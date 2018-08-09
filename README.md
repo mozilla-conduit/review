@@ -40,13 +40,13 @@ arc_last_check = <time>
 - `updater.arc_last_check` : epoch timestamp (local timezone) indicating the last time
     an update was performed for arc.  set to `-1` to disable this check.
 
-`review` can also be configured via the following environmental variables:
+`moz-phab` can also be configured via the following environmental variables:
 - `DEBUG` : enabled debugging output (default: disabled)
 - `UPDATE_FILE` : when self-updating write to this file instead of \_\_file\_\_
 
 e.g. To enable debugging output on MacOS/Linux:
 ```
-  $ DEBUG=1 review submit
+  $ DEBUG=1 moz-phab submit
 ```
 
 Unit tests can be executed with `python -m unittest discover`.
