@@ -1325,7 +1325,11 @@ def parse_args():
         action="store_true",
         help="Override sanity checks and force submission; a tool of last resort",
     )
-    submit_parser.add_argument("--bug", "-b", help="Set Bug ID for all commits")
+    submit_parser.add_argument(
+        "--bug",
+        "-b",
+        help="Set Bug ID for all commits (default: from commit)"
+    )
     submit_parser.add_argument(
         "--reviewer",
         "--reviewers",
