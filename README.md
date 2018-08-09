@@ -1,5 +1,10 @@
 ## Wrapper around Phabricator's `arc` cli to support submission of a series of commits.
 
+### Installation
+
+Download [moz-phab](https://raw.githubusercontent.com/mozilla-conduit/review/master/moz-phab)
+and place it on your system path.
+
 ### Configuration
 
 `moz-phab` has an INI style configuration file to control defaults: `~/.moz-phab-config`
