@@ -1,12 +1,5 @@
 ## Wrapper around Phabricator's `arc` cli to support submission of a series of commits.
 
-
-### Goals
-
-- must only use standard libraries
-- must be a single file for easy deployment
-- should work on python 2.7 and python 3.5+
-
 ### Configuration
 
 `moz-phab` has an INI style configuration file to control defaults: `~/.moz-phab-config`
@@ -49,5 +42,11 @@ e.g. To enable debugging output on MacOS/Linux:
   $ DEBUG=1 moz-phab submit
 ```
 
+### Development
+
+- must only use standard libraries
+- must be a single file for easy deployment
+
 Unit tests can be executed with `python -m unittest discover`.
 
+All python code must be formatted with [black](https://github.com/ambv/black) using the default settings.
