@@ -40,6 +40,9 @@ This file will be created if it doesn't exist.
 [ui]
 no_ansi = False
 
+[arc]
+arc_command = arc
+
 [submit]
 auto_submit = False
 always_blocking = False
@@ -51,6 +54,8 @@ arc_last_check = <time>
 ```
 
 - `ui.no_ansi` : never use ANSI colours (default: auto-detected).
+- `arc.arc_command` : command to use when calling the Arcanist CLI.
+    (default: "arc")
 - `submit.auto_submit` : when true the confirmation prompt will be skipped
     (default: false).
 - `submit.always_blocking` : when true reviewers in commit descriptions will be marked

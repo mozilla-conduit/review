@@ -82,7 +82,6 @@ PHABRICATOR_URLS = {
 }
 
 # arc related consts.
-ARC = ["arc.bat" if IS_WINDOWS else "arc"]
 ARC_COMMIT_DESC_TEMPLATE = """
 {title}
 
@@ -324,6 +323,9 @@ class Config(object):
             [ui]
             no_ansi=false
 
+            [arc]
+            arc_command=arc
+
             [submit]
             auto_submit=false
             always_blocking=false
@@ -338,9 +340,15 @@ class Config(object):
         self._config.readfp(
             io.StringIO("\n".join([l.strip() for l in defaults.splitlines()]))
         )
+
+        # the `arc_command` default value depends on the operating system
+        if IS_WINDOWS:
+            self._set("arc", "arc_command", "arc.bat")
+
         self._config.read([self._filename])
 
         self.no_ansi = self._config.getboolean("ui", "no_ansi")
+        self.arc_command = self._config.get("arc", "arc_command")
         self.auto_submit = self._config.getboolean("submit", "auto_submit")
         self.always_blocking = self._config.getboolean("submit", "always_blocking")
         self.warn_untracked = self._config.getboolean("submit", "warn_untracked")
@@ -365,6 +373,7 @@ class Config(object):
         else:
             logger.debug("creating %s" % self._filename)
             self._set("ui", "no_ansi", self.no_ansi)
+            self._set("arc", "arc_command", self.arc_command)
             self._set("submit", "auto_submit", self.auto_submit)
             self._set("submit", "always_blocking", self.always_blocking)
             self._set("submit", "warn_untracked", self.warn_untracked)
@@ -1064,7 +1073,7 @@ def show_commit_stack(repo, commits, show_rev_urls=False, show_warnings=False):
 
 def arc_out(args, cwd):
     """arc wrapper that logs output"""
-    arc_output = check_output(ARC + args, cwd=cwd, split=False)
+    arc_output = check_output([config.arc_command] + args, cwd=cwd, split=False)
     if logger.level != logging.DEBUG:
         logger.info(arc_output)
     return arc_output
@@ -1305,14 +1314,14 @@ def check_for_updates():
         config.arc_last_check = int(time.time())
         config.write()
 
-        check_call(ARC + ["upgrade"])
+        check_call([config.arc_command, "upgrade"])
 
 
 def self_update(args):
     """`self-update` command, updates arc and this script"""
     release = get_self_release()
 
-    check_call(ARC + ["upgrade"])
+    check_call([config.arc_command, "upgrade"])
 
     if not release["update_required"] and not args.force:
         logger.warning("Update of `moz-phab` not required")
@@ -1446,11 +1455,11 @@ def main():
         if config.no_ansi:
             HAS_ANSI = False
 
-        if not which(ARC[0]):
+        if not os.path.exists(config.arc_command) and not which(config.arc_command):
             raise Error(
-                "Failed to find 'arc' on the system path.\n"
+                "Failed to find '%s' on the system path.\n"
                 "Please follow the Phabricator setup guide:\n"
-                "%s" % GUIDE_URL
+                "%s" % (config.arc_command, GUIDE_URL)
             )
 
         # Ensure ssl certificates are validated (see PEP 476).
