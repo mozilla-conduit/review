@@ -29,10 +29,8 @@ import stat
 import subprocess
 import sys
 import tempfile
-import termios
 import time
 import traceback
-import tty
 import urllib2
 import uuid
 from distutils.version import LooseVersion
@@ -54,7 +52,8 @@ from distutils.version import LooseVersion
 # Environment Vars
 
 DEBUG = bool(os.getenv("DEBUG"))
-HAS_ANSI = (
+IS_WINDOWS = sys.platform == "win32"
+HAS_ANSI = not IS_WINDOWS and (
     (hasattr(sys.stdout, "isatty") and sys.stdout.isatty())
     or os.getenv("TERM", "") == "ANSI"
     or os.getenv("PYCHARM_HOSTED", "") == "1"
@@ -83,7 +82,7 @@ PHABRICATOR_URLS = {
 }
 
 # arc related consts.
-ARC = ["arc"]
+ARC = ["arc.bat" if IS_WINDOWS else "arc"]
 ARC_COMMIT_DESC_TEMPLATE = """
 {title}
 
@@ -192,22 +191,52 @@ def check_output(command, cwd=None, split=True, strip=True, never_log=False):
     return output.splitlines() if split else output
 
 
-def read_json_field(filename, field_path):
-    """Parses json file returning value as per field_path, or None."""
+def read_json_field(files, field_path):
+    """Parses json files in turn returning value as per field_path, or None."""
+    for filename in files:
+        try:
+            with open(filename) as f:
+                rc = json.load(f)
+                for field_name in field_path:
+                    if field_name not in rc:
+                        rc = None
+                        break
+                    rc = rc[field_name]
+                if not rc:
+                    continue
+                return rc
+        except IOError as e:
+            if e.errno == errno.ENOENT:
+                continue
+            raise
+        except ValueError:
+            continue
+    return None
+
+
+def get_char():
     try:
-        with open(filename) as f:
-            rc = json.load(f)
-            for field_name in field_path:
-                if field_name not in rc:
-                    return None
-                rc = rc[field_name]
-            return rc
-    except IOError as e:
-        if e.errno == errno.ENOENT:
-            return None
-        raise
-    except ValueError:
-        return None
+        # POSIX-based systems.
+        import tty
+        import termios
+
+        fd = sys.stdin.fileno()
+        old_term_attrs = None
+        try:
+            old_term_attrs = termios.tcgetattr(fd)
+            tty.setcbreak(fd)
+            return sys.stdin.read(1)
+        except termios.error:
+            # Fallback on readline() if we failed to put the terminal into raw mode.
+            return sys.stdin.readline().strip().lower()
+        finally:
+            if old_term_attrs:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_term_attrs)
+    except ImportError:
+        # Windows-based systems.
+        import msvcrt
+
+        return msvcrt.getch()
 
 
 def prompt(question, options):
@@ -218,39 +247,61 @@ def prompt(question, options):
     sys.stdout.flush()
 
     res = ""
-    old_term_attrs = None
-    fd = sys.stdout.fileno()
     default = options[0][0].lower()
     options = {o[0].lower(): o for o in options}
-    try:
-        # Put terminal into raw mode to allow us to capture a single char immediately.
-        old_term_attrs = termios.tcgetattr(fd)
-        try:
-            tty.setraw(sys.stdin.fileno())
-        except termios.error:
-            pass
-
-        while res not in options:
-            res = sys.stdin.read(1).lower()
-            if res == chr(13):  # return
-                res = default
-            elif res == chr(3) or res == chr(27):  # ^C, escape
-                sys.exit(1)
-    except termios.error:
-        # Fallback on readline() if we failed to put the terminal into raw mode.
-        while res not in options:
-            res = sys.stdin.readline().strip().lower()
-            if len(res) > 1:
-                res = res[0]
-    finally:
-        if old_term_attrs:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_term_attrs)
-            if res in options:
-                print(options[res])
-            else:
-                print("^C")
+    while res not in options:
+        res = get_char()
+        if res in (chr(10), chr(13)):  # return
+            res = default
+        elif res == chr(3) or res == chr(27):  # ^C, escape
+            print("^C")
+            sys.exit(1)
+        if res in options:
+            print(options[res])
 
     return options[res]
+
+
+class NamedTemporaryFile(object):
+    """
+    Like tempfile.NamedTemporaryFile except it works on Windows
+    in the case where you open the created file a second time.
+
+    From mozilla-central:testing/mozbase/mozfile/mozfile/mozfile.py with
+    slight modifications.
+    """
+
+    def __init__(self):
+        fd, path = tempfile.mkstemp()
+        os.close(fd)
+
+        self.file = open(path, "w+b")
+        self._path = path
+        self._delete = True
+        self._unlinked = False
+
+    def __getattr__(self, k):
+        return getattr(self.__dict__["file"], k)
+
+    def __iter__(self):
+        return self.__dict__["file"]
+
+    def __enter__(self):
+        self.file.__enter__()
+        return self
+
+    def __exit__(self, exc, value, tb):
+        self.file.__exit__(exc, value, tb)
+        if self.__dict__["_delete"]:
+            os.unlink(self.__dict__["_path"])
+            self._unlinked = True
+
+    def __del__(self):
+        if self.__dict__["_unlinked"]:
+            return
+        self.file.__exit__(None, None, None)
+        if self.__dict__["_delete"]:
+            os.unlink(self.__dict__["_path"])
 
 
 class Error(Exception):
@@ -377,18 +428,22 @@ class Repository(object):
         """Determine the phab/conduit URL."""
 
         # In order of priority as per arc
-        phab_url = (
-            read_json_field(
-                os.path.join(self.dot_path, ".arcconfig"), ["phabricator.uri"]
-            )
-            or read_json_field(
-                os.path.join(self.path, ".arcconfig"), ["phabricator.uri"]
-            )
-            or read_json_field("/etc/arcconfig", ["config", "default"])
-            or read_json_field(
-                os.path.join(os.path.expanduser("~"), ".arcrc"), ["config", "default"]
-            )
-        )
+        arcconfig_files = [
+            os.path.join(self.dot_path, ".arcconfig"),
+            os.path.join(self.path, ".arcconfig"),
+        ]
+        if IS_WINDOWS:
+            defaults_files = [
+                os.path.join(os.getenv("APPDATA", ""), ".arcrc"),
+                os.path.join(
+                    os.getenv("ProgramData", ""), "Phabricator", "Arcanist", "config"
+                ),
+            ]
+        else:
+            defaults_files = ["/etc/arcconfig", os.path.expanduser("~/.arcrc")]
+        phab_url = read_json_field(
+            arcconfig_files, ["phabricator.uri"]
+        ) or read_json_field(defaults_files, ["config", "default"])
 
         if not phab_url:
             raise Error("Failed to determine Phabricator URL (missing .arcconfig?)")
@@ -474,13 +529,17 @@ class Mercurial(Repository):
 
         super(Mercurial, self).__init__(path, dot_path)
 
-        self._hg = ["hg"]
+        self._hg = ["hg.exe" if IS_WINDOWS else "hg"]
         self.revset = None
         self.strip_nodes = []
         self.status = None
 
+        # Normalise/standardise Mercurial's output.
+        os.environ["HGPLAIN"] = "1"
+        os.environ["HGENCODING"] = "UTF-8"
+
         # Check for `hg`, and mercurial version.
-        if not which("hg"):
+        if not which(self._hg[0]):
             raise Error("Failed to find 'hg' executable")
         m = re.search(
             r"\(version ([^)]+)\)", self.hg_out(["--version", "--quiet"], split=False)
@@ -498,6 +557,13 @@ class Mercurial(Repository):
         # the command line when calling hg; all other user settings are ignored.
         hg_config = {}
         for line in self.hg_out(["config"], never_log=True):
+            # On Windows mercurial.ini is likely to be cp1252 encoded, not UTF-8.
+            if IS_WINDOWS:
+                try:
+                    line = line.decode("cp1252").encode("UTF-8")
+                except UnicodeDecodeError:
+                    pass
+
             name, value = line.split("=", 1)
             name = name.strip()
             value = value.strip()
@@ -542,10 +608,6 @@ class Mercurial(Repository):
 
         # Disable the user's hgrc file, to ensure we run without rogue extensions.
         os.environ["HGRCPATH"] = ""
-
-        # Normalise/standardise Mercurial's output.
-        os.environ["HGPLAIN"] = "1"
-        os.environ["HGENCODING"] = "UTF-8"
 
     def hg(self, command, **kwargs):
         return check_call(self._hg + command, cwd=self.path, **kwargs)
@@ -676,7 +738,7 @@ class Mercurial(Repository):
         self.hg(["update", "--quiet", node])
 
     def _amend_commit_body(self, node, body):
-        with tempfile.NamedTemporaryFile() as temp_f:
+        with NamedTemporaryFile() as temp_f:
             temp_f.write(body)
             temp_f.flush()
 
@@ -1128,7 +1190,7 @@ def submit(repo, args):
         message = arc_message(template_vars)
 
         # Run arc.
-        with tempfile.NamedTemporaryFile() as temp_f:
+        with NamedTemporaryFile() as temp_f:
             temp_f.write(message)
             temp_f.flush()
 
@@ -1326,9 +1388,7 @@ def parse_args():
         help="Override sanity checks and force submission; a tool of last resort",
     )
     submit_parser.add_argument(
-        "--bug",
-        "-b",
-        help="Set Bug ID for all commits (default: from commit)"
+        "--bug", "-b", help="Set Bug ID for all commits (default: from commit)"
     )
     submit_parser.add_argument(
         "--reviewer",
@@ -1382,7 +1442,7 @@ def main():
         if config.no_ansi:
             HAS_ANSI = False
 
-        if not which("arc"):
+        if not which(ARC[0]):
             raise Error(
                 "Failed to find 'arc' on the system path.\n"
                 "Please follow the Phabricator setup guide:\n"

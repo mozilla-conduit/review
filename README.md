@@ -2,10 +2,33 @@
 
 ### Installation
 
+#### Linux and MacOS
+
 Download [moz-phab](https://raw.githubusercontent.com/mozilla-conduit/review/master/moz-phab)
 and place it on your system path.
 
 You must have Python 2.7 installed, and preferably in your path.
+
+#### Windows with MozillaBuild/MSYS
+
+Download [moz-phab](https://raw.githubusercontent.com/mozilla-conduit/review/master/moz-phab)
+and place it on your system path.
+
+You must have Python 2.7 installed, and preferably in your path.
+
+#### Other Windows Installs
+
+Download [moz-phab](https://raw.githubusercontent.com/mozilla-conduit/review/master/moz-phab)
+and store it anywhere (e.g. `C:\Users\myuser\phabricator\moz-phab`).
+
+You must have Python 2.7 installed, and preferably in your path.
+
+Run python with the full path to moz-phab:
+`python C:\Users\myuser\phabricator\moz-phab`.
+
+If you are using `MinTTY` (e.g. via Git's Bash) you'll need to run it through `winpty`
+as with any other Python script:
+`winpty python C:\Users\myuser\phabricator\moz-phab`.
 
 ### Configuration
 
