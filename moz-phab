@@ -141,6 +141,7 @@ def which(filename):
     # backport of shutil.which from py3
     seen = set()
     for path in os.environ.get("PATH", os.defpath).split(os.pathsep):
+        path = os.path.expanduser(path)
         norm_path = os.path.normcase(path)
         if norm_path not in seen:
             seen.add(norm_path)
