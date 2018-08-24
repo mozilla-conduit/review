@@ -62,7 +62,7 @@ SELF_FILE = os.getenv("UPDATE_FILE") if os.getenv("UPDATE_FILE") else __file__
 
 # Constants and Globals
 
-logger = logging.getLogger("review")
+logger = logging.getLogger("moz-phab")
 config = None
 
 # Where to direct people when `arc` isn't installed.
@@ -1291,8 +1291,8 @@ def check_for_updates():
         release = get_self_release()
 
         if release["update_required"]:
-            logger.warning("Version %s of `review` is now available" % release["tag"])
-            logger.info("Run `review self-update` to update")
+            logger.warning("Version %s of `moz-phab` is now available" % release["tag"])
+            logger.info("Run `moz-phab self-update` to update")
         else:
             logger.debug("update check not required")
 
@@ -1314,12 +1314,12 @@ def self_update(args):
     check_call(ARC + ["upgrade"])
 
     if not release["update_required"] and not args.force:
-        logger.warning("Update of `review` not required")
+        logger.warning("Update of `moz-phab` not required")
         return
 
-    logger.warning("Updating `review` to v%s" % release["tag"])
+    logger.warning("Updating `moz-phab` to v%s" % release["tag"])
 
-    url = "https://raw.githubusercontent.com/%s/%s/review" % (SELF_REPO, release["tag"])
+    url = "https://raw.githubusercontent.com/%s/%s/moz-phab" % (SELF_REPO, release["tag"])
     logger.debug("updating '%s' from %s" % (SELF_FILE, url))
     try:
         gh = urllib2.urlopen(url)
