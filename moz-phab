@@ -1320,7 +1320,10 @@ def self_update(args):
 
     logger.warning("Updating `moz-phab` to v%s" % release["tag"])
 
-    url = "https://raw.githubusercontent.com/%s/%s/moz-phab" % (SELF_REPO, release["tag"])
+    url = "https://raw.githubusercontent.com/%s/%s/moz-phab" % (
+        SELF_REPO,
+        release["tag"],
+    )
     logger.debug("updating '%s' from %s" % (SELF_FILE, url))
     try:
         gh = urllib2.urlopen(url)
