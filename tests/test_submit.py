@@ -61,23 +61,23 @@ class Commits(unittest.TestCase):
         build = review.build_commit_title
 
         self.assertEqual(
-            "Bug 1, blah, r=turnip",
-            build(commit("1", ["turnip"], title="bug 1, blah, r?turnip")),
+            "Bug 1, blah, r?turnip",
+            build(commit("1", ["turnip"], title="bug 1, blah, r=turnip")),
         )
         self.assertEqual(
-            "blah (Bug 1) r=turnip",
-            build(commit("1", ["turnip"], title="blah (bug 1) r?turnip")),
+            "blah (Bug 1) r?turnip",
+            build(commit("1", ["turnip"], title="blah (bug 1) r=turnip")),
         )
         self.assertEqual(
-            "Bug 1 - blah r=turnip",
+            "Bug 1 - blah r?turnip",
             build(commit("1", ["turnip"], title="blah r?turnip")),
         )
 
         self.assertEqual(
-            "blah r=turnip", build(commit("", ["turnip"], title="blah r?turnip"))
+            "blah r?turnip", build(commit("", ["turnip"], title="blah r=turnip"))
         )
         self.assertEqual(
-            "Bug 1 - blah", build(commit("1", [], title="Bug 1 - blah r?turnip"))
+            "Bug 1 - blah", build(commit("1", [], title="Bug 1 - blah r=turnip"))
         )
 
 
