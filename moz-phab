@@ -512,9 +512,6 @@ class Repository(object):
             if not commit["bug-id"]:
                 commit_errors.append("missing bug-id")
 
-            if not commit["reviewers"]:
-                commit_errors.append("missing reviewers")
-
             if has_arc_rejections(commit["body"]):
                 commit_errors.append("contains arc fields")
 
@@ -1077,6 +1074,10 @@ def show_commit_stack(repo, commits, show_rev_urls=False, show_warnings=False):
                     "!! Bug ID changed from %s to %s"
                     % (commit["bug-id-orig"], commit["bug-id"])
                 )
+
+            if not commit["reviewers"]:
+                logger.warning("!! Missing reviewers")
+
         if show_rev_urls and commit["rev-id"]:
             logger.warning("-> %sD%s" % (repo.phab_url, commit["rev-id"]))
 

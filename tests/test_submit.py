@@ -46,16 +46,16 @@ class Commits(unittest.TestCase):
         self._assertNoError(
             check, [commit("1", ["r1"]), commit("2", ["r1"]), commit("3", ["r1", "r2"])]
         )
+        self._assertNoError(check, [commit("1", [])])
+        self._assertNoError(check, [commit("1", ["r"]), commit("1", [])])
 
         self._assertError(check, [commit(None, ["r"])])
         self._assertError(check, [commit("", ["r"])])
-        self._assertError(check, [commit("1", [])])
         self._assertError(
             check, [commit("1", ["r"], body="Summary: blah\nReviewers: r")]
         )
 
         self._assertError(check, [commit("1", ["r"]), commit("", ["r"])])
-        self._assertError(check, [commit("1", ["r"]), commit("1", [])])
 
     def test_commit_preview(self):
         build = review.build_commit_title
