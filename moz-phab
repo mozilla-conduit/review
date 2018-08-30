@@ -593,10 +593,9 @@ class Mercurial(Repository):
 
         # Enable evolve if the user's currently using it.  evolve makes amending
         # commits with children trivial (amongst other things).
-        if "extensions.evolve" in hg_config:
-            self._hg.extend(
-                ["--config", "extensions.evolve=%s" % hg_config["extensions.evolve"]]
-            )
+        ext_evolve = self._get_extension("evolve", hg_config)
+        if ext_evolve is not None:
+            self._hg.extend(["--config", "extensions.evolve=%s" % ext_evolve])
             self.use_evolve = True
 
         # Otherwise just enable obsolescence markers, and when we're done remove
@@ -609,18 +608,26 @@ class Mercurial(Repository):
             self.unlink_obsstore = not os.path.exists(self.obsstore)
 
         # This script interacts poorly with mq.
-        self.has_mq = "extensions.mq" in hg_config
+        ext_mq = self._get_extension("mq", hg_config)
+        self.has_mq = ext_mq is not None
         if self.has_mq:
-            self._hg.extend(
-                ["--config", "extensions.mq=%s" % hg_config["extensions.mq"]]
-            )
+            self._hg.extend(["--config", "extensions.mq=%s" % ext_mq])
 
         # `shelve` is useful for dealing with uncommitted changes; track if it's
         # currently enabled so we can tailor our error accordingly.
-        self.has_shelve = "extensions.shelve" in hg_config
+        self.has_shelve = self._get_extension("shelve", hg_config) is not None
 
         # Disable the user's hgrc file, to ensure we run without rogue extensions.
         os.environ["HGRCPATH"] = ""
+
+    @staticmethod
+    def _get_extension(extension, config):
+        for prefix in ("extensions.%s", "extensions.hgext.%s"):
+            field = prefix % extension
+            if field in config:
+                return config.get(field, "")
+
+        return None
 
     def hg(self, command, **kwargs):
         return check_call(self._hg + command, cwd=self.path, **kwargs)

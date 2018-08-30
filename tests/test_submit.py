@@ -4,7 +4,7 @@ import sys
 import unittest
 
 review = imp.load_source(
-    "review", os.path.join(os.path.dirname(__file__), os.path.pardir, "review")
+    "review", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
 
 
