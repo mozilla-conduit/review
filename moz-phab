@@ -1298,6 +1298,13 @@ def get_self_release():
     )
 
 
+def update_arc():
+    """Write the las check and update arc."""
+    config.arc_last_check = int(time.time())
+    config.write()
+    check_call(config.arc + ["upgrade"])
+
+
 def check_for_updates():
     """Log a message if an update is required/available"""
 
@@ -1322,17 +1329,17 @@ def check_for_updates():
         config.arc_last_check >= 0
         and time.time() - config.arc_last_check > ARC_UPDATE_FREQUENCY * 60 * 60
     ):
-        config.arc_last_check = int(time.time())
-        config.write()
-
-        check_call(config.arc + ["upgrade"])
+        update_arc()
 
 
 def self_update(args):
     """`self-update` command, updates arc and this script"""
-    release = get_self_release()
+    # Update arc.
+    if config.arc_last_check >= 0:
+        update_arc()
 
-    check_call(config.arc + ["upgrade"])
+    # Update moz-phab
+    release = get_self_release()
 
     if not release["update_required"] and not args.force:
         logger.warning("Update of `moz-phab` not required")
