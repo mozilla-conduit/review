@@ -102,6 +102,16 @@ reviewers), which again overrides any reviewers in commit messages.
 
 Run `moz-phab submit -h` for more options for submitting revisions.
 
+To submit updates to a commit series, run `moz-phab` in the same way
+with the same arguments, that is, specifying the full original range
+of commits.  Note that, while inserting and amending commits should
+work fine, reordering commits is not yet supported, and deleting
+commits will leave the associated revisions open, which should be
+abandoned manually.  See
+[bug 1481539](https://bugzilla.mozilla.org/show_bug.cgi?id=1481539) for
+planned fixes.  Also note that "fix-up" commits are not yet supported;
+see [bug 1481542](https://bugzilla.mozilla.org/show_bug.cgi?id=1481542).
+
 `moz-phab` will periodically check for updates and display a notice
 when a new version is available.  To update `moz-phab`, run `moz-phab
 self-update`.
