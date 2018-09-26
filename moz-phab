@@ -254,10 +254,12 @@ def prompt(question, options):
         if res in (chr(10), chr(13)):  # return
             res = default
         elif res == chr(3) or res == chr(27):  # ^C, escape
-            print("^C")
+            sys.stdout.write("^C\n")
+            sys.stdout.flush()
             sys.exit(1)
         if res in options:
-            print(options[res])
+            sys.stdout.write("%s\n" % options[res])
+            sys.stdout.flush()
 
     return options[res]
 
@@ -1018,8 +1020,6 @@ def update_commit_title_previews(commits):
 
 def replace_reviewers(commit_description, reviewers):
     """From vct's commitparser"""
-    # TODO unit test
-
     if not reviewers:
         reviewers_str = ""
     else:
