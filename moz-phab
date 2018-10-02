@@ -533,7 +533,7 @@ class Repository(object):
 class Mercurial(Repository):
     def __init__(self, path):
         dot_path = os.path.join(path, ".hg")
-        if not os.path.exists(dot_path):
+        if not os.path.isdir(dot_path):
             raise ValueError("%s: not a hg repository" % path)
         logger.debug("found hg repo in %s" % path)
 
@@ -925,7 +925,7 @@ class Mercurial(Repository):
 class Git(Repository):
     def __init__(self, path):
         dot_path = os.path.join(path, ".git")
-        if not os.path.exists(dot_path):
+        if not os.path.isdir(dot_path):
             raise ValueError("%s: not a git repository" % path)
         logger.debug("found git repo in %s" % path)
 
