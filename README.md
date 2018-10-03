@@ -121,6 +121,11 @@ Note that if you do not have Python in your path, you will need to run
 
 ### Development
 
+File bugs in Bugzilla under
+[Conduit :: Review Wrapper](https://bugzilla.mozilla.org/enter_bug.cgi?product=Conduit&component=Review%20Wrapper).
+
+We have strict requirements for moz-phab development:
+
 - must only use standard libraries
 - must be a single file for easy deployment
 
