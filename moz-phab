@@ -1000,7 +1000,7 @@ def build_commit_title(commit):
     # Bug-ID.
     if commit["bug-id"]:
         if BUG_ID_RE.search(title):
-            title = BUG_ID_RE.sub("Bug %s" % commit["bug-id"], title)
+            title = BUG_ID_RE.sub("Bug %s" % commit["bug-id"], title, count=1)
         else:
             title = "Bug %s - %s" % (commit["bug-id"], title)
     else:

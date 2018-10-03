@@ -79,6 +79,9 @@ class Commits(unittest.TestCase):
         self.assertEqual(
             "Bug 1 - blah", build(commit("1", [], title="Bug 1 - blah r=turnip"))
         )
+        self.assertEqual(
+            "Bug 1 - helper_bug2.html", build(commit("1", [], title="Bug 1 - helper_bug2.html"))
+        )
 
 
 if __name__ == "__main__":

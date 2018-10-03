@@ -20,6 +20,7 @@ class CommitParsing(unittest.TestCase):
         self.assertEqual(parse("12345 is a bug"), [])
         self.assertEqual(parse(" bug   123456 whitespace!"), ["123456"])
         self.assertEqual(parse("bug 1 and bug 2"), ["1", "2"])
+        self.assertEqual(parse("BUG 1 helper_bug2.html"), ["1", "2"])
 
     def test_reviewers(self):
         parse = review.parse_reviewers
