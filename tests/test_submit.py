@@ -5,18 +5,20 @@ import os
 import sys
 import unittest
 
+
 review = imp.load_source(
     "review", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
 
 
-def commit(bug_id=None, reviewers=None, body="", name="", title=""):
+def commit(bug_id=None, reviewers=None, body="", name="", title="", rev_id=None):
     return {
         "name": name,
         "title": title,
         "bug-id": bug_id,
         "reviewers": reviewers if reviewers else [],
         "body": body,
+        "rev-id": rev_id,
     }
 
 
@@ -86,7 +88,7 @@ class Commits(unittest.TestCase):
             build(commit("1", [], title="Bug 1 - helper_bug2.html")),
         )
 
-    @mock.patch('review.build_commit_title')
+    @mock.patch("review.build_commit_title")
     def test_update_commit_title_previews(self, m_build_commit_title):
         m_build_commit_title.side_effect = lambda x: x["title"] + " preview"
         commits = [dict(title="a"), dict(title="b")]
@@ -279,6 +281,83 @@ class Commits(unittest.TestCase):
                     {"title": "B", "reviewers": ["one!", "two!"], "bug-id": 1},
                 ],
             )
+
+
+class TestUpdateCommitSummary(unittest.TestCase):
+    @mock.patch("review.check_output")
+    @mock.patch("review.config")
+    def test_update_summary_cli_args(self, config, check_output):
+        config.arc = ["arc"]
+        c = commit(rev_id="D123")
+        check_output.return_value = '{"error": null, "errorMessage": null}'
+
+        review.update_phabricator_commit_summary(c, mock.Mock())
+
+        check_output.assert_called_once_with(
+            ["arc", "call-conduit", "differential.revision.edit"],
+            cwd=mock.ANY,
+            split=mock.ANY,
+            stdin=mock.ANY,
+        )
+
+    def test_build_api_call_to_update_title_and_summary(self):
+        # From https://phabricator.services.mozilla.com/api/differential.revision.edit
+        #
+        # Example call format we are aiming for:
+        #
+        # $ echo '{
+        #   "transactions": [
+        #     {
+        #       "type": "title",
+        #       "value": "Remove unnecessary branch statement"
+        #     }
+        #     {
+        #       "type": "summary",
+        #       "value": "Blah"
+        #     }
+        #   ],
+        #   "objectIdentifier": "D8095"
+        # }' | arc call-conduit --conduit-uri \
+        #       https://phabricator.services.mozilla.com/ \
+        #       --conduit-token <conduit-token> differential.revision.edit
+
+        c = commit(
+            rev_id="D123",
+            title="hi!",
+            body="hello!\n\nDifferential Revision: http://phabricator.test/D123",
+        )
+        expected_json = {
+            "transactions": [
+                {"type": "title", "value": "hi!"},
+                {"type": "summary", "value": "hello!"},
+            ],
+            "objectIdentifier": "D123",
+        }
+
+        api_call_args = review.build_api_call_to_update_commit_title_and_summary(c)
+
+        self.assertDictEqual(expected_json, api_call_args)
+
+    def test_parse_api_response_with_no_problems(self):
+        # Response comes from running:
+        # $ echo '{... (some valid update summary JSON) ...}' | \
+        #   arc call-conduit differential.revision.edit
+        api_response = '{"error":null,"errorMessage":null,"response":{"object":{' \
+                       '"id":56,"phid":"PHID-DREV-ke6jhbdnwd5chtnk2q5w"},' \
+                       '"transactions":[{"phid":"PHID-XACT-DREV-itlxgx7rsjrcnta"}]}} '
+        self.assertEqual(None, review.parse_api_error(api_response))
+
+    def test_parse_api_response_with_errors(self):
+        # Error response from running:
+        # $ echo '{}' | arc call-conduit differential.revision.edit
+        api_response = '{"error":"ERR-CONDUIT-CORE", ' \
+                       '"errorMessage":"ERR-CONDUIT-CORE: Parameter ' \
+                       '\\"transactions\\" is not a list of transactions.",' \
+                       '"response":null} '
+        self.assertEqual(
+            'ERR-CONDUIT-CORE: Parameter "transactions" is not a list of transactions.',
+            review.parse_api_error(api_response),
+        )
 
 
 if __name__ == "__main__":

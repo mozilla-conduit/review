@@ -34,26 +34,20 @@ class Helpers(unittest.TestCase):
 
         m_json.load.side_effect = (
             dict(a="value A", b=3),
-            dict(b="value B", c=dict(a="value CA"))
+            dict(b="value B", c=dict(a="value CA")),
         )
-        self.assertEqual(
-            3, review.read_json_field(["file_a", "file_b"], ["b"])
-        )
+        self.assertEqual(3, review.read_json_field(["file_a", "file_b"], ["b"]))
         m_json.load.side_effect = (
             dict(b="value B", c=dict(a="value CA")),
             dict(a="value A", b=3),
         )
-        self.assertEqual(
-            "value B",
-            review.read_json_field(["file_b", "file_a"], ["b"]),
-        )
+        self.assertEqual("value B", review.read_json_field(["file_b", "file_a"], ["b"]))
         m_json.load.side_effect = (
             dict(a="value A", b=3),
             dict(b="value B", c=dict(a="value CA")),
         )
         self.assertEqual(
-            "value CA",
-            review.read_json_field(["file_a", "file_b"], ["c", "a"]),
+            "value CA", review.read_json_field(["file_a", "file_b"], ["c", "a"])
         )
 
     @mock.patch("__builtin__.termios", create=True)
@@ -152,5 +146,55 @@ class Helpers(unittest.TestCase):
             "\n\nSummary:\n\n\n\n\nTest Plan:\n\nReviewers: \n\nSubscribers:\n\nBug #: ",
             review.arc_message(
                 dict(title=None, body=None, reviewers=None, bug_id=None)
+            ),
+        )
+
+    def test_strip_differential_revision_from_commit_body(self):
+        self.assertEqual("", review.strip_differential_revision("\n\n"))
+        self.assertEqual(
+            "",
+            review.strip_differential_revision(
+                "\nDifferential Revision: http://phabricator.test/D123"
+            ),
+        )
+        self.assertEqual(
+            "",
+            review.strip_differential_revision(
+                "Differential Revision: http://phabricator.test/D123"
+            ),
+        )
+        self.assertEqual(
+            "title",
+            review.strip_differential_revision(
+                "title\nDifferential Revision: http://phabricator.test/D123"
+            ),
+        )
+        self.assertEqual(
+            "title",
+            review.strip_differential_revision(
+                "title\n\nDifferential Revision: http://phabricator.test/D123"
+            ),
+        )
+        self.assertEqual(
+            "title\n\nsummary",
+            review.strip_differential_revision(
+                "title\n\nsummary\n\nDifferential Revision: http://phabricator.test/D123"
+            ),
+        )
+
+    def test_amend_commit_message_body_with_new_revision_url(self):
+        self.assertEqual(
+            "\nDifferential Revision: http://phabricator.test/D123",
+            review.amend_revision_url("", "http://phabricator.test/D123"),
+        )
+        self.assertEqual(
+            "title\n\nDifferential Revision: http://phabricator.test/D123",
+            review.amend_revision_url("title", "http://phabricator.test/D123"),
+        )
+        self.assertEqual(
+            "\nDifferential Revision: http://phabricator.test/D123",
+            review.amend_revision_url(
+                "\nDifferential Revision: http://phabricator.test/D999",
+                "http://phabricator.test/D123",
             ),
         )

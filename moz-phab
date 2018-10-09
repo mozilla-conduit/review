@@ -196,10 +196,12 @@ def check_call_by_line(command, cwd=None, never_log=False):
         raise subprocess.CalledProcessError(process.returncode, command)
 
 
-def check_output(command, cwd=None, split=True, strip=True, never_log=False, env=None):
+def check_output(
+    command, cwd=None, split=True, strip=True, never_log=False, stdin=None, env=None
+):
     # wrapper around subprocess.check_output with debug output and splitting
     logger.debug("$ %s" % " ".join(shell_quote(s) for s in command))
-    kwargs = dict(cwd=cwd)
+    kwargs = dict(cwd=cwd, stdin=stdin)
     if env:
         kwargs["env"] = env
 
@@ -1333,6 +1335,19 @@ def parse_reviewers(title):
     return reviewers
 
 
+def strip_differential_revision(body):
+    return ARC_DIFF_REV_RE.sub("", body).rstrip()
+
+
+def amend_revision_url(body, new_url):
+    """Append or replace the Differential Revision URL in a commit body."""
+    body = strip_differential_revision(body)
+    if body:
+        body += "\n"
+    body += "\nDifferential Revision: %s" % new_url
+    return body
+
+
 def has_arc_rejections(body):
     return all(r.search(body) for r in ARC_REJECT_RE_LIST)
 
@@ -1452,10 +1467,22 @@ def show_commit_stack(repo, commits, show_rev_urls=False, show_warnings=False):
             logger.warning("-> %s/D%s" % (repo.phab_url.rstrip("/"), commit["rev-id"]))
 
 
-def arc_out(args, cwd):
-    """arc wrapper that logs output"""
-    arc_output = check_output(config.arc + args, cwd=cwd, split=False)
-    if logger.level != logging.DEBUG:
+def arc_out(args, cwd, stdin=None, log_output_to_console=True):
+    """arc wrapper that logs output to the console.
+
+    Args:
+        args: A list of arguments for the arc command.
+        cwd: The directory to run the arc command in.
+        stdin: Optionally overrides the standard input pipe to use for the arc
+            subprocess call.
+        log_output_to_console: Defaults to True.  If set to False, don't log the arc
+            standard output to the console (stderr prints to console as normal).
+
+    Returns:
+        The list of lines arc printed to the console.
+    """
+    arc_output = check_output(config.arc + args, cwd=cwd, split=False, stdin=stdin)
+    if logger.level != logging.DEBUG and log_output_to_console:
         logger.info(arc_output)
     return arc_output
 
@@ -1525,6 +1552,99 @@ def update_commits_from_args(commits, args):
     update_commit_title_previews(commits)
 
 
+def build_api_call_to_update_commit_title_and_summary(commit):
+    """Build a Conduit API transaction to update a commit title and summary.
+
+    See https://phabricator.services.mozilla.com/api/differential.revision.edit for
+    the returned JSON object format.
+
+    Args:
+        commit: A VCS commit data dict to use for the call args.
+
+    Returns:
+        A JSON dict that can be passed to a Conduit differential.revision.edit API call.
+    """
+    # The Phabricator API will refuse the new summary value if we include the
+    # "Differential Revision:" keyword in the summary body.
+    transactions = [
+        dict(type="title", value=commit["title"]),
+        dict(type="summary", value=strip_differential_revision(commit["body"])),
+    ]
+    return {"transactions": transactions, "objectIdentifier": commit["rev-id"]}
+
+
+def parse_api_error(api_response):
+    """Parse the string output from 'arc call-conduit' and return any errors found.
+
+    Args:
+        api_response: stdout string captured from 'arc call-conduit'.  It should
+            contain only valid JSON.
+
+    Returns:
+        A string error description if an error occurred or None if no error occurred.
+    """
+    # Example error response from running
+    # $ echo '{}' | arc call-conduit differential.revision.edit | jq .
+    #
+    # {
+    #   "error": "ERR-CONDUIT-CORE",
+    #   "errorMessage": "ERR-CONDUIT-CORE: Parameter \"transactions\" is not a list "\
+    #       "of transactions.",
+    #   "response": null
+    # }
+    response = json.loads(api_response)
+    if response["error"] and response["errorMessage"]:
+        return response["errorMessage"]
+
+
+def update_phabricator_commit_summary(commit, repo):
+    """Send a new commit summary and description to Phabricator.
+
+    Args:
+        commit: A VCS commit data dict to use for the call args.
+        repo: The Repository that the commit lives in.
+
+    """
+    # From https://phabricator.services.mozilla.com/api/differential.revision.edit
+    #
+    # Example call format we are aiming for:
+    #
+    # $ echo '{
+    #   "transactions": [
+    #     {
+    #       "type": "title",
+    #       "value": "Remove unnecessary branch statement"
+    #     }
+    #     {
+    #       "type": "summary",
+    #       "value": "Blah"
+    #     }
+    #   ],
+    #   "objectIdentifier": "D8095"
+    # }' | arc call-conduit --conduit-uri https://phabricator.services.mozilla.com/ \
+    #       --conduit-token <conduit-token> differential.revision.edit
+    logger.debug("Updating revision title and summary in Phabricator")
+    api_call_args = build_api_call_to_update_commit_title_and_summary(commit)
+    arc_args = ["call-conduit", "differential.revision.edit"]
+
+    # 'arc call-conduit' only accepts its args from STDIN.
+    with NamedTemporaryFile() as temp_f:
+        json.dump(api_call_args, temp_f)
+        temp_f.flush()
+        temp_f.file.seek(0)
+        logger.debug("Arc stdin: %s", api_call_args)
+        output = arc_out(
+            arc_args, cwd=repo.path, stdin=temp_f, log_output_to_console=False
+        )
+
+    maybe_error = parse_api_error(output)
+    if maybe_error:
+        logger.warn(
+            "Error attempting to update revision summary and title in Phabricator"
+        )
+        logger.warn("Error was: %s", maybe_error)
+
+
 def submit(repo, args):
     if DEBUG:
         config.arc.append("--trace")
@@ -1587,8 +1707,11 @@ def submit(repo, args):
     # Process.
     previous_commit = None
     for commit in commits:
+        # Only revisions being updated have an ID.  Newly created ones don't.
+        is_update = bool(commit["rev-id"])
+
         # Let the user know something's happening.
-        if commit["rev-id"]:
+        if is_update:
             logger.info("\nUpdating revision D%s:" % commit["rev-id"])
         else:
             logger.info("\nCreating new revision:")
@@ -1619,7 +1742,7 @@ def submit(repo, args):
             )
             if args.nolint:
                 arc_args.append("--nolint")
-            if commit["rev-id"]:
+            if is_update:
                 arc_args.extend(
                     ["--message", "Revision updated."] + ["--update", commit["rev-id"]]
                 )
@@ -1640,12 +1763,16 @@ def submit(repo, args):
         if not revision_url:
             raise Error("Failed to find 'Revision URL' in arc output")
 
+        if is_update:
+            try:
+                update_phabricator_commit_summary(commit, repo)
+            except Exception:
+                logger.warning(
+                    "Warning: failed to update commit summary in Phabricator"
+                )
+
         # Append/replace div rev url to/in commit description.
-        body = commit["body"]
-        body = ARC_DIFF_REV_RE.sub("", body).rstrip()
-        if body:
-            body += "\n"
-        body += "\nDifferential Revision: %s" % revision_url
+        body = amend_revision_url(commit["body"], revision_url)
 
         # Amend the commit if required.
         if commit["title-preview"] != commit["title"] or body != commit["body"]:
