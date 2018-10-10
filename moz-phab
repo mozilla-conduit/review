@@ -136,6 +136,21 @@ MINIMUM_MERCURIAL_VERSION = LooseVersion("4.3.3")
 #
 
 
+def getXDGdir():
+    platform = sys.platform
+    default = os.path.expanduser("~")
+    if platform == "linux" or platform == "linux2":
+        default = os.path.join(default, ".config")
+        path = os.getenv("XDG_CONFIG_HOME", default)
+    elif platform == "darwin":  # MACOS
+        default = os.path.join(default, "Library", "Preferences")
+        path = os.getenv("XDG_CONFIG_HOME", default)
+    elif platform == "win32" or platform == "win64":
+        default = os.path.join(default, "AppData")
+        path = os.getenv("APPDATA", default)
+    return path
+
+
 def which(filename):
     # backport of shutil.which from py3
     seen = set()
@@ -315,8 +330,8 @@ class Error(Exception):
 
 class Config(object):
     def __init__(self, should_access_file=True):
-        self._filename = os.path.join(os.path.expanduser("~"), ".moz-phab-config")
-        self.name = "~/.moz-phab-config"  # human-readable name
+        self._filename = os.path.join(getXDGdir(), "moz-phab-config.ini")
+        self.name = "moz-phab-config.ini"  # human-readable name
 
         # Default values.
         defaults = u"""

@@ -32,7 +32,15 @@ as with any other Python script:
 
 ### Configuration
 
-`moz-phab` has an INI style configuration file to control defaults: `~/.moz-phab-config`
+`moz-phab` has an INI style configuration file to control defaults: `moz-phab-config.ini`
+The location of this file is platform dependent, following the table:
+
+| OS | Location |
+| --- | --- |
+| Linux | ${XDG_CONFIG_HOME:-~/.config}/moz-phab-config.ini |
+| Windows | %APPDATA%\moz-phab-config.ini |
+| MacOS | ${XDG_CONFIG_HOME:-~/Library/Preferences}/moz-phab-config.ini |
+
 
 This file will be created if it doesn't exist.
 
