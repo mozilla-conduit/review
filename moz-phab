@@ -618,11 +618,11 @@ class Mercurial(Repository):
         os.environ["HGRCPATH"] = ""
 
     @staticmethod
-    def _get_extension(extension, config):
+    def _get_extension(extension, hg_config):
         for prefix in ("extensions.%s", "extensions.hgext.%s"):
             field = prefix % extension
-            if field in config:
-                return config.get(field, "")
+            if field in hg_config:
+                return hg_config.get(field, "")
 
         return None
 
@@ -1221,6 +1221,8 @@ def submit(repo, args):
                 + ["--allow-untracked", "--no-amend", "--no-ansi"]
                 + ["--message-file", temp_f.name]
             )
+            if args.nolint:
+                arc_args.append("--nolint")
             if commit["rev-id"]:
                 arc_args.extend(
                     ["--message", "Revision updated."] + ["--update", commit["rev-id"]]
@@ -1430,10 +1432,16 @@ def parse_args():
     )
     submit_parser.add_argument(
         "--blocker",
-        "--blocker",
+        "--blockers",
         "-R",
         action="append",
         help="Set blocking review(s) for all commits (default: from commit)",
+    )
+    submit_parser.add_argument(
+        "--nolint",
+        "--no-lint",
+        action="store_true",
+        help="Do not run lint (default: lint changed files if configured)",
     )
     submit_parser.add_argument(
         "start_rev",
