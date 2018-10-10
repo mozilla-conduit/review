@@ -173,7 +173,7 @@ def parse_zulu_time(timestamp):
 def check_call(command, **kwargs):
     # wrapper around subprocess.check_call with debug output
     logger.debug("$ %s" % " ".join(shell_quote(s) for s in command))
-    subprocess.check_call(command, **kwargs)
+    subprocess.check_call(command,  shell=True, **kwargs)
 
 
 def check_output(command, cwd=None, split=True, strip=True, never_log=False):
