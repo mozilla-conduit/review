@@ -101,7 +101,7 @@ Bug #: {bug_id}
 """.strip()
 ARC_OUTPUT_REV_URL_RE = re.compile(r"^\s*Revision URI: (http.+)$", flags=re.MULTILINE)
 ARC_DIFF_REV_RE = re.compile(
-    r"^\s*Differential Revision:\s*https://.+/D(\d+)\s*$", flags=re.MULTILINE
+    r"^\s*Differential Revision:\s*https?://.+/D(\d+)\s*$", flags=re.MULTILINE
 )
 
 # If a commit body matches **all** of these, reject it.  This is to avoid the

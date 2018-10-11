@@ -130,7 +130,7 @@ class CommitParsing(unittest.TestCase):
         )
         self.assertEqual("1", parse("Differential Revision: https://example.com/D1\n"))
         self.assertIsNone(parse("Differential Revision: https://example.com/D1 1"))
-        self.assertIsNone(parse("Differential Revision: http://example.com/D1"))
+        self.assertEqual("1", parse("Differential Revision: http://example.com/D1"))
         self.assertIsNone(parse("\n  Differential Revision: http://example.com/Q1"))
 
     def test_arc_reject(self):
