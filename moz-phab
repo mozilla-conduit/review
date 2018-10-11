@@ -1095,7 +1095,7 @@ def show_commit_stack(repo, commits, show_rev_urls=False, show_warnings=False):
                 logger.warning("!! Missing reviewers")
 
         if show_rev_urls and commit["rev-id"]:
-            logger.warning("-> %sD%s" % (repo.phab_url, commit["rev-id"]))
+            logger.warning("-> %s/D%s" % (repo.phab_url.rstrip("/"), commit["rev-id"]))
 
 
 def arc_out(args, cwd):
@@ -1108,7 +1108,7 @@ def arc_out(args, cwd):
 
 def arc_ping(cwd):
     """Sends a ping to the Phabricator server using `conduit.ping` API.
-    
+
     Returns: `True` if no error, otherwise - `False`
     """
     logger.debug('$ echo "{}" | %s call-conduit conduit.ping' % " ".join(config.arc))
