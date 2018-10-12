@@ -177,11 +177,15 @@ def check_call(command, **kwargs):
     subprocess.check_call(command, **kwargs)
 
 
-def check_output(command, cwd=None, split=True, strip=True, never_log=False):
+def check_output(command, cwd=None, split=True, strip=True, never_log=False, env=None):
     # wrapper around subprocess.check_output with debug output and splitting
     logger.debug("$ %s" % " ".join(shell_quote(s) for s in command))
+    kwargs = dict(cwd=cwd)
+    if env:
+        kwargs["env"] = env
+
     try:
-        output = subprocess.check_output(command, cwd=cwd)
+        output = subprocess.check_output(command, **kwargs)
     except subprocess.CalledProcessError as e:
         logger.debug(e.output)
         raise Exception("command '%s' failed to complete successfully" % command[0])
@@ -263,6 +267,34 @@ def prompt(question, options):
             sys.stdout.flush()
 
     return options[res]
+
+
+def parse_config(config_list, filter_func=None):
+    """Parses list with "name=value" strings.
+
+    Args:
+        config_list: A list of "name=value" strings
+        filter_func: A function taking the parsing config name and value for each line.
+            If the function returns True the config value will be included in the final dict
+
+    Returns: A dict containing parsed data.
+    """
+    config = dict()
+    for line in config_list:
+        # On Windows config file is likely to be cp1252 encoded, not UTF-8.
+        if IS_WINDOWS:
+            try:
+                line = line.decode("cp1252").encode("UTF-8")
+            except UnicodeDecodeError:
+                pass
+
+        name, value = line.split("=", 1)
+        name = name.strip()
+        value = value.strip()
+        if filter_func is None or (callable(filter_func) and filter_func(name, value)):
+            config[name] = value
+
+    return config
 
 
 class NamedTemporaryFile(object):
@@ -583,20 +615,13 @@ class Mercurial(Repository):
 
         # Load hg config into hg_config.  We'll specify specific settings on
         # the command line when calling hg; all other user settings are ignored.
-        hg_config = {}
-        for line in self.hg_out(["config"], never_log=True):
-            # On Windows mercurial.ini is likely to be cp1252 encoded, not UTF-8.
-            if IS_WINDOWS:
-                try:
-                    line = line.decode("cp1252").encode("UTF-8")
-                except UnicodeDecodeError:
-                    pass
-
-            name, value = line.split("=", 1)
-            name = name.strip()
-            value = value.strip()
-            if not name.startswith("extensions.") or not value.startswith("!"):
-                hg_config[name] = value
+        # Do not parse shell alias extensions.
+        hg_config = parse_config(
+            self.hg_out(["config"], never_log=True),
+            lambda name, value: not (
+                name.startswith("extensions.") and value.startswith("!")
+            ),
+        )
 
         # Need to use the correct username.
         if "ui.username" not in hg_config:
@@ -645,7 +670,7 @@ class Mercurial(Repository):
         return None
 
     def hg(self, command, **kwargs):
-        return check_call(self._hg + command, cwd=self.path, **kwargs)
+        check_call(self._hg + command, cwd=self.path, **kwargs)
 
     def hg_out(self, command, **kwargs):
         return check_output(self._hg + command, cwd=self.path, **kwargs)
@@ -949,11 +974,308 @@ class Git(Repository):
 
         super(Git, self).__init__(path, dot_path)
 
-        if not which("git"):
-            raise Error("Failed to find 'git' executable")
-        # TODO draw the rest of the owl
+        self._git = ["git.exe" if IS_WINDOWS else "git"]
+        self.revset = None
 
-        raise NotImplementedError("git support is not yet implemented")
+        if not which(self._git[0]):
+            raise Error("Failed to find 'git' executable")
+
+        logger.debug("found git repo in %s" % path)
+
+        # `self._env` is a dict representing environment used in all git commands.
+        self._env = os.environ.copy()
+        git_config = parse_config(self.git_out(["config", "--list"]))
+
+        # Need to use the correct username.
+        if "user.email" not in git_config:
+            raise Error("user.email is not configured in your gitconfig")
+
+        self._git.extend(["-c", "user.email=%s" % git_config["user.email"]])
+
+        if "user.name" in git_config:
+            self._git.extend(["-c", "user.name=%s" % git_config["user.name"]])
+
+        if "cinnabar.helper" in git_config:
+            self._git.extend(
+                ["-c", "cinnabar.helper=%s" % git_config["cinnabar.helper"]]
+            )
+
+        # Ignore the user's Git config
+        # To make Git not read the `~/.gitconfig` we need to temporarily change the
+        # `$HOME` variable.
+        self._env["HOME"] = ""
+        self._env["XDG_CONFIG_HOME"] = ""
+
+        # Store current branch (fails if HEAD in detached state)
+        try:
+            self.current_head = self._get_current_head()
+        except Exception:
+            raise Error(
+                "Git failed to read the branch name.\n"
+                "The repository is in a detached HEAD state.\n"
+                "You need to run the *git checkout <branch-name>* command."
+            )
+
+    def git(self, command, **kwargs):
+        """Call git from the repository path."""
+        check_call(self._git + command, cwd=self.path, env=self._env, **kwargs)
+
+    def git_out(self, command, **kwargs):
+        """Call git from the repository path and return the result."""
+        return check_output(self._git + command, cwd=self.path, env=self._env, **kwargs)
+
+    def cleanup(self):
+        self.git(["gc", "--auto", "--quiet"])
+
+    def refresh_commit_stack(self, commits):
+        """Update revset and names of the commits."""
+        for commit in commits:
+            commit["name"] = commit["node"][:12]
+        self.revset = (commits[0]["node"], commits[-1]["node"])
+
+        super(Git, self).refresh_commit_stack(commits)
+
+    def _get_first_unpublished_node(self):
+        """Check which commits should be pushed and return the oldest one."""
+        cherry = ["cherry", "--abbrev=12"]
+        if self.args.upstream:
+            cherry += self.args.upstream
+        else:
+            remotes = self.git_out(["remote"])
+            if len(remotes) > 1:
+                logger.warning(
+                    "!! Found multiple upstreams (%s). Using %s."
+                    % (", ".join(remotes), remotes[0])
+                )
+            cherry += remotes[:1]
+
+        try:
+            unpublished = self.git_out(cherry)
+        except:
+            logger.warning(
+                "Unable to detect the start commit. Please provide its SHA-1 or\n"
+                "specify the upstream branch with `--upstream <branch>`."
+            )
+            raise
+
+        if not unpublished:
+            return None
+
+        for line in unpublished:
+            # `git cherry` is producing the output in reverse order - oldest
+            # commit is the first one. That is the *opposite* of what we can find
+            # in the documentation.
+            if line.startswith("+"):
+                return line.split("+ ")[1]
+            else:
+                logger.warning(
+                    "!! Diff from commit %s found in upstream - omitting."
+                    % line.split("- ")[1]
+                )
+
+    def set_args(self, args):
+        """Store moz-phab command line args and set the revset."""
+        super(Git, self).set_args(args)
+
+        if self.args.start_rev == "(auto)":
+            start = self._get_first_unpublished_node()
+        else:
+            start = self.args.start_rev
+
+        if start:
+            self.revset = (start[:12], self.args.end_rev[:12])
+
+    def _get_children(self, node):
+        """ Return direct children of the commit."""
+        # Get commits with their children. The command prints out
+        # "aaaa bbbb cccc"" where bbbb and cccc are direct children of aaaa
+        commits_with_children = self.git_out(
+            ["rev-list", "--all", "--children", "--not", "%s^@" % node]
+        )
+        # Find the line containing the node to extract its commit's children
+        for line in commits_with_children:
+            if node in line:
+                children = line.split(" ")
+                children.remove(node)
+                return children
+
+    def _get_commits_info(self, start, end):
+        """Log useful info about the commits within the desired range.
+
+        Returns a list of strings
+        An example of a list item:
+            4912923
+            b18312ffe929d3482f1d7b1e9716a1885c7a61b8
+            5f161c70fef9e59d1966bab693a0a68a9336af80
+            Update code references
+            Fixes:
+            $ moz-phab self-update
+            > Failed to download update: HTTP Error 404: Not Found
+        """
+        boundary = "--%s--\n" % uuid.uuid4().get_hex()
+        log = self.git_out(
+            [
+                "log",
+                "--reverse",
+                "--ancestry-path",
+                "--quiet",
+                "--format=%p%n%T%n%H%n%s%n%b{}".format(boundary),
+                "{}..{}".format(start, end),
+            ],
+            split=False,
+            strip=False,
+        )[: -len(boundary) - 1]
+        return log.split("%s\n" % boundary)
+
+    def commit_stack(self):
+        """Collect all the info about commits."""
+        if not self.revset:
+            # No commits found to submit
+            return None
+
+        # Git log starts from the commit after given SHA
+        try:
+            start = self._revparse("%s^" % self.revset[0])
+        except:
+            # it might happen that a "HEAD~" or similar is provided as a start node
+            start = self.revset[0]
+
+        commits = []
+        for log_line in self._get_commits_info(start, self.revset[1]):
+            parents, tree_hash, node, desc = log_line.split("\n", 3)
+            desc = desc.splitlines()
+
+            # Check if commit has multiple children, if so - raise an Error
+            if node[:12] != self.revset[1] and len(self._get_children(node)) > 1:
+                raise Error(
+                    "Multiple children found for commit %s, unable to continue"
+                    % node[:12]
+                )
+
+            # Check if commit has multiple parents, if so - raise an Error
+            # We may push the merging commit if it's the first one
+            parents = parents.split(" ")
+            if node[:12] != self.revset[0] and len(parents) > 1:
+                raise Error(
+                    "Multiple parents found for commit %s, unable to continue"
+                    % node[:12]
+                )
+
+            commits.append(
+                {
+                    "name": node[:12],
+                    "node": node,
+                    "title": desc[0],
+                    "title-preview": desc[0],
+                    "body": "\n".join(desc[1:]).rstrip(),
+                    "bug-id": None,
+                    "reviewers": [],
+                    "rev-id": None,
+                    "parent": parents[0],
+                    "tree_hash": tree_hash,
+                }
+            )
+
+        return commits
+
+    def checkout(self, node):
+        self.git(["checkout", "--quiet", node])
+
+    def _get_current_head(self, allow_detached=False):
+        """Return current's HEAD symbolic link."""
+        symbolic = self.git_out(["symbolic-ref", "HEAD"], split=False)
+        return symbolic.split("refs/heads/")[1]
+
+    def _get_current_hash(self):
+        """Return the SHA1 of the current commit."""
+        return self._revparse("HEAD")
+
+    def _revparse(self, branch):
+        """Return the SHA1 of given branch."""
+        return self.git_out(["rev-parse", branch], split=False)
+
+    def _commit_tree(self, parent, tree_hash, message):
+        """Prepare and run `commit-tree` command.
+        
+        Creates a new commit for the tree_hash.
+        Args:
+            parent: SHA1 of the parent commit
+            tree_hash: SHA1 of the tree_hash to use for the commit
+            message: commit message
+
+        Returns:
+            str: SHA1 of the new commit.
+        """
+        with NamedTemporaryFile() as temp_f:
+            temp_f.write(message)
+            temp_f.flush()
+            return self.git_out(
+                ["commit-tree", "-p", parent, "-F", temp_f.name, tree_hash], split=False
+            )
+
+    def amend_commit(self, commit, commits):
+        """Amend the commit with an updated message.
+
+        Changing commit's message changes also its SHA1.
+        All the children within the stack and branches are then updated
+        to keep the history.
+
+        Args:
+            commit: Information about the commit to be amended
+            commits: List of commits within the stack
+        """
+        updated_body = "%s\n\n%s" % (commit["title"], commit["body"])
+
+        current_body = self.git_out(
+            ["show", "-s", "--format=%s%n%b", commit["node"]], split=False
+        )
+        if current_body == updated_body:
+            logger.debug("not amending commit %s, unchanged" % commit["name"])
+            return
+
+        # Create a new commit with the updated body.
+        new_parent_sha = self._commit_tree(
+            commit["parent"], commit["tree_hash"], updated_body
+        )
+
+        # Update commit info
+        old_parent_sha = commit["node"]
+        commit["node"] = new_parent_sha
+        # Update parent for all the children of the `commit` within the stack
+        has_children = False
+        for c in commits:
+            if not has_children:
+                # Find the amended commit info in the list of all commits in the stack.
+                # Next commits are children of this one.
+                has_children = c == commit
+                continue
+
+            # Update parent information and create a new commit
+            c["parent"] = new_parent_sha
+            new_parent_sha = self._commit_tree(
+                new_parent_sha, c["tree_hash"], "%s\n%s" % (c["title"], c["body"])
+            )
+            old_parent_sha = c["node"]
+            c["node"] = new_parent_sha
+
+        # We've created a new linear history with detached commits.
+        # All branches based on the old SHA1 of the last commit need to be re-parented
+        # to its new SHA1.
+        branches = self.git_out(["branch", "--contains", old_parent_sha])
+        for branch in branches:
+            if branch.startswith("* ("):
+                # Omit `* (detached from {SHA1})`
+                continue
+            self.checkout(branch.lstrip("*").lstrip())
+            self._rebase(new_parent_sha, old_parent_sha)
+
+        self.checkout(self.current_head)
+
+    def rebase_commit(self, source_commit, dest_commit):
+        self._rebase(dest_commit["node"], source_commit["node"])
+
+    def _rebase(self, newbase, upstream):
+        self.git(["rebase", "--quiet", "--onto", newbase, upstream])
 
 
 #
@@ -1484,6 +1806,13 @@ def parse_args():
         "--no-lint",
         action="store_true",
         help="Do not run lint (default: lint changed files if configured)",
+    )
+    submit_parser.add_argument(
+        "--upstream",
+        "--upstream",
+        "-u",
+        action="append",
+        help='Set upstream branch to detect the starting commit. (default: "")',
     )
     submit_parser.add_argument(
         "start_rev",
