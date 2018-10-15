@@ -476,6 +476,8 @@ class Repository(object):
         """Determine the phab/conduit URL."""
 
         # In order of priority as per arc
+        # FIXME: This should also check {.hg|.git}/arc/config, which is where
+        # `arc set-config --local` writes to.  See bug 1497786.
         arcconfig_files = [
             os.path.join(self.dot_path, ".arcconfig"),
             os.path.join(self.path, ".arcconfig"),
