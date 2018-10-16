@@ -1769,7 +1769,11 @@ def self_update(args):
 
 class ColourFormatter(logging.Formatter):
     def __init__(self):
-        super(ColourFormatter, self).__init__("%(message)s")
+        if DEBUG:
+            fmt = "%(levelname)-8s %(asctime)-13s %(message)s"
+        else:
+            fmt = "%(message)s"
+        super(ColourFormatter, self).__init__(fmt)
         self.log_colours = {"WARNING": 34, "ERROR": 31}  # blue, red
 
     def format(self, record):
