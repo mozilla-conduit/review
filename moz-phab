@@ -968,22 +968,28 @@ class Mercurial(Repository):
 class Git(Repository):
     def __init__(self, path):
         dot_path = os.path.join(path, ".git")
-        if not os.path.isdir(dot_path):
+        if not os.path.exists(dot_path):
             raise ValueError("%s: not a git repository" % path)
+
         logger.debug("found git repo in %s" % path)
 
-        super(Git, self).__init__(path, dot_path)
-
         self._git = ["git.exe" if IS_WINDOWS else "git"]
-        self.revset = None
-
         if not which(self._git[0]):
             raise Error("Failed to find 'git' executable")
 
-        logger.debug("found git repo in %s" % path)
-
         # `self._env` is a dict representing environment used in all git commands.
         self._env = os.environ.copy()
+
+        if os.path.isfile(dot_path):
+            # We're working from a worktree. Let's find the dot_path directory.
+            dot_path = self.git_out(
+                ["rev-parse", "--git-common-dir"], path=path, split=False
+            )
+
+        super(Git, self).__init__(path, dot_path)
+
+        self.revset = None
+
         git_config = parse_config(self.git_out(["config", "--list"]))
 
         # Need to use the correct username.
@@ -1020,9 +1026,11 @@ class Git(Repository):
         """Call git from the repository path."""
         check_call(self._git + command, cwd=self.path, env=self._env, **kwargs)
 
-    def git_out(self, command, **kwargs):
+    def git_out(self, command, path=None, **kwargs):
         """Call git from the repository path and return the result."""
-        return check_output(self._git + command, cwd=self.path, env=self._env, **kwargs)
+        return check_output(
+            self._git + command, cwd=path or self.path, env=self._env, **kwargs
+        )
 
     def cleanup(self):
         self.git(["gc", "--auto", "--quiet"])
@@ -1196,7 +1204,7 @@ class Git(Repository):
 
     def _commit_tree(self, parent, tree_hash, message):
         """Prepare and run `commit-tree` command.
-        
+
         Creates a new commit for the tree_hash.
         Args:
             parent: SHA1 of the parent commit
