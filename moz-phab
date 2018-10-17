@@ -177,6 +177,22 @@ def check_call(command, **kwargs):
     subprocess.check_call(command, **kwargs)
 
 
+def check_call_by_line(command, cwd=None, never_log=False):
+    # similar to check_call, yields for line-by-line processing
+    logger.debug("$ %s" % " ".join(shell_quote(s) for s in command))
+
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, cwd=cwd)
+    try:
+        for line in iter(process.stdout.readline, ""):
+            line = line.rstrip()
+            if not never_log:
+                logger.debug("> %s" % line)
+            yield line
+    finally:
+        process.stdout.close()
+        process.wait()
+
+
 def check_output(command, cwd=None, split=True, strip=True, never_log=False, env=None):
     # wrapper around subprocess.check_output with debug output and splitting
     logger.debug("$ %s" % " ".join(shell_quote(s) for s in command))
@@ -233,7 +249,8 @@ def get_char():
             return sys.stdin.read(1)
         except termios.error:
             # Fallback on readline() if we failed to put the terminal into raw mode.
-            return sys.stdin.readline().strip().lower()
+            ch = sys.stdin.readline().strip()
+            return "\n" if ch == "" else ch[0]
         finally:
             if old_term_attrs:
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_term_attrs)
@@ -255,7 +272,7 @@ def prompt(question, options):
     default = options[0][0].lower()
     options = {o[0].lower(): o for o in options}
     while res not in options:
-        res = get_char()
+        res = get_char().lower()
         if res in (chr(10), chr(13)):  # return
             res = default
         elif res == chr(3) or res == chr(27):  # ^C, escape
@@ -1504,7 +1521,7 @@ def update_commits_from_args(commits, args):
 
 
 def submit(repo, args):
-    if DEBUG or (hasattr(args, "trace") and args.trace):
+    if DEBUG:
         config.arc.append("--trace")
 
     # Find and preview commits to submits.
@@ -1604,13 +1621,19 @@ def submit(repo, args):
             else:
                 arc_args.append("--create")
 
-            arc_output = arc_out(arc_args, cwd=repo.path)
+            revision_url = None
+            for line in check_call_by_line(
+                config.arc + arc_args, cwd=repo.path, never_log=True
+            ):
+                print(line)
 
-        # Extract Revision URL.
-        m = ARC_OUTPUT_REV_URL_RE.search(arc_output)
-        if not m:
+                # Extract Revision URL.
+                m = ARC_OUTPUT_REV_URL_RE.search(line)
+                if m:
+                    revision_url = m.group(1)
+
+        if not revision_url:
             raise Error("Failed to find 'Revision URL' in arc output")
-        revision_url = m.group(1)
 
         # Append/replace div rev url to/in commit description.
         body = commit["body"]
@@ -1854,7 +1877,7 @@ def parse_args():
 
 
 def main():
-    global config, HAS_ANSI
+    global config, HAS_ANSI, DEBUG
     try:
         init_logging()
         config = Config()
@@ -1882,6 +1905,9 @@ def main():
             )
 
         args = parse_args()
+
+        if hasattr(args, "trace") and args.trace:
+            DEBUG = True
 
         if args.command != "self-update":
             check_for_updates()
