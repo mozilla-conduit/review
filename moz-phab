@@ -1113,8 +1113,16 @@ class Git(Repository):
         else:
             start = self.args.start_rev
 
-        if start:
-            self.revset = (start[:12], self.args.end_rev[:12])
+        # We want full, inclusive range of commits.
+        # If the user provided a commit SHA1, its parent needs to be passed to the log.
+        if self._revparse(start).startswith(start):
+            # start is a hash - we need to use its parent
+            start = "%s^" % start
+
+        if not start:
+            return None
+
+        self.revset = (start, self.args.end_rev)
 
     def _get_children(self, node):
         """ Return direct children of the commit."""
@@ -1164,15 +1172,10 @@ class Git(Repository):
             # No commits found to submit
             return None
 
-        # Git log starts from the commit after given SHA
-        try:
-            start = self._revparse("%s^" % self.revset[0])
-        except:
-            # it might happen that a "HEAD~" or similar is provided as a start node
-            start = self.revset[0]
-
         commits = []
-        for log_line in self._get_commits_info(start, self.revset[1]):
+        for log_line in self._get_commits_info(*self.revset):
+            if not log_line:
+                continue
             parents, tree_hash, node, desc = log_line.split("\n", 3)
             desc = desc.splitlines()
 
