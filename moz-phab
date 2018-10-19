@@ -713,7 +713,7 @@ class Mercurial(Repository):
         if self.strip_nodes:
             # With the obsstore deleted the amended nodes are no longer hidden, so
             # we need to strip them completely from the repo.
-            self.hg(["strip"] + self.strip_nodes)
+            self.hg(["strip", "--hidden"] + self.strip_nodes)
             self.strip_nodes = []
 
     def _status(self):
