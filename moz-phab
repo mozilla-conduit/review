@@ -192,6 +192,9 @@ def check_call_by_line(command, cwd=None, never_log=False):
         process.stdout.close()
         process.wait()
 
+    if process.returncode:
+        raise subprocess.CalledProcessError(process.returncode, command)
+
 
 def check_output(command, cwd=None, split=True, strip=True, never_log=False, env=None):
     # wrapper around subprocess.check_output with debug output and splitting
