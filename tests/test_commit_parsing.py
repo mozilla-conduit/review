@@ -8,6 +8,9 @@ review = imp.load_source(
 
 
 class CommitParsing(unittest.TestCase):
+    def assertParsed(self, result, parsed):
+        self.assertEqual(dict(request=result[0], granted=result[1]), parsed)
+
     def test_bug_id(self):
         parse = review.parse_bugs
 
@@ -26,88 +29,126 @@ class CommitParsing(unittest.TestCase):
         parse = review.parse_reviewers
 
         # first with r? reviewer request syntax
-        self.assertEqual(["romulus"], parse("stuff; r?romulus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff; r?romulus, r?remus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff; r?romulus,r?remus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff; r?romulus, remus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff; r?romulus,remus"))
-        self.assertEqual(["romulus"], parse("stuff; (r?romulus)"))
-        self.assertEqual(["romulus", "remus"], parse("stuff; (r?romulus,remus)"))
-        self.assertEqual(["romulus"], parse("stuff; [r?romulus]"))
-        self.assertEqual(["remus", "romulus"], parse(" stuff; [r?remus, r?romulus]"))
-        self.assertEqual(["romulus"], parse("stuff; r?romulus, a=test-only"))
-        self.assertEqual(["romulus"], parse("stuff; r?romulus, ux-r=test-only"))
+        self.assertParsed((["romulus"], []), parse("stuff; r?romulus"))
+        self.assertParsed(
+            (["romulus", "remus"], []), parse("stuff; r?romulus, r?remus")
+        )
+        self.assertParsed((["romulus", "remus"], []), parse("stuff; r?romulus,r?remus"))
+        self.assertParsed((["romulus", "remus"], []), parse("stuff; r?romulus, remus"))
+        self.assertParsed((["romulus", "remus"], []), parse("stuff; r?romulus,remus"))
+        self.assertParsed((["romulus"], []), parse("stuff; (r?romulus)"))
+        self.assertParsed((["romulus", "remus"], []), parse("stuff; (r?romulus,remus)"))
+        self.assertParsed((["romulus"], []), parse("stuff; [r?romulus]"))
+        self.assertParsed(
+            (["remus", "romulus"], []), parse(" stuff; [r?remus, r?romulus]")
+        )
+        self.assertParsed((["romulus"], []), parse("stuff; r?romulus, a=test-only"))
+        self.assertParsed((["romulus"], []), parse("stuff; r?romulus, ux-r=test-only"))
 
         # now with r= review granted syntax
-        self.assertEqual(["romulus"], parse("stuff; r=romulus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff; r=romulus, r=remus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff; r=romulus,r=remus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff; r=romulus, remus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff; r=romulus,remus"))
-        self.assertEqual(["romulus"], parse("stuff; (r=romulus)"))
-        self.assertEqual(["romulus", "remus"], parse("stuff; (r=romulus,remus)"))
-        self.assertEqual(["romulus"], parse("stuff; [r=romulus]"))
-        self.assertEqual(["remus", "romulus"], parse("stuff; [r=remus, r=romulus]"))
-        self.assertEqual(["romulus"], parse("stuff; r=romulus, a=test-only"))
+        self.assertParsed(([], ["romulus"]), parse("stuff; r=romulus"))
+        self.assertParsed(
+            ([], ["romulus", "remus"]), parse("stuff; r=romulus, r=remus")
+        )
+        self.assertParsed(([], ["romulus", "remus"]), parse("stuff; r=romulus,r=remus"))
+        self.assertParsed(([], ["romulus", "remus"]), parse("stuff; r=romulus, remus"))
+        self.assertParsed(([], ["romulus", "remus"]), parse("stuff; r=romulus,remus"))
+        self.assertParsed(([], ["romulus"]), parse("stuff; (r=romulus)"))
+        self.assertParsed(([], ["romulus", "remus"]), parse("stuff; (r=romulus,remus)"))
+        self.assertParsed(([], ["romulus"]), parse("stuff; [r=romulus]"))
+        self.assertParsed(
+            ([], ["remus", "romulus"]), parse("stuff; [r=remus, r=romulus]")
+        )
+        self.assertParsed(([], ["romulus"]), parse("stuff; r=romulus, a=test-only"))
+        self.assertParsed(([], ["romulus"]), parse("stuff; r=romulus, a?test-only"))
+        self.assertParsed(([], ["romulus"]), parse("stuff; r=romulus, ux-r=test-only"))
+
+        # mixed r? and r=
+        self.assertParsed((["romulus"], ["remus"]), parse("stuff; r?romulus r=remus"))
+        self.assertParsed((["remus"], ["romulus"]), parse("stuff; r=romulus r?remus"))
+        self.assertParsed(
+            (["romulus", "gps"], ["remus"]), parse("stuff; r?romulus,gps r=remus")
+        )
+        self.assertParsed(
+            (["romulus"], ["remus", "gps"]), parse("stuff; r?romulus r=remus,gps")
+        )
+        self.assertParsed(
+            (["romulus", "next"], ["remus", "gps"]),
+            parse("stuff; r?romulus r=remus r?next r=gps"),
+        )
+        self.assertParsed(
+            (["romulus", "romulus!", "romulus"], ["romulus", "romulus!", "romulus"]),
+            parse("stuff; r?romulus r=romulus r?romulus! r=romulus!,romulus r?romulus"),
+        )
+        self.assertParsed(
+            (["remus", "gps"], ["romulus"]), parse("stuff; r=romulus r?remus,gps")
+        )
+        self.assertParsed(
+            (["remus"], ["romulus", "gps"]), parse("stuff; r=romulus,gps r?remus")
+        )
 
         # try some other separators than ;
-        self.assertEqual(["romulus"], parse("stuff r=romulus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff. r=romulus, r=remus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff - r=romulus,r=remus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff, r=romulus, remus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff.. r=romulus,remus"))
-        self.assertEqual(["romulus"], parse("stuff | (r=romulus)"))
+        self.assertParsed(([], ["romulus"]), parse("stuff r=romulus"))
+        self.assertParsed(
+            ([], ["romulus", "remus"]), parse("stuff. r=romulus, r=remus")
+        )
+        self.assertParsed(
+            ([], ["romulus", "remus"]), parse("stuff - r=romulus,r=remus")
+        )
+        self.assertParsed(([], ["romulus", "remus"]), parse("stuff, r=romulus, remus"))
+        self.assertParsed(([], ["romulus", "remus"]), parse("stuff.. r=romulus,remus"))
+        self.assertParsed(([], ["romulus"]), parse("stuff | (r=romulus)"))
 
         # make sure things work with different spacing
-        self.assertEqual(["romulus", "remus"], parse("stuff;r=romulus,r=remus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff.r=romulus, r=remus"))
-        self.assertEqual(["romulus", "remus"], parse("stuff,r=romulus, remus"))
-        self.assertEqual(["gps"], parse("stuff; r=gps DONTBUILD (NPOTB)"))
-        self.assertEqual(["gps"], parse("stuff; r=gps DONTBUILD"))
-        self.assertEqual(["gps"], parse("stuff; r=gps (DONTBUILD)"))
+        self.assertParsed(([], ["romulus", "remus"]), parse("stuff;r=romulus,r=remus"))
+        self.assertParsed(([], ["romulus", "remus"]), parse("stuff.r=romulus, r=remus"))
+        self.assertParsed(([], ["romulus", "remus"]), parse("stuff,r=romulus, remus"))
+        self.assertParsed(([], ["gps"]), parse("stuff; r=gps DONTBUILD (NPOTB)"))
+        self.assertParsed(([], ["gps"]), parse("stuff; r=gps DONTBUILD"))
+        self.assertParsed(([], ["gps"]), parse("stuff; r=gps (DONTBUILD)"))
 
         # bare r?
-        self.assertEqual([], parse("stuff; r?"))
-        self.assertEqual([], parse("stuff, r="))
+        self.assertParsed(([], []), parse("stuff; r?"))
+        self.assertParsed(([], []), parse("stuff, r="))
 
         # oddball real-world examples
-        self.assertEqual(
-            ["roc", "ehsan"],
+        self.assertParsed(
+            ([], ["roc", "ehsan"]),
             parse(
                 "Bug 1094764 - Implement AudioContext.suspend and friends.  r=roc,ehsan"
             ),
         )
-        self.assertEqual(
-            ["bsmedberg", "dbaron"],
+        self.assertParsed(
+            ([], ["bsmedberg", "dbaron"]),
             parse(
                 "Bug 380783 - nsStringAPI.h: no equivalent of IsVoid (tell if "
                 "string is null), patch by Mook <mook.moz+mozbz@gmail.com>, "
                 "r=bsmedberg/dbaron, sr=dbaron, a1.9=bz"
             ),
         )
-        self.assertEqual(
-            ["hsinyi"],
+        self.assertParsed(
+            ([], ["hsinyi"]),
             parse(
                 "Bug 1181382: move declaration into namespace to resolve conflict. "
                 "r=hsinyi. try: -b d -p all -u none -t none"
             ),
         )
-        self.assertEqual(
-            ["bsmedberg"],
+        self.assertParsed(
+            ([], ["bsmedberg"]),
             parse(
                 "Bug 1024110 - Change Aurora's default profile behavior to use "
                 "channel-specific profiles. r=bsmedberg f=gavin,markh"
             ),
         )
-        self.assertEqual(
-            ["gijs"],
+        self.assertParsed(
+            ([], ["gijs"]),
             parse(
                 "Bug 1199050 - Round off the corners of browser-extension-panel's "
                 "content. ui-r=maritz, r=gijs"
             ),
         )
-        self.assertEqual(
-            ["billm"],
+        self.assertParsed(
+            ([], ["billm"]),
             parse(
                 "Bug 1197422 - Part 2: [webext] Implement the pageAction API. "
                 "r=billm ui-r=bwinton"

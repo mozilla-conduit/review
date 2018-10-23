@@ -119,8 +119,8 @@ LIST_RE = re.compile(LIST)
 IRC_NICK = (
     r"[a-zA-Z0-9\-\_!]+"
 )  # Note this includes !, which is different from commitparser
-REVIEWERS_RE = re.compile(
-    r"([\s(.\[;,])(r[=?])("
+REVIEWERS_RE = (
+    r"([\s(.\[;,])(r%s)("
     + IRC_NICK
     + r"(?:"
     + LIST
@@ -128,6 +128,9 @@ REVIEWERS_RE = re.compile(
     + IRC_NICK
     + r")*)?"
 )
+ALL_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"[=?]")
+REQUEST_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"\?")
+GRANTED_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"=")
 R_SPECIFIER_RE = re.compile(r"\br[=?]")
 
 MINIMUM_MERCURIAL_VERSION = LooseVersion("4.3.3")
@@ -1346,12 +1349,23 @@ def parse_bugs(title):
 
 
 def parse_reviewers(title):
-    reviewers = []
-    for match in re.finditer(REVIEWERS_RE, title):
+    """Extract reviewers information from first line of the commit message.
+
+    Returns a dictionary containing reviewers divided by the type:
+        "r?" reviewers under the "request" key
+        "r=" reviewers under the "granted" key
+    """
+    request_reviewers = []
+    for match in re.finditer(REQUEST_REVIEWERS_RE, title):
         if not match.group(3):
             continue
-        reviewers.extend(re.split(LIST_RE, match.group(3)))
-    return reviewers
+        request_reviewers.extend(re.split(LIST_RE, match.group(3)))
+    granted_reviewers = []
+    for match in re.finditer(GRANTED_REVIEWERS_RE, title):
+        if not match.group(3):
+            continue
+        granted_reviewers.extend(re.split(LIST_RE, match.group(3)))
+    return dict(request=request_reviewers, granted=granted_reviewers)
 
 
 def strip_differential_revision(body):
@@ -1424,10 +1438,14 @@ def update_commit_title_previews(commits):
 
 def replace_reviewers(commit_description, reviewers):
     """From vct's commitparser"""
-    if not reviewers:
-        reviewers_str = ""
-    else:
-        reviewers_str = "r?" + ",".join(reviewers)
+    reviewers_lst = []
+    if reviewers["request"]:
+        reviewers_lst.append("r?" + ",".join(reviewers["request"]))
+
+    if reviewers["granted"]:
+        reviewers_lst.append("r=" + ",".join(reviewers["granted"]))
+
+    reviewers_str = " ".join(reviewers_lst)
 
     if commit_description == "":
         return reviewers_str
@@ -1454,7 +1472,7 @@ def replace_reviewers(commit_description, reviewers):
             else:
                 return matchobj.group(0)
 
-        commit_title = re.sub(REVIEWERS_RE, replace_first_reviewer, commit_title)
+        commit_title = re.sub(ALL_REVIEWERS_RE, replace_first_reviewer, commit_title)
 
         # remove marker values as well as leading separators.  this allows us
         # to remove runs of multiple reviewers and retain the trailing
@@ -1548,25 +1566,110 @@ def arc_message(template_vars):
 #
 # "submit" Command
 #
+def make_blocking(reviewers):
+    return ["%s!" % r.rstrip("!") for r in reviewers]
 
+
+def remove_duplicates(reviewers):
+    """Remove all duplicate items from the list.
+
+    Args:
+        reviewers: list of strings representing IRC nicks of reviewers.
+
+    Returns: list of unique reviewers.
+
+    Duplicates with excalamation mark are prefered.
+    """
+    unique = []
+    nicks = []
+    for reviewer in reviewers:
+        nick = reviewer.lower().strip("!")
+        if reviewer.endswith("!") and nick in nicks:
+            nicks.remove(nick)
+            unique = [r for r in unique if r.lower().strip("!") != nick]
+
+        if nick not in nicks:
+            nicks.append(nick)
+            unique.append(reviewer)
+
+    return unique
 
 def update_commits_from_args(commits, args):
-    # Build list of reviewers from args.
-    reviewers = list(set(args.reviewer)) if args.reviewer else []
-    blockers = list(set(args.blocker)) if args.blocker else []
-    reviewers += ["%s!" % r.rstrip("!") for r in blockers]
+    """Modify commit description based on args and configuration.
 
-    # Command args always overwrite commit desc.
+    Args:
+        commits: list of dicts representing the commits in commit stack
+        args: argparse.ArgumentParser object. In this function we're using
+            following attributes:
+            * reviewer - list of strings representing reviewers
+            * blocker - list of string representing blocking reviewers
+            * bug - an integer representing bug id in Bugzilla
+
+    Command args always overwrite commit desc.
+    Overwriting reviewers rules
+    (The "-r" are loaded into args.reviewer and "-R" into args.blocker):
+        a) Recognize `r=` and `r?` from commit message title.
+        b) Modify reviewers only if `-r` or `-R` is used in call arguments.
+        c) Add new reviewers using `r=`
+        d) Do not modify the way reviewer is already provided in the title (`r?` or `r=`).
+        e) Delete reviewer if `-r` or `-R` is used and the reviewer is not mentioned.
+
+    If no reviewers are provided by args and an `always_blocking` flag is set
+    change all reviewers in title to blocking.
+    """
+    # Build list of reviewers from args.
+    # WARN: Order might be changed here `list(set(["one", "two"])) == ['two', 'one']`
+    reviewers = list(set(args.reviewer)) if args.reviewer else []
+    blockers = [r.rstrip("!") for r in args.blocker] if args.blocker else []
+    # User might use "-r <nick>!" to provide a blocking reviewer.
+    # Add all such blocking reviewers to blockers list.
+    blockers += [r.rstrip("!") for r in reviewers if r.endswith("!")]
+    blockers = list(set(blockers))
+    # Remove blocking reviewers from reviewers list
+    reviewers_no_flag = [r.strip("!") for r in reviewers]
+    reviewers = [r for r in reviewers_no_flag if r.lower() not in blockers]
+    # Add all blockers to reviewers list. Reviewers list will contain a list
+    # of all reviewers where blocking ones are marked with the "!" suffix.
+    reviewers += make_blocking(blockers)
+    reviewers = remove_duplicates(reviewers)
+    lowercase_reviewers = [r.lower() for r in reviewers]
+    lowercase_blockers = [r.lower() for r in blockers]
+
     for commit in commits:
         if reviewers:
-            commit["reviewers"] = reviewers
+            # Only the reviewers mentioned in command line args will remain.
+            # New reviewers will be marked as "granted" (r=).
+            granted = reviewers[:]
+            requested = []
+
+            # commit["reviewers"]["request|"] is a list containing reviewers
+            # provided in commit's title with an r? mark.
+            for reviewer in commit["reviewers"]["request"]:
+                r = reviewer.strip("!")
+                # check which request reviewers are provided also via -r
+                if r.lower() in lowercase_reviewers:
+                    requested.append(r)
+                    granted.remove(r)
+                # check which request reviewers are provided also via -R
+                elif r.lower() in lowercase_blockers:
+                    requested.append("%s!" % r)
+                    granted.remove("%s!" % r)
+        else:
+            granted = commit["reviewers"].get("granted", [])
+            requested = commit["reviewers"].get("request", [])
+
+        commit["reviewers"] = dict(granted=granted, request=requested)
         if args.bug:
+            # Bug ID command arg used.
             commit["bug-id"] = args.bug
 
     # Otherwise honour config setting to always use blockers
     if not reviewers and config.always_blocking:
         for commit in commits:
-            commit["reviewers"] = ["%s!" % r.rstrip("!") for r in commit["reviewers"]]
+            commit["reviewers"] = dict(
+                request=make_blocking(commit["reviewers"]["request"]),
+                granted=make_blocking(commit["reviewers"]["granted"]),
+            )
 
     update_commit_title_previews(commits)
 
@@ -1741,7 +1844,9 @@ def submit(repo, args):
         template_vars = dict(
             title=commit["title-preview"],
             body=commit["body"],
-            reviewers=", ".join(commit["reviewers"]),
+            reviewers=", ".join(
+                commit["reviewers"]["granted"] + commit["reviewers"]["request"]
+            ),
             bug_id=commit["bug-id"],
         )
         if previous_commit:

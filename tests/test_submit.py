@@ -11,12 +11,19 @@ review = imp.load_source(
 )
 
 
+def reviewers_dict(reviewers=None):
+    return dict(
+        request=reviewers[0] if reviewers else [],
+        granted=reviewers[1] if reviewers else [],
+    )
+
+
 def commit(bug_id=None, reviewers=None, body="", name="", title="", rev_id=None):
     return {
         "name": name,
         "title": title,
         "bug-id": bug_id,
-        "reviewers": reviewers if reviewers else [],
+        "reviewers": reviewers_dict(reviewers),
         "body": body,
         "rev-id": rev_id,
     }
@@ -46,46 +53,54 @@ class Commits(unittest.TestCase):
         check = repo.check_commits_for_submit
 
         self._assertNoError(check, [])
-        self._assertNoError(check, [commit("1", ["r"])])
+        self._assertNoError(check, [commit("1", (["r"], []))])
         self._assertNoError(
-            check, [commit("1", ["r1"]), commit("2", ["r1"]), commit("3", ["r1", "r2"])]
+            check,
+            [
+                commit("1", (["r1"], [])),
+                commit("2", (["r1"], [])),
+                commit("3", (["r1", "r2"], [])),
+            ],
         )
-        self._assertNoError(check, [commit("1", [])])
-        self._assertNoError(check, [commit("1", ["r"]), commit("1", [])])
+        self._assertNoError(check, [commit("1", None)])
+        self._assertNoError(check, [commit("1", (["r"], [])), commit("1", None)])
 
-        self._assertError(check, [commit(None, ["r"])])
-        self._assertError(check, [commit("", ["r"])])
+        self._assertError(check, [commit(None, (["r"], []))])
+        self._assertError(check, [commit("", (["r"], []))])
         self._assertError(
-            check, [commit("1", ["r"], body="Summary: blah\nReviewers: r")]
+            check, [commit("1", (["r"], []), body="Summary: blah\nReviewers: r")]
         )
 
-        self._assertError(check, [commit("1", ["r"]), commit("", ["r"])])
+        self._assertError(check, [commit("1", (["r"], [])), commit("", (["r"], []))])
 
     def test_commit_preview(self):
         build = review.build_commit_title
 
         self.assertEqual(
-            "Bug 1, blah, r?turnip",
-            build(commit("1", ["turnip"], title="bug 1, blah, r=turnip")),
+            "Bug 1, blah, r=turnip",
+            build(commit("1", ([], ["turnip"]), title="bug 1, blah, r=turnip")),
         )
         self.assertEqual(
-            "blah (Bug 1) r?turnip",
-            build(commit("1", ["turnip"], title="blah (bug 1) r=turnip")),
+            "blah (Bug 1) r=turnip",
+            build(commit("1", ([], ["turnip"]), title="blah (bug 1) r=turnip")),
         )
         self.assertEqual(
             "Bug 1 - blah r?turnip",
-            build(commit("1", ["turnip"], title="blah r?turnip")),
+            build(commit("1", (["turnip"], []), title="blah r?turnip")),
         )
 
         self.assertEqual(
-            "blah r?turnip", build(commit("", ["turnip"], title="blah r=turnip"))
+            "blah r=turnip", build(commit("", ([], ["turnip"]), title="blah r=turnip"))
         )
         self.assertEqual(
-            "Bug 1 - blah", build(commit("1", [], title="Bug 1 - blah r=turnip"))
+            "Bug 1 - blah", build(commit("1", None, title="Bug 1 - blah r?turnip"))
+        )
+        self.assertEqual(
+            "Bug 1 - blah", build(commit("1", None, title="Bug 1 - blah r=turnip"))
         )
         self.assertEqual(
             "Bug 1 - helper_bug2.html",
-            build(commit("1", [], title="Bug 1 - helper_bug2.html")),
+            build(commit("1", None, title="Bug 1 - helper_bug2.html")),
         )
 
     @mock.patch("review.build_commit_title")
@@ -101,74 +116,230 @@ class Commits(unittest.TestCase):
             commits,
         )
 
-    def test_replace_reviewers(self):
+    def test_replace_request_reviewers(self):
         replace = review.replace_reviewers
-        self.assertEqual("", replace("", []))
-        self.assertEqual("Title", replace("Title", []))
-        self.assertEqual("Title\n\nr?one", replace("Title\n\nr?one", []))
-        self.assertEqual("r?one", replace("", ["one"]))
-        self.assertEqual("r?one", replace("r?one", ["one"]))
-        self.assertEqual("r?two", replace("r?two", ["one"]))
-        self.assertEqual("r?one", replace("r?one", ["one", "two"]))
-        self.assertEqual("r?one,two", replace("r?one,two", ["one"]))
-        self.assertEqual("r?one,two", replace("", ["one", "two"]))
-        self.assertEqual("Some Title r?one,two", replace("Some Title", ["one", "two"]))
+        self.assertEqual("", replace("", reviewers_dict()))
+        self.assertEqual("Title", replace("Title", reviewers_dict()))
         self.assertEqual(
-            "Title r?one\n\nDescr\niption", replace("Title\n\nDescr\niption", ["one"])
+            "Title\n\nr?one r=two", replace("Title\n\nr?one r=two", reviewers_dict())
+        )
+        self.assertEqual("r?one", replace("", reviewers_dict([["one"], []])))
+        self.assertEqual("r?one", replace("r?one", reviewers_dict([["one"], []])))
+        self.assertEqual("r?one,two", replace("", reviewers_dict([["one", "two"], []])))
+        self.assertEqual(
+            "Some Title r?one,two",
+            replace("Some Title", reviewers_dict([["one", "two"], []])),
         )
         self.assertEqual(
-            "Title r?one,two\n\nr?two", replace("Title\n\nr?two", ["one", "two"])
+            "Title r?one\n\nDescr\niption",
+            replace("Title\n\nDescr\niption", reviewers_dict([["one"], []])),
+        )
+        self.assertEqual(
+            "Title r?one,two\n\nr?two",
+            replace("Title\n\nr?two", reviewers_dict([["one", "two"], []])),
         )
 
-        self.assertEqual("Title", replace("Title r?one", []))
-        self.assertEqual("Title", replace("Title r?one,two", []))
-        self.assertEqual("Title", replace("Title r?one r?two", []))
-        self.assertEqual("Title r?one", replace("Title r?one", ["one"]))
-        self.assertEqual("Title r?one one", replace("Title r? one", ["one"]))
-        self.assertEqual("Title r?one,two", replace("Title r?one,two", ["one", "two"]))
-        self.assertEqual("Title r?one,two", replace("Title r?two", ["one", "two"]))
+        self.assertEqual("Title", replace("Title r?one", reviewers_dict()))
+        self.assertEqual("Title", replace("Title r?one,two", reviewers_dict()))
+        self.assertEqual("Title", replace("Title r?one r?two", reviewers_dict()))
         self.assertEqual(
-            "Title r?one,two", replace("Title r?one r?two", ["one", "two"])
-        )
-        self.assertEqual("Title r?one", replace("Title r=one", ["one"]))
-        self.assertEqual("Title r?one", replace("Title r=one,two", ["one"]))
-        self.assertEqual("Title r?one,two", replace("Title r=one,two", ["one", "two"]))
-        self.assertEqual(
-            "Title r?one,two", replace("Title r=one r=two", ["one", "two"])
+            "Title r?one!", replace("Title r?one!", reviewers_dict([["one!"], []]))
         )
         self.assertEqual(
-            "Title r?one,two", replace("Title r?one r=two", ["one", "two"])
+            "Title r?one", replace("Title r?one!", reviewers_dict([["one"], []]))
+        )
+        self.assertEqual(
+            "Title r?one!", replace("Title r?one", reviewers_dict([["one!"], []]))
+        )
+        self.assertEqual(
+            "Title r?one", replace("Title r?one", reviewers_dict([["one"], []]))
+        )
+        self.assertEqual(
+            "Title r?one one", replace("Title r? one", reviewers_dict([["one"], []]))
+        )
+        self.assertEqual(
+            "Title r?one,two",
+            replace("Title r?one,two", reviewers_dict([["one", "two"], []])),
+        )
+        self.assertEqual(
+            "Title r?one,two",
+            replace("Title r?two", reviewers_dict([["one", "two"], []])),
+        )
+        self.assertEqual(
+            "Title r?one,two",
+            replace("Title r?one r?two", reviewers_dict([["one", "two"], []])),
+        )
+        self.assertEqual(
+            "Title r?one", replace("Title r=one", reviewers_dict([["one"], []]))
+        )
+        self.assertEqual(
+            "Title r?one", replace("Title r=one,two", reviewers_dict([["one"], []]))
+        )
+        self.assertEqual(
+            "Title r?one,two",
+            replace("Title r=one,two", reviewers_dict([["one", "two"], []])),
+        )
+        self.assertEqual(
+            "Title r?one,two",
+            replace("Title r=one r=two", reviewers_dict([["one", "two"], []])),
+        )
+        self.assertEqual(
+            "Title r?one,two",
+            replace("Title r?one r=two", reviewers_dict([["one", "two"], []])),
+        )
+
+    def test_replace_granted_reviewers(self):
+        replace = review.replace_reviewers
+        self.assertEqual("r=one", replace("", reviewers_dict([[], ["one"]])))
+        self.assertEqual("r=one", replace("r=one", reviewers_dict([[], ["one"]])))
+        self.assertEqual("r=one,two", replace("", reviewers_dict([[], ["one", "two"]])))
+        self.assertEqual(
+            "Some Title r=one,two",
+            replace("Some Title", reviewers_dict([[], ["one", "two"]])),
+        )
+        self.assertEqual(
+            "Title r=one\n\nDescr\niption",
+            replace("Title\n\nDescr\niption", reviewers_dict([[], ["one"]])),
+        )
+        self.assertEqual(
+            "Title r=one,two\n\nr?two",
+            replace("Title\n\nr?two", reviewers_dict([[], ["one", "two"]])),
+        )
+        self.assertEqual("Title", replace("Title r=one", reviewers_dict()))
+        self.assertEqual("Title", replace("Title r=one,two", reviewers_dict()))
+        self.assertEqual("Title", replace("Title r=one r=two", reviewers_dict()))
+        self.assertEqual(
+            "Title r=one", replace("Title r=one", reviewers_dict([[], ["one"]]))
+        )
+        self.assertEqual(
+            "Title r=one!", replace("Title r=one!", reviewers_dict([[], ["one!"]]))
+        )
+        self.assertEqual(
+            "Title r=one", replace("Title r=one!", reviewers_dict([[], ["one"]]))
+        )
+        self.assertEqual(
+            "Title r=one!", replace("Title r=one", reviewers_dict([[], ["one!"]]))
+        )
+        self.assertEqual(
+            "Title r=one one", replace("Title r= one", reviewers_dict([[], ["one"]]))
+        )
+        self.assertEqual(
+            "Title r=one,two",
+            replace("Title r=one,two", reviewers_dict([[], ["one", "two"]])),
+        )
+        self.assertEqual(
+            "Title r=one,two",
+            replace("Title r=two", reviewers_dict([[], ["one", "two"]])),
+        )
+        self.assertEqual(
+            "Title r=one,two",
+            replace("Title r=one r=two", reviewers_dict([[], ["one", "two"]])),
+        )
+        self.assertEqual(
+            "Title r=one", replace("Title r?one", reviewers_dict([[], ["one"]]))
+        )
+        self.assertEqual(
+            "Title r=one", replace("Title r?one,two", reviewers_dict([[], ["one"]]))
+        )
+        self.assertEqual(
+            "Title r=one,two",
+            replace("Title r?one,two", reviewers_dict([[], ["one", "two"]])),
+        )
+        self.assertEqual(
+            "Title r=one,two",
+            replace("Title r?one r?two", reviewers_dict([[], ["one", "two"]])),
+        )
+        self.assertEqual(
+            "Title r=one,two",
+            replace("Title r=one r?two", reviewers_dict([[], ["one", "two"]])),
+        )
+
+    def test_replace_mixed_reviewers(self):
+        replace = review.replace_reviewers
+        self.assertEqual(
+            "Title r?one r=two", replace("Title", reviewers_dict([["one"], ["two"]]))
+        )
+        self.assertEqual(
+            "Title r?one r=two",
+            replace("Title r=one r?two", reviewers_dict([["one"], ["two"]])),
+        )
+        self.assertEqual(
+            "Title r?one r=two",
+            replace("Title r?two r=one", reviewers_dict([["one"], ["two"]])),
+        )
+        self.assertEqual(
+            "Title r?one,two r=three",
+            replace("Title r=one r?two", reviewers_dict([["one", "two"], ["three"]])),
+        )
+        self.assertEqual(
+            "Title r?one r=two,three",
+            replace("Title r=one r?two", reviewers_dict([["one"], ["two", "three"]])),
         )
 
     @unittest.skip("These tests should pass we should fix the function")
     def test_badly_replaced_reviewers(self):
         replace = review.replace_reviewers
-        # r? one
-        self.assertEqual("r?one one", replace("r? one", ["one"]))
-        # r?one,
-        self.assertEqual("r?one", replace("r?one,", ["one"]))
-        # Title r?one,two,,two
-        self.assertEqual("Title r?one,two", replace("Title r?one,,two", ["one", "two"]))
-        # r?one
-        self.assertEqual("", replace("r?one", []))
-        # r?one,two
-        self.assertEqual("", replace("r?one,two", []))
-        # r?one
-        self.assertEqual("", replace("r?one r?two", []))
         # r?two
-        self.assertEqual("r?one,two", replace("r?two", ["one", "two"]))
-        # r?one r?one,two
-        self.assertEqual("r?one,two", replace("r?one r?two", ["one", "two"]))
+        self.assertEqual("r?one", replace("r?two", reviewers_dict([["one"], []])))
         # r=one
-        self.assertEqual("r?one", replace("r=one", ["one"]))
+        self.assertEqual("r?one", replace("r=one", reviewers_dict([["one"], []])))
+        # r? one
+        self.assertEqual("r?one one", replace("r? one", reviewers_dict([["one"], []])))
+        # r?one,
+        self.assertEqual("r?one", replace("r?one,", reviewers_dict([["one"], []])))
+        # r?one
+        self.assertEqual(
+            "r?one,two", replace("r?one", reviewers_dict([["one", "two"], []]))
+        )
+        # r?one,two
+        self.assertEqual("r?one", replace("r?one,two", reviewers_dict([["one"], []])))
+        # Title r?one,two,,two
+        self.assertEqual(
+            "Title r?one,two",
+            replace("Title r?one,,two", reviewers_dict([["one"], ["two"], []])),
+        )
+        # r?one
+        self.assertEqual("", replace("r?one", reviewers_dict()))
+        # r?one,two
+        self.assertEqual("", replace("r?one,two", reviewers_dict()))
+        # r?one
+        self.assertEqual("", replace("r?one r?two", reviewers_dict()))
+        # r?two
+        self.assertEqual(
+            "r?one,two", replace("r?two", reviewers_dict([["one", "two"], []]))
+        )
+        # r?one r?one,two
+        self.assertEqual(
+            "r?one,two", replace("r?one r?two", reviewers_dict([["one", "two"], []]))
+        )
+        # r=one
+        self.assertEqual("r?one", replace("r=one", reviewers_dict([["one"], []])))
         # r=one,two
-        self.assertEqual("r?one", replace("r=one,two", ["one"]))
+        self.assertEqual("r?one", replace("r=one,two", reviewers_dict([["one"], []])))
         # r=one,two
-        self.assertEqual("r?one,two", replace("r=one,two", ["one", "two"]))
+        self.assertEqual(
+            "r?one,two", replace("r=one,two", reviewers_dict([["one", "two"], []]))
+        )
         # r=one, r?one,two
-        self.assertEqual("r?one,two", replace("r=one r=two", ["one", "two"]))
+        self.assertEqual(
+            "r?one,two", replace("r=one r=two", reviewers_dict([["one", "two"], []]))
+        )
         # r? one, r?one,two
-        self.assertEqual("r?one,two", replace("r?one r=two", ["one", "two"]))
+        self.assertEqual(
+            "r?one,two", replace("r?one r=two", reviewers_dict([["one", "two"], []]))
+        )
+
+        # Granted
+        # r=two
+        self.assertEqual("r=one", replace("r=two", reviewers_dict([[], ["one"]])))
+        # r?one
+        self.assertEqual("r=one", replace("r?one", reviewers_dict([[], ["one"]])))
+        # r?one
+        self.assertEqual(
+            "r=one,two", replace("r=one", reviewers_dict([[], ["one", "two"]]))
+        )
+        # r?one,two
+        self.assertEqual("r?one", replace("r?one,two", reviewers_dict([["one"], []])))
 
     @mock.patch("review.logger")
     def test_show_commit_stack(self, mock_logger):
@@ -256,29 +427,123 @@ class Commits(unittest.TestCase):
                 self.bug = bug
 
         _commits = [
-            {"title": "A", "reviewers": [], "bug-id": None},
-            {"title": "B", "reviewers": ["one"], "bug-id": 1},
+            {"title": "A", "reviewers": dict(granted=[], request=[]), "bug-id": None},
+            {"title": "B", "reviewers": dict(granted=[], request=["one"]), "bug-id": 1},
         ]
+
+        # No change if noreviewer  args provided
+        commits = copy.deepcopy(_commits)
+        commits[1]["reviewers"]["granted"].append("two")
+        with mock.patch("review.config") as m_config:
+            m_config.always_blocking = False
+            update(commits, Args())
+            self.assertEqual(
+                commits,
+                [
+                    {
+                        "title": "A",
+                        "reviewers": dict(granted=[], request=[]),
+                        "bug-id": None,
+                    },
+                    {
+                        "title": "B",
+                        "reviewers": dict(granted=["two"], request=["one"]),
+                        "bug-id": 1,
+                    },
+                ],
+            )
+
+        # Adding and removing reviewers, forcing the bug ID
         commits = copy.deepcopy(_commits)
         update(commits, Args(reviewer=["two", "three"], bug=2))
         self.assertEqual(
             commits,
             [
-                {"title": "A", "reviewers": ["two", "three"], "bug-id": 2},
-                {"title": "B", "reviewers": ["two", "three"], "bug-id": 2},
+                {
+                    "title": "A",
+                    "reviewers": dict(granted=["two", "three"], request=[]),
+                    "bug-id": 2,
+                },
+                {
+                    "title": "B",
+                    "reviewers": dict(granted=["two", "three"], request=[]),
+                    "bug-id": 2,
+                },
             ],
         )
-        commits = copy.deepcopy(_commits)
-        commits[1]["reviewers"].append("two")
 
+        # Removing duplicates
+        commits = copy.deepcopy(_commits)
+        update(
+            commits,
+            Args(
+                reviewer=["Two", "two", "two!", "three", "Three", "THREE!"],
+                blocker=["Two", "THREE!", "three", "two", "three"],
+            ),
+        )
+        self.assertEqual(
+            commits,
+            [
+                {
+                    "title": "A",
+                    "reviewers": dict(granted=["two!", "THREE!"], request=[]),
+                    "bug-id": None,
+                },
+                {
+                    "title": "B",
+                    "reviewers": dict(granted=["two!", "THREE!"], request=[]),
+                    "bug-id": 1,
+                },
+            ],
+        )
+
+        # Adding blocking reviewers via args
+        commits = copy.deepcopy(_commits)
+        commits[1]["reviewers"]["request"].append("three")
+        commits[0]["reviewers"]["granted"].append("four")
+        commits[0]["reviewers"]["granted"].append("five")
+        update(
+            commits, Args(reviewer=["one", "two!", "four"], blocker=["three", "four!"])
+        )
+        self.assertEqual(
+            commits,
+            [
+                {
+                    "title": "A",
+                    "reviewers": dict(
+                        granted=["one", "four!", "three!", "two!"], request=[]
+                    ),
+                    "bug-id": None,
+                },
+                {
+                    "title": "B",
+                    "reviewers": dict(
+                        granted=["four!", "two!"], request=["one", "three!"]
+                    ),
+                    "bug-id": 1,
+                },
+            ],
+        )
+
+        # Forcing blocking reviewers
+        commits = copy.deepcopy(_commits)
+        commits[1]["reviewers"]["granted"].append("two")
         with mock.patch("review.config") as m_config:
             m_config.always_blocking = True
             update(commits, Args())
             self.assertEqual(
                 commits,
                 [
-                    {"title": "A", "reviewers": [], "bug-id": None},
-                    {"title": "B", "reviewers": ["one!", "two!"], "bug-id": 1},
+                    {
+                        "title": "A",
+                        "reviewers": dict(granted=[], request=[]),
+                        "bug-id": None,
+                    },
+                    {
+                        "title": "B",
+                        "reviewers": dict(granted=["two!"], request=["one!"]),
+                        "bug-id": 1,
+                    },
                 ],
             )
 
