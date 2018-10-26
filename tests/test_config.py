@@ -9,6 +9,8 @@ review = imp.load_source(
 
 class Configuration(unittest.TestCase):
     def test_default_arc_command(self):
+        _is_windows = review.IS_WINDOWS
+
         review.IS_WINDOWS = False
         config = review.Config(should_access_file=False)
         self.assertEqual(config.arc_command, "arc")
@@ -16,6 +18,8 @@ class Configuration(unittest.TestCase):
         review.IS_WINDOWS = True
         config = review.Config(should_access_file=False)
         self.assertEqual(config.arc_command, "arc.bat")
+
+        review.IS_WINDOWS = _is_windows
 
 
 if __name__ == "__main__":

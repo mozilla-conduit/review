@@ -342,18 +342,22 @@ class TestUpdateCommitSummary(unittest.TestCase):
         # Response comes from running:
         # $ echo '{... (some valid update summary JSON) ...}' | \
         #   arc call-conduit differential.revision.edit
-        api_response = '{"error":null,"errorMessage":null,"response":{"object":{' \
-                       '"id":56,"phid":"PHID-DREV-ke6jhbdnwd5chtnk2q5w"},' \
-                       '"transactions":[{"phid":"PHID-XACT-DREV-itlxgx7rsjrcnta"}]}} '
+        api_response = (
+            '{"error":null,"errorMessage":null,"response":{"object":{'
+            '"id":56,"phid":"PHID-DREV-ke6jhbdnwd5chtnk2q5w"},'
+            '"transactions":[{"phid":"PHID-XACT-DREV-itlxgx7rsjrcnta"}]}} '
+        )
         self.assertEqual(None, review.parse_api_error(api_response))
 
     def test_parse_api_response_with_errors(self):
         # Error response from running:
         # $ echo '{}' | arc call-conduit differential.revision.edit
-        api_response = '{"error":"ERR-CONDUIT-CORE", ' \
-                       '"errorMessage":"ERR-CONDUIT-CORE: Parameter ' \
-                       '\\"transactions\\" is not a list of transactions.",' \
-                       '"response":null} '
+        api_response = (
+            '{"error":"ERR-CONDUIT-CORE", '
+            '"errorMessage":"ERR-CONDUIT-CORE: Parameter '
+            '\\"transactions\\" is not a list of transactions.",'
+            '"response":null} '
+        )
         self.assertEqual(
             'ERR-CONDUIT-CORE: Parameter "transactions" is not a list of transactions.',
             review.parse_api_error(api_response),

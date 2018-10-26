@@ -198,3 +198,33 @@ class Helpers(unittest.TestCase):
                 "http://phabricator.test/D123",
             ),
         )
+
+    @mock.patch("review.os.access")
+    @mock.patch("review.os.path")
+    @mock.patch("review.os.environ")
+    def test_which(self, m_os_environ, m_os_path, m_os_access):
+        m_os_environ.get.return_value = "/one:/two"
+        m_os_path.expanduser = lambda x: x
+        m_os_path.normcase = lambda x: x
+        m_os_path.join = lambda x, y: "%s/%s" % (x, y)
+        m_os_path.exists.side_effect = (False, True)
+        m_os_access.return_value = True
+        m_os_path.isdir.return_value = False
+
+        path = "x"
+        self.assertEqual("/two/x", review.which(path))
+
+    @mock.patch("review.os.access")
+    @mock.patch("review.os.path")
+    @mock.patch("review.os.environ")
+    @mock.patch("review.which")
+    def test_which(self, m_which, m_os_environ, m_os_path, m_os_access):
+        m_os_path.exists.side_effect = (True, False)
+        m_os_access.return_value = True
+        m_os_path.isdir.return_value = False
+
+        path = "x"
+        self.assertEqual(path, review.which_path(path))
+        m_which.assert_not_called()
+        review.which_path(path)
+        m_which.assert_called_once_with(path)

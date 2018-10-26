@@ -137,6 +137,25 @@ MINIMUM_MERCURIAL_VERSION = LooseVersion("4.3.3")
 #
 
 
+def which_path(path):
+    """Check if an executable is provided. Fall back to which if not.
+
+    Args:
+        path: (str) filename or path to check for an executable command
+
+    Returns:
+        The full path of a command or None.
+    """
+    if (
+        os.path.exists(path)
+        and os.access(path, os.F_OK | os.X_OK)
+        and not os.path.isdir(path)
+    ):
+        return path
+
+    return which(path)
+
+
 def which(filename):
     # backport of shutil.which from py3
     seen = set()
@@ -416,7 +435,7 @@ class Config(object):
         if should_access_file and not os.path.exists(self._filename):
             self.write()
 
-        self.arc = [self.arc_command]
+        self.arc = None
 
     def _set(self, section, option, value):
         if not self._config.has_section(section):
@@ -623,7 +642,7 @@ class Mercurial(Repository):
         os.environ["HGENCODING"] = "UTF-8"
 
         # Check for `hg`, and mercurial version.
-        if not which(self._hg[0]):
+        if not which_path(self._hg[0]):
             raise Error("Failed to find 'hg' executable")
         m = re.search(
             r"\(version ([^)]+)\)", self.hg_out(["--version", "--quiet"], split=False)
@@ -998,7 +1017,7 @@ class Git(Repository):
         logger.debug("found git repo in %s" % path)
 
         self._git = ["git.exe" if IS_WINDOWS else "git"]
-        if not which(self._git[0]):
+        if not which_path(self._git[0]):
             raise Error("Failed to find 'git' executable")
 
         # `self._env` is a dict representing environment used in all git commands.
@@ -2021,12 +2040,15 @@ def main():
         if config.no_ansi:
             HAS_ANSI = False
 
-        if not os.path.exists(config.arc_command) and not which(config.arc_command):
+        arc_path = which_path(config.arc_command)
+        if not arc_path:
             raise Error(
                 "Failed to find '%s' on the system path.\n"
                 "Please follow the Phabricator setup guide:\n"
                 "%s" % (config.arc_command, GUIDE_URL)
             )
+
+        config.arc = [arc_path]
 
         # Ensure ssl certificates are validated (see PEP 476).
         if hasattr(ssl, "_https_verify_certificates"):
