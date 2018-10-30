@@ -2090,7 +2090,7 @@ def init_logging():
     logger.setLevel(logging.DEBUG if DEBUG else logging.INFO)
 
 
-def parse_args():
+def parse_args(argv):
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", metavar="COMMAND")
     commands.required = True
@@ -2177,10 +2177,10 @@ def parse_args():
     )
     update_parser.set_defaults(func=self_update, needs_repo=False)
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main():
+def main(argv):
     global config, HAS_ANSI, DEBUG
     try:
         init_logging()
@@ -2211,7 +2211,7 @@ def main():
                 "or later."
             )
 
-        args = parse_args()
+        args = parse_args(argv)
 
         if hasattr(args, "trace") and args.trace:
             DEBUG = True
@@ -2240,4 +2240,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv)
