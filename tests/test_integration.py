@@ -10,8 +10,8 @@ import sys
 import mock
 import pytest
 
-review = imp.load_source(
-    "review", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
+mozphab = imp.load_source(
+    "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
 
 
@@ -25,17 +25,17 @@ def in_process(monkeypatch):
     """Set up an environment to run moz-phab within the current process."""
     # Make sure other tests didn't leak and mess up the module-level
     # global variables :/
-    monkeypatch.setattr(review, "IS_WINDOWS", False)
-    monkeypatch.setattr(review, "DEBUG", False)
-    monkeypatch.setattr(review, "HAS_ANSI", False)
+    monkeypatch.setattr(mozphab, "IS_WINDOWS", False)
+    monkeypatch.setattr(mozphab, "DEBUG", False)
+    monkeypatch.setattr(mozphab, "HAS_ANSI", False)
     # Constructing the Mercurial() object modifies os.environ for all tests.
     # Make sure we preserve the system defaults.
     monkeypatch.setattr(os, "environ", os.environ.copy())
     # Disable logging to keep the testrunner output clean
-    monkeypatch.setattr(review, "init_logging", mock.MagicMock())
+    monkeypatch.setattr(mozphab, "init_logging", mock.MagicMock())
     # Disable update checking.  It modifies the program on disk which we do /not/ want
     # to do during a test run.
-    monkeypatch.setattr(review, "check_for_updates", mock.MagicMock())
+    monkeypatch.setattr(mozphab, "check_for_updates", mock.MagicMock())
 
     # Disable calls to sys.exit() at the end of the script.  Re-raise errors instead
     # to make test debugging easier.
@@ -54,9 +54,9 @@ def in_process(monkeypatch):
     def check_call_by_line(*args, **kwargs):
         return ["Revision URI: http://example.test/D123"]
 
-    monkeypatch.setattr(review, "arc_ping", arc_ping)
-    monkeypatch.setattr(review, "arc_out", arc_out)
-    monkeypatch.setattr(review, "check_call_by_line", check_call_by_line)
+    monkeypatch.setattr(mozphab, "arc_ping", arc_ping)
+    monkeypatch.setattr(mozphab, "arc_out", arc_out)
+    monkeypatch.setattr(mozphab, "check_call_by_line", check_call_by_line)
 
 
 @pytest.fixture
@@ -78,7 +78,7 @@ def test_submit_create(in_process, repo_path):
     hg("add")
     hg("commit", "--message", "A")
 
-    review.main(["submit", "--yes", "--bug", "1"])
+    mozphab.main(["submit", "--yes", "--bug", "1"])
 
     log = hg("log", "--template", r"{desc}\n", "--rev", ".")
     expected = """\
@@ -106,7 +106,7 @@ Differential Revision: http://example.test/D123
 """,
     )
 
-    review.main(["submit", "--yes", "--bug", "1"])
+    mozphab.main(["submit", "--yes", "--bug", "1"])
 
     log = hg("log", "--template", r"{desc}\n", "--rev", ".")
     expected = """\
