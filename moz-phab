@@ -231,7 +231,10 @@ def check_output(
         output = subprocess.check_output(command, **kwargs)
     except subprocess.CalledProcessError as e:
         logger.debug(e.output)
-        raise Exception("command '%s' failed to complete successfully" % command[0])
+        raise CommandError(
+            "command '%s' failed to complete successfully" % command[0], e.returncode
+        )
+
     if strip:
         output = output.rstrip()
     if output and not never_log:
@@ -385,6 +388,14 @@ class NamedTemporaryFile(object):
 
 class Error(Exception):
     """Errors thrown explictly by this script; won't generate a stack trace."""
+
+
+class CommandError(Exception):
+    status = None
+
+    def __init__(self, msg="", status=1):
+        self.status = status
+        super(CommandError, self).__init__(msg)
 
 
 #
@@ -1090,28 +1101,41 @@ class Git(Repository):
 
         super(Git, self).refresh_commit_stack(commits)
 
+    def _cherry(self, command, remotes):
+        """Run command and try all the remotes until success."""
+        if not remotes:
+            return self.git_out(command)
+
+        for remote in remotes:
+            logger.info('Determining the commit range using upstream "%s"' % remote)
+
+            try:
+                response = self.git_out(command + [remote])
+            except CommandError:
+                continue
+
+            return response
+
     def _get_first_unpublished_node(self):
         """Check which commits should be pushed and return the oldest one."""
         cherry = ["cherry", "--abbrev=12"]
+        remotes = []
         if self.args.upstream:
             cherry += self.args.upstream
         else:
             remotes = self.git_out(["remote"])
             if len(remotes) > 1:
                 logger.warning(
-                    "!! Found multiple upstreams (%s). Using %s."
-                    % (", ".join(remotes), remotes[0])
+                    "!! Found multiple upstreams (%s)." % (", ".join(remotes))
                 )
-            cherry += remotes[:1]
 
-        try:
-            unpublished = self.git_out(cherry)
-        except:
-            logger.warning(
+        unpublished = self._cherry(cherry, remotes)
+
+        if unpublished is None:
+            raise Error(
                 "Unable to detect the start commit. Please provide its SHA-1 or\n"
                 "specify the upstream branch with `--upstream <branch>`."
             )
-            raise
 
         if not unpublished:
             return None
@@ -1137,14 +1161,14 @@ class Git(Repository):
         else:
             start = self.args.start_rev
 
+        if start is None:
+            return None
+
         # We want full, inclusive range of commits.
         # If the user provided a commit SHA1, its parent needs to be passed to the log.
         if self._revparse(start).startswith(start):
             # start is a hash - we need to use its parent
             start = "%s^" % start
-
-        if not start:
-            return None
 
         self.revset = (start, self.args.end_rev)
 
@@ -1593,6 +1617,7 @@ def remove_duplicates(reviewers):
             unique.append(reviewer)
 
     return unique
+
 
 def update_commits_from_args(commits, args):
     """Modify commit description based on args and configuration.

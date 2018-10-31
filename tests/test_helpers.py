@@ -6,7 +6,6 @@ import mock
 import os
 import sys
 import unittest
-import __builtin__
 
 review = imp.load_source(
     "review", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
