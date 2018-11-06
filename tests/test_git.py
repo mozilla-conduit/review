@@ -1,150 +1,159 @@
 import imp
 import mock
 import os
-import unittest
+import pytest
 
-review = imp.load_source(
-    "review", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
+mozphab = imp.load_source(
+    "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
 
-git_config = ["user.email=email"]
+
+@mock.patch("mozphab.Git.git_out")
+def test_cherry(m_git_git_out, git):
+    m_git_git_out.side_effect = (mozphab.CommandError, ["output"])
+    assert git._cherry(["cherry"], ["one", "two"]) == ["output"]
+    m_git_git_out.assert_has_calls(
+        [mock.call(["cherry", "one"]), mock.call(["cherry", "two"])]
+    )
 
 
-@mock.patch("review.Git.git_out")
-@mock.patch("review.Git._get_current_head")
-@mock.patch("review.Config")
-@mock.patch("review.os.path")
-@mock.patch("review.which")
-@mock.patch("review.Repository._phab_url")
-class TestGit(unittest.TestCase):
-    def test_cherry(
-        self,
-        m_repository_phab_url,
-        m_which,
-        m_os_path,
-        m_config,
-        m_git_get_current_head,
-        m_git_git_out,
-    ):
-        m_os_path.join = os.path.join
-        m_os_path.exists.return_value = True
-        m_which.return_value = True
-        m_os_path.isfile.return_value = False
-        m_git_get_current_head.return_value = "branch"
+@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.Git._cherry")
+def test_first_unpublished(m_git_cherry, m_git_git_out, git):
+    class Args:
+        def __init__(self, upstream=None, start_rev="(auto)"):
+            self.upstream = upstream
+            self.start_rev = start_rev
 
-        m_git_git_out.side_effect = (git_config, review.CommandError, ["output"])
-        git = review.Git("x")
-        self.assertEqual(["output"], git._cherry(["cherry"], ["one", "two"]))
-        m_git_git_out.assert_has_calls(
-            [mock.call(["cherry", "one"]), mock.call(["cherry", "two"])]
-        )
-
-    @mock.patch("review.Git._cherry")
-    def test_first_unpublished(
-        self,
-        m_git_cherry,
-        m_repository_phab_url,
-        m_which,
-        m_os_path,
-        m_config,
-        m_git_get_current_head,
-        m_git_git_out,
-    ):
-        m_os_path.join = os.path.join
-        m_os_path.exists.return_value = True
-        m_which.return_value = True
-        m_os_path.isfile.return_value = False
-        m_git_get_current_head.return_value = "branch"
-
-        class Args:
-            def __init__(self, upstream=None, start_rev="(auto)"):
-                self.upstream = upstream
-                self.start_rev = start_rev
-
-        m_git_git_out.side_effect = (git_config, ["a", "b"], ["c"], ["d"])
-        m_git_cherry.side_effect = (["- sha1", "+ sha2"], [], None, [])
-        git = review.Git("x")
-        git.args = Args()
-        first = git._get_first_unpublished_node
-        self.assertEqual("sha2", first())
-        m_git_cherry.assert_called_with(["cherry", "--abbrev=12"], ["a", "b"])
-        self.assertIsNone(first())
-        with self.assertRaises(review.Error):
-            first()
-
-        git.args = Args(upstream=["upstream"])
+    m_git_git_out.side_effect = (["a", "b"], ["c"], ["d"])
+    m_git_cherry.side_effect = (["- sha1", "+ sha2"], [], None, [])
+    git.args = Args()
+    first = git._get_first_unpublished_node
+    assert "sha2" == first()
+    m_git_cherry.assert_called_with(["cherry", "--abbrev=12"], ["a", "b"])
+    assert first() is None
+    with pytest.raises(mozphab.Error):
         first()
         m_git_cherry.assert_called_with(["cherry", "--abbrev=12", "upstream"], [])
 
-    def test_get_dirsect_children(
-        self,
-        m_repository_phab_url,
-        m_which,
-        m_os_path,
-        m_config,
-        m_git_get_current_head,
-        m_git_git_out,
-    ):
-        m_os_path.join = os.path.join
-        m_os_path.exists.return_value = True
-        m_which.return_value = True
-        m_os_path.isfile.return_value = False
-        m_git_get_current_head.return_value = "branch"
-        m_git_git_out.return_value = git_config
-        git = review.Git("x")
-
-        get_children = git._get_direct_children
-        rev_list = ["aaa bbb ccc", "bbb", "ccc ddd"]
-
-        self.assertEqual(["bbb", "ccc"], get_children("aaa", rev_list))
-        self.assertEqual([], get_children("bbb", rev_list))
-        self.assertEqual(["ddd"], get_children("ccc", rev_list))
-        self.assertEqual([], get_children("xxx", rev_list))
+    git.args = Args(upstream=["upstream"])
+    first()
+    m_git_cherry.assert_called_with(["cherry", "--abbrev=12", "upstream"], [])
 
 
-    def test_is_child(
-        self,
-        m_repository_phab_url,
-        m_which,
-        m_os_path,
-        m_config,
-        m_git_get_current_head,
-        m_git_git_out,
-    ):
-        m_os_path.join = os.path.join
-        m_os_path.exists.return_value = True
-        m_which.return_value = True
-        m_os_path.isfile.return_value = False
-        m_git_get_current_head.return_value = "branch"
-        m_git_git_out.return_value = git_config
-        git = review.Git("x")
+@mock.patch("mozphab.Git.git_out")
+def test_branches_to_rebase(m_git_git_out, git):
+    git_find = git._find_branches_to_rebase
 
-        is_child = git._is_child
-        # * ccc
-        # * bbb
-        # * aaa
-        nodes = ["ccc", "bbb ccc", "aaa bbb"]
-        self.assertTrue(is_child("aaa", "bbb", nodes))
-        self.assertTrue(is_child("aaa", "ccc", nodes))
-        self.assertTrue(is_child("bbb", "ccc", nodes))
-        self.assertFalse(is_child("bbb", "aaa", nodes))
-        self.assertFalse(is_child("aaa", "aaa", nodes))
-        self.assertFalse(is_child("bbb", "bbb", nodes))
-        self.assertFalse(is_child("ccc", "ccc", nodes))
+    # No branch returned - not a real case - we don't work without branches
+    m_git_git_out.return_value = []
+    assert dict() == git_find([{"orig-node": "_aaa", "node": "aaa"}])
 
-        # * ddd
-        # | * ccc
-        # | | * eee
-        # | |/
-        # | * bbb
-        # |/
-        # * aaa
-        nodes = ["ddd", "ccc", "eee", "bbb ccc eee", "aaa bbb ddd"]
-        self.assertTrue(is_child("aaa", "bbb", nodes))
-        self.assertTrue(is_child("aaa", "ccc", nodes))
-        self.assertTrue(is_child("aaa", "ddd", nodes))
-        self.assertTrue(is_child("aaa", "eee", nodes))
-        self.assertTrue(is_child("bbb", "ccc", nodes))
-        self.assertTrue(is_child("bbb", "eee", nodes))
-        self.assertFalse(is_child("bbb", "ddd", nodes))
-        self.assertFalse(is_child("ccc", "ddd", nodes))
+    # No amend, no branches to rebase
+    m_git_git_out.return_value = ["branch"]
+    assert dict() == git_find([{"orig-node": "aaa", "node": "aaa"}])
+
+    # One commit, one branch
+    m_git_git_out.return_value = ["branch"]
+    assert dict(branch=["aaa", "_aaa"]) == git_find(
+        [{"orig-node": "_aaa", "node": "aaa"}]
+    )
+
+    # Two commits one branch
+    m_git_git_out.return_value = ["branch"]
+    assert dict(branch=["bbb", "_bbb"]) == git_find(
+        [{"orig-node": "_aaa", "node": "aaa"}, {"orig-node": "_bbb", "node": "bbb"}]
+    )
+
+    # Two branches one commit
+    # ... (branch1)
+    # | ... (branch2)
+    # |/
+    # * aaa
+    # More realistic output from the git command
+    m_git_git_out.return_value = ["*  branch1", "  branch2"]
+    assert dict(branch1=["aaa", "_aaa"], branch2=["aaa", "_aaa"]) == git_find(
+        [{"orig-node": "_aaa", "node": "aaa"}]
+    )
+
+    # ... (branch1)
+    # | * bbb (branch2)
+    # |/
+    # * aaa
+    m_git_git_out.side_effect = (["branch1", "branch2"], ["branch2"])
+    assert dict(branch1=["aaa", "_aaa"], branch2=["bbb", "_bbb"]) == git_find(
+        [{"orig-node": "_aaa", "node": "aaa"}, {"orig-node": "_bbb", "node": "bbb"}]
+    )
+
+    # * ... (master)
+    # | * ... (feature1)
+    # | | * ... (feature2)
+    # | |/
+    # |/|
+    # | | * ddd (feature1_1)
+    # | |/
+    # | * ccc
+    # |/
+    # * bbb
+    # * aaa
+
+    m_git_git_out.side_effect = (
+        ["master", "feature1", "feature1_1", "feature2"],  # aaa
+        ["master", "feature1", "feature1_1", "feature2"],  # bbb
+        ["feature1", "feature1_1"],  # ccc
+        ["feature1_1"],  # ddd
+    )
+    assert dict(
+        master=["bbb", "_bbb"],
+        feature1=["ccc", "_ccc"],
+        feature2=["bbb", "_bbb"],
+        feature1_1=["ddd", "_ddd"],
+    ) == git_find(
+        [
+            {"orig-node": "_aaa", "node": "aaa"},
+            {"orig-node": "_bbb", "node": "bbb"},
+            {"orig-node": "_ccc", "node": "ccc"},
+            {"orig-node": "_ddd", "node": "ddd"},
+        ]
+    )
+
+
+def test_get_direct_children(git):
+    get_children = git._get_direct_children
+    rev_list = ["aaa bbb ccc", "bbb", "ccc ddd"]
+    assert ["bbb", "ccc"] == get_children("aaa", rev_list)
+    assert [] == get_children("bbb", rev_list)
+    assert ["ddd"] == get_children("ccc", rev_list)
+    assert [] == get_children("xxx", rev_list)
+
+
+def test_is_child(git):
+    is_child = git._is_child
+    # * ccc
+    # * bbb
+    # * aaa
+    nodes = ["ccc", "bbb ccc", "aaa bbb"]
+    assert is_child("aaa", "bbb", nodes)
+    assert is_child("aaa", "ccc", nodes)
+    assert is_child("bbb", "ccc", nodes)
+    assert not is_child("bbb", "aaa", nodes)
+    assert not is_child("aaa", "aaa", nodes)
+    assert not is_child("bbb", "bbb", nodes)
+    assert not is_child("ccc", "ccc", nodes)
+
+    # * ddd
+    # | * ccc
+    # | | * eee
+    # | |/
+    # | * bbb
+    # |/
+    # * aaa
+    nodes = ["ddd", "ccc", "eee", "bbb ccc eee", "aaa bbb ddd"]
+    assert is_child("aaa", "bbb", nodes)
+    assert is_child("aaa", "ccc", nodes)
+    assert is_child("aaa", "ddd", nodes)
+    assert is_child("aaa", "eee", nodes)
+    assert is_child("bbb", "ccc", nodes)
+    assert is_child("bbb", "eee", nodes)
+    assert not is_child("bbb", "ddd", nodes)
+    assert not is_child("ccc", "ddd", nodes)

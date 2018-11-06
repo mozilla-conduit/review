@@ -569,6 +569,9 @@ class Repository(object):
         May be called multiple times.
         If an exception is raised this is NOT called (to avoid dataloss)."""
 
+    def finalize(self, commits):
+        """Update the history after node changed."""
+
     def set_args(self, args):
         self.args = args
 
@@ -1107,7 +1110,7 @@ class Git(Repository):
 
         # Store current branch (fails if HEAD in detached state)
         try:
-            self.current_head = self._get_current_head()
+            self.branch = self._get_current_head()
         except Exception:
             raise Error(
                 "Git failed to read the branch name.\n"
@@ -1127,7 +1130,35 @@ class Git(Repository):
 
     def cleanup(self):
         self.git(["gc", "--auto", "--quiet"])
-        self.checkout(self.current_head)
+        self.checkout(self.branch)
+
+    def _find_branches_to_rebase(self, commits):
+        """Create a list of branches to rebase."""
+        branches_to_rebase = dict()
+        for commit in commits:
+            if commit["node"] == commit["orig-node"]:
+                continue
+            branches = self.git_out(["branch", "--contains", commit["orig-node"]])
+            for branch in branches:
+                if branch.startswith("* ("):
+                    # Omit `* (detached from {SHA1})`
+                    continue
+
+                branch = branch.lstrip("* ")
+                # Rebase the branch to the last commit from the stack .
+                branches_to_rebase[branch] = [commit["node"], commit["orig-node"]]
+
+        return branches_to_rebase
+
+    def finalize(self, commits):
+        """Rebase all branches based on changed commits from the stack."""
+        branches_to_rebase = self._find_branches_to_rebase(commits)
+
+        for branch, nodes in branches_to_rebase.iteritems():
+            self.checkout(branch)
+            self._rebase(*nodes)
+
+        self.checkout(self.branch)
 
     def refresh_commit_stack(self, commits):
         """Update revset and names of the commits."""
@@ -1299,25 +1330,24 @@ class Git(Repository):
         for log_line in self._get_commits_info(*self.revset):
             if not log_line:
                 continue
+
             parents, tree_hash, node, desc = log_line.split("\n", 3)
             desc = desc.splitlines()
+
+            # Check if the commit is a child of the first one
             if not rev_list:
                 rev_list = self._git_get_children(node)
-
-            # Check if commit has multiple children, if so - raise an Error
-            if (
-                node[:12] != self.revset[1]
-                and len(self._get_direct_children(node, rev_list)) > 1
-            ):
+                first_node = node
+            elif not self._is_child(first_node, node, rev_list):
                 raise Error(
-                    "Multiple children found for commit %s, unable to continue"
-                    % node[:12]
+                    "Commit %s is not a child of %s, unable to continue"
+                    % (node[:12], first_node[:12])
                 )
 
             # Check if commit has multiple parents, if so - raise an Error
             # We may push the merging commit if it's the first one
             parents = parents.split(" ")
-            if node[:12] != self.revset[0] and len(parents) > 1:
+            if node[:12] != first_node[:12] and len(parents) > 1:
                 raise Error(
                     "Multiple parents found for commit %s, unable to continue"
                     % node[:12]
@@ -1327,6 +1357,7 @@ class Git(Repository):
                 {
                     "name": node[:12],
                     "node": node,
+                    "orig-node": node,
                     "title": desc[0],
                     "title-preview": desc[0],
                     "body": "\n".join(desc[1:]).rstrip(),
@@ -1334,18 +1365,9 @@ class Git(Repository):
                     "reviewers": [],
                     "rev-id": None,
                     "parent": parents[0],
-                    "tree_hash": tree_hash,
+                    "tree-hash": tree_hash,
                 }
             )
-
-        # Check if all commits are children of the first one
-        first_node = commits[0]["node"]
-        for commit in commits[1:]:
-            if not self._is_child(first_node, commit["node"], rev_list):
-                raise Error(
-                    "Commit %s is not a child of %s"
-                    % (commit["node"][:12], first_node[:12])
-                )
 
         return commits
 
@@ -1406,7 +1428,7 @@ class Git(Repository):
 
         # Create a new commit with the updated body.
         new_parent_sha = self._commit_tree(
-            commit["parent"], commit["tree_hash"], updated_body
+            commit["parent"], commit["tree-hash"], updated_body
         )
 
         # Update commit info
@@ -1424,21 +1446,10 @@ class Git(Repository):
             # Update parent information and create a new commit
             c["parent"] = new_parent_sha
             new_parent_sha = self._commit_tree(
-                new_parent_sha, c["tree_hash"], "%s\n%s" % (c["title"], c["body"])
+                new_parent_sha, c["tree-hash"], "%s\n%s" % (c["title"], c["body"])
             )
             old_parent_sha = c["node"]
             c["node"] = new_parent_sha
-
-        # We've created a new linear history with detached commits.
-        # All branches based on the old SHA1 of the last commit need to be re-parented
-        # to its new SHA1.
-        branches = self.git_out(["branch", "--contains", old_parent_sha])
-        for branch in branches:
-            if branch.startswith("* ("):
-                # Omit `* (detached from {SHA1})`
-                continue
-            self.checkout(branch.lstrip("*").lstrip())
-            self._rebase(new_parent_sha, old_parent_sha)
 
     def rebase_commit(self, source_commit, dest_commit):
         self._rebase(dest_commit["node"], source_commit["node"])
@@ -2064,6 +2075,7 @@ def submit(repo, args):
     # final showing.
     repo.cleanup()
     repo.refresh_commit_stack(commits)
+    repo.finalize(commits)
 
     logger.warning("\nCompleted")
     show_commit_stack(repo, commits, show_rev_urls=True)
