@@ -7,6 +7,8 @@ import os
 import sys
 import unittest
 
+import pytest
+
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
@@ -40,7 +42,9 @@ class Helpers(unittest.TestCase):
             dict(b="value B", c=dict(a="value CA")),
             dict(a="value A", b=3),
         )
-        self.assertEqual("value B", mozphab.read_json_field(["file_b", "file_a"], ["b"]))
+        self.assertEqual(
+            "value B", mozphab.read_json_field(["file_b", "file_a"], ["b"])
+        )
         m_json.load.side_effect = (
             dict(a="value A", b=3),
             dict(b="value B", c=dict(a="value CA")),
@@ -227,3 +231,78 @@ class Helpers(unittest.TestCase):
         m_which.assert_not_called()
         mozphab.which_path(path)
         m_which.assert_called_once_with(path)
+
+
+@mock.patch("mozphab.arc_out")
+def test_valid_reviewers_in_phabricator_returns_no_errors(arc_out):
+    # See https://phabricator.services.mozilla.com/api/user.search
+    arc_out.return_value = json.dumps(
+        {
+            "error": None,
+            "errorMessage": None,
+            "response": {"data": [{"fields": {"username": "alice"}}]},
+        }
+    )
+    reviewers = dict(granted=[], request=["alice"])
+    assert [] == mozphab.check_for_invalid_reviewers(reviewers, "")
+
+
+@mock.patch("mozphab.arc_out")
+def test_non_existent_reviewers_generates_error_list(arc_out):
+    reviewers = dict(granted=[], request=["alice", "goober", "gonzo"])
+    expected_errors = [
+        "goober is not a valid reviewer's name",
+        "gonzo is not a valid reviewer's name",
+    ]
+    # See https://phabricator.services.mozilla.com/api/user.search
+    arc_out.return_value = json.dumps(
+        {
+            "error": None,
+            "errorMessage": None,
+            "response": {"data": [{"fields": {"username": "alice"}}]},
+        }
+    )
+    assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers, "")
+
+
+@mock.patch("mozphab.arc_out")
+def test_api_call_with_no_errors_returns_api_response_json(arc_out):
+    # fmt: off
+    arc_out.return_value = json.dumps(
+        {
+            "error": None,
+            "errorMessage": None,
+            "response": {"data": "ok"}
+        }
+    )
+    # fmt: on
+    api_response = mozphab.arc_call_conduit("my.method", {}, "")
+
+    assert api_response == {"data": "ok"}
+    arc_out.assert_called_once_with(
+        ["call-conduit", "my.method"],
+        cwd="",
+        log_output_to_console=False,
+        stdin=mock.ANY,
+    )
+
+
+@mock.patch("mozphab.arc_out")
+def test_api_call_with_error_raises_exception(arc_out):
+    arc_out.return_value = json.dumps(
+        {
+            "error": "ERR-CONDUIT-CORE",
+            "errorMessage": "**sad trombone**",
+            "response": None,
+        }
+    )
+
+    with pytest.raises(mozphab.ConduitAPIError) as err:
+        mozphab.arc_call_conduit("my.method", {}, "")
+        assert err.message == "**sad trombone**"
+
+
+@mock.patch("mozphab.arc_out")
+def test_arc_ping_with_invalid_certificate_returns_false(arc_out):
+    arc_out.side_effect = mozphab.CommandError
+    assert not mozphab.arc_ping("")

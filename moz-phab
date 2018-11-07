@@ -34,7 +34,6 @@ import traceback
 import urllib2
 import uuid
 from distutils.version import LooseVersion
-from subprocess import Popen, PIPE
 
 # Known Issues
 # - reordering, folding, etc commits doesn't result in the stack being updated
@@ -398,6 +397,10 @@ class CommandError(Exception):
         super(CommandError, self).__init__(msg)
 
 
+class ConduitAPIError(Error):
+    """Raised when the Phabricator Conduit API returns an error response."""
+
+
 #
 # Configuration
 #
@@ -606,6 +609,9 @@ class Repository(object):
 
             if has_arc_rejections(commit["body"]):
                 commit_errors.append("contains arc fields")
+
+            if commit["reviewers"]:
+                errors += check_for_invalid_reviewers(commit["reviewers"], self.path)
 
             if commit_errors:
                 errors.append(
@@ -1547,6 +1553,35 @@ def show_commit_stack(repo, commits, show_rev_urls=False, show_warnings=False):
             logger.warning("-> %s/D%s" % (repo.phab_url.rstrip("/"), commit["rev-id"]))
 
 
+def check_for_invalid_reviewers(reviewers, cwd):
+    """Return a list of invalid reviewer names and reasons.
+
+    Args:
+        reviewers: A commit reviewers dict of granted and requested reviewers.
+        cwd: The directory to run the arc command in.
+    """
+    # Combine the lists of requested reviewers and granted reviewers.
+    all_reviewers = []
+    for sublist in reviewers.values():
+        all_reviewers.extend(sublist)
+
+    # See https://phabricator.services.mozilla.com/api/user.search
+    api_call_args = {"queryKey": "active", "constraints": {"usernames": all_reviewers}}
+    result = arc_call_conduit("user.search", api_call_args, cwd)
+    found_names = [data["fields"]["username"] for data in result["data"]]
+
+    missing_reviewer_messages = []
+    for name in all_reviewers:
+        if name not in found_names:
+            missing_reviewer_messages.append("%s is not a valid reviewer's name" % name)
+    return missing_reviewer_messages
+
+
+#
+# Arc helpers
+#
+
+
 def arc_out(args, cwd, stdin=None, log_output_to_console=True):
     """arc wrapper that logs output to the console.
 
@@ -1567,26 +1602,75 @@ def arc_out(args, cwd, stdin=None, log_output_to_console=True):
     return arc_output
 
 
+def arc_call_conduit(api_method, api_call_args, cwd):
+    """Run 'arc call-conduit' and return the JSON API call result.
+
+    Args:
+        api_method: The API method name to call, like 'differential.revision.edit'.
+        api_call_args: JSON dict of call args to send.
+        cwd: The directory to run the arc command in.
+
+    Raises:
+        ConduitAPIError if the API threw an error back at us.
+    """
+    arc_args = ["call-conduit", api_method]
+    # 'arc call-conduit' only accepts its args from STDIN.
+    with NamedTemporaryFile() as temp_f:
+        json.dump(api_call_args, temp_f)
+        temp_f.flush()
+        temp_f.file.seek(0)
+        logger.debug("Arc stdin: %s", api_call_args)
+        output = arc_out(arc_args, cwd=cwd, stdin=temp_f, log_output_to_console=False)
+
+    maybe_error = parse_api_error(output)
+    if maybe_error:
+        raise ConduitAPIError(maybe_error)
+
+    return json.loads(output)["response"]
+
+
+def parse_api_error(api_response):
+    """Parse the string output from 'arc call-conduit' and return any errors found.
+
+    Args:
+        api_response: stdout string captured from 'arc call-conduit'.  It should
+            contain only valid JSON.
+
+    Returns:
+        A string error description if an error occurred or None if no error occurred.
+    """
+    # Example error response from running
+    # $ echo '{}' | arc call-conduit differential.revision.edit | jq .
+    #
+    # {
+    #   "error": "ERR-CONDUIT-CORE",
+    #   "errorMessage": "ERR-CONDUIT-CORE: Parameter \"transactions\" is not a list "\
+    #       "of transactions.",
+    #   "response": null
+    # }
+    response = json.loads(api_response)
+    if response["error"] and response["errorMessage"]:
+        return response["errorMessage"]
+
+
 def arc_ping(cwd):
     """Sends a ping to the Phabricator server using `conduit.ping` API.
 
     Returns: `True` if no error, otherwise - `False`
     """
-    logger.debug('$ echo "{}" | %s call-conduit conduit.ping' % " ".join(config.arc))
-    p = Popen(
-        config.arc + ["call-conduit", "conduit.ping"],
-        cwd=cwd,
-        stdin=PIPE,
-        stdout=PIPE,
-        stderr=PIPE,
-    )
-    stdout, stderr = p.communicate("{}")
-    logger.debug(stdout)
-    if p.returncode == 0:
-        return True
+    try:
+        arc_call_conduit("conduit.ping", {}, cwd)
+    except ConduitAPIError as err:
+        logger.error(err)
+        return False
+    except CommandError:
+        return False
+    return True
 
-    logger.error(stderr)
-    return False
+
+#
+# "submit" Command
+#
 
 
 def arc_message(template_vars):
@@ -1606,9 +1690,6 @@ def arc_message(template_vars):
     return message
 
 
-#
-# "submit" Command
-#
 def make_blocking(reviewers):
     return ["%s!" % r.rstrip("!") for r in reviewers]
 
@@ -1739,30 +1820,6 @@ def build_api_call_to_update_commit_title_and_summary(commit):
     return {"transactions": transactions, "objectIdentifier": commit["rev-id"]}
 
 
-def parse_api_error(api_response):
-    """Parse the string output from 'arc call-conduit' and return any errors found.
-
-    Args:
-        api_response: stdout string captured from 'arc call-conduit'.  It should
-            contain only valid JSON.
-
-    Returns:
-        A string error description if an error occurred or None if no error occurred.
-    """
-    # Example error response from running
-    # $ echo '{}' | arc call-conduit differential.revision.edit | jq .
-    #
-    # {
-    #   "error": "ERR-CONDUIT-CORE",
-    #   "errorMessage": "ERR-CONDUIT-CORE: Parameter \"transactions\" is not a list "\
-    #       "of transactions.",
-    #   "response": null
-    # }
-    response = json.loads(api_response)
-    if response["error"] and response["errorMessage"]:
-        return response["errorMessage"]
-
-
 def update_phabricator_commit_summary(commit, repo):
     """Send a new commit summary and description to Phabricator.
 
@@ -1789,26 +1846,15 @@ def update_phabricator_commit_summary(commit, repo):
     #   "objectIdentifier": "D8095"
     # }' | arc call-conduit --conduit-uri https://phabricator.services.mozilla.com/ \
     #       --conduit-token <conduit-token> differential.revision.edit
-    logger.debug("Updating revision title and summary in Phabricator")
+    logger.debug("updating revision title and summary in Phabricator")
     api_call_args = build_api_call_to_update_commit_title_and_summary(commit)
-    arc_args = ["call-conduit", "differential.revision.edit"]
-
-    # 'arc call-conduit' only accepts its args from STDIN.
-    with NamedTemporaryFile() as temp_f:
-        json.dump(api_call_args, temp_f)
-        temp_f.flush()
-        temp_f.file.seek(0)
-        logger.debug("Arc stdin: %s", api_call_args)
-        output = arc_out(
-            arc_args, cwd=repo.path, stdin=temp_f, log_output_to_console=False
-        )
-
-    maybe_error = parse_api_error(output)
-    if maybe_error:
+    try:
+        arc_call_conduit("differential.revision.edit", api_call_args, repo.path)
+    except (ConduitAPIError, CommandError) as err:
         logger.warn(
             "Error attempting to update revision summary and title in Phabricator"
         )
-        logger.warn("Error was: %s", maybe_error)
+        logger.warn("Error was: %s", err)
 
 
 def submit(repo, args):
@@ -1826,6 +1872,10 @@ def submit(repo, args):
     # Pre-process to load metadata.
     augment_commits_from_body(commits)
     update_commits_from_args(commits, args)
+
+    # Check if arc is configured
+    if not repo.check_arc():
+        raise Error("Failed to run %s." % config.arc_command)
 
     # Validate commit stack is suitable for review.
     show_commit_stack(repo, commits, show_warnings=True)
@@ -1847,10 +1897,6 @@ def submit(repo, args):
             if len(untracked) <= 5:
                 for filename in untracked:
                     logger.info("  %s" % filename)
-
-    # Check if arc is configured
-    if not repo.check_arc():
-        raise Error("Failed to run %s." % config.arc_command)
 
     # Confirmation prompt.
     if args.yes:

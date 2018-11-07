@@ -48,7 +48,9 @@ class Commits(unittest.TestCase):
             self.fail("%s raised" % repr(info[0]))
         self.fail("%s failed to raise Error" % callableObj)
 
-    def test_commit_validation(self):
+    @mock.patch("mozphab.check_for_invalid_reviewers")
+    def test_commit_validation(self, check_reviewers):
+        check_reviewers.return_value = []
         repo = mozphab.Repository(None, None, "dummy")
         check = repo.check_commits_for_submit
 
@@ -72,6 +74,29 @@ class Commits(unittest.TestCase):
         )
 
         self._assertError(check, [commit("1", (["r"], [])), commit("", (["r"], []))])
+
+    @mock.patch("mozphab.check_for_invalid_reviewers")
+    def test_invalid_reviewers_fails_the_stack_validation_check(self, check_reviewers):
+        def fail_gonzo(reviewers, _):
+            # Replace the check_for_invalid_reviewers() function with something that
+            # fails if "gonzo" is in the reviewers list.
+            if "gonzo" in reviewers["request"]:
+                return ["gonzo is not a valid reviewer name"]
+            else:
+                return []
+
+        check_reviewers.side_effect = fail_gonzo
+        repo = mozphab.Repository(None, None, "dummy")
+
+        with self.assertRaises(mozphab.Error):
+            # Build a stack with an invalid reviewer in the middle.
+            repo.check_commits_for_submit(
+                [
+                    commit("1", (["alice"], [])),
+                    commit("2", (["bob", "gonzo"], [])),
+                    commit("3", (["charlie"], [])),
+                ]
+            )
 
     def test_commit_preview(self):
         build = mozphab.build_commit_title
@@ -554,7 +579,9 @@ class TestUpdateCommitSummary(unittest.TestCase):
     def test_update_summary_cli_args(self, config, check_output):
         config.arc = ["arc"]
         c = commit(rev_id="D123")
-        check_output.return_value = '{"error": null, "errorMessage": null}'
+        check_output.return_value = (
+            '{"error": null, "errorMessage": null, "response": {}}'
+        )
 
         mozphab.update_phabricator_commit_summary(c, mock.Mock())
 

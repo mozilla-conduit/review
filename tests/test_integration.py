@@ -45,11 +45,23 @@ def in_process(monkeypatch):
 
     monkeypatch.setattr(sys, "exit", reraise)
 
+    # Disable uploading a new commit title and summary to Phabricator.  This operation
+    # is safe to skip and doing so makes it easier to test other arc_out call sites.
+    monkeypatch.setattr(mozphab, "update_phabricator_commit_summary", mock.MagicMock())
+
     def arc_ping(self, *args):
         return True
 
     def arc_out(self, *args, **kwargs):
-        pass
+        # Return alice as the only valid reviewer name from Phabricator.
+        # See https://phabricator.services.mozilla.com/api/user.search
+        return json.dumps(
+            {
+                "error": None,
+                "errorMessage": None,
+                "response": {"data": [{"fields": {"username": "alice"}}]},
+            }
+        )
 
     def check_call_by_line(*args, **kwargs):
         return ["Revision URI: http://example.test/D123"]
@@ -76,13 +88,13 @@ def test_submit_create(in_process, repo_path):
     testfile = repo_path / "X"
     testfile.write_text(u"a")
     hg("add")
-    hg("commit", "--message", "A")
+    hg("commit", "--message", "A r?alice")
 
     mozphab.main(["submit", "--yes", "--bug", "1"])
 
     log = hg("log", "--template", r"{desc}\n", "--rev", ".")
     expected = """\
-Bug 1 - A
+Bug 1 - A r?alice
 
 Differential Revision: http://example.test/D123
 """
