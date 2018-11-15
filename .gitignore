@@ -3,3 +3,4 @@ moz-phabc
 reviewc
 .coverage
 *,cover
+venv

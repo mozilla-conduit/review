@@ -14,9 +14,9 @@ Goals:
 - should work on python 2.7 and python 3.5+
 """
 
-import ConfigParser
 import argparse
 import calendar
+import ConfigParser
 import datetime
 import errno
 import io
@@ -321,11 +321,12 @@ def parse_config(config_list, filter_func=None):
     Args:
         config_list: A list of "name=value" strings
         filter_func: A function taking the parsing config name and value for each line.
-            If the function returns True the config value will be included in the final dict
+            If the function returns True the config value will be included in the final
+            dict.
 
     Returns: A dict containing parsed data.
     """
-    config = dict()
+    result = dict()
     for line in config_list:
         # On Windows config file is likely to be cp1252 encoded, not UTF-8.
         if IS_WINDOWS:
@@ -338,9 +339,9 @@ def parse_config(config_list, filter_func=None):
         name = name.strip()
         value = value.strip()
         if filter_func is None or (callable(filter_func) and filter_func(name, value)):
-            config[name] = value
+            result[name] = value
 
-    return config
+    return result
 
 
 class NamedTemporaryFile(object):
@@ -631,7 +632,7 @@ class Repository(object):
 
         if arc_ping(self.path):
             # Create the cache file
-            with open(path, "a") as f:
+            with open(path, "a"):
                 os.utime(path, None)
             return True
 
@@ -1189,7 +1190,8 @@ class Git(Repository):
         """
         return self.git_out(["rev-list", "--all", "--children", "--not", "%s^@" % node])
 
-    def _get_children(self, node, all_children):
+    @staticmethod
+    def _get_children(node, all_children):
         """ Return direct children of the commit.
 
         Args:
@@ -1290,7 +1292,7 @@ class Git(Repository):
     def checkout(self, node):
         self.git(["checkout", "--quiet", node])
 
-    def _get_current_head(self, allow_detached=False):
+    def _get_current_head(self):
         """Return current's HEAD symbolic link."""
         symbolic = self.git_out(["symbolic-ref", "HEAD"], split=False)
         return symbolic.split("refs/heads/")[1]
@@ -1735,8 +1737,8 @@ def update_commits_from_args(commits, args):
     (The "-r" are loaded into args.reviewer and "-R" into args.blocker):
         a) Recognize `r=` and `r?` from commit message title.
         b) Modify reviewers only if `-r` or `-R` is used in call arguments.
-        c) Add new reviewers using `r=`
-        d) Do not modify the way reviewer is already provided in the title (`r?` or `r=`).
+        c) Add new reviewers using `r=`.
+        d) Do not modify reviewers already provided in the title (`r?` or `r=`).
         e) Delete reviewer if `-r` or `-R` is used and the reviewer is not mentioned.
 
     If no reviewers are provided by args and an `always_blocking` flag is set
@@ -1980,10 +1982,11 @@ def submit(repo, args):
         if is_update:
             try:
                 update_phabricator_commit_summary(commit, repo)
-            except Exception:
+            except Exception as e:
                 logger.warning(
                     "Warning: failed to update commit summary in Phabricator"
                 )
+                logger.debug(e)
 
         # Append/replace div rev url to/in commit description.
         body = amend_revision_url(commit["body"], revision_url)
