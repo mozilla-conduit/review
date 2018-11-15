@@ -612,7 +612,9 @@ class Repository(object):
                 commit_errors.append("contains arc fields")
 
             if commit["reviewers"]:
-                errors += check_for_invalid_reviewers(commit["reviewers"], self.path)
+                commit_errors.extend(
+                    check_for_invalid_reviewers(commit["reviewers"], self.path)
+                )
 
             if commit_errors:
                 errors.append(
@@ -1565,7 +1567,7 @@ def check_for_invalid_reviewers(reviewers, cwd):
     # Combine the lists of requested reviewers and granted reviewers.
     all_reviewers = []
     for sublist in reviewers.values():
-        all_reviewers.extend(sublist)
+        all_reviewers.extend([r.rstrip("!") for r in sublist])
 
     # See https://phabricator.services.mozilla.com/api/user.search
     api_call_args = {"queryKey": "active", "constraints": {"usernames": all_reviewers}}
