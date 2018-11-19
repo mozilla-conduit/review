@@ -250,10 +250,7 @@ def test_valid_reviewers_in_phabricator_returns_no_errors(arc_out):
 @mock.patch("mozphab.arc_out")
 def test_non_existent_reviewers_generates_error_list(arc_out):
     reviewers = dict(granted=[], request=["alice", "goober", "gonzo"])
-    expected_errors = [
-        "goober is not a valid reviewer's name",
-        "gonzo is not a valid reviewer's name",
-    ]
+    expected_errors = ["gonzo", "goober"]
     # See https://phabricator.services.mozilla.com/api/user.search
     arc_out.return_value = json.dumps(
         {
