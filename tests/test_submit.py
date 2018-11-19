@@ -4,6 +4,7 @@ import mock
 import os
 import sys
 import unittest
+import uuid
 
 
 mozphab = imp.load_source(
@@ -26,6 +27,7 @@ def commit(bug_id=None, reviewers=None, body="", name="", title="", rev_id=None)
         "reviewers": reviewers_dict(reviewers),
         "body": body,
         "rev-id": rev_id,
+        "node": uuid.uuid4().get_hex(),
     }
 
 
@@ -81,7 +83,7 @@ class Commits(unittest.TestCase):
             # Replace the check_for_invalid_reviewers() function with something that
             # fails if "gonzo" is in the reviewers list.
             if "gonzo" in reviewers["request"]:
-                return ["gonzo is not a valid reviewer name"]
+                return ["gonzo"]
             else:
                 return []
 
