@@ -813,24 +813,30 @@ class Mercurial(Repository):
         commit["node"] = node
         commit["name"] = "%s:%s" % (rev, node[:12])
 
+    def _get_successor(self, node):
+        """Get the successor of the commit represented by its node.
+
+        Returns: a tuple containing rev and node"""
+        hg_log = self.hg_out(
+            ["log"]
+            + ["-T", "{rev} {node}\n"]
+            + ["--hidden"]
+            + ["-r", "successors(%s) and not obsolete()" % node]
+        )
+        if not hg_log:
+            return None, None
+
+        # Not sure the best way to handle multiple successors, so just bail out.
+        if len(hg_log) > 1:
+            raise Error("Multiple successors found for %s, unable to continue" % node)
+
+        return hg_log[0].split(" ", 1)
+
     def refresh_commit_stack(self, commits):
         """Update all commits to point to their superseded commit."""
         for commit in commits:
-            hg_log = self.hg_out(
-                ["log"]
-                + ["-T", "{rev} {node}\n"]
-                + ["--hidden"]
-                + ["-r", "successors(%s) and not obsolete()" % commit["node"]]
-            )
-            if hg_log:
-                # Not sure the best way to handle multiple successors, so just bail out.
-                if len(hg_log) > 1:
-                    raise Error(
-                        "Multiple successors found for %s, unable to continue"
-                        % commit["node"]
-                    )
-
-                (rev, node) = hg_log[0].split(" ", 1)
+            (rev, node) = self._get_successor(commit["node"])
+            if rev and node:
                 self._refresh_commit(commit, node, rev)
 
         self.revset = "%s::%s" % (commits[0]["node"], commits[-1]["node"])
@@ -901,6 +907,22 @@ class Mercurial(Repository):
             self.checkout(node)
             self.hg(["commit", "--amend", "--logfile", temp_f.name])
 
+    def finalize(self, commits):
+        """Rebase stack children commits if needed."""
+        # Currently we do all rebases in `amend_commit` if the evolve extension
+        # is not installed.
+        if not self.use_evolve:
+            return
+
+        parent = None
+        for commit in commits:
+            if parent:
+                self.rebase_commit(commit, parent)
+                (rev, node) = self._get_successor(commit["node"])
+                if rev and node:
+                    self._refresh_commit(commit, node, rev)
+            parent = commit
+
     def amend_commit(self, commit, commits):
         updated_body = "%s\n%s" % (commit["title"], commit["body"])
         current_body = self.hg_out(
@@ -934,10 +956,7 @@ class Mercurial(Repository):
             # Amend and refresh the stack to get the new commit node.
             self._amend_commit_body(commit["node"], updated_body)
             self.refresh_commit_stack(commits)
-
-            # Rebase children atop new commit node.
-            if first_child:
-                self.rebase_commit(first_child, commit)
+            # Rebase will happen in `finalize`
 
         elif not first_child and not post_stack_children:
             # Without evolve things are much more exciting.
@@ -2073,9 +2092,9 @@ def submit(repo, args):
 
     # Cleanup (eg. strip nodes) and refresh to ensure the stack is right for the
     # final showing.
+    repo.finalize(commits)
     repo.cleanup()
     repo.refresh_commit_stack(commits)
-    repo.finalize(commits)
 
     logger.warning("\nCompleted")
     show_commit_stack(repo, commits, show_rev_urls=True)

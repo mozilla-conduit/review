@@ -21,7 +21,7 @@ def hg(*args):
 
 
 @pytest.fixture
-def in_process(monkeypatch):
+def in_process(monkeypatch, safe_environ):
     """Set up an environment to run moz-phab within the current process."""
     # Make sure other tests didn't leak and mess up the module-level
     # global variables :/
@@ -29,10 +29,6 @@ def in_process(monkeypatch):
     monkeypatch.setattr(mozphab, "DEBUG", False)
     monkeypatch.setattr(mozphab, "HAS_ANSI", False)
     # Constructing the Mercurial() object modifies os.environ for all tests.
-    # Make sure we preserve the system defaults.
-    monkeypatch.setattr(os, "environ", os.environ.copy())
-    # Disable logging to keep the testrunner output clean
-    monkeypatch.setattr(mozphab, "init_logging", mock.MagicMock())
     # Disable update checking.  It modifies the program on disk which we do /not/ want
     # to do during a test run.
     monkeypatch.setattr(mozphab, "check_for_updates", mock.MagicMock())
