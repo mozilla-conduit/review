@@ -35,7 +35,7 @@ def test_finalize(m_hg_rebase, m_hg_get_successor, hg):
     assert m_hg_rebase.call_count == 2
     assert m_hg_rebase.call_args_list == [
         mock.call(dict(rev="2", node="bbb"), dict(rev="1", node="aaa")),
-        mock.call(dict(rev="3", node="ccc"), dict(rev="2", node="bbb"))
+        mock.call(dict(rev="3", node="ccc"), dict(rev="2", node="bbb")),
     ]
 
     m_hg_get_successor.side_effect = [(None, None), ("4", "ddd")]

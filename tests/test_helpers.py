@@ -236,29 +236,58 @@ class Helpers(unittest.TestCase):
 @mock.patch("mozphab.arc_out")
 def test_valid_reviewers_in_phabricator_returns_no_errors(arc_out):
     # See https://phabricator.services.mozilla.com/api/user.search
-    arc_out.return_value = json.dumps(
-        {
-            "error": None,
-            "errorMessage": None,
-            "response": {"data": [{"fields": {"username": "alice"}}]},
-        }
+    arc_out.side_effect = (
+        json.dumps(
+            {
+                "error": None,
+                "errorMessage": None,
+                "response": {"data": [{"fields": {"username": "alice"}}]},
+            }
+        ),
+        json.dumps(
+            {
+                "error": None,
+                "errorMessage": None,
+                "response": {"data": [{"fields": {"slug": "user-group"}}]},
+            }
+        ),
     )
-    reviewers = dict(granted=[], request=["alice"])
+    reviewers = dict(granted=[], request=["alice", "#user-group"])
     assert [] == mozphab.check_for_invalid_reviewers(reviewers, "")
 
 
 @mock.patch("mozphab.arc_out")
-def test_non_existent_reviewers_generates_error_list(arc_out):
-    reviewers = dict(granted=[], request=["alice", "goober", "gonzo"])
-    expected_errors = ["gonzo", "goober"]
-    # See https://phabricator.services.mozilla.com/api/user.search
-    arc_out.return_value = json.dumps(
-        {
-            "error": None,
-            "errorMessage": None,
-            "response": {"data": [{"fields": {"username": "alice"}}]},
-        }
+def test_non_existent_reviewers_or_groups_generates_error_list(arc_out):
+    reviewers = dict(
+        granted=[],
+        request=[
+            "alice",
+            "goober",
+            "goozer",
+            "#user-group",
+            "#goo-group",
+            "#gon-group",
+        ],
     )
+    arc_out.side_effect = (
+        # See https://phabricator.services.mozilla.com/api/user.search
+        json.dumps(
+            {
+                "error": None,
+                "errorMessage": None,
+                "response": {"data": [{"fields": {"username": "alice"}}]},
+            }
+        ),
+        # See https://phabricator.services.mozilla.com/api/project.search
+        json.dumps(
+            {
+                "error": None,
+                "errorMessage": None,
+                "response": {"data": [{"fields": {"slug": "user-group"}}]},
+            }
+        ),
+    )
+    expected_errors = ["#goo-group", "goozer", "#gon-group", "goober"]
     assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers, "")
 
 

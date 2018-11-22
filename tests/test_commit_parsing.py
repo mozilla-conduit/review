@@ -30,6 +30,8 @@ class CommitParsing(unittest.TestCase):
 
         # first with r? reviewer request syntax
         self.assertParsed((["romulus"], []), parse("stuff; r?romulus"))
+        self.assertParsed((["#romulus"], []), parse("stuff; r?#romulus"))
+        self.assertParsed((["rom"], []), parse("stuff; r?rom#ulus"))
         self.assertParsed(
             (["romulus", "remus"], []), parse("stuff; r?romulus, r?remus")
         )
@@ -47,6 +49,8 @@ class CommitParsing(unittest.TestCase):
 
         # now with r= mozphab granted syntax
         self.assertParsed(([], ["romulus"]), parse("stuff; r=romulus"))
+        self.assertParsed(([], ["#romulus"]), parse("stuff; r=#romulus"))
+        self.assertParsed(([], ["rom"]), parse("stuff; r=rom#ulus"))
         self.assertParsed(
             ([], ["romulus", "remus"]), parse("stuff; r=romulus, r=remus")
         )

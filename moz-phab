@@ -116,7 +116,7 @@ BUG_ID_RE = re.compile(r"(?:(?:bug|b=)(?:\s*)(\d+)(?=\b))", flags=re.IGNORECASE)
 LIST = r"[;,\/\\]\s*"
 LIST_RE = re.compile(LIST)
 IRC_NICK = (
-    r"[a-zA-Z0-9\-\_!]+"
+    r"#?[a-zA-Z0-9\-\_!]+"
 )  # Note this includes !, which is different from commitparser
 REVIEWERS_RE = (
     r"([\s(.\[;,])(r%s)("
@@ -1655,14 +1655,33 @@ def check_for_invalid_reviewers(reviewers, cwd):
 
     # Combine the lists of requested reviewers and granted reviewers.
     all_reviewers = []
+    found_names = []
     for sublist in reviewers.values():
-        all_reviewers.extend([r.rstrip("!") for r in sublist])
+        all_reviewers.extend([r.rstrip("!") for r in sublist if not r.startswith("#")])
 
-    # See https://phabricator.services.mozilla.com/api/user.search
-    api_call_args = {"queryKey": "active", "constraints": {"usernames": all_reviewers}}
-    result = arc_call_conduit("user.search", api_call_args, cwd)
-    found_names = [data["fields"]["username"] for data in result["data"]]
+    if all_reviewers:
+        # See https://phabricator.services.mozilla.com/api/user.search
+        api_call_args = {
+            "queryKey": "active",
+            "constraints": {"usernames": all_reviewers},
+        }
+        result = arc_call_conduit("user.search", api_call_args, cwd)
+        found_names = [data["fields"]["username"] for data in result["data"]]
 
+    # Group reviewers are represented by a "#" prefix
+    all_groups = []
+    found_groups = []
+    for sublist in reviewers.values():
+        all_groups.extend([r.rstrip("!") for r in sublist if r.startswith("#")])
+
+    if all_groups:
+        # See https://phabricator.services.mozilla.com/api/user.search
+        api_call_args = {"queryKey": "active", "constraints": {"slugs": all_groups}}
+        result = arc_call_conduit("project.search", api_call_args, cwd)
+        found_groups = ["#%s" % data["fields"]["slug"] for data in result["data"]]
+
+    all_reviewers.extend(all_groups)
+    found_names.extend(found_groups)
     return list(set(all_reviewers) - set(found_names))
 
 
