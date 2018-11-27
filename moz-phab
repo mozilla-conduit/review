@@ -1297,6 +1297,7 @@ class Git(Repository):
             b18312ffe929d3482f1d7b1e9716a1885c7a61b8
             5f161c70fef9e59d1966bab693a0a68a9336af80
             Update code references
+
             Fixes:
             $ moz-phab self-update
             > Failed to download update: HTTP Error 404: Not Found
@@ -1308,7 +1309,7 @@ class Git(Repository):
                 "--reverse",
                 "--ancestry-path",
                 "--quiet",
-                "--format=%p%n%T%n%H%n%s%n%b{}".format(boundary),
+                "--format=%p%n%T%n%H%n%s%n%n%b{}".format(boundary),
                 "{}..{}".format(start, end),
             ],
             split=False,
@@ -1436,7 +1437,7 @@ class Git(Repository):
             commit: Information about the commit to be amended
             commits: List of commits within the stack
         """
-        updated_body = "%s\n\n%s" % (commit["title"], commit["body"])
+        updated_body = "%s\n%s" % (commit["title"], commit["body"])
 
         current_body = self.git_out(
             ["show", "-s", "--format=%s%n%b", commit["node"]], split=False
