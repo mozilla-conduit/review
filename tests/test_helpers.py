@@ -1,3 +1,4 @@
+import datetime
 import errno
 import imp
 import json
@@ -216,13 +217,11 @@ class Helpers(unittest.TestCase):
 def test_valid_reviewers_in_phabricator_returns_no_errors(arc_out):
     # See https://phabricator.services.mozilla.com/api/user.search
     arc_out.side_effect = (
+        # user.query
         json.dumps(
-            {
-                "error": None,
-                "errorMessage": None,
-                "response": {"data": [{"fields": {"username": "alice"}}]},
-            }
+            {"error": None, "errorMessage": None, "response": [{"userName": "alice"}]}
         ),
+        # project.search
         json.dumps(
             {
                 "error": None,
@@ -240,6 +239,8 @@ def test_valid_reviewers_in_phabricator_returns_no_errors(arc_out):
 
 @mock.patch("mozphab.arc_out")
 def test_non_existent_reviewers_or_groups_generates_error_list(arc_out):
+    ts = 1543622400
+    ts_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
     reviewers = dict(
         granted=[],
         request=[
@@ -252,15 +253,20 @@ def test_non_existent_reviewers_or_groups_generates_error_list(arc_out):
         ],
     )
     arc_out.side_effect = (
-        # See https://phabricator.services.mozilla.com/api/user.search
+        # user.query
         json.dumps(
             {
                 "error": None,
                 "errorMessage": None,
-                "response": {"data": [{"fields": {"username": "alice"}}]},
+                "response": [
+                    dict(userName="alice"),
+                    dict(
+                        userName="goober", currentStatus="away", currentStatusUntil=ts
+                    ),
+                ],
             }
         ),
-        # See https://phabricator.services.mozilla.com/api/project.search
+        # project.search
         json.dumps(
             {
                 "error": None,
@@ -269,7 +275,12 @@ def test_non_existent_reviewers_or_groups_generates_error_list(arc_out):
             }
         ),
     )
-    expected_errors = ["#goo-group", "goozer", "#gon-group", "goober"]
+    expected_errors = [
+        dict(name="goober", until=ts_str),
+        dict(name="#goo-group"),
+        dict(name="#gon-group"),
+        dict(name="goozer"),
+    ]
     assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers, "")
 
 
@@ -277,15 +288,11 @@ def test_non_existent_reviewers_or_groups_generates_error_list(arc_out):
 def test_reviwer_case_sensitivity(arc_out):
     reviewers = dict(granted=[], request=["Alice", "#uSeR-gRoUp"])
     arc_out.side_effect = (
-        # See https://phabricator.services.mozilla.com/api/user.search
+        # See https://phabricator.services.mozilla.com/conduit/method/user.query/
         json.dumps(
-            {
-                "error": None,
-                "errorMessage": None,
-                "response": {"data": [{"fields": {"username": "alice"}}]},
-            }
+            {"error": None, "errorMessage": None, "response": [dict(userName="alice")]}
         ),
-        # See https://phabricator.services.mozilla.com/api/project.search
+        # See https://phabricator.services.mozilla.com/conduit/method/project.search/
         json.dumps(
             {
                 "error": None,

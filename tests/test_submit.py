@@ -79,26 +79,59 @@ class Commits(unittest.TestCase):
 
     @mock.patch("mozphab.check_for_invalid_reviewers")
     def test_invalid_reviewers_fails_the_stack_validation_check(self, check_reviewers):
+        class Args:
+            def __init__(self):
+                self.force = False
+
         def fail_gonzo(reviewers, _):
             # Replace the check_for_invalid_reviewers() function with something that
             # fails if "gonzo" is in the reviewers list.
             if "gonzo" in reviewers["request"]:
-                return ["gonzo"]
+                return [dict(name="gonzo")]
+            elif "goober" in reviewers["request"]:
+                return [dict(name="goober", until="string")]
             else:
                 return []
 
         check_reviewers.side_effect = fail_gonzo
         repo = mozphab.Repository(None, None, "dummy")
+        repo.args = Args()
 
-        with self.assertRaises(mozphab.Error):
-            # Build a stack with an invalid reviewer in the middle.
-            repo.check_commits_for_submit(
+        self._assertError(
+            repo.check_commits_for_submit,
+            (
+                # Build a stack with an invalid reviewer in the middle.
                 [
                     commit("1", (["alice"], [])),
                     commit("2", (["bob", "gonzo"], [])),
                     commit("3", (["charlie"], [])),
                 ]
-            )
+            ),
+        )
+
+        self._assertError(
+            repo.check_commits_for_submit,
+            (
+                # Build a stack with an unavailable reviewer in the middle.
+                [
+                    commit("1", (["alice"], [])),
+                    commit("2", (["bob", "goober"], [])),
+                    commit("3", (["charlie"], [])),
+                ]
+            ),
+        )
+
+        repo.args.force = True
+        self._assertNoError(
+            repo.check_commits_for_submit,
+            (
+                [
+                    commit("1", (["alice"], [])),
+                    commit("2", (["bob", "goober"], [])),
+                    commit("3", (["charlie"], [])),
+                ]
+            ),
+        )
 
     def test_commit_preview(self):
         build = mozphab.build_commit_title

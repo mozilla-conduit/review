@@ -588,6 +588,7 @@ class Repository(object):
     def check_commits_for_submit(self, commits):
         """Validate the list of commits (from commit_stack) are ok to submit"""
         errors = []
+        warnings = []
 
         # Extract a set of reviewers and verify first; they will be displayed
         # with other commit errors.
@@ -610,11 +611,15 @@ class Repository(object):
 
         # Verify all reviewers in a single call
         for invalid_reviewer in check_for_invalid_reviewers(all_reviewers, self.path):
-            for node in reviewer_commit_map[normalise_reviewer(invalid_reviewer)]:
+            for node in reviewer_commit_map[
+                normalise_reviewer(invalid_reviewer["name"])
+            ]:
                 commit_invalid_reviewers[node].append(invalid_reviewer)
 
+        unavailable_reviewers_warning = False
         for commit in commits:
             commit_errors = []
+            commit_warnings = []
             # TODO allow NOBUG in commit message (not in arg)
             # TODO be more relaxed if we're updating an existing rev?
             if not commit["bug-id"]:
@@ -624,7 +629,20 @@ class Repository(object):
                 commit_errors.append("contains arc fields")
 
             for reviewer in commit_invalid_reviewers[commit["node"]]:
-                commit_errors.append("%s is not a valid reviewer's name" % reviewer)
+                if "until" in reviewer:
+                    unavailable_reviewers_warning = True
+                    msg = "%s is not available until %s" % (
+                        reviewer["name"],
+                        reviewer["until"],
+                    )
+                    if self.args.force:
+                        commit_warnings.append(msg)
+                    else:
+                        commit_errors.append(msg)
+                else:
+                    commit_errors.append(
+                        "%s is not a valid reviewer's name" % reviewer["name"]
+                    )
 
             if commit_errors:
                 errors.append(
@@ -632,8 +650,23 @@ class Repository(object):
                     % (commit["name"], commit["title"], "\n- ".join(commit_errors))
                 )
 
+            if commit_warnings:
+                warnings.append(
+                    "%s %s\n- %s"
+                    % (commit["name"], commit["title"], "\n- ".join(commit_warnings))
+                )
+
         if errors:
             raise Error("\n\n".join(errors))
+
+        if warnings:
+            logger.warning("\n\n".join(warnings))
+
+        if unavailable_reviewers_warning:
+            logger.warning(
+                "\nYou're forcing unavailable reviewer(s).\nIf stuck, please read the "
+                "discussion under https://bugzilla.mozilla.org/show_bug.cgi?id=1499205"
+            )
 
     def check_arc(self):
         """Check if arc can communicate with Phabricator."""
@@ -1664,16 +1697,15 @@ def check_for_invalid_reviewers(reviewers, cwd):
             ]
         )
 
+    users = []
     if all_reviewers:
-        # See https://phabricator.services.mozilla.com/api/user.search
-        api_call_args = {
-            "queryKey": "active",
-            "constraints": {"usernames": all_reviewers},
-        }
-        result = arc_call_conduit("user.search", api_call_args, cwd)
+        # We're using the deprecated user.query API as the user.search does not
+        # provide the user availability information.
+        # See https://phabricator.services.mozilla.com/conduit/method/user.query/
+        api_call_args = {"usernames": all_reviewers}
+        users = arc_call_conduit("user.query", api_call_args, cwd)
         found_names = [
-            normalise_reviewer(data["fields"]["username"], strip_group=False)
-            for data in result["data"]
+            normalise_reviewer(data["userName"], strip_group=False) for data in users
         ]
 
     # Group reviewers are represented by a "#" prefix
@@ -1689,7 +1721,7 @@ def check_for_invalid_reviewers(reviewers, cwd):
         )
 
     if all_groups:
-        # See https://phabricator.services.mozilla.com/api/user.search
+        # See https://phabricator.services.mozilla.com/conduit/method/project.search/
         api_call_args = {"queryKey": "active", "constraints": {"slugs": all_groups}}
         result = arc_call_conduit("project.search", api_call_args, cwd)
         found_groups = [
@@ -1707,7 +1739,21 @@ def check_for_invalid_reviewers(reviewers, cwd):
 
     all_reviewers.extend(all_groups)
     found_names.extend(found_groups)
-    return list(set(all_reviewers) - set(found_names))
+    invalid_reviewers = list(set(all_reviewers) - set(found_names))
+
+    # Find users availability:
+    unavailable_reviewers = [
+        dict(
+            name=r["userName"],
+            until=datetime.datetime.fromtimestamp(r["currentStatusUntil"]).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+        )
+        for r in users
+        if r.get("currentStatus") == "away"
+    ]
+
+    return unavailable_reviewers + [dict(name=r) for r in invalid_reviewers]
 
 
 #

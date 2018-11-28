@@ -95,11 +95,7 @@ def in_process(monkeypatch, safe_environ):
         # Return alice as the only valid reviewer name from Phabricator.
         # See https://phabricator.services.mozilla.com/api/user.search
         return json.dumps(
-            {
-                "error": None,
-                "errorMessage": None,
-                "response": {"data": [{"fields": {"username": "alice"}}]},
-            }
+            {"error": None, "errorMessage": None, "response": [{"userName": "alice"}]}
         )
 
     def check_call_by_line(*args, **kwargs):
