@@ -2037,7 +2037,7 @@ def submit(repo, args):
             ),
             bug_id=commit["bug-id"],
         )
-        if previous_commit:
+        if previous_commit and not args.no_stack:
             template_vars["depends_on"] = "Depends on D%s" % previous_commit["rev-id"]
         message = arc_message(template_vars)
 
@@ -2297,6 +2297,11 @@ def parse_args(argv):
         "--plan-changes",
         action="store_true",
         help="Create or update a revision without requesting a code review",
+    )
+    submit_parser.add_argument(
+        "--no-stack",
+        action="store_true",
+        help="Submit multiple commits, but do not mark them as dependant",
     )
     submit_parser.add_argument(
         "--upstream",
