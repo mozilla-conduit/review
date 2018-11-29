@@ -2003,7 +2003,7 @@ def submit(repo, args):
         untracked = repo.untracked()
         if untracked:
             logger.warning(
-                "Warning: found %s untracked file%s:"
+                "Warning: found %s untracked file%s (will not be submitted for review):"
                 % (len(untracked), "" if len(untracked) == 1 else "s")
             )
             if len(untracked) <= 5:
