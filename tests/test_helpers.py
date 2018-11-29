@@ -6,6 +6,7 @@ import mock
 import os
 import sys
 import unittest
+import __builtin__
 
 import pytest
 
@@ -65,40 +66,32 @@ class Helpers(unittest.TestCase):
         m_termios.tcgetattr.assert_called_once()
         m_tty.setcbreak.assert_called_once()
 
-    @mock.patch("mozphab.get_char")
+    @mock.patch.object(__builtin__, "raw_input")
     @mock.patch("mozphab.sys")
-    def test_prompt(self, m_sys, m_get_char):
-        char = None
+    def test_prompt(self, m_sys, m_raw_input):
+        input_response = None
 
-        def get_char():
-            return char
+        def _raw_input(_):
+            return input_response
 
-        m_get_char.side_effect = get_char
+        m_raw_input.side_effect = _raw_input
 
-        # Return key
-        char = chr(10)
+        # Default
+        input_response = ""
         self.assertEqual("AAA", mozphab.prompt("", ["AAA", "BBB"]))
-        m_sys.stdout.write.assert_called_with("AAA\n")
 
-        # ^C, Escape
-        char = chr(13)
-        self.assertEqual("AAA", mozphab.prompt("", ["AAA", "BBB"]))
-        m_sys.stdout.write.assert_called_with("AAA\n")
-
+        # Escape
         m_sys.exit.side_effect = SystemExit()
         with self.assertRaises(SystemExit):
-            char = chr(3)
+            input_response = chr(27)
             mozphab.prompt("", ["AAA"])
-        m_sys.stdout.write.assert_called_with("^C\n")
 
-        with self.assertRaises(SystemExit):
-            char = chr(27)
-            mozphab.prompt("", ["AAA"])
-        m_sys.stdout.write.assert_called_with("^C\n")
-
-        char = "b"
+        input_response = "aaa"
+        self.assertEqual("AAA", mozphab.prompt("", ["AAA", "BBB"]))
+        input_response = "a"
+        self.assertEqual("AAA", mozphab.prompt("", ["AAA", "BBB"]))
+        input_response = "B"
         self.assertEqual("BBB", mozphab.prompt("", ["AAA", "BBB"]))
-        m_sys.stdout.write.assert_called_with("BBB\n")
 
     @mock.patch("mozphab.probe_repo")
     def test_repo_from_args(self, m_probe):
