@@ -2068,6 +2068,8 @@ def submit(repo, args):
             )
             if args.nolint:
                 arc_args.append("--nolint")
+            if args.wip:
+                arc_args.append("--plan-changes")
             if is_update:
                 arc_args.extend(
                     ["--message", "Revision updated."] + ["--update", commit["rev-id"]]
@@ -2303,6 +2305,12 @@ def parse_args(argv):
         "--no-lint",
         action="store_true",
         help="Do not run lint (default: lint changed files if configured)",
+    )
+    submit_parser.add_argument(
+        "--wip",
+        "--plan-changes",
+        action="store_true",
+        help="Create or update a revision without requesting a code review",
     )
     submit_parser.add_argument(
         "--upstream",
