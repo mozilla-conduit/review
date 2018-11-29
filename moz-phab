@@ -457,6 +457,16 @@ class Config(object):
 #
 
 
+def find_repo_root(path):
+    """Lightweight check for a repo in/under the specified path."""
+    path = os.path.abspath(path)
+    while os.path.split(path)[1]:
+        if Mercurial.is_repo(path) or Git.is_repo(path):
+            return path
+        path = os.path.abspath(os.path.join(path, os.path.pardir))
+    return None
+
+
 def probe_repo(path):
     try:
         return Mercurial(path)
@@ -484,10 +494,9 @@ def repo_from_args(args):
 
     else:
         # Walk parents to find repository root.
-        path = os.path.abspath(os.getcwd())
-        while not repo and os.path.split(path)[1]:
+        path = find_repo_root(os.getcwd())
+        if path:
             repo = probe_repo(path)
-            path = os.path.abspath(os.path.join(path, os.path.pardir))
         if not repo:
             raise Error(
                 "Not a repository (or any of the parent directories): .hg / .git"
@@ -723,6 +732,11 @@ class Mercurial(Repository):
 
         # Disable the user's hgrc file, to ensure we run without rogue extensions.
         os.environ["HGRCPATH"] = ""
+
+    @classmethod
+    def is_repo(cls, path):
+        """Quick check for repository at specified path."""
+        return os.path.exists(os.path.join(path, ".hg"))
 
     @staticmethod
     def _get_extension(extension, hg_config):
@@ -1105,6 +1119,11 @@ class Git(Repository):
                 "You need to run the *git checkout <branch-name>* command."
             )
 
+    @classmethod
+    def is_repo(cls, path):
+        """Quick check for repository at specified path."""
+        return os.path.exists(os.path.join(path, ".git"))
+
     def git(self, command, **kwargs):
         """Call git from the repository path."""
         check_call(self._git + command, cwd=self.path, env=self._env, **kwargs)
@@ -1315,6 +1334,7 @@ class Git(Repository):
 
         commits = []
         rev_list = None
+        first_node = None
         for log_line in self._get_commits_info(*self.revset):
             if not log_line:
                 continue
@@ -1420,7 +1440,6 @@ class Git(Repository):
         )
 
         # Update commit info
-        old_parent_sha = commit["node"]
         commit["node"] = new_parent_sha
         # Update parent for all the children of the `commit` within the stack
         has_children = False
@@ -1436,7 +1455,6 @@ class Git(Repository):
             new_parent_sha = self._commit_tree(
                 new_parent_sha, c["tree-hash"], "%s\n%s" % (c["title"], c["body"])
             )
-            old_parent_sha = c["node"]
             c["node"] = new_parent_sha
 
     def rebase_commit(self, source_commit, dest_commit):
@@ -2312,6 +2330,15 @@ def parse_args(argv):
         "--force", "-f", action="store_true", help="Force update even if not necessary"
     )
     update_parser.set_defaults(func=self_update, needs_repo=False)
+
+    # if we're called without a command and from within a repository, default to submit.
+    if not argv or (
+        not (set(argv) & {"-h", "--help"})
+        and argv[0] not in ["submit", "self-update"]
+        and find_repo_root(os.getcwd())
+    ):
+        logger.debug("defaulting to `submit`")
+        argv.insert(0, "submit")
 
     return parser.parse_args(argv)
 
