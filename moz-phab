@@ -264,55 +264,23 @@ def read_json_field(files, field_path):
     return None
 
 
-def get_char():
-    try:
-        # POSIX-based systems.
-        import tty
-        import termios
-
-        fd = sys.stdin.fileno()
-        old_term_attrs = None
-        try:
-            old_term_attrs = termios.tcgetattr(fd)
-            tty.setcbreak(fd)
-            return sys.stdin.read(1)
-        except termios.error:
-            # Fallback on readline() if we failed to put the terminal into raw mode.
-            ch = sys.stdin.readline().strip()
-            return "\n" if ch == "" else ch[0]
-        finally:
-            if old_term_attrs:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_term_attrs)
-    except ImportError:
-        # Windows-based systems.
-        import msvcrt
-
-        return msvcrt.getch()
-
-
 def prompt(question, options):
     if HAS_ANSI:
         question = "\033[33m%s\033[0m" % question
-    options[0] = options[0].upper()
-    sys.stdout.write("%s (%s)? " % (question, "/".join(options)))
-    sys.stdout.flush()
+    prompt_options = list(options)
+    prompt_options[0] = prompt_options[0].upper()
+    prompt_str = "%s (%s)? " % (question, "/".join(prompt_options))
 
-    res = ""
-    default = options[0][0].lower()
-    options = {o[0].lower(): o for o in options}
-    while res not in options:
-        res = get_char().lower()
-        if res in (chr(10), chr(13)):  # return
-            res = default
-        elif res == chr(3) or res == chr(27):  # ^C, escape
-            sys.stdout.write("^C\n")
-            sys.stdout.flush()
+    options_map = {o[0].lower(): o for o in options}
+    options_map[""] = options[0]
+    while True:
+        res = raw_input(prompt_str)
+        if len(res) > 1:
+            res = res[0].lower()
+        if res == chr(27):  # escape
             sys.exit(1)
-        if res in options:
-            sys.stdout.write("%s\n" % options[res])
-            sys.stdout.flush()
-
-    return options[res]
+        if res in options_map:
+            return options_map[res]
 
 
 def parse_config(config_list, filter_func=None):
