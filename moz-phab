@@ -1616,8 +1616,17 @@ def replace_reviewers(commit_description, reviewers):
 
 def show_commit_stack(repo, commits, show_rev_urls=False, show_warnings=False):
     """Log the commit stack in a human readable form."""
+
+    # keep output in columns by sizing the action column to the longest rev + 1 ("D")
+    max_len = max(len(c.get("rev-id", "")) for c in commits) + 1 if commits else ""
+    action_template = "(%" + str(max_len) + "s)"
+
     for commit in reversed(commits):
-        logger.info("%s %s" % (commit["name"], commit["title-preview"]))
+        if commit.get("rev-id"):
+            action = action_template % ("D" + commit["rev-id"])
+        else:
+            action = action_template % "New"
+        logger.info("%s %s %s" % (action, commit["name"], commit["title-preview"]))
         if show_warnings:
             if commit["bug-id-orig"] and commit["bug-id"] != commit["bug-id-orig"]:
                 logger.warning(

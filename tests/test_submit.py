@@ -382,7 +382,16 @@ class Commits(unittest.TestCase):
         )
 
         mozphab.show_commit_stack(repo, [{"name": "aaa000", "title-preview": "A"}])
-        mock_logger.info.assert_called_with("aaa000 A")
+        mock_logger.info.assert_called_with("(New) aaa000 A")
+        self.assertFalse(
+            mock_logger.warning.called, "logger.warning() shouldn't be called"
+        )
+        mock_logger.reset_mock()
+
+        mozphab.show_commit_stack(
+            repo, [{"name": "aaa000", "title-preview": "A", "rev-id": "12"}]
+        )
+        mock_logger.info.assert_called_with("(D12) aaa000 A")
         self.assertFalse(
             mock_logger.warning.called, "logger.warning() shouldn't be called"
         )
@@ -397,7 +406,7 @@ class Commits(unittest.TestCase):
         )
         self.assertEqual(2, mock_logger.info.call_count)
         self.assertEqual(
-            [mock.call("bbb000 B"), mock.call("aaa000 A")],
+            [mock.call("(New) bbb000 B"), mock.call("(New) aaa000 A")],
             mock_logger.info.call_args_list,
         )
         mock_logger.reset_mock()
@@ -415,7 +424,7 @@ class Commits(unittest.TestCase):
             ],
             show_warnings=True,
         )
-        mock_logger.info.assert_called_with("aaa000 A")
+        mock_logger.info.assert_called_with("(New) aaa000 A")
         mock_logger.warning.assert_called_with("!! Bug ID changed from 2 to 1")
         mock_logger.reset_mock()
 
