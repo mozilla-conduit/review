@@ -54,18 +54,6 @@ class Helpers(unittest.TestCase):
             "value CA", mozphab.read_json_field(["file_a", "file_b"], ["c", "a"])
         )
 
-    @mock.patch("__builtin__.termios", create=True)
-    @mock.patch("__builtin__.tty", create=True)
-    @mock.patch("mozphab.sys")
-    @unittest.skip(
-        "Figure out the way to mock termios and tty imported within function"
-    )
-    def test_get_char(self, m_sys, m_tty, m_termios):
-        m_sys.stdin.read.return_value = "x"
-        self.assertEqual("x", mozphab.get_char())
-        m_termios.tcgetattr.assert_called_once()
-        m_tty.setcbreak.assert_called_once()
-
     @mock.patch.object(__builtin__, "raw_input")
     @mock.patch("mozphab.sys")
     def test_prompt(self, m_sys, m_raw_input):
@@ -90,7 +78,7 @@ class Helpers(unittest.TestCase):
         self.assertEqual("AAA", mozphab.prompt("", ["AAA", "BBB"]))
         input_response = "a"
         self.assertEqual("AAA", mozphab.prompt("", ["AAA", "BBB"]))
-        input_response = "B"
+        input_response = "b"
         self.assertEqual("BBB", mozphab.prompt("", ["AAA", "BBB"]))
 
     @mock.patch("mozphab.probe_repo")
