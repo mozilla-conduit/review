@@ -157,3 +157,13 @@ def test_is_child(git):
     assert is_child("bbb", "eee", nodes)
     assert not is_child("bbb", "ddd", nodes)
     assert not is_child("ccc", "ddd", nodes)
+
+
+def test_range(git):
+    class Args:
+        def __init__(self, start="aaa", end="."):
+            self.start_rev = start
+            self.end_rev = end
+
+    git.set_args(Args())
+    assert git.revset == ("aaa", ".")

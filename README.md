@@ -82,11 +82,13 @@ The simplest invocation is
 
 If no positional arguments (`start_rev`/`end_rev`) are given, the
 range of commits is automatically determined, starting with the first
-non-public, non-obsolete changeset (for Mercurial) and ending with the
-currently checked-out changeset.  If only one argument is given, it is
-interpreted as the first changeset in the range, with the last again
-being the currently checked-out changeset.  If both arguments are
-given, they denote the full, inclusive range of changesets.
+non-public, non-obsolete changeset (for Mercurial) or first unpublished commit
+(for Git) and ending with the currently checked-out changeset. If at least one
+argument is given `moz-phab` is following the underlying VCS's `log` behavior.
+The first argument is interpreted differently in Mercurial (as inclusive) and
+Git (exclusive). If only one argument is given the end of range is again
+interpreted as the currently checked-out changeset.  If both arguments are
+given - the second one is interpreted as inclusive.
 
 Bug IDs and reviewers are parsed out of commit messages by default.
 You can set a reviewer as blocking by appending an exclamation mark to

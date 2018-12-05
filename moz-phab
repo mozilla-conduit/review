@@ -1240,10 +1240,8 @@ class Git(Repository):
         if start is None:
             return None
 
-        # We want full, inclusive range of commits.
-        # If the user provided a commit SHA1, its parent needs to be passed to the log.
-        if self._revparse(start).startswith(start):
-            # start is a hash - we need to use its parent
+        # We want inclusive range of commits if start commit is detected
+        if self.args.start_rev == "(auto)":
             start = "%s^" % start
 
         self.revset = (start, self.args.end_rev)
