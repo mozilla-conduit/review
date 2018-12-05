@@ -312,9 +312,12 @@ def parse_config(config_list, filter_func=None):
     return result
 
 
-def normalise_reviewer(reviewer):
+def normalise_reviewer(reviewer, strip_group=True):
     """This provide a canonical form of the reviewer for comparison."""
-    return reviewer.lstrip("#").rstrip("!").lower()
+    reviewer = reviewer.rstrip("!").lower()
+    if strip_group:
+        reviewer = reviewer.lstrip("#")
+    return reviewer
 
 
 class NamedTemporaryFile(object):
@@ -1655,7 +1658,13 @@ def check_for_invalid_reviewers(reviewers, cwd):
     all_reviewers = []
     found_names = []
     for sublist in reviewers.values():
-        all_reviewers.extend([r.rstrip("!") for r in sublist if not r.startswith("#")])
+        all_reviewers.extend(
+            [
+                normalise_reviewer(r, strip_group=False)
+                for r in sublist
+                if not r.startswith("#")
+            ]
+        )
 
     if all_reviewers:
         # See https://phabricator.services.mozilla.com/api/user.search
@@ -1664,19 +1673,31 @@ def check_for_invalid_reviewers(reviewers, cwd):
             "constraints": {"usernames": all_reviewers},
         }
         result = arc_call_conduit("user.search", api_call_args, cwd)
-        found_names = [data["fields"]["username"] for data in result["data"]]
+        found_names = [
+            normalise_reviewer(data["fields"]["username"], strip_group=False)
+            for data in result["data"]
+        ]
 
     # Group reviewers are represented by a "#" prefix
     all_groups = []
     found_groups = []
     for sublist in reviewers.values():
-        all_groups.extend([r.rstrip("!") for r in sublist if r.startswith("#")])
+        all_groups.extend(
+            [
+                normalise_reviewer(r, strip_group=False)
+                for r in sublist
+                if r.startswith("#")
+            ]
+        )
 
     if all_groups:
         # See https://phabricator.services.mozilla.com/api/user.search
         api_call_args = {"queryKey": "active", "constraints": {"slugs": all_groups}}
         result = arc_call_conduit("project.search", api_call_args, cwd)
-        found_groups = ["#%s" % data["fields"]["slug"] for data in result["data"]]
+        found_groups = [
+            "#%s" % normalise_reviewer(data["fields"]["slug"])
+            for data in result["data"]
+        ]
 
     all_reviewers.extend(all_groups)
     found_names.extend(found_groups)

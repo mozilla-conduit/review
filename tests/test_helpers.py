@@ -1,10 +1,8 @@
 import errno
-import exceptions
 import imp
 import json
 import mock
 import os
-import sys
 import unittest
 import __builtin__
 
@@ -270,6 +268,30 @@ def test_non_existent_reviewers_or_groups_generates_error_list(arc_out):
     )
     expected_errors = ["#goo-group", "goozer", "#gon-group", "goober"]
     assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers, "")
+
+
+@mock.patch("mozphab.arc_out")
+def test_reviwer_case_sensitivity(arc_out):
+    reviewers = dict(granted=[], request=["Alice", "#uSeR-gRoUp"])
+    arc_out.side_effect = (
+        # See https://phabricator.services.mozilla.com/api/user.search
+        json.dumps(
+            {
+                "error": None,
+                "errorMessage": None,
+                "response": {"data": [{"fields": {"username": "alice"}}]},
+            }
+        ),
+        # See https://phabricator.services.mozilla.com/api/project.search
+        json.dumps(
+            {
+                "error": None,
+                "errorMessage": None,
+                "response": {"data": [{"fields": {"slug": "user-group"}}]},
+            }
+        ),
+    )
+    assert [] == mozphab.check_for_invalid_reviewers(reviewers, "")
 
 
 @mock.patch("mozphab.arc_out")
