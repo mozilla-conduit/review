@@ -2203,7 +2203,11 @@ def check_for_updates():
         config.self_last_check = int(time.time())
         config.write()
 
-        release = get_self_release()
+        try:
+            release = get_self_release()
+        except Error as e:
+            logger.warning(e.message)
+            return
 
         if release["update_required"]:
             logger.warning("Version %s of `moz-phab` is now available" % release["tag"])
