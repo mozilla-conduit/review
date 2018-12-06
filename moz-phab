@@ -1698,6 +1698,14 @@ def check_for_invalid_reviewers(reviewers, cwd):
             "#%s" % normalise_reviewer(data["fields"]["slug"])
             for data in result["data"]
         ]
+        # We might be searching by the hashtag.
+        if "maps" in result and "slugMap" in result["maps"]:
+            found_groups.extend(
+                [
+                    "#%s" % normalise_reviewer(r)
+                    for r in result["maps"]["slugMap"].keys()
+                ]
+            )
 
     all_reviewers.extend(all_groups)
     found_names.extend(found_groups)

@@ -227,11 +227,14 @@ def test_valid_reviewers_in_phabricator_returns_no_errors(arc_out):
             {
                 "error": None,
                 "errorMessage": None,
-                "response": {"data": [{"fields": {"slug": "user-group"}}]},
+                "response": {
+                    "data": [{"fields": {"slug": "user-group"}}],
+                    "maps": {"slugMap": {"alias1": {}, "#alias2": {}}},
+                },
             }
         ),
     )
-    reviewers = dict(granted=[], request=["alice", "#user-group"])
+    reviewers = dict(granted=[], request=["alice", "#user-group", "#alias1", "#alias2"])
     assert [] == mozphab.check_for_invalid_reviewers(reviewers, "")
 
 
