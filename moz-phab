@@ -925,6 +925,11 @@ class Mercurial(Repository):
             self.checkout(node)
             self.hg(["commit", "--amend", "--logfile", temp_f.name])
 
+    def _get_parent(self, node):
+        return self.hg_out(
+            ["log", "-T", "{node}", "-r", "parents(%s)" % node], split=False
+        )
+
     def finalize(self, commits):
         """Rebase stack children commits if needed."""
         # Currently we do all rebases in `amend_commit` if the evolve extension
@@ -934,7 +939,8 @@ class Mercurial(Repository):
 
         parent = None
         for commit in commits:
-            if parent:
+            commit_parent = self._get_parent(commit["node"])
+            if parent and parent["node"] not in commit_parent:
                 self.rebase_commit(commit, parent)
                 (rev, node) = self._get_successor(commit["node"])
                 if rev and node:

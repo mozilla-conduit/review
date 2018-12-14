@@ -1,3 +1,4 @@
+import copy
 import imp
 import mock
 import os
@@ -23,25 +24,38 @@ def test_get_successor(m_hg_hg_out, hg):
 
 @mock.patch("mozphab.Mercurial._get_successor")
 @mock.patch("mozphab.Mercurial.rebase_commit")
-def test_finalize(m_hg_rebase, m_hg_get_successor, hg):
+@mock.patch("mozphab.Mercurial._get_parent")
+def test_finalize(m_get_parent, m_hg_rebase, m_hg_get_successor, hg):
     commits = [
         dict(rev="1", node="aaa"),
         dict(rev="2", node="bbb"),
         dict(rev="3", node="ccc"),
     ]
 
+    m_get_parent.return_value = "different:than_others"
     m_hg_get_successor.return_value = (None, None)
-    hg.finalize(commits[:])
+    hg.finalize(copy.deepcopy(commits))
     assert m_hg_rebase.call_count == 2
     assert m_hg_rebase.call_args_list == [
         mock.call(dict(rev="2", node="bbb"), dict(rev="1", node="aaa")),
         mock.call(dict(rev="3", node="ccc"), dict(rev="2", node="bbb")),
     ]
 
-    m_hg_get_successor.side_effect = [(None, None), ("4", "ddd")]
+    m_get_parent.side_effect = ("first", "aaa", "last")
+    m_hg_rebase.reset_mock()
     hg.finalize(commits)
+    assert m_hg_rebase.call_count == 1
+    assert m_hg_rebase.call_args_list == [
+        mock.call(dict(rev="3", node="ccc"), dict(rev="2", node="bbb"))
+    ]
+
+    m_get_parent.side_effect = None
+    m_get_parent.return_value = "different:than_others"
+    m_hg_get_successor.side_effect = [(None, None), ("4", "ddd")]
+    _commits = commits[:]
+    hg.finalize(_commits)
     assert m_hg_get_successor.called_once_with(dict(rev="3", node="ccc"), "ddd", "4")
-    assert commits == [
+    assert _commits == [
         dict(rev="1", node="aaa"),
         dict(rev="2", node="bbb"),
         dict(rev="3", node="ddd", name="4:ddd"),
