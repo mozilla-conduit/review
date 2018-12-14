@@ -2187,9 +2187,23 @@ def get_self_release():
 
 def update_arc():
     """Write the las check and update arc."""
-    config.arc_last_check = int(time.time())
-    config.write()
-    check_call(config.arc + ["upgrade"])
+    try:
+        check_call(config.arc + ["upgrade"])
+    except subprocess.CalledProcessError:
+        logger.warning(
+            "arc failed to upgrade, which may be caused by using an arcanist "
+            "package from\nyour system package manager."
+        )
+        result = prompt(
+            "Would you like to skip arc upgrades in the future?", ["Yes", "No"]
+        )
+
+        if result == "YES":
+            config.arc_last_check = -1
+            config.write()
+    else:
+        config.arc_last_check = int(time.time())
+        config.write()
 
 
 def check_for_updates():
