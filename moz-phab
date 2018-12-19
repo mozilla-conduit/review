@@ -33,6 +33,7 @@ import time
 import traceback
 import urllib2
 import uuid
+from contextlib import contextmanager
 from distutils.version import LooseVersion
 
 # Known Issues
@@ -320,47 +321,16 @@ def normalise_reviewer(reviewer, strip_group=True):
     return reviewer
 
 
-class NamedTemporaryFile(object):
-    """
-    Like tempfile.NamedTemporaryFile except it works on Windows
-    in the case where you open the created file a second time.
-
-    From mozilla-central:testing/mozbase/mozfile/mozfile/mozfile.py with
-    slight modifications.
-    """
-
-    def __init__(self):
-        fd, path = tempfile.mkstemp()
-        os.close(fd)
-
-        self.file = open(path, "w+b")
-        self._path = path
-        self._delete = True
-        self._unlinked = False
-
-    def __getattr__(self, k):
-        return getattr(self.__dict__["file"], k)
-
-    def __iter__(self):
-        return self.__dict__["file"]
-
-    def __enter__(self):
-        self.file.__enter__()
-        return self
-
-    def __exit__(self, exc, value, tb):
-        self.file.__exit__(exc, value, tb)
-        if self.__dict__["_delete"]:
-            os.unlink(self.__dict__["_path"])
-            self._unlinked = True
-
-    def __del__(self):
-        if self.__dict__["_unlinked"]:
-            return
-        self.file.__exit__(None, None, None)
-        if self.__dict__["_delete"]:
-            os.unlink(self.__dict__["_path"])
-
+@contextmanager
+def TemporaryFileName(content):
+    f = tempfile.NamedTemporaryFile(delete=False)
+    try:
+        f.write(content)
+        f.flush()
+        f.close()
+        yield f.name
+    finally:
+        os.remove(f.name)
 
 class Error(Exception):
     """Errors thrown explictly by this script; won't generate a stack trace."""
@@ -918,12 +888,9 @@ class Mercurial(Repository):
         self.hg(["update", "--quiet", node])
 
     def _amend_commit_body(self, node, body):
-        with NamedTemporaryFile() as temp_f:
-            temp_f.write(body)
-            temp_f.flush()
-
+        with TemporaryFileName(body) as body_file:
             self.checkout(node)
-            self.hg(["commit", "--amend", "--logfile", temp_f.name])
+            self.hg(["commit", "--amend", "--logfile", body_file])
 
     def _get_parent(self, node):
         return self.hg_out(
@@ -1447,11 +1414,9 @@ class Git(Repository):
         Returns:
             str: SHA1 of the new commit.
         """
-        with NamedTemporaryFile() as temp_f:
-            temp_f.write(message)
-            temp_f.flush()
+        with TemporaryFileName(message) as message_file:
             return self.git_out(
-                ["commit-tree", "-p", parent, "-F", temp_f.name, tree_hash], split=False
+                ["commit-tree", "-p", parent, "-F", message_file, tree_hash], split=False
             )
 
     def amend_commit(self, commit, commits):
@@ -1800,12 +1765,10 @@ def arc_call_conduit(api_method, api_call_args, cwd):
     """
     arc_args = ["call-conduit", api_method]
     # 'arc call-conduit' only accepts its args from STDIN.
-    with NamedTemporaryFile() as temp_f:
-        json.dump(api_call_args, temp_f)
-        temp_f.flush()
-        temp_f.file.seek(0)
+    with TemporaryFileName(json.dumps(api_call_args)) as args_file:
         logger.debug("Arc stdin: %s", api_call_args)
-        output = arc_out(arc_args, cwd=cwd, stdin=temp_f, log_output_to_console=False)
+        with open(args_file, "rb") as temp_f:
+            output = arc_out(arc_args, cwd=cwd, stdin=temp_f, log_output_to_console=False)
 
     # We expect arc output to be a JSON. However, in DEBUG mode, a `--trace` is used and
     # the reponse becomes a multiline string with some messages in plain text.
@@ -2132,15 +2095,12 @@ def submit(repo, args):
         message = arc_message(template_vars)
 
         # Run arc.
-        with NamedTemporaryFile() as temp_f:
-            temp_f.write(message)
-            temp_f.flush()
-
+        with TemporaryFileName(message) as message_file:
             arc_args = (
                 ["diff"]
                 + ["--base", "arc:this"]
                 + ["--allow-untracked", "--no-amend", "--no-ansi"]
-                + ["--message-file", temp_f.name]
+                + ["--message-file", message_file]
             )
             if args.nolint:
                 arc_args.append("--nolint")
