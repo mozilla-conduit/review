@@ -51,6 +51,11 @@ auto_submit = False
 always_blocking = False
 warn_untracked = True
 
+[patch]
+apply_to = base
+create_bookmark = True
+always_full_stack = False
+
 [updater]
 self_last_check = <time>
 arc_last_check = <time>
@@ -67,6 +72,15 @@ arc_last_check = <time>
     (default: false).
 - `submit.warn_untracked` : when true show a warning if there are uncommitted or
     untracked changes in the working directory (default: true)
+- `patch.apply_to` : [base/here] Where to apply the patches by default. If `"base"`
+    `moz-phab` will look for the SHA1 in the first commit. If `"here"` - current
+    commit/checkout will be used (default: base).
+- `patch.create_bookmark` : affects only when patching a Mercurial repository. If `True`
+    `moz-phab` will create a bookmark (based on the last revision number) for the
+    new DAG branch point.
+- `patch.always_full_stack` : when `False` and the patched revision has successors,
+    moz-phab will ask if the whole stack should be patched instead. If `True`
+    moz-phab will do it without without asking.
 - `updater.self_last_check` : epoch timestamp (local timezone) indicating the last time
     an update check was performed for this script.  set to `-1` to disable this check.
 - `updater.arc_last_check` : epoch timestamp (local timezone) indicating the last time
@@ -76,12 +90,21 @@ arc_last_check = <time>
 - `DEBUG` : enabled debugging output (default: disabled)
 - `UPDATE_FILE` : when self-updating write to this file instead of \_\_file\_\_
 
-### Execution
+## Execution
 
+To get information about all available commands run
+```
+  $ moz-phab -h
+```
+
+All commands involving VCS (like `submit` and `patch`) might be used with a 
+`--safe-mode` switch. It will run the VCS command with only chosen set of extensions.
+
+### Submiting commits to the Phabricator
 The simplest invocation is
 
 ```
-  $ moz-phab submit [start_rev] [end_rev]
+  $ moz-phab [start_rev] [end_rev]
 ```
 
 If no positional arguments (`start_rev`/`end_rev`) are given, the
@@ -125,22 +148,51 @@ self-update`.
 Note that if you do not have Python in your path, you will need to run
 `<path to python>/python <path to moz-phab>/moz-phab` instead of `moz-phab`.
 
-### Reporting Issues
+### Downloading a patch from the Phabricator
 
-We use [Bugzilla](https://bugzilla.mozilla.org/) to track development.
+moz-phab patch allows patching an entire stack of revisions. The simplest 
+invocation is
+
+```
+$ moz-phab patch rev_id
+```
+
+To patch a stack ending with the revision `D123` run `moz-phab patch D123`.
+Diffs will be downloaded from the Phabricator and applied using the underlying
+VCS (`import` for Mercurial or `apply` for Git). A commit for each revision will
+be created in a new bookmark (Mercurial) or branch (Git).
+
+This behavior can be modified with few options:
+
+- `--apply-to TARGET` Define the commit to which apply the patch:
+  - `base` (default) find the base commit in the first ancestor of the revision,
+  - `here` use the current commit,
+  - `{NODE}` use a commit identified by SHA1 or (in Mecurial) revision number
+
+- `--raw` Print out the diffs of each revision starting from the oldest
+   ancestor instead of applying to the repository. It can be used to patch the
+   working directory with an external tool:
+   `$ moz-phab patch D123 --raw | patch -p1`.
+
+- `--no-commit` Use the `git apply` command (also for Mercurial repos) to patch
+   the diffs. No commit or branch is created.
+
+- `--no-bookmark` : used only when patching a Mercurial repository. If not
+    provided - `moz-phab` will create a bookmark (based on the last revision number)
+    for the new DAG branch point. The default behavior [is configurable](#configuration).
+
+
+## Development
 
 File bugs in Bugzilla under
 [Conduit :: Review Wrapper](https://bugzilla.mozilla.org/enter_bug.cgi?product=Conduit&component=Review%20Wrapper).
-
-
-### Development
 
 We have strict requirements for moz-phab development:
 
 - must only use standard libraries
 - must be a single file for easy deployment
 
-Unit tests can be executed with `python -m unittest discover`.
+Tests can be executed with `pytest`.
 Integration tests require to have access to `git`, `hg` with `evolve` extension
 and `patch` commands.
 

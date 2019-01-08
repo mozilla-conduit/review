@@ -21,8 +21,8 @@ check_call_by_line = mock.Mock(
 )
 
 
-def test_submit_feature_branch(in_process, repo_path):
-    testfile = repo_path / "X"
+def test_submit_feature_branch(in_process, hg_repo_path):
+    testfile = hg_repo_path / "X"
     testfile.write_text(u"a1")
     hg_out("add")
     hg_out("commit", "--message", "A1")

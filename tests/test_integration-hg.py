@@ -14,8 +14,8 @@ mozphab = imp.load_source(
 )
 
 
-def test_submit_create(in_process, repo_path):
-    testfile = repo_path / "X"
+def test_submit_create(in_process, hg_repo_path):
+    testfile = hg_repo_path / "X"
     testfile.write_text(u"a")
     hg_out("add")
     hg_out("commit", "--message", "A r?alice")
@@ -31,8 +31,8 @@ Differential Revision: http://example.test/D123
     assert log == expected
 
 
-def test_submit_update(in_process, repo_path):
-    testfile = repo_path / "X"
+def test_submit_update(in_process, hg_repo_path):
+    testfile = hg_repo_path / "X"
     testfile.write_text(u"a")
     hg_out("add")
 

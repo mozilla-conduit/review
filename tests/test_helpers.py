@@ -185,7 +185,7 @@ class Helpers(unittest.TestCase):
     @mock.patch("mozphab.os.access")
     @mock.patch("mozphab.os.path")
     @mock.patch("mozphab.os.environ")
-    def test_which(self, m_os_environ, m_os_path, m_os_access):
+    def test_which_a(self, m_os_environ, m_os_path, m_os_access):
         m_os_environ.get.return_value = "/one:/two"
         m_os_path.expanduser = lambda x: x
         m_os_path.normcase = lambda x: x
@@ -201,7 +201,7 @@ class Helpers(unittest.TestCase):
     @mock.patch("mozphab.os.path")
     @mock.patch("mozphab.os.environ")
     @mock.patch("mozphab.which")
-    def test_which(self, m_which, m_os_environ, m_os_path, m_os_access):
+    def test_which_b(self, m_which, m_os_environ, m_os_path, m_os_access):
         m_os_path.exists.side_effect = (True, False)
         m_os_access.return_value = True
         m_os_path.isdir.return_value = False

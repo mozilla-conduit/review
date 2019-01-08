@@ -133,6 +133,8 @@ REQUEST_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"\?")
 GRANTED_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"=")
 R_SPECIFIER_RE = re.compile(r"\br[=?]")
 
+DEPENDS_ON_RE = re.compile(r"^\s*Depends on\s*D(\d+)\s*$", flags=re.MULTILINE)
+
 MINIMUM_MERCURIAL_VERSION = LooseVersion("4.3.3")
 
 #
@@ -222,11 +224,18 @@ def check_call_by_line(command, cwd=None, never_log=False):
 
 
 def check_output(
-    command, cwd=None, split=True, strip=True, never_log=False, stdin=None, env=None
+    command,
+    cwd=None,
+    split=True,
+    strip=True,
+    never_log=False,
+    stdin=None,
+    stderr=None,
+    env=None,
 ):
     # wrapper around subprocess.check_output with debug output and splitting
     logger.debug("$ %s" % " ".join(shell_quote(s) for s in command))
-    kwargs = dict(cwd=cwd, stdin=stdin)
+    kwargs = dict(cwd=cwd, stdin=stdin, stderr=stderr)
     if env:
         kwargs["env"] = env
 
@@ -340,6 +349,14 @@ class Error(Exception):
     """Errors thrown explictly by this script; won't generate a stack trace."""
 
 
+class NotFoundError(Exception):
+    """Errors raised when node is not found."""
+
+
+class NonLinearException(Exception):
+    """Errors raised when multiple children or parents found."""
+
+
 class CommandError(Exception):
     status = None
 
@@ -365,22 +382,27 @@ class Config(object):
         # Default values.
         defaults = u"""
             [ui]
-            no_ansi=false
+            no_ansi = False
 
             [vcs]
-            safe_mode=false
+            safe_mode = False
 
             [arc]
-            arc_command=arc
+            arc_command = arc
 
             [submit]
-            auto_submit=false
-            always_blocking=false
-            warn_untracked=true
+            auto_submit = False
+            always_blocking = False
+            warn_untracked = True
+
+            [patch]
+            apply_to = base
+            create_bookmark = True
+            always_full_stack = False
 
             [updater]
-            self_last_check=0
-            arc_last_check=0
+            self_last_check = 0
+            arc_last_check = 0
             """
 
         self._config = ConfigParser.SafeConfigParser()
@@ -401,6 +423,9 @@ class Config(object):
         self.auto_submit = self._config.getboolean("submit", "auto_submit")
         self.always_blocking = self._config.getboolean("submit", "always_blocking")
         self.warn_untracked = self._config.getboolean("submit", "warn_untracked")
+        self.apply_patch_to = self._config.get("patch", "apply_to")
+        self.create_bookmark = self._config.getboolean("patch", "create_bookmark")
+        self.always_full_stack = self._config.getboolean("patch", "always_full_stack")
         self.self_last_check = self._config.getint("updater", "self_last_check")
         self.arc_last_check = self._config.getint("updater", "arc_last_check")
 
@@ -418,6 +443,7 @@ class Config(object):
         if os.path.exists(self._filename):
             logger.debug("updating %s" % self._filename)
             self._set("submit", "auto_submit", self.auto_submit)
+            self._set("patch", "always_full_stack", self.always_full_stack)
             self._set("updater", "self_last_check", self.self_last_check)
             self._set("updater", "arc_last_check", self.arc_last_check)
 
@@ -429,6 +455,9 @@ class Config(object):
             self._set("submit", "auto_submit", self.auto_submit)
             self._set("submit", "always_blocking", self.always_blocking)
             self._set("submit", "warn_untracked", self.warn_untracked)
+            self._set("patch", "apply_to", self.apply_patch_to)
+            self._set("patch", "create_bookmark", self.create_bookmark)
+            self._set("patch", "always_full_stack", self.always_full_stack)
 
         with open(self._filename, "w") as f:
             self._config.write(f)
@@ -495,6 +524,12 @@ class Repository(object):
         self.args = None
         self.phab_url = phab_url or self._phab_url()
 
+    def is_worktree_clean(self):
+        """Check if the working tree is clean."""
+
+    def before_submit(self):
+        """Add special step for the submit command."""
+
     def _phab_url(self):
         """Determine the phab/conduit URL."""
 
@@ -555,14 +590,37 @@ class Repository(object):
     def refresh_commit_stack(self, commits):
         """Update the stack following an altering change (eg rebase)."""
 
+    def is_node(self, node):
+        """Check if node exists.
+
+        Returns a Boolean.
+        """
+
+    def check_node(self, node):
+        """Check if node exists.
+
+        Returns a node if found.
+
+        Raises NotFoundError if node not found in the repository.
+        """
+
     def checkout(self, node):
         """Checkout/Update to specified node."""
+
+    def commit(self, body):
+        """Commit the changes in the working directory."""
 
     def amend_commit(self, commit, commits):
         """Amend commit description from `title` and `desc` fields"""
 
     def rebase_commit(self, source_commit, dest_commit):
         """Rebase source onto destination."""
+
+    def before_patch(self, node, name):
+        """Prepare repository to apply the patches."""
+
+    def apply_patch(self, diff, body, author, author_date):
+        """Apply the patch and commit the changes."""
 
     def check_commits_for_submit(self, commits):
         """Validate the list of commits (from commit_stack) are ok to submit"""
@@ -715,6 +773,10 @@ class Mercurial(Repository):
 
         return None
 
+    def is_worktree_clean(self):
+        status = self._status()
+        return not (status["T"] or status["U"])
+
     def hg(self, command, **kwargs):
         check_call(self._hg + command, cwd=self.path, **kwargs)
 
@@ -851,26 +913,29 @@ class Mercurial(Repository):
 
         self._hg.extend(options)
 
-        # Set the default start revision.
-        if self.args.start_rev == "(auto)":
-            start = "ancestors(.) and not public() and not obsolete()"
-        else:
-            start = self.args.start_rev
-
-        # Resolve to nodes as that's nicer to read.
-        try:
-            start = self.hg_log(start)[0]
-        except IndexError:
+        if hasattr(self.args, "start_rev"):
+            # Set the default start revision.
             if self.args.start_rev == "(auto)":
-                raise Error("Failed to find draft commits to submit")
+                start = "ancestors(.) and not public() and not obsolete()"
             else:
-                raise Error("Failed to start of commit range: %s" % self.args.start_rev)
-        try:
-            end = self.hg_log(self.args.end_rev)[0]
-        except IndexError:
-            raise Error("Failed to end of commit range: %s" % self.args.end_rev)
+                start = self.args.start_rev
 
-        self.revset = "%s::%s" % (start[:12], end[:12])
+            # Resolve to nodes as that's nicer to read.
+            try:
+                start = self.hg_log(start)[0]
+            except IndexError:
+                if self.args.start_rev == "(auto)":
+                    raise Error("Failed to find draft commits to submit")
+                else:
+                    raise Error(
+                        "Failed to start of commit range: %s" % self.args.start_rev
+                    )
+            try:
+                end = self.hg_log(self.args.end_rev)[0]
+            except IndexError:
+                raise Error("Failed to end of commit range: %s" % self.args.end_rev)
+
+            self.revset = "%s::%s" % (start[:12], end[:12])
 
     def commit_stack(self):
         # Grab all the info we need about the commits, using randomness as a delimiter.
@@ -923,8 +988,63 @@ class Mercurial(Repository):
 
         return commits
 
+    def is_node(self, node):
+        try:
+            self.hg(["identify", "-q", "-r", node])
+        except subprocess.CalledProcessError:
+            return False
+
+        return True
+
+    def check_node(self, node):
+        if not self.is_node(node):
+            raise NotFoundError()
+
+        return node
+
     def checkout(self, node):
         self.hg(["update", "--quiet", node])
+
+    def commit(self, body):
+        """Commit the changes in the working directory."""
+        with temporary_file(body) as temp_f:
+            self.hg(["commit", "--logfile", temp_f])
+
+    def before_patch(self, node, name):
+        """Prepare repository to apply the patches.
+
+        Args:
+            node - SHA1 or revision of the base commit
+            name - name of the bookmark to be created
+        """
+        # Checkout sha
+        if node:
+            self.checkout(node)
+            if not self.args.raw:
+                logger.warning("Checked out %s" % node)
+
+        if name and config.create_bookmark and not self.args.no_bookmark:
+            bookmarks = self.hg_out(["bookmarks", "-T", "{bookmark}\n"])
+            bookmark_name = name
+            i = 0
+            while bookmark_name in bookmarks:
+                i += 1
+                bookmark_name = "%s_%s" % (name, i)
+
+            self.hg(["bookmark", bookmark_name])
+            if not self.args.raw:
+                logger.warning("Bookmark set to %s" % bookmark_name)
+
+    def apply_patch(self, diff, body, author, author_date):
+        commands = []
+        if author:
+            commands.extend(["-u", author])
+
+        if author_date:
+            commands.extend(["-d", author_date])
+
+        with temporary_file(diff) as patch_file, temporary_file(body) as body_file:
+            self.hg(["import", patch_file, "-l", body_file] + commands)
 
     def _amend_commit_body(self, node, body):
         with temporary_file(body) as body_file:
@@ -1147,7 +1267,13 @@ class Git(Repository):
         super(Git, self).__init__(path, dot_path)
 
         self.revset = None
+        self.extensions = []
+        self.branch = None
 
+    def is_worktree_clean(self):
+        return self.git_out(["status", "--short"], split=False) == ""
+
+    def before_submit(self):
         # Store current branch (fails if HEAD in detached state)
         try:
             self.branch = self._get_current_head()
@@ -1178,7 +1304,8 @@ class Git(Repository):
 
     def cleanup(self):
         self.git(["gc", "--auto", "--quiet"])
-        self.checkout(self.branch)
+        if self.branch:
+            self.checkout(self.branch)
 
     def _find_branches_to_rebase(self, commits):
         """Create a list of branches to rebase."""
@@ -1297,19 +1424,20 @@ class Git(Repository):
             self._env["XDG_CONFIG_HOME"] = ""
             self._git.extend(safe_options)
 
-        if self.args.start_rev == "(auto)":
-            start = self._get_first_unpublished_node()
-        else:
-            start = self.args.start_rev
+        if hasattr(self.args, "start_rev"):
+            if self.args.start_rev == "(auto)":
+                start = self._get_first_unpublished_node()
+            else:
+                start = self.args.start_rev
 
-        if start is None:
-            return None
+            if start is None:
+                return None
 
-        # We want inclusive range of commits if start commit is detected
-        if self.args.start_rev == "(auto)":
-            start = "%s^" % start
+            # We want inclusive range of commits if start commit is detected
+            if self.args.start_rev == "(auto)":
+                start = "%s^" % start
 
-        self.revset = (start, self.args.end_rev)
+            self.revset = (start, self.args.end_rev)
 
     def _git_get_children(self, node):
         """Get commits SHA1 with their children.
@@ -1459,8 +1587,93 @@ class Git(Repository):
 
         return commits
 
+    def is_node(self, node):
+        try:
+            node_type = self.git_out(
+                ["cat-file", "-t", node], split=False, stderr=subprocess.STDOUT
+            )
+        except CommandError:
+            return False
+
+        return node_type == "commit"
+
+    def check_node(self, node):
+        """Check if the node exists.
+
+        Calls `hg2git` if node is not found and cinnabar extension is installed.
+
+        Returns a node if found.
+
+        Raises NotFoundError if not found.
+        """
+        hashtag = node
+        if not self.is_node(hashtag):
+            if "cinnabar" in self.extensions:
+                hashtag = self.git_out(["cinnabar", "hg2git", hashtag], split=False)
+                if hashtag == "0" * 40:
+                    # hashtag is not found via hg2git
+                    raise NotFoundError(
+                        "Mercurial SHA1 not found by the cinnabar extension."
+                    )
+                elif not self.is_node(hashtag):
+                    # the found hashtag is not a valid node in the repository.
+                    raise NotFoundError(
+                        "Mercurial SHA1 detected, but commit not found in the repository."
+                    )
+            else:
+                raise NotFoundError("Cinnabar extension not enabled.")
+
+        return hashtag
+
     def checkout(self, node):
         self.git(["checkout", "--quiet", node])
+
+    def add(self):
+        """Add new files in the working directory."""
+        self.git(["add", "."])
+
+    def commit(self, body, author=None, author_date=None):
+        """Commit the changes in the working directory."""
+        commands = ["commit", "-a"]
+        if author:
+            commands.append('--author="%s"' % author)
+
+        if author_date:
+            commands.append('--date="%s"' % author_date)
+
+        with temporary_file(body) as temp_f:
+            commands += ["-F", temp_f]
+            self.git(commands)
+
+    def before_patch(self, node, name):
+        """Prepare repository to apply the patches.
+
+        Args:
+            node - SHA1 of the base commit
+            name - name of the branch to be created
+        """
+        # Checkout sha
+        if node:
+            self.checkout(node)
+            logger.warning("Checked out %s" % node[:12])
+
+        if name:
+            branches = self.git_out(["branch", "--list", "%s*" % name])
+            branches = [re.sub("[ *]", "", b) for b in branches]
+            branch_name = name
+            i = 0
+            while branch_name in branches:
+                i += 1
+                branch_name = "%s_%s" % (name, i)
+
+            self.git(["checkout", "-q", "-b", branch_name])
+            logger.warning("Created branch %s" % branch_name)
+
+    def apply_patch(self, diff, body, author, author_date):
+        with temporary_file(diff) as patch_file:
+            self.git(["apply", patch_file])
+        self.add()
+        self.commit(body, author, author_date)
 
     def _get_current_head(self):
         """Return current's HEAD symbolic link."""
@@ -1598,12 +1811,33 @@ def strip_differential_revision(body):
     return ARC_DIFF_REV_RE.sub("", body).rstrip()
 
 
+def strip_depends_on(body):
+    return DEPENDS_ON_RE.sub("", body).rstrip()
+
+
 def amend_revision_url(body, new_url):
     """Append or replace the Differential Revision URL in a commit body."""
     body = strip_differential_revision(body)
     if body:
         body += "\n"
     body += "\nDifferential Revision: %s" % new_url
+    return body
+
+
+def prepare_body(title, summary, rev_id, phab_url, depends_on=None):
+    """Prepare the body using title and summary."""
+    summary = strip_differential_revision(summary)
+    summary = strip_depends_on(summary)
+
+    if summary:
+        summary += "\n\n"
+
+    summary += "Differential Revision: %s/D%s" % (phab_url, rev_id)
+    if depends_on:
+        summary += "\n\nDepends on D%s" % depends_on
+
+    body = "%s\n\n%s" % (title, summary)
+
     return body
 
 
@@ -2105,6 +2339,8 @@ def submit(repo, args):
     if DEBUG:
         config.arc.append("--trace")
 
+    repo.before_submit()
+
     # Find and preview commits to submits.
     commits = repo.commit_stack()
     if not commits:
@@ -2371,6 +2607,304 @@ def self_update(args):
     logger.info("%s updated" % SELF_FILE)
 
 
+def get_revisions(cwd, ids=None, phids=None):
+    """Get revisions info from Phabricator.
+
+    Args:
+        cwd - current working directory
+        ids - list of ids
+        phids - list of revision phids
+
+    Returns a list of revisions ordered by ids or phids
+
+    Raises Exception if both ids and phids are provided
+    """
+    if ids and phids:
+        # Ordering would be too complicated
+        raise ValueError("ids and phids are mutually exclusive")
+
+    api_call_args = {"constraints": {}}
+    if ids:
+        api_call_args["constraints"]["ids"] = ids
+    else:
+        api_call_args["constraints"]["phids"] = phids
+
+    response = arc_call_conduit("differential.revision.search", api_call_args, cwd)
+    rev_list = response.get("data", [])
+    if not rev_list:
+        return
+
+    # Order by the ids or phids
+    rev_dict_by_id = {}
+    rev_dict_by_phid = {}
+
+    for r in rev_list:
+        rev_dict_by_id[r["id"]] = r
+        rev_dict_by_phid[r["phid"]] = r
+
+    if ids:
+        return [rev_dict_by_id[i] for i in ids]
+
+    return [rev_dict_by_phid[phid] for phid in phids]
+
+
+def get_diffs(cwd, phids):
+    """Get diffs from Phabricator.
+
+    Args:
+        phids - a list of diff PHIDs to pull
+        cwd - current working directory
+
+    Returns a dict of diffs identified by their PHID
+    """
+    api_call_args = {"constraints": {"phids": phids}, "attachments": {"commits": True}}
+    response = arc_call_conduit("differential.diff.search", api_call_args, cwd)
+    diff_list = response.get("data", [])
+
+    diff_dict = {}
+    for d in diff_list:
+        diff_dict[d["phid"]] = d
+
+    return diff_dict
+
+
+def apply_patch(diff, cwd):
+    """Apply a patch provided in the `diff`.
+
+    Requires `patch` command to be installed.
+    """
+    with temporary_file(diff) as temp_f:
+        try:
+            check_call(["git", "apply", temp_f], cwd=cwd)
+        except OSError:
+            raise Error("Can't access the `git` command. Is Git installed?")
+
+
+def get_base_ref(diff):
+    for ref in diff["fields"].get("refs", []):
+        if ref["type"] == "base":
+            return ref["identifier"]
+
+
+def has_successor(phid, path):
+    successor = get_related_phids(phid, None, path, relation="child", proceed=False)
+    return True if successor else False
+
+
+def get_successor_phids(phid, path):
+    return get_related_phids(phid, None, path, relation="child")
+
+
+def get_ancestor_phids(phid, path):
+    return get_related_phids(phid, None, path, relation="parent")
+
+
+def get_related_phids(phid, related, path, relation="parent", proceed=True):
+    """Returns the list of PHIDs with direct dependency"""
+    if not related:
+        related = []
+
+    api_call_args = {"sourcePHIDs": [phid], "types": ["revision.%s" % relation]}
+    edge = arc_call_conduit("edge.search", api_call_args, path)
+    if edge.get("data"):
+        if len(edge["data"]) > 1:
+            raise NonLinearException()
+
+        dep_phid = edge["data"][0]["destinationPHID"]
+        grand = (
+            get_related_phids(dep_phid, related, path, relation=relation)
+            if proceed
+            else []
+        )
+        related.append(dep_phid)
+        related.extend(grand)
+
+    return related
+
+
+def patch(repo, args):
+    """Patch repository from Phabricator's revisions.
+
+    By default:
+    * perform sanity checks
+    * find the base commit
+    * create a new branch/bookmark
+    * apply the patches and commit the changes
+
+    args.no_commit is True - no commit will be created after applying diffs
+    args.apply_to - <head|tip|branch> (default: branch)
+        branch - find base commit and apply on top of it
+        head/tip - apply changes to current commit
+    args.raw is True - only print out the diffs (--force doesn't change anything)
+
+    Raises:
+    * Error if uncommited changes are present in the working tree
+    * Error if Phabricator revision is not found
+    * Error if `--apply-to base` and no base commit found in the first diff
+    * Error if base commit not found in repository
+    """
+    if DEBUG:
+        config.arc.append("--trace")
+
+    # Check if arc is configured
+    if not repo.check_arc():
+        raise Error("Failed to run %s." % config.arc_command)
+
+    # Look for any uncommited changes
+    if not args.raw and not repo.is_worktree_clean():
+        raise Error(
+            "Uncommited changes present. Please %s them or commit before patching."
+            % ("shelve" if isinstance(repo, Mercurial) else "stash")
+        )
+
+    # Get the target revision
+    rev_id = int(args.rev_id.lstrip("D"))
+    revs = get_revisions(repo.path, ids=[rev_id])
+    if not revs:
+        raise Error("Revision not found")
+
+    revision = revs[0]
+
+    # Check if revision is the last in the stack
+    has_child = False
+    try:
+        has_child = has_successor(revision["phid"], repo.path)
+    except NonLinearException:
+        has_child = True
+
+    patch_children = False
+    if has_child:
+        if args.yes or config.always_full_stack:
+            patch_children = True
+        else:
+            res = prompt(
+                "Revision D%s has child(ren). Would you like to patch the full stack?."
+                % rev_id,
+                ["Yes", "No", "Always"],
+            )
+            if res == "Always":
+                config.always_full_stack = True
+                config.write()
+
+            patch_children = res == "Yes" or res == "Always"
+
+    children = []
+    if patch_children:
+        multiple_children = False
+        try:
+            children = get_successor_phids(revision["phid"], repo.path)
+        except NonLinearException:
+            multiple_children = True
+
+        if multiple_children and not args.yes:
+            res = prompt(
+                "Revision D%s has a non-linear successor graph. "
+                "Unable to detect the full stack. Would you like to continue "
+                "with only part of the stack?" % rev_id,
+                ["Yes", "No"],
+            )
+            if res == "No":
+                return
+
+    # Get list of PHIDs in the stack
+    try:
+        phids = get_ancestor_phids(revision["phid"], repo.path)
+    except NonLinearException:
+        raise Error("Non linear dependency detected. Unable to patch the stack.")
+
+    # Pull revisions data
+    if phids:
+        revs.extend(get_revisions(repo.path, phids=phids))
+        revs.reverse()
+
+    if children:
+        revs.extend(get_revisions(repo.path, phids=children))
+
+    # Set the target id
+    rev_id = revs[-1]["id"]
+
+    if not args.raw:
+        logger.warning(
+            "Patching revision%s: %s"
+            % ("s" if len(revs) > 1 else "", " ".join(["D%s" % r["id"] for r in revs]))
+        )
+
+    # Pull diffs
+    diffs = get_diffs(repo.path, [r["fields"]["diffPHID"] for r in revs])
+
+    if not args.no_commit and not args.raw:
+        for rev in revs:
+            diff = diffs[rev["fields"]["diffPHID"]]
+            if not diff["attachments"]["commits"]["commits"]:
+                raise Error(
+                    "A diff without commit information detected in revision D%s.\n"
+                    "Use `--no-commit` to patch the working tree." % rev["id"]
+                )
+
+    base_node = None
+    if not args.raw:
+        if args.apply_to == "base":
+            base_node = get_base_ref(diffs[revs[0]["fields"]["diffPHID"]])
+
+            if not base_node:
+                raise Error(
+                    "Base commit not found in diff. "
+                    "Use `--apply-to here` to patch current commit."
+                )
+        elif args.apply_to != "here":
+            base_node = args.apply_to
+
+        if args.apply_to != "here":
+            try:
+                base_node = repo.check_node(base_node)
+            except NotFoundError as e:
+                msg = "Unknown revision: %s" % base_node[:12]
+                if str(e):
+                    msg += "\n%s" % str(e)
+
+                if args.apply_to == "base":
+                    msg += "\nUse --apply-to to set the base commit."
+
+                raise Error(msg)
+
+        branch_name = None if args.no_commit else "D%s" % rev_id
+        repo.before_patch(base_node, branch_name)
+
+    parent = None
+    for rev in revs:
+        # Prepare the body using just the data from Phabricator
+        body = prepare_body(
+            rev["fields"]["title"],
+            rev["fields"]["summary"],
+            rev["id"],
+            repo.phab_url,
+            depends_on=parent,
+        )
+        parent = rev["id"]
+        diff = diffs[rev["fields"]["diffPHID"]]
+        raw = arc_call_conduit(
+            "differential.getrawdiff", {"diffID": diff["id"]}, repo.path
+        )
+        if args.no_commit:
+            apply_patch(raw, repo.path)
+        elif args.raw:
+            logger.info(raw)
+        else:
+            diff_commits = diff["attachments"]["commits"]["commits"]
+            author = "%s <%s>" % (
+                diff_commits[0]["author"]["name"],
+                diff_commits[0]["author"]["email"],
+            )
+            author_date = datetime.datetime.fromtimestamp(
+                diff_commits[0]["author"]["epoch"]
+            ).isoformat()
+
+            try:
+                repo.apply_patch(raw, body, author, author_date)
+            except subprocess.CalledProcessError:
+                raise Error("Patch failed to apply")
+
+
 #
 # Main
 #
@@ -2513,10 +3047,55 @@ def parse_args(argv):
     )
     update_parser.set_defaults(func=self_update, needs_repo=False)
 
+    # patch
+
+    patch_parser = commands.add_parser("patch", help="Patch from Phabricator revision")
+    patch_parser.add_argument("rev_id", help="Revision number")
+    patch_group = patch_parser.add_mutually_exclusive_group()
+    patch_group.add_argument(
+        "--apply-to",
+        "--applyto",
+        "-a",
+        metavar="TARGET",
+        dest="apply_to",
+        help="Where to apply the patch? <{NODE}|here|base> (default: %s)"
+        % config.apply_patch_to,
+    )
+    patch_group.add_argument(
+        "--raw", action="store_true", help="Prints out the raw diff to the STDOUT"
+    )
+    patch_parser.add_argument(
+        "--no-commit",
+        "--nocommit",
+        action="store_true",
+        dest="no_commit",
+        help="Do not commit. Applies the changes with the `patch` command",
+    )
+    patch_parser.add_argument(
+        "--no-bookmark",
+        "--nobookmark",
+        action="store_true",
+        dest="no_bookmark",
+        help="(Merucrial only) Do not create the bookmark",
+    )
+    patch_parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Patch without confirmation (default: False)",
+    )
+    patch_parser.add_argument(
+        "--safe-mode",
+        dest="safe_mode",
+        action="store_true",
+        help="Run VCS with only necessary extensions.",
+    )
+    patch_parser.set_defaults(func=patch, needs_repo=True)
+
     # if we're called without a command and from within a repository, default to submit.
     if not argv or (
         not (set(argv) & {"-h", "--help"})
-        and argv[0] not in ["submit", "self-update"]
+        and argv[0] not in ["submit", "self-update", "patch"]
         and find_repo_root(os.getcwd())
     ):
         logger.debug("defaulting to `submit`")
@@ -2563,6 +3142,9 @@ def main(argv):
 
         if args.command != "self-update":
             check_for_updates()
+
+        if args.command == "patch" and not args.apply_to:
+            args.apply_to = config.apply_patch_to
 
         if args.needs_repo:
             repo = repo_from_args(args)

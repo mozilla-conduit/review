@@ -9,18 +9,13 @@ import subprocess
 import mock
 import pytest
 
+from conftest import git_out
+
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
 
-env = os.environ.copy()
 initial_sha = None
-
-
-def git_out(*args):
-    args = ["git"] + list(args)
-    env["DEBUG"] = "1"
-    return subprocess.check_output(args, env=env)
 
 
 def get_sha():
@@ -28,27 +23,12 @@ def get_sha():
 
 
 @pytest.fixture
-def repo_path(monkeypatch, tmp_path):
-    """Build a usable Git repository. Return the pathlib.Path to the repo."""
-    phabricator_uri = "http://example.test"
-    repo_path = tmp_path / "repo"
-    repo_path.mkdir()
-    monkeypatch.chdir(str(repo_path))
-    arcconfig = repo_path / ".arcconfig"
-    arcconfig.write_text(unicode(json.dumps({"phabricator.uri": phabricator_uri})))
-    git_out("init")
-    git_out("add", ".")
-    git_out("commit", "--message", "initial commit")
-    return repo_path
-
-
-@pytest.fixture
-def init_sha(in_process, repo_path):
+def init_sha(in_process, git_repo_path):
     return get_sha()
 
 
-def test_submit_create(in_process, repo_path, init_sha):
-    testfile = repo_path / "X"
+def test_submit_create(in_process, git_repo_path, init_sha):
+    testfile = git_repo_path / "X"
     testfile.write_text(u"a")
     git_out("add", ".")
     git_out("commit", "--message", "A r?alice")
@@ -64,8 +44,8 @@ Differential Revision: http://example.test/D123
     assert log == expected
 
 
-def test_submit_different_author(in_process, repo_path, init_sha):
-    testfile = repo_path / "X"
+def test_submit_different_author(in_process, git_repo_path, init_sha):
+    testfile = git_repo_path / "X"
     testfile.write_text(u"a")
     git_out("add", ".")
     git_out(
@@ -100,8 +80,8 @@ Tue, 22 Jan 2019 13:42:48 +0000+++foo+++foo@bar.com
 
 
 @pytest.mark.skip("Commit body has an extra line at the end.")
-def test_submit_update(in_process, repo_path, init_sha):
-    testfile = repo_path / "X"
+def test_submit_update(in_process, git_repo_path, init_sha):
+    testfile = git_repo_path / "X"
     testfile.write_text(u"a")
     git_out("add", ".")
 

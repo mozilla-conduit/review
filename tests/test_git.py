@@ -3,6 +3,8 @@ import mock
 import os
 import pytest
 
+from conftest import create_temp_fn
+
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
@@ -232,3 +234,113 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
     git.set_args(Args())
     assert "" == git._env["HOME"]
     assert "" == git._env["XDG_CONFIG_HOME"]
+
+
+@mock.patch("mozphab.Git.git_out")
+def test_worktree_clean(m_git_out, git):
+    m_git_out.return_value = ""
+    assert git.is_worktree_clean()
+
+    m_git_out.return_value = "xxx"
+    assert not git.is_worktree_clean()
+
+
+@mock.patch("mozphab.Git.git")
+def test_add(m_git, git):
+    git.add()
+    assert m_git.called_once_with(["add", "."])
+
+
+@mock.patch("mozphab.Git.git")
+def test_commit(m_git, git):
+    git.commit("some body")
+    assert m_git.called_once()
+
+    m_git.reset_mock()
+    git.commit("some body", "user")
+    assert m_git.called_once()
+
+
+@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.Git.is_node")
+def test_check_node(m_git_is_node, m_git_out, git):
+    node = "aabbcc"
+    assert node == git.check_node(node)
+
+    m_git_is_node.return_value = False
+    with pytest.raises(mozphab.NotFoundError) as e:
+        git.check_node(node)
+    assert "Cinnabar extension not enabled" in str(e.value)
+
+    git.extensions = ["cinnabar"]
+    m_git_out.return_value = "0" * 40
+    with pytest.raises(mozphab.NotFoundError) as e:
+        git.check_node(node)
+    assert "Mercurial SHA1 not found" in str(e.value)
+
+    m_git_out.return_value = "git_aabbcc"
+    with pytest.raises(mozphab.NotFoundError) as e:
+        git.check_node(node)
+    assert "Mercurial SHA1 detected" in str(e.value)
+
+    m_git_is_node.side_effect = (False, True)
+    assert "git_aabbcc" == git.check_node(node)
+
+
+@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.Git.checkout")
+@mock.patch("mozphab.Git.git")
+def test_before_patch(m_git, m_checkout, m_git_out, git):
+    class Args:
+        def __init__(self, rev_id="D123", nocommit=False, raw=False, applyto="base"):
+            self.rev_id = rev_id
+            self.nocommit = nocommit
+            self.raw = raw
+            self.applyto = applyto
+
+    git.args = Args()
+    m_git_out.side_effect = (["  branch"],)
+    git.before_patch("sha1", "branch")
+    m_checkout.assert_called_with("sha1")
+    m_git.assert_called_with(["checkout", "-q", "-b", "branch_1"])
+
+    m_git.reset_mock()
+    m_git_out.reset_mock()
+    m_checkout.reset_mock()
+
+    m_checkout.reset_mock()
+    m_git_out.side_effect = ("the branch name is not here",)
+    git.args = Args(applyto="here")
+    git.before_patch(None, "branchname")
+    m_checkout.assert_not_called()
+
+    m_git.reset_mock()
+    git.args = Args(applyto="abcdef", nocommit=True)
+    git.before_patch("abcdef", None)
+    m_checkout.assert_called_once_with("abcdef")
+    m_git.assert_not_called()
+
+
+@mock.patch("mozphab.temporary_file")
+@mock.patch("mozphab.Git.git")
+@mock.patch("mozphab.Git.add")
+@mock.patch("mozphab.Git.commit")
+def test_apply_patch(m_commit, m_add, m_git, m_temp_fn, git):
+    m_temp_fn.return_value = create_temp_fn("filename")
+    git.apply_patch("diff", "commit message", "user", 1)
+    m_git.assert_called_once_with(["apply", "filename"])
+    m_add.assert_called_once()
+    m_commit.assert_called_with("commit message", "user", 1)
+    m_temp_fn.assert_called_once_with("diff")
+
+
+@mock.patch("mozphab.Git.git_out")
+def test_is_node(m_git_out, git):
+    m_git_out.return_value = "commit"
+    assert git.is_node("aaa")
+
+    m_git_out.return_value = "something else"
+    assert not git.is_node("aaa")
+
+    m_git_out.side_effect = mozphab.CommandError
+    assert not git.is_node("aaa")

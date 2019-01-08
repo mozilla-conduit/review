@@ -14,6 +14,16 @@ mozphab = imp.load_source(
 )
 
 
+def create_temp_fn(*filenames):
+    m_temp_fn = mock.Mock()
+    if len(filenames) > 1:
+        m_temp_fn.__enter__ = mock.Mock(side_effect=filenames)
+    else:
+        m_temp_fn.__enter__ = mock.Mock(return_value=filenames[0])
+    m_temp_fn.__exit__ = mock.Mock(return_value=None)
+    return m_temp_fn
+
+
 @pytest.fixture
 @mock.patch("mozphab.Git.git_out")
 @mock.patch("mozphab.Git._get_current_head")
@@ -65,7 +75,7 @@ def hg_out(*args):
 
 
 @pytest.fixture
-def repo_path(monkeypatch, tmp_path):
+def hg_repo_path(monkeypatch, tmp_path):
     """Build a usable HG repository. Return the pathlib.Path to the repo."""
     phabricator_uri = "http://example.test"
     repo_path = tmp_path / "repo"
@@ -74,6 +84,28 @@ def repo_path(monkeypatch, tmp_path):
     arcconfig = repo_path / ".arcconfig"
     arcconfig.write_text(unicode(json.dumps({"phabricator.uri": phabricator_uri})))
     hg_out("init")
+    return repo_path
+
+
+def git_out(*args):
+    env = os.environ.copy()
+    args = ["git"] + list(args)
+    env["DEBUG"] = "1"
+    return subprocess.check_output(args, env=env)
+
+
+@pytest.fixture
+def git_repo_path(monkeypatch, tmp_path):
+    """Build a usable Git repository. Return the pathlib.Path to the repo."""
+    phabricator_uri = "http://example.test"
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    monkeypatch.chdir(str(repo_path))
+    arcconfig = repo_path / ".arcconfig"
+    arcconfig.write_text(unicode(json.dumps({"phabricator.uri": phabricator_uri})))
+    git_out("init")
+    git_out("add", ".")
+    git_out("commit", "--message", "initial commit")
     return repo_path
 
 

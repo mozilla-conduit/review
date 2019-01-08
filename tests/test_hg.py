@@ -4,6 +4,9 @@ import mock
 import os
 import pytest
 
+from conftest import create_temp_fn
+from subprocess import CalledProcessError
+
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
@@ -74,7 +77,7 @@ def test_finalize(m_hg_find_forks, m_get_parent, m_hg_rebase, m_hg_get_successor
     m_hg_rebase.reset_mock()
     m_hg_get_successor.side_effect = None
     m_hg_get_successor.return_value = (None, None)
-    m_hg_find_forks.side_effect = (["XXX"], [], [])
+    m_hg_find_forks.side_effect = (["YYY"], [], [])
     _commits = commits[:]
     _commits[0]["node"] = "AAA"  # node has been amended
     hg.finalize(_commits)
@@ -165,3 +168,123 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
     m_hg_hg_log.side_effect = IndexError
     with pytest.raises(mozphab.Error):
         hg.set_args(Args())
+
+
+@mock.patch("mozphab.Mercurial._status")
+def test_clean_worktree(m_status, hg):
+    m_status.return_value = {"T": None, "U": None}
+    assert hg.is_worktree_clean()
+
+    m_status.return_value = {"T": True, "U": None}
+    assert not hg.is_worktree_clean()
+
+    m_status.return_value = {"T": None, "U": True}
+    assert not hg.is_worktree_clean()
+
+    m_status.return_value = {"T": True, "U": True}
+    assert not hg.is_worktree_clean()
+
+
+@mock.patch("mozphab.Mercurial.hg")
+def test_commit(m_hg, hg):
+    hg.commit("some body")
+    m_hg.called_once()
+
+
+@mock.patch("mozphab.Mercurial.checkout")
+@mock.patch("mozphab.Mercurial.hg_out")
+@mock.patch("mozphab.Mercurial.hg")
+@mock.patch("mozphab.config")
+def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
+    class Args:
+        def __init__(
+            self,
+            rev_id="D123",
+            nocommit=False,
+            raw=False,
+            applyto="base",
+            no_bookmark=False,
+        ):
+            self.rev_id = rev_id
+            self.nocommit = nocommit
+            self.raw = raw
+            self.applyto = applyto
+            self.no_bookmark = no_bookmark
+
+    m_config.create_bookmark = True
+    m_hg_out.side_effect = ["bookmark"]
+    hg.args = Args()
+    hg.before_patch("sha1", "bookmark")
+    m_checkout.assert_called_with("sha1")
+    m_hg_out.assert_called()
+    m_hg.assert_called_with(["bookmark", "bookmark_1"])
+    m_checkout.assert_called_once_with("sha1")
+
+    m_checkout.reset_mock()
+    hg.args = Args(nocommit=True)
+    m_hg.reset_mock()
+    hg.before_patch("sha1", None)
+    m_hg.assert_not_called()
+    m_checkout.assert_called_once_with("sha1")
+
+    hg.args = Args(applyto="here")
+    m_checkout.reset_mock()
+    m_hg_out.reset_mock()
+    m_hg_out.side_effect = None
+    m_hg_out.return_value = "some book_marks"
+    hg.before_patch(None, "bookmark")
+    m_hg_out.assert_called_once()
+    m_checkout.assert_not_called()
+
+    hg.args = Args(applyto="here")
+    m_checkout.reset_mock()
+    m_hg_out.reset_mock()
+    m_hg_out.side_effect = None
+    m_hg_out.return_value = "some book_marks"
+    hg.before_patch(None, "bookmark")
+    m_hg_out.assert_called_once()
+    m_checkout.assert_not_called()
+
+    m_hg_out.reset_mock()
+    hg.args = Args(no_bookmark=True)
+    hg.before_patch(None, "bookmark")
+    m_hg_out.assert_not_called()
+
+    m_config.create_bookmark = False
+    m_hg_out.reset_mock()
+    hg.args = Args()
+    hg.before_patch(None, "bookmark")
+    m_hg_out.assert_not_called()
+
+
+@mock.patch("mozphab.temporary_file")
+@mock.patch("mozphab.Mercurial.hg")
+def test_apply_patch(m_hg, m_temp_fn, hg):
+    m_temp_fn.return_value = create_temp_fn("diff_fn", "body_fn")
+    hg.apply_patch("diff", "body", "user", 1)
+    m_hg.assert_called_once_with(
+        ["import", "diff_fn", "-l", "body_fn", "-u", "user", "-d", 1]
+    )
+    assert m_temp_fn.call_count == 2
+
+
+@mock.patch("mozphab.Mercurial.hg")
+def test_is_node(m_hg, hg):
+    assert hg.is_node("aabbcc")
+    m_hg.assert_called_once_with(["identify", "-q", "-r", "aabbcc"])
+
+    m_hg.side_effect = mock.Mock(side_effect=CalledProcessError(None, None))
+    assert not hg.is_node("aaa")
+
+
+@mock.patch("mozphab.Mercurial.is_node")
+def test_check_node(m_is_node, hg):
+    node = "aabbcc"
+    m_is_node.return_value = True
+    assert node == hg.check_node(node)
+
+    m_is_node.return_value = False
+    with pytest.raises(mozphab.NotFoundError) as e:
+        hg.check_node(node)
+
+    assert "" == str(e.value)
