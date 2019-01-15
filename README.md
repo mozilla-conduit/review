@@ -132,5 +132,8 @@ We have strict requirements for moz-phab development:
 - must be a single file for easy deployment
 
 Unit tests can be executed with `python -m unittest discover`.
+Integration tests require to have access to `git`, `hg` with `evolve` extension
+and `patch` commands.
 
-All python code must be formatted with [black](https://github.com/ambv/black) using the default settings.
+All python code must be formatted with [black](https://github.com/ambv/black)
+using the default settings.

@@ -6,6 +6,7 @@ import json
 import mock
 import os
 import pytest
+import subprocess
 import sys
 
 mozphab = imp.load_source(
@@ -55,6 +56,24 @@ def hg(m_repository_phab_url, m_which, m_os_path, m_config, m_hg_hg_out, safe_en
     return mozphab.Mercurial("x")
 
 
+def hg_out(*args):
+    args = ["hg"] + list(args)
+    return subprocess.check_output(args)
+
+
+@pytest.fixture
+def repo_path(monkeypatch, tmp_path):
+    """Build a usable HG repository. Return the pathlib.Path to the repo."""
+    phabricator_uri = "http://example.test"
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    monkeypatch.chdir(str(repo_path))
+    arcconfig = repo_path / ".arcconfig"
+    arcconfig.write_text(unicode(json.dumps({"phabricator.uri": phabricator_uri})))
+    hg_out("init")
+    return repo_path
+
+
 @pytest.fixture
 def safe_environ(monkeypatch):
     # Make sure we preserve the system defaults.
@@ -64,7 +83,7 @@ def safe_environ(monkeypatch):
 
 
 @pytest.fixture
-def in_process(monkeypatch, safe_environ):
+def in_process(monkeypatch, safe_environ, request):
     """Set up an environment to run moz-phab within the current process."""
     # Make sure other tests didn't leak and mess up the module-level
     # global variables :/
@@ -98,8 +117,13 @@ def in_process(monkeypatch, safe_environ):
             {"error": None, "errorMessage": None, "response": [{"userName": "alice"}]}
         )
 
-    def check_call_by_line(*args, **kwargs):
+    def check_call_by_line_static(*args, **kwargs):
         return ["Revision URI: http://example.test/D123"]
+
+    # Allow to define the check_call_by_line function in the testing module
+    check_call_by_line = getattr(
+        request.module, "check_call_by_line", check_call_by_line_static
+    )
 
     monkeypatch.setattr(mozphab, "arc_ping", arc_ping)
     monkeypatch.setattr(mozphab, "arc_out", arc_out)
