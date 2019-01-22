@@ -1172,10 +1172,11 @@ class Git(Repository):
         """Call git from the repository path."""
         check_call(self._git + command, cwd=self.path, env=self._env, **kwargs)
 
-    def git_out(self, command, path=None, **kwargs):
+    def git_out(self, command, path=None, env={}, **kwargs):
         """Call git from the repository path and return the result."""
+        env = dict(self._env, **env)
         return check_output(
-            self._git + command, cwd=path or self.path, env=self._env, **kwargs
+            self._git + command, cwd=path or self.path, env=env, **kwargs
         )
 
     def cleanup(self):
@@ -1322,6 +1323,9 @@ class Git(Repository):
 
         Returns a list of strings
         An example of a list item:
+            Tue, 22 Jan 2019 13:42:48 +0000
+            Conduit User
+            conduit@mozilla.bugs
             4912923
             b18312ffe929d3482f1d7b1e9716a1885c7a61b8
             5f161c70fef9e59d1966bab693a0a68a9336af80
@@ -1338,7 +1342,7 @@ class Git(Repository):
                 "--reverse",
                 "--ancestry-path",
                 "--quiet",
-                "--format=%p%n%T%n%H%n%s%n%n%b{}".format(boundary),
+                "--format=%aD%n%an%n%ae%n%p%n%T%n%H%n%s%n%n%b{}".format(boundary),
                 "{}..{}".format(start, end),
             ],
             split=False,
@@ -1381,7 +1385,15 @@ class Git(Repository):
             if not log_line:
                 continue
 
-            parents, tree_hash, node, desc = log_line.split("\n", 3)
+            (
+                author_date,
+                author_name,
+                author_email,
+                parents,
+                tree_hash,
+                node,
+                desc,
+            ) = log_line.split("\n", 6)
             desc = desc.splitlines()
 
             # Check if the commit is a child of the first one
@@ -1416,6 +1428,9 @@ class Git(Repository):
                     "rev-id": None,
                     "parent": parents[0],
                     "tree-hash": tree_hash,
+                    "author-date": author_date,
+                    "author-name": author_name,
+                    "author-email": author_email,
                 }
             )
 
@@ -1437,7 +1452,9 @@ class Git(Repository):
         """Return the SHA1 of given branch."""
         return self.git_out(["rev-parse", branch], split=False)
 
-    def _commit_tree(self, parent, tree_hash, message):
+    def _commit_tree(
+        self, parent, tree_hash, message, author_name, author_email, author_date
+    ):
         """Prepare and run `commit-tree` command.
 
         Creates a new commit for the tree_hash.
@@ -1453,6 +1470,11 @@ class Git(Repository):
             return self.git_out(
                 ["commit-tree", "-p", parent, "-F", message_file, tree_hash],
                 split=False,
+                env={
+                    "GIT_AUTHOR_NAME": author_name,
+                    "GIT_AUTHOR_EMAIL": author_email,
+                    "GIT_AUTHOR_DATE": author_date,
+                },
             )
 
     def amend_commit(self, commit, commits):
@@ -1477,7 +1499,12 @@ class Git(Repository):
 
         # Create a new commit with the updated body.
         new_parent_sha = self._commit_tree(
-            commit["parent"], commit["tree-hash"], updated_body
+            commit["parent"],
+            commit["tree-hash"],
+            updated_body,
+            commit["author-name"],
+            commit["author-email"],
+            commit["author-date"],
         )
 
         # Update commit info
@@ -1494,7 +1521,12 @@ class Git(Repository):
             # Update parent information and create a new commit
             c["parent"] = new_parent_sha
             new_parent_sha = self._commit_tree(
-                new_parent_sha, c["tree-hash"], "%s\n%s" % (c["title"], c["body"])
+                new_parent_sha,
+                c["tree-hash"],
+                "%s\n%s" % (c["title"], c["body"]),
+                c["author-name"],
+                c["author-email"],
+                c["author-date"],
             )
             c["node"] = new_parent_sha
 

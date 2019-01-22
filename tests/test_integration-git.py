@@ -64,6 +64,41 @@ Differential Revision: http://example.test/D123
     assert log == expected
 
 
+def test_submit_different_author(in_process, repo_path, init_sha):
+    testfile = repo_path / "X"
+    testfile.write_text(u"a")
+    git_out("add", ".")
+    git_out(
+        "commit",
+        "--date",
+        "Tue, 22 Jan 2019 13:42:48 +0000",
+        "--author",
+        "foo <foo@bar.com>",
+        "--message",
+        "A r?alice",
+    )
+    testfile.write_text(u"b")
+    git_out(
+        "commit",
+        "--date",
+        "Tue, 22 Jan 2019 13:43:48 +0000",
+        "--author",
+        "bar <bar@foo.com>",
+        "--all",
+        "--message",
+        "B r?alice",
+    )
+
+    mozphab.main(["submit", "--yes", "--bug", "1", init_sha])
+
+    log = git_out("log", "--format=%aD+++%an+++%ae", "-2")
+    expected = """\
+Tue, 22 Jan 2019 13:43:48 +0000+++bar+++bar@foo.com
+Tue, 22 Jan 2019 13:42:48 +0000+++foo+++foo@bar.com
+"""
+    assert log == expected
+
+
 @pytest.mark.skip("Commit body has an extra line at the end.")
 def test_submit_update(in_process, repo_path, init_sha):
     testfile = repo_path / "X"
