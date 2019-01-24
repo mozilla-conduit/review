@@ -203,7 +203,10 @@ def check_call_by_line(command, cwd=None, never_log=False):
     # similar to check_call, yields for line-by-line processing
     logger.debug("$ %s" % " ".join(shell_quote(s) for s in command))
 
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, cwd=cwd)
+    # Connecting the STDIN to the PIPE will make arc throw an exception on reading user input
+    process = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stdin=subprocess.PIPE, cwd=cwd
+    )
     try:
         for line in iter(process.stdout.readline, ""):
             line = line.rstrip()
