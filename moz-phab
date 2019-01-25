@@ -322,7 +322,7 @@ def normalise_reviewer(reviewer, strip_group=True):
 
 
 @contextmanager
-def TemporaryFileName(content):
+def temporary_file(content):
     f = tempfile.NamedTemporaryFile(delete=False)
     try:
         f.write(content)
@@ -911,7 +911,7 @@ class Mercurial(Repository):
         self.hg(["update", "--quiet", node])
 
     def _amend_commit_body(self, node, body):
-        with TemporaryFileName(body) as body_file:
+        with temporary_file(body) as body_file:
             self.checkout(node)
             self.hg(["commit", "--amend", "--logfile", body_file])
 
@@ -920,7 +920,8 @@ class Mercurial(Repository):
             ["log", "-T", "{node}", "-r", "parents(%s)" % node], split=False
         )
 
-    def _find_forks_to_rebase(self, commit, original_nodes):
+    @staticmethod
+    def _find_forks_to_rebase(commit, original_nodes):
         """Returns a list of split commits to rebase."""
         if commit["node"] == commit["orig-node"]:
             return []
@@ -1172,9 +1173,11 @@ class Git(Repository):
         """Call git from the repository path."""
         check_call(self._git + command, cwd=self.path, env=self._env, **kwargs)
 
-    def git_out(self, command, path=None, env={}, **kwargs):
+    def git_out(self, command, path=None, extra_env=None, **kwargs):
         """Call git from the repository path and return the result."""
-        env = dict(self._env, **env)
+        env = dict(self._env)
+        if extra_env:
+            env.update(extra_env)
         return check_output(
             self._git + command, cwd=path or self.path, env=env, **kwargs
         )
@@ -1466,11 +1469,11 @@ class Git(Repository):
         Returns:
             str: SHA1 of the new commit.
         """
-        with TemporaryFileName(message) as message_file:
+        with temporary_file(message) as message_file:
             return self.git_out(
                 ["commit-tree", "-p", parent, "-F", message_file, tree_hash],
                 split=False,
-                env={
+                extra_env={
                     "GIT_AUTHOR_NAME": author_name,
                     "GIT_AUTHOR_EMAIL": author_email,
                     "GIT_AUTHOR_DATE": author_date,
@@ -1833,7 +1836,7 @@ def arc_call_conduit(api_method, api_call_args, cwd):
     """
     arc_args = ["call-conduit", api_method]
     # 'arc call-conduit' only accepts its args from STDIN.
-    with TemporaryFileName(json.dumps(api_call_args)) as args_file:
+    with temporary_file(json.dumps(api_call_args)) as args_file:
         logger.debug("Arc stdin: %s", api_call_args)
         with open(args_file, "rb") as temp_f:
             output = arc_out(
@@ -2165,7 +2168,7 @@ def submit(repo, args):
         message = arc_message(template_vars)
 
         # Run arc.
-        with TemporaryFileName(message) as message_file:
+        with temporary_file(message) as message_file:
             arc_args = (
                 ["diff"]
                 + ["--base", "arc:this"]
@@ -2410,10 +2413,8 @@ def parse_args(argv):
     submit_parser.add_argument(
         "--force-delete",
         action="store_true",
-        help=(
-            "Mercurial only. Override the fail if a DAG branch point detected "
-            "and no evolve installed",
-        ),
+        help="Mercurial only. Override the fail if a DAG branch point detected "
+             "and no evolve installed",
     )
     submit_parser.add_argument(
         "--bug", "-b", help="Set Bug ID for all commits (default: from commit)"
