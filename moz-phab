@@ -367,6 +367,9 @@ class Config(object):
             [ui]
             no_ansi=false
 
+            [vcs]
+            safe_mode=false
+
             [arc]
             arc_command=arc
 
@@ -393,6 +396,7 @@ class Config(object):
             self._config.read([self._filename])
 
         self.no_ansi = self._config.getboolean("ui", "no_ansi")
+        self.safe_mode = self._config.getboolean("vcs", "safe_mode")
         self.arc_command = self._config.get("arc", "arc_command")
         self.auto_submit = self._config.getboolean("submit", "auto_submit")
         self.always_blocking = self._config.getboolean("submit", "always_blocking")
@@ -420,6 +424,7 @@ class Config(object):
         else:
             logger.debug("creating %s" % self._filename)
             self._set("ui", "no_ansi", self.no_ansi)
+            self._set("vcs", "safe_mode", self.safe_mode)
             self._set("arc", "arc_command", self.arc_command)
             self._set("submit", "auto_submit", self.auto_submit)
             self._set("submit", "always_blocking", self.always_blocking)
@@ -696,53 +701,6 @@ class Mercurial(Repository):
                 % (m.group(1), MINIMUM_MERCURIAL_VERSION)
             )
 
-        # Load hg config into hg_config.  We'll specify specific settings on
-        # the command line when calling hg; all other user settings are ignored.
-        # Do not parse shell alias extensions.
-        hg_config = parse_config(
-            self.hg_out(["config"], never_log=True),
-            lambda name, value: not (
-                name.startswith("extensions.") and value.startswith("!")
-            ),
-        )
-
-        # Need to use the correct username.
-        if "ui.username" not in hg_config:
-            raise Error("ui.username is not configured in your hgrc")
-        self._hg.extend(["--config", "ui.username=%s" % hg_config["ui.username"]])
-
-        # Always need rebase.
-        self._hg.extend(["--config", "extensions.rebase="])
-
-        # Enable evolve if the user's currently using it.  evolve makes amending
-        # commits with children trivial (amongst other things).
-        ext_evolve = self._get_extension("evolve", hg_config)
-        if ext_evolve is not None:
-            self._hg.extend(["--config", "extensions.evolve=%s" % ext_evolve])
-            self.use_evolve = True
-
-        # Otherwise just enable obsolescence markers, and when we're done remove
-        # the obsstore we created.
-        else:
-            self._hg.extend(["--config", "experimental.evolution.createmarkers=true"])
-            self._hg.extend(["--config", "extensions.strip="])
-            self.use_evolve = False
-            self.obsstore = os.path.join(self.path, ".hg", "store", "obsstore")
-            self.unlink_obsstore = not os.path.exists(self.obsstore)
-
-        # This script interacts poorly with mq.
-        ext_mq = self._get_extension("mq", hg_config)
-        self.has_mq = ext_mq is not None
-        if self.has_mq:
-            self._hg.extend(["--config", "extensions.mq=%s" % ext_mq])
-
-        # `shelve` is useful for dealing with uncommitted changes; track if it's
-        # currently enabled so we can tailor our error accordingly.
-        self.has_shelve = self._get_extension("shelve", hg_config) is not None
-
-        # Disable the user's hgrc file, to ensure we run without rogue extensions.
-        os.environ["HGRCPATH"] = ""
-
     @classmethod
     def is_repo(cls, path):
         """Quick check for repository at specified path."""
@@ -837,6 +795,61 @@ class Mercurial(Repository):
 
     def set_args(self, args):
         super(Mercurial, self).set_args(args)
+
+        # Load hg config into hg_config.  We'll specify specific settings on
+        # the command line when calling hg; all other user settings are ignored.
+        # Do not parse shell alias extensions.
+        hg_config = parse_config(
+            self.hg_out(["config"], never_log=True),
+            lambda name, value: not (
+                name.startswith("extensions.") and value.startswith("!")
+            ),
+        )
+
+        safe_options = []
+        options = []
+
+        # Need to use the correct username.
+        if "ui.username" not in hg_config:
+            raise Error("ui.username is not configured in your hgrc")
+
+        safe_options.extend(["--config", "ui.username=%s" % hg_config["ui.username"]])
+
+        # Always need rebase.
+        options.extend(["--config", "extensions.rebase="])
+
+        # Enable evolve if the user's currently using it.  evolve makes amending
+        # commits with children trivial (amongst other things).
+        ext_evolve = self._get_extension("evolve", hg_config)
+        if ext_evolve is not None:
+            safe_options.extend(["--config", "extensions.evolve=%s" % ext_evolve])
+            self.use_evolve = True
+
+        # Otherwise just enable obsolescence markers, and when we're done remove
+        # the obsstore we created.
+        else:
+            options.extend(["--config", "experimental.evolution.createmarkers=true"])
+            options.extend(["--config", "extensions.strip="])
+            self.use_evolve = False
+            self.obsstore = os.path.join(self.path, ".hg", "store", "obsstore")
+            self.unlink_obsstore = not os.path.exists(self.obsstore)
+
+        # This script interacts poorly with mq.
+        ext_mq = self._get_extension("mq", hg_config)
+        self.has_mq = ext_mq is not None
+        if self.has_mq:
+            safe_options.extend(["--config", "extensions.mq=%s" % ext_mq])
+
+        # `shelve` is useful for dealing with uncommitted changes; track if it's
+        # currently enabled so we can tailor our error accordingly.
+        self.has_shelve = self._get_extension("shelve", hg_config) is not None
+
+        # Disable the user's hgrc file, to ensure we run without rogue extensions.
+        if self.args.safe_mode or config.safe_mode:
+            os.environ["HGRCPATH"] = ""
+            options.extend(safe_options)
+
+        self._hg.extend(options)
 
         # Set the default start revision.
         if self.args.start_rev == "(auto)":
@@ -1135,28 +1148,6 @@ class Git(Repository):
 
         self.revset = None
 
-        git_config = parse_config(self.git_out(["config", "--list"]))
-
-        # Need to use the correct username.
-        if "user.email" not in git_config:
-            raise Error("user.email is not configured in your gitconfig")
-
-        self._git.extend(["-c", "user.email=%s" % git_config["user.email"]])
-
-        if "user.name" in git_config:
-            self._git.extend(["-c", "user.name=%s" % git_config["user.name"]])
-
-        if "cinnabar.helper" in git_config:
-            self._git.extend(
-                ["-c", "cinnabar.helper=%s" % git_config["cinnabar.helper"]]
-            )
-
-        # Ignore the user's Git config
-        # To make Git not read the `~/.gitconfig` we need to temporarily change the
-        # `$HOME` variable.
-        self._env["HOME"] = ""
-        self._env["XDG_CONFIG_HOME"] = ""
-
         # Store current branch (fails if HEAD in detached state)
         try:
             self.branch = self._get_current_head()
@@ -1279,6 +1270,32 @@ class Git(Repository):
     def set_args(self, args):
         """Store moz-phab command line args and set the revset."""
         super(Git, self).set_args(args)
+
+        git_config = parse_config(self.git_out(["config", "--list"]))
+
+        safe_options = []
+
+        # Need to use the correct username.
+        if "user.email" not in git_config:
+            raise Error("user.email is not configured in your gitconfig")
+
+        safe_options.extend(["-c", "user.email=%s" % git_config["user.email"]])
+
+        if "user.name" in git_config:
+            safe_options.extend(["-c", "user.name=%s" % git_config["user.name"]])
+
+        if "cinnabar.helper" in git_config:
+            safe_options.extend(
+                ["-c", "cinnabar.helper=%s" % git_config["cinnabar.helper"]]
+            )
+
+        if self.args.safe_mode or config.safe_mode:
+            # Ignore the user's Git config
+            # To make Git not read the `~/.gitconfig` we need to temporarily change the
+            # `$HOME` variable.
+            self._env["HOME"] = ""
+            self._env["XDG_CONFIG_HOME"] = ""
+            self._git.extend(safe_options)
 
         if self.args.start_rev == "(auto)":
             start = self._get_first_unpublished_node()
@@ -2463,6 +2480,12 @@ def parse_args(argv):
         "-u",
         action="append",
         help='Set upstream branch to detect the starting commit. (default: "")',
+    )
+    submit_parser.add_argument(
+        "--safe-mode",
+        dest="safe_mode",
+        action="store_true",
+        help="Run VCS with only necessary extensions.",
     )
     submit_parser.add_argument(
         "start_rev",

@@ -106,3 +106,62 @@ def test_find_forks(hg):
     # "eee" amended, no children
     commit = {"node": "EEE", "orig-node": "eee", "children": []}
     assert [] == hg._find_forks_to_rebase(commit, original_nodes)
+
+
+@mock.patch("mozphab.config")
+@mock.patch("mozphab.parse_config")
+@mock.patch("mozphab.Mercurial.hg_out")
+@mock.patch("mozphab.Mercurial.hg_log")
+def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
+    class Args:
+        def __init__(self, start="(auto)", end=".", safe_mode=False):
+            self.start_rev = start
+            self.end_rev = end
+            self.safe_mode = safe_mode
+
+    with pytest.raises(mozphab.Error):
+        hg.set_args(Args())
+
+    hg._hg = []
+    m_config.safe_mode = False
+    m_parse_config.return_value = {"ui.username": "username", "extensions.evolve": ""}
+    hg.set_args(Args())
+    assert ["--config", "extensions.rebase="] == hg._hg
+    assert hg.use_evolve == True
+    assert hg.has_shelve == False
+
+    # safe_mode
+    safe_mode_options = (
+        ["--config", "extensions.rebase="]
+        + ["--config", "ui.username=username"]
+        + ["--config", "extensions.evolve="]
+    )
+    hg._hg = []
+    hg.set_args(Args(safe_mode=True))
+    assert safe_mode_options == hg._hg
+
+    m_config.safe_mode = True
+    hg._hg = []
+    hg.set_args(Args())
+    assert safe_mode_options == hg._hg
+
+    # no evolve
+    m_config.safe_mode = False
+    hg._hg = []
+    m_parse_config.return_value = {"ui.username": "username", "extensions.shelve": ""}
+    hg.set_args(Args())
+    assert (
+        ["--config", "extensions.rebase="]
+        + ["--config", "experimental.evolution.createmarkers=true"]
+        + ["--config", "extensions.strip="]
+    ) == hg._hg
+    assert hg.use_evolve == False
+    assert hg.has_shelve == True
+
+    m_hg_hg_log.side_effect = [("1234567890123",), ("0987654321098",)]
+    hg.set_args(Args())
+    assert "123456789012::098765432109" == hg.revset
+
+    m_hg_hg_log.side_effect = IndexError
+    with pytest.raises(mozphab.Error):
+        hg.set_args(Args())

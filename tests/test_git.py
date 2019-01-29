@@ -159,11 +159,76 @@ def test_is_child(git):
     assert not is_child("ccc", "ddd", nodes)
 
 
-def test_range(git):
+@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.config")
+def test_range(m_config, m_git_git_out, git):
     class Args:
         def __init__(self, start="aaa", end="."):
             self.start_rev = start
             self.end_rev = end
+            self.safe_mode = False
 
+    m_config.safe_mode = False
+    m_git_git_out.return_value = ["user.email=email"]
     git.set_args(Args())
     assert git.revset == ("aaa", ".")
+
+
+@mock.patch("mozphab.config")
+@mock.patch("mozphab.parse_config")
+@mock.patch("mozphab.Git._get_first_unpublished_node")
+@mock.patch("mozphab.Git.git_out")
+def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git):
+    class Args:
+        def __init__(self, start="(auto)", end=".", safe_mode=False):
+            self.start_rev = start
+            self.end_rev = end
+            self.safe_mode = safe_mode
+
+    with pytest.raises(mozphab.Error):
+        git.set_args(Args())
+
+    git._git = []
+    m_config.safe_mode = False
+    m_parse_config.return_value = {"user.email": "email"}
+    m_git_get_first.return_value = "aaa"
+    git.set_args(Args())
+    assert [] == git._git
+    m_git_get_first.assert_called_once()
+    assert git.revset == ("aaa^", ".")
+
+    m_parse_config.return_value = {
+        "user.email": "email",
+        "user.name": "name",
+        "cinnabar.helper": "string",
+    }
+    git.set_args(Args())
+    assert [] == git._git
+
+    safe_options = (
+        ["-c", "user.email=email"]
+        + ["-c", "user.name=name"]
+        + ["-c", "cinnabar.helper=string"]
+    )
+    git.set_args(Args(safe_mode=True))
+    assert safe_options == git._git
+
+    git._git = []
+    m_config.safe_mode = True
+    git.set_args(Args())
+    assert safe_options == git._git
+
+    m_config.safe_mode = False
+    m_git_get_first.reset_mock()
+    git.set_args(Args(start="bbb", end="ccc"))
+    m_git_get_first.assert_not_called()
+    assert git.revset == ("bbb", "ccc")
+
+    git.set_args(Args(safe_mode=True))
+    assert "" == git._env["HOME"]
+    assert "" == git._env["XDG_CONFIG_HOME"]
+
+    m_config.safe_mode = True
+    git.set_args(Args())
+    assert "" == git._env["HOME"]
+    assert "" == git._env["XDG_CONFIG_HOME"]

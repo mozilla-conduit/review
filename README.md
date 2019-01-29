@@ -40,6 +40,9 @@ This file will be created if it doesn't exist.
 [ui]
 no_ansi = False
 
+[vcs]
+safe_mode = False
+
 [arc]
 arc_command = arc
 
@@ -54,6 +57,7 @@ arc_last_check = <time>
 ```
 
 - `ui.no_ansi` : never use ANSI colours (default: auto-detected).
+- `vcs.safe_mode` : use only safe VCS settings (default: false). Use `--safe-mode` option to switch it on for a one-time usage.
 - `arc.arc_command` : command to use when calling the Arcanist CLI.
     (default: "arc")
 - `submit.auto_submit` : when true the confirmation prompt will be skipped

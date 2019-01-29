@@ -34,7 +34,6 @@ def git(
     m_which.return_value = True
     m_os_path.isfile.return_value = False
     m_git_get_current_head.return_value = "branch"
-    m_git_git_out.return_value = ["user.email=email"]
     return mozphab.Git("x")
 
 
@@ -46,6 +45,7 @@ def git(
 @mock.patch("mozphab.Repository._phab_url")
 def hg(m_repository_phab_url, m_which, m_os_path, m_config, m_hg_hg_out, safe_environ):
     m_os_path.join = os.path.join
+    m_config.safe_mode = False
     m_os_path.exists.return_value = True
     m_which.return_value = True
     m_os_path.isfile.return_value = False
@@ -53,7 +53,10 @@ def hg(m_repository_phab_url, m_which, m_os_path, m_config, m_hg_hg_out, safe_en
         "Mercurial Distributed SCM (version 4.7.1)",
         ["ui.username=username", "extensions.evolve="],
     ]
-    return mozphab.Mercurial("x")
+    hg = mozphab.Mercurial("x")
+    hg.use_evolve = True
+    hg.has_mq = False
+    return hg
 
 
 def hg_out(*args):
