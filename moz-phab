@@ -2384,7 +2384,11 @@ def init_logging():
 
 def parse_args(argv):
     parser = argparse.ArgumentParser()
-    commands = parser.add_subparsers(dest="command", metavar="COMMAND")
+    commands = parser.add_subparsers(
+        dest="command",
+        metavar="COMMAND",
+        description="For full command description: moz-phab COMMAND -h",
+    )
     commands.required = True
 
     # submit
@@ -2417,7 +2421,7 @@ def parse_args(argv):
         "--force-delete",
         action="store_true",
         help="Mercurial only. Override the fail if a DAG branch point detected "
-             "and no evolve installed",
+        "and no evolve installed",
     )
     submit_parser.add_argument(
         "--bug", "-b", help="Set Bug ID for all commits (default: from commit)"
