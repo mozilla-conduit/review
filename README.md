@@ -121,10 +121,15 @@ self-update`.
 Note that if you do not have Python in your path, you will need to run
 `<path to python>/python <path to moz-phab>/moz-phab` instead of `moz-phab`.
 
-### Development
+### Reporting Issues
+
+We use [Bugzilla](https://bugzilla.mozilla.org/) to track development.
 
 File bugs in Bugzilla under
 [Conduit :: Review Wrapper](https://bugzilla.mozilla.org/enter_bug.cgi?product=Conduit&component=Review%20Wrapper).
+
+
+### Development
 
 We have strict requirements for moz-phab development:
 
