@@ -206,6 +206,7 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
     }
     git.set_args(Args())
     assert [] == git._git
+    assert ["cinnabar"] == git.extensions
 
     safe_options = (
         ["-c", "user.email=email"]

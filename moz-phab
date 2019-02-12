@@ -1412,6 +1412,7 @@ class Git(Repository):
             safe_options.extend(["-c", "user.name=%s" % git_config["user.name"]])
 
         if "cinnabar.helper" in git_config:
+            self.extensions.append("cinnabar")
             safe_options.extend(
                 ["-c", "cinnabar.helper=%s" % git_config["cinnabar.helper"]]
             )
