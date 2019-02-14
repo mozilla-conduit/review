@@ -1653,12 +1653,30 @@ class Git(Repository):
             node - SHA1 of the base commit
             name - name of the branch to be created
         """
+        is_detached_head = self.args.no_branch and node
+        if is_detached_head and not self.args.yes:
+            res = prompt(
+                "Switching to the 'detached HEAD' state. Do you wish to continue?",
+                ["Yes", "No"],
+            )
+            if res == "No":
+                sys.exit(1)
+
+        if is_detached_head and self.args.yes:
+            logger.warning("Switching to the 'detached HEAD' state.")
+
+        if is_detached_head:
+            logger.warning(
+                "If you want to create a new branch to retain created commits,\n"
+                "you may do so by calling `git checkout -b <new-branch-name>`"
+            )
+
         # Checkout sha
         if node:
             self.checkout(node)
             logger.warning("Checked out %s" % node[:12])
 
-        if name:
+        if name and not self.args.no_branch:
             branches = self.git_out(["branch", "--list", "%s*" % name])
             branches = [re.sub("[ *]", "", b) for b in branches]
             branch_name = name
@@ -3078,6 +3096,13 @@ def parse_args(argv):
         action="store_true",
         dest="no_bookmark",
         help="(Merucrial only) Do not create the bookmark",
+    )
+    patch_parser.add_argument(
+        "--no-branch",
+        "--nobranch",
+        action="store_true",
+        dest="no_branch",
+        help="(Git only) Do not create the branch",
     )
     patch_parser.add_argument(
         "--yes",

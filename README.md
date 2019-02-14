@@ -181,6 +181,11 @@ This behavior can be modified with few options:
     provided - `moz-phab` will create a bookmark (based on the last revision number)
     for the new DAG branch point. The default behavior [is configurable](#configuration).
 
+- `--no-branch`: used only when patching a Git repository. If not provided -
+    `moz-phab` will create a branch (based on the revision number). Otherwise
+    commits will be added just on top of the *base commit* which might result
+    in switching the repository to the 'detached HEAD' state.
+
 
 ## Development
 

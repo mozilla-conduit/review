@@ -291,13 +291,25 @@ def test_check_node(m_git_is_node, m_git_out, git):
 @mock.patch("mozphab.Git.git_out")
 @mock.patch("mozphab.Git.checkout")
 @mock.patch("mozphab.Git.git")
-def test_before_patch(m_git, m_checkout, m_git_out, git):
+@mock.patch("mozphab.prompt")
+@mock.patch("mozphab.logger")
+def test_before_patch(m_logger, m_prompt, m_git, m_checkout, m_git_out, git):
     class Args:
-        def __init__(self, rev_id="D123", nocommit=False, raw=False, applyto="base"):
+        def __init__(
+            self,
+            rev_id="D123",
+            nocommit=False,
+            raw=False,
+            applyto="base",
+            no_branch=False,
+            yes=False,
+        ):
             self.rev_id = rev_id
             self.nocommit = nocommit
             self.raw = raw
             self.applyto = applyto
+            self.no_branch = no_branch
+            self.yes = yes
 
     git.args = Args()
     m_git_out.side_effect = (["  branch"],)
@@ -316,10 +328,34 @@ def test_before_patch(m_git, m_checkout, m_git_out, git):
     m_checkout.assert_not_called()
 
     m_git.reset_mock()
+    m_checkout.reset_mock()
     git.args = Args(applyto="abcdef", nocommit=True)
     git.before_patch("abcdef", None)
     m_checkout.assert_called_once_with("abcdef")
     m_git.assert_not_called()
+
+    m_git.reset_mock()
+    m_checkout.reset_mock()
+    m_logger.reset_mock()
+    git.args = Args(no_branch=True, yes=True)
+    git.before_patch("abcdef", "name")
+    m_checkout.assert_called_once()
+    m_git.assert_not_called()
+    assert "git checkout -b" in m_logger.warning.call_args_list[1][0][0]
+
+    m_git.reset_mock()
+    m_checkout.reset_mock()
+    m_logger.reset_mock()
+    git.args = Args(no_branch=True)
+    git.before_patch("abcdef", "name")
+    m_checkout.assert_called_once()
+    m_git.assert_not_called()
+    m_prompt.assert_called_once()
+    assert "git checkout -b" in m_logger.warning.call_args_list[0][0][0]
+
+    m_prompt.return_value = "No"
+    with pytest.raises(SystemExit):
+        git.before_patch("abcdef", "name")
 
 
 @mock.patch("mozphab.temporary_file")
