@@ -245,12 +245,14 @@ def test_hg_patch_with_commit(
     assert "| o  changeset:   1" in result
     assert "|/   bookmark:    D1" in result
 
+    testfile = hg_repo_path / "unknown"
+    testfile.write_text(u"not added to repository")
     m_get_revs.side_effect = ([REV_2], [REV_1])
     m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
     m_arc_conduit.side_effect = [PATCH_1, PATCH_2]
     mozphab.main(["patch", "D2"])
-    assert [".arcconfig", ".hg", "X"] == os.listdir(str(hg_repo_path))
+    assert [".arcconfig", ".hg", "unknown", "X"] == os.listdir(str(hg_repo_path))
     test_file = hg_repo_path / "X"
     assert "b\n" == test_file.read_text()
     result = hg_out("log", "-G")

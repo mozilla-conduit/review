@@ -179,7 +179,7 @@ def test_clean_worktree(m_status, hg):
     assert not hg.is_worktree_clean()
 
     m_status.return_value = {"T": None, "U": True}
-    assert not hg.is_worktree_clean()
+    assert hg.is_worktree_clean()
 
     m_status.return_value = {"T": True, "U": True}
     assert not hg.is_worktree_clean()

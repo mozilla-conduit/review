@@ -775,7 +775,7 @@ class Mercurial(Repository):
 
     def is_worktree_clean(self):
         status = self._status()
-        return not (status["T"] or status["U"])
+        return not status["T"]
 
     def hg(self, command, **kwargs):
         check_call(self._hg + command, cwd=self.path, **kwargs)
