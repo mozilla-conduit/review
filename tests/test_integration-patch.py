@@ -198,6 +198,17 @@ def test_git_patch_with_commit(
     assert "  D1_1" in result
     assert "  D1" in result
 
+    time.sleep(1)
+    m_get_revs.side_effect = ([REV_BIN],)
+    m_get_diffs.return_value = {"PHID-DIFF-3": diff_1}
+    m_arc_conduit.side_effect = (PATCH_UTF8,)
+    mozphab.main(["patch", "D4"])
+    path = git_repo_path / "X"
+    with path.open() as f:
+        line = f.readline().rstrip()
+
+    assert line == u"\u0105"
+
 
 @mock.patch("mozphab.get_revisions")
 @mock.patch("mozphab.get_diffs")
@@ -315,6 +326,16 @@ diff --git a/X b/X
 @@ -1 +1 @@
 -a
 +b
+
+"""
+
+PATCH_UTF8 = u"""\
+diff --git a/X b/X
+new file mode 100644
+--- /dev/null
++++ b/X
+@@ -0,0 +1 @@
++\u0105
 
 """
 

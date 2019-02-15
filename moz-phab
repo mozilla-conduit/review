@@ -2904,6 +2904,7 @@ def patch(repo, args):
         raw = arc_call_conduit(
             "differential.getrawdiff", {"diffID": diff["id"]}, repo.path
         )
+        raw = raw.encode("utf8")
         if args.no_commit:
             apply_patch(raw, repo.path)
         elif args.raw:
