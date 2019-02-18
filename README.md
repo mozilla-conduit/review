@@ -1,22 +1,22 @@
-## Wrapper around Phabricator's `arc` cli to support submission of a series of commits.
+# Wrapper around Phabricator's `arc` cli to support submission of a series of commits.
 
-### Installation
+## Installation
 
-#### Linux and MacOS
-
-Download moz-phab from the [latest release](https://github.com/mozilla-conduit/review/releases/latest/)
-and place it on your system path.
-
-You must have Python 2.7 installed, and preferably in your path.
-
-#### Windows with MozillaBuild/MSYS
+### Linux and MacOS
 
 Download moz-phab from the [latest release](https://github.com/mozilla-conduit/review/releases/latest/)
 and place it on your system path.
 
 You must have Python 2.7 installed, and preferably in your path.
 
-#### Other Windows Installs
+### Windows with MozillaBuild/MSYS
+
+Download moz-phab from the [latest release](https://github.com/mozilla-conduit/review/releases/latest/)
+and place it on your system path.
+
+You must have Python 2.7 installed, and preferably in your path.
+
+### Other Windows Installs
 
 Download moz-phab from the [latest release](https://github.com/mozilla-conduit/review/releases/latest/)
 and store it anywhere (e.g. `C:\Users\myuser\phabricator\moz-phab`).
@@ -30,7 +30,7 @@ If you are using `MinTTY` (e.g. via Git's Bash) you'll need to run it through `w
 as with any other Python script:
 `winpty python C:\Users\myuser\phabricator\moz-phab`.
 
-### Configuration
+## Configuration
 
 `moz-phab` has an INI style configuration file to control defaults: `~/.moz-phab-config`
 
@@ -186,11 +186,14 @@ This behavior can be modified with few options:
     commits will be added just on top of the *base commit* which might result
     in switching the repository to the 'detached HEAD' state.
 
+## Reporting Issues
 
-## Development
+We use [Bugzilla](https://bugzilla.mozilla.org/) to track development.
 
 File bugs in Bugzilla under
 [Conduit :: Review Wrapper](https://bugzilla.mozilla.org/enter_bug.cgi?product=Conduit&component=Review%20Wrapper).
+
+## Development
 
 We have strict requirements for moz-phab development:
 
