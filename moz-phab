@@ -1374,7 +1374,6 @@ class Git(Repository):
                 )
 
         unpublished = self._cherry(cherry, remotes)
-
         if unpublished is None:
             raise Error(
                 "Unable to detect the start commit. Please provide its SHA-1 or\n"
@@ -1383,6 +1382,14 @@ class Git(Repository):
 
         if not unpublished:
             return None
+
+        if len(unpublished) > 100:
+            raise Error(
+                "Unable to create a stack with %s unpublished commits.\n\n"
+                "This is usually the result of a failure to detect the correct "
+                "remote repository.\nTry again with the `--upstream <upstream>` "
+                "switch to specify the correct remote repository." % len(unpublished)
+            )
 
         for line in unpublished:
             # `git cherry` is producing the output in reverse order - oldest
@@ -3036,7 +3043,7 @@ def parse_args(argv):
     )
     submit_parser.add_argument(
         "--upstream",
-        "--upstream",
+        "--remote",
         "-u",
         action="append",
         help='Set upstream branch to detect the starting commit. (default: "")',

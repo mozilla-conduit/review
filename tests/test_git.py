@@ -42,6 +42,11 @@ def test_first_unpublished(m_git_cherry, m_git_git_out, git):
     first()
     m_git_cherry.assert_called_with(["cherry", "--abbrev=12", "upstream"], [])
 
+    m_git_cherry.side_effect = (["+ %s" % i for i in range(101)],)
+    m_git_git_out.side_effect = (["origin"],)
+    with pytest.raises(mozphab.Error):
+        first()
+
 
 @mock.patch("mozphab.Git.git_out")
 def test_branches_to_rebase(m_git_git_out, git):
