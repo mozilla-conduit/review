@@ -82,6 +82,8 @@ PHABRICATOR_URLS = {
     "https://phabricator-dev.allizom.org/": "Phabricator-Dev",
 }
 
+DEFAULT_UPDATE_MESSAGE = "Revision updated."
+
 # arc related consts.
 ARC_COMMIT_DESC_TEMPLATE = """
 {title}
@@ -2455,9 +2457,8 @@ def submit(repo, args):
             if args.wip:
                 arc_args.append("--plan-changes")
             if is_update:
-                arc_args.extend(
-                    ["--message", "Revision updated."] + ["--update", commit["rev-id"]]
-                )
+                message = args.message if args.message else DEFAULT_UPDATE_MESSAGE
+                arc_args.extend(["--message", message] + ["--update", commit["rev-id"]])
             else:
                 arc_args.append("--create")
 
@@ -2981,6 +2982,11 @@ def parse_args(argv):
         "-i",
         action="store_true",
         help="Submit with confirmation (default: %s)" % (not config.auto_submit),
+    )
+    submit_parser.add_argument(
+        "--message",
+        "-m",
+        help="Provide a custom update message (default: %s)" % DEFAULT_UPDATE_MESSAGE,
     )
     submit_parser.add_argument(
         "--force",
