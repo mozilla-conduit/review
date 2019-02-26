@@ -71,6 +71,27 @@ GUIDE_URL = (
     "https://moz-conduit.readthedocs.io/en/latest/phabricator-user.html#quick-start"
 )
 
+GIT_COMMAND = ["git.exe" if IS_WINDOWS else "git"]
+HOME_DIR = os.path.expanduser("~")
+
+# Arcanist
+MOZBUILD_PATH = os.path.join(HOME_DIR, ".mozbuild", "moz-phab")
+LIBPHUTIL_PATH = os.path.join(MOZBUILD_PATH, "libphutil")
+ARC_PATH = os.path.join(MOZBUILD_PATH, "arcanist")
+ARC_COMMAND = os.path.join(ARC_PATH, "bin", "arc.bat" if IS_WINDOWS else "arc")
+ARC = [ARC_COMMAND]
+INSTALL_CERT_MSG = (
+    "You don't have credentials needed to access Phabricator.\n"
+    "Please run the following command to configure moz-phab:\n\n"
+    "   moz-phab install-certificate\n "
+)
+ARC_CONDUIT_ERROR = (
+    {"matching": "install-certificate", "message": INSTALL_CERT_MSG},
+    {"matching": "ERR-INVALID_AUTH", "message": "Server rejected your token."},
+)
+LIBPHUTIL_URL = "https://github.com/phacility/libphutil.git"
+ARC_URL = "https://github.com/mozilla-conduit/arcanist.git"
+
 # Auto-update
 SELF_REPO = "mozilla-conduit/review"
 SELF_UPDATE_FREQUENCY = 24 * 3  # hours
@@ -234,6 +255,7 @@ def check_output(
     stdin=None,
     stderr=None,
     env=None,
+    search_error=None,
 ):
     # wrapper around subprocess.check_output with debug output and splitting
     logger.debug("$ %s" % " ".join(shell_quote(s) for s in command))
@@ -244,6 +266,11 @@ def check_output(
     try:
         output = subprocess.check_output(command, **kwargs)
     except subprocess.CalledProcessError as e:
+        if search_error:
+            for err in search_error:
+                if err["matching"] in e.output:
+                    logger.error(err["message"])
+
         logger.debug(e.output)
         raise CommandError(
             "command '%s' failed to complete successfully" % command[0], e.returncode
@@ -378,7 +405,7 @@ class ConduitAPIError(Error):
 
 class Config(object):
     def __init__(self, should_access_file=True):
-        self._filename = os.path.join(os.path.expanduser("~"), ".moz-phab-config")
+        self._filename = os.path.join(HOME_DIR, ".moz-phab-config")
         self.name = "~/.moz-phab-config"  # human-readable name
 
         # Default values.
@@ -388,9 +415,6 @@ class Config(object):
 
             [vcs]
             safe_mode = False
-
-            [arc]
-            arc_command = arc
 
             [submit]
             auto_submit = False
@@ -412,16 +436,14 @@ class Config(object):
             io.StringIO("\n".join([l.strip() for l in defaults.splitlines()]))
         )
 
-        # the `arc_command` default value depends on the operating system
-        if IS_WINDOWS:
-            self._set("arc", "arc_command", "arc.bat")
+        if self._config.has_section("arc"):
+            self._config.remove_section("arc")
 
         if should_access_file:
             self._config.read([self._filename])
 
         self.no_ansi = self._config.getboolean("ui", "no_ansi")
         self.safe_mode = self._config.getboolean("vcs", "safe_mode")
-        self.arc_command = self._config.get("arc", "arc_command")
         self.auto_submit = self._config.getboolean("submit", "auto_submit")
         self.always_blocking = self._config.getboolean("submit", "always_blocking")
         self.warn_untracked = self._config.getboolean("submit", "warn_untracked")
@@ -453,7 +475,6 @@ class Config(object):
             logger.debug("creating %s" % self._filename)
             self._set("ui", "no_ansi", self.no_ansi)
             self._set("vcs", "safe_mode", self.safe_mode)
-            self._set("arc", "arc_command", self.arc_command)
             self._set("submit", "auto_submit", self.auto_submit)
             self._set("submit", "always_blocking", self.always_blocking)
             self._set("submit", "warn_untracked", self.warn_untracked)
@@ -1255,9 +1276,7 @@ class Git(Repository):
 
         logger.debug("found git repo in %s" % path)
 
-        self._git = ["git.exe" if IS_WINDOWS else "git"]
-        if not which_path(self._git[0]):
-            raise Error("Failed to find 'git' executable")
+        self._git = GIT_COMMAND[:]
 
         # `self._env` is a dict representing environment used in all git commands.
         self._env = os.environ.copy()
@@ -2087,7 +2106,9 @@ def check_for_invalid_reviewers(reviewers, cwd):
 #
 
 
-def arc_out(args, cwd, stdin=None, log_output_to_console=True):
+def arc_out(
+    args, cwd, stdin=None, log_output_to_console=True, stderr=None, search_error=None
+):
     """arc wrapper that logs output to the console.
 
     Args:
@@ -2097,11 +2118,21 @@ def arc_out(args, cwd, stdin=None, log_output_to_console=True):
             subprocess call.
         log_output_to_console: Defaults to True.  If set to False, don't log the arc
             standard output to the console (stderr prints to console as normal).
+        stderr: Standard error output stream
+        search_error: a list of dicts passed to the check_output to parse the
+            errors in the error response
 
     Returns:
         The list of lines arc printed to the console.
     """
-    arc_output = check_output(config.arc + args, cwd=cwd, split=False, stdin=stdin)
+    arc_output = check_output(
+        ARC + args,
+        cwd=cwd,
+        split=False,
+        stdin=stdin,
+        stderr=stderr,
+        search_error=search_error,
+    )
     if logger.level != logging.DEBUG and log_output_to_console:
         logger.info(arc_output)
     return arc_output
@@ -2124,7 +2155,12 @@ def arc_call_conduit(api_method, api_call_args, cwd):
         logger.debug("Arc stdin: %s", api_call_args)
         with open(args_file, "rb") as temp_f:
             output = arc_out(
-                arc_args, cwd=cwd, stdin=temp_f, log_output_to_console=False
+                arc_args,
+                cwd=cwd,
+                stdin=temp_f,
+                log_output_to_console=False,
+                stderr=subprocess.STDOUT,
+                search_error=ARC_CONDUIT_ERROR,
             )
 
     # We expect arc output to be a JSON. However, in DEBUG mode, a `--trace` is used and
@@ -2159,6 +2195,26 @@ def parse_api_error(api_response):
     response = json.loads(api_response)
     if response["error"] and response["errorMessage"]:
         return response["errorMessage"]
+
+
+def install_arc_if_required():
+    if os.path.exists(ARC_COMMAND) and os.path.exists(LIBPHUTIL_PATH):
+        return
+
+    logger.warning("Installing arc")
+    logger.debug("arc command: ", ARC_COMMAND)
+    logger.debug("libphutil path: ", LIBPHUTIL_PATH)
+
+    if not os.path.exists(MOZBUILD_PATH):
+        os.makedirs(MOZBUILD_PATH)
+
+    check_call(["git", "clone", "--depth", "1", ARC_URL, ARC_PATH])
+    check_call(["git", "clone", "--depth", "1", LIBPHUTIL_URL, LIBPHUTIL_PATH])
+
+
+def arc_install_certificate(args):
+    """Calls arc to install the Phabricator's certificate."""
+    check_call([ARC_COMMAND, "install-certificate"])
 
 
 def arc_ping(cwd):
@@ -2367,7 +2423,7 @@ def update_phabricator_commit_summary(commit, repo):
 
 def submit(repo, args):
     if DEBUG:
-        config.arc.append("--trace")
+        ARC.append("--trace")
 
     repo.before_submit()
 
@@ -2385,7 +2441,7 @@ def submit(repo, args):
 
     # Check if arc is configured
     if not repo.check_arc():
-        raise Error("Failed to run %s." % config.arc_command)
+        raise Error("Failed to run %s." % ARC_COMMAND)
 
     # Validate commit stack is suitable for review.
     show_commit_stack(repo, commits, show_warnings=True)
@@ -2473,7 +2529,7 @@ def submit(repo, args):
 
             revision_url = None
             for line in check_call_by_line(
-                config.arc + arc_args, cwd=repo.path, never_log=True
+                ARC + arc_args, cwd=repo.path, never_log=True
             ):
                 print(line)
 
@@ -2554,9 +2610,9 @@ def get_self_release():
 
 
 def update_arc():
-    """Write the las check and update arc."""
+    """Write the last check and update arc."""
     try:
-        check_call(config.arc + ["upgrade"])
+        check_call(ARC + ["upgrade"])
     except subprocess.CalledProcessError:
         logger.warning(
             "arc failed to upgrade, which may be caused by using an arcanist "
@@ -2773,11 +2829,11 @@ def patch(repo, args):
     * Error if base commit not found in repository
     """
     if DEBUG:
-        config.arc.append("--trace")
+        ARC.append("--trace")
 
     # Check if arc is configured
     if not repo.check_arc():
-        raise Error("Failed to run %s." % config.arc_command)
+        raise Error("Failed to run %s." % ARC_COMMAND)
 
     # Look for any uncommited changes
     if not args.raw and not repo.is_worktree_clean():
@@ -3134,10 +3190,17 @@ def parse_args(argv):
     )
     patch_parser.set_defaults(func=patch, needs_repo=True)
 
+    # install-certificate
+
+    cert_parser = commands.add_parser(
+        "install-certificate", help="Install Phabricator certificate locally"
+    )
+    cert_parser.set_defaults(func=arc_install_certificate, needs_repo=False)
+
     # if we're called without a command and from within a repository, default to submit.
     if not argv or (
         not (set(argv) & {"-h", "--help"})
-        and argv[0] not in ["submit", "self-update", "patch"]
+        and argv[0] not in ["submit", "self-update", "patch", "install-certificate"]
         and find_repo_root(os.getcwd())
     ):
         logger.debug("defaulting to `submit`")
@@ -3155,15 +3218,10 @@ def main(argv):
         if config.no_ansi:
             HAS_ANSI = False
 
-        arc_path = which_path(config.arc_command)
-        if not arc_path:
-            raise Error(
-                "Failed to find '%s' on the system path.\n"
-                "Please follow the Phabricator setup guide:\n"
-                "%s" % (config.arc_command, GUIDE_URL)
-            )
+        if not which_path(GIT_COMMAND[0]):
+            raise Error("Failed to find 'git' executable")
 
-        config.arc = [arc_path]
+        install_arc_if_required()
 
         # Ensure ssl certificates are validated (see PEP 476).
         if hasattr(ssl, "_https_verify_certificates"):

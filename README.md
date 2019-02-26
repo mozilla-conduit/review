@@ -43,9 +43,6 @@ no_ansi = False
 [vcs]
 safe_mode = False
 
-[arc]
-arc_command = arc
-
 [submit]
 auto_submit = False
 always_blocking = False
@@ -63,8 +60,6 @@ arc_last_check = <time>
 
 - `ui.no_ansi` : never use ANSI colours (default: auto-detected).
 - `vcs.safe_mode` : use only safe VCS settings (default: false). Use `--safe-mode` option to switch it on for a one-time usage.
-- `arc.arc_command` : command to use when calling the Arcanist CLI.
-    (default: "arc")
 - `submit.auto_submit` : when true the confirmation prompt will be skipped
     (default: false).
 - `submit.always_blocking` : when true reviewers in commit descriptions will be marked
@@ -97,7 +92,7 @@ To get information about all available commands run
   $ moz-phab -h
 ```
 
-All commands involving VCS (like `submit` and `patch`) might be used with a 
+All commands involving VCS (like `submit` and `patch`) might be used with a
 `--safe-mode` switch. It will run the VCS command with only chosen set of extensions.
 
 ### Submiting commits to the Phabricator

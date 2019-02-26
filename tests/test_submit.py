@@ -619,9 +619,8 @@ class Commits(unittest.TestCase):
 
 class TestUpdateCommitSummary(unittest.TestCase):
     @mock.patch("mozphab.check_output")
-    @mock.patch("mozphab.config")
-    def test_update_summary_cli_args(self, config, check_output):
-        config.arc = ["arc"]
+    def test_update_summary_cli_args(self, check_output):
+        mozphab.ARC = ["arc"]
         c = commit(rev_id="D123")
         check_output.return_value = (
             '{"error": null, "errorMessage": null, "response": {}}'
@@ -634,6 +633,8 @@ class TestUpdateCommitSummary(unittest.TestCase):
             cwd=mock.ANY,
             split=mock.ANY,
             stdin=mock.ANY,
+            stderr=mock.ANY,
+            search_error=mozphab.ARC_CONDUIT_ERROR,
         )
 
     def test_build_api_call_to_update_title_and_summary(self):

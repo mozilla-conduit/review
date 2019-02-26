@@ -323,6 +323,8 @@ def test_api_call_with_no_errors_returns_api_response_json(arc_out):
         cwd="",
         log_output_to_console=False,
         stdin=mock.ANY,
+        stderr=mock.ANY,
+        search_error=mozphab.ARC_CONDUIT_ERROR,
     )
 
 
@@ -345,3 +347,17 @@ def test_api_call_with_error_raises_exception(arc_out):
 def test_arc_ping_with_invalid_certificate_returns_false(arc_out):
     arc_out.side_effect = mozphab.CommandError
     assert not mozphab.arc_ping("")
+
+
+@mock.patch("mozphab.check_call")
+@mock.patch("os.path.exists")
+@mock.patch("os.makedirs")
+def test_install(m_makedirs, m_exists, m_check_call):
+    install = mozphab.install_arc_if_required
+    m_exists.return_value = True
+    install()
+    m_check_call.assert_not_called()
+
+    m_exists.return_value = False
+    install()
+    assert 2 == m_check_call.call_count
