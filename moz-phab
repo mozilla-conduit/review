@@ -1994,7 +1994,7 @@ def show_commit_stack(repo, commits, show_rev_urls=False, show_warnings=False):
                     % (commit["bug-id-orig"], commit["bug-id"])
                 )
 
-            if not commit["reviewers"]:
+            if not commit["reviewers"]["granted"] + commit["reviewers"]["request"]:
                 logger.warning("!! Missing reviewers")
 
         if show_rev_urls and commit["rev-id"]:
