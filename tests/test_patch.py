@@ -1,3 +1,4 @@
+import datetime
 import imp
 import mock
 import os
@@ -242,7 +243,10 @@ def test_patch(
     m_prepare_body.return_value = "commit message"
     mozphab.patch(git, Args())
     m_git_apply_patch.assert_called_once_with(
-        "raw", "commit message", "user <author@example.com>", "2019-01-18T11:07:58"
+        "raw",
+        "commit message",
+        "user <author@example.com>",
+        datetime.datetime.fromtimestamp(1547806078).isoformat(),
     )
     m_apply_patch.assert_not_called()
     m_get_base_ref.assert_called_once()
@@ -281,7 +285,10 @@ def test_patch(
     mozphab.patch(git, Args(apply_to="head"))
     m_get_base_ref.assert_not_called()
     m_git_apply_patch.assert_called_once_with(
-        "raw", "commit message", "user <author@example.com>", "2019-01-18T11:07:58"
+        "raw",
+        "commit message",
+        "user <author@example.com>",
+        datetime.datetime.fromtimestamp(1547806078).isoformat(),
     )
     m_apply_patch.assert_not_called()
 
