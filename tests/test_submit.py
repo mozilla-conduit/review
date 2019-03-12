@@ -452,7 +452,7 @@ class Commits(unittest.TestCase):
                     "title-preview": "A",
                     "bug-id-orig": 2,
                     "bug-id": 1,
-                    "reviewers": ["one"],
+                    "reviewers": {"granted": [], "request": ["one"]},
                 }
             ],
             show_warnings=True,
@@ -468,7 +468,7 @@ class Commits(unittest.TestCase):
                     "name": "aaa000",
                     "title-preview": "A",
                     "bug-id-orig": None,
-                    "reviewers": [],
+                    "reviewers": {"granted": [], "request": []},
                 }
             ],
             show_warnings=True,
