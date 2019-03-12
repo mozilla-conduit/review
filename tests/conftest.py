@@ -84,6 +84,9 @@ def hg_repo_path(monkeypatch, tmp_path):
     arcconfig = repo_path / ".arcconfig"
     arcconfig.write_text(unicode(json.dumps({"phabricator.uri": phabricator_uri})))
     hg_out("init")
+    # graphshorten changes `log --graph` output, force to false
+    with open(".hg/hgrc", "a") as f:
+        f.write("\n[experimental]\ngraphshorten = false\n")
     return repo_path
 
 
