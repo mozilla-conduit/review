@@ -36,12 +36,12 @@ def test_submit_create(in_process, git_repo_path, init_sha):
     mozphab.main(["submit", "--yes", "--bug", "1", init_sha])
 
     log = git_out("log", "--format=%s%n%n%b", "-1")
-    expected = """\
+    expected = """
 Bug 1 - A r?alice
 
 Differential Revision: http://example.test/D123
 """
-    assert log == expected
+    assert log.strip() == expected.strip()
 
 
 def test_submit_different_author(in_process, git_repo_path, init_sha):

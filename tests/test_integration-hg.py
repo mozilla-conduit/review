@@ -23,12 +23,12 @@ def test_submit_create(in_process, hg_repo_path):
     mozphab.main(["submit", "--yes", "--bug", "1"])
 
     log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
-    expected = """\
+    expected = """
 Bug 1 - A r?alice
 
 Differential Revision: http://example.test/D123
 """
-    assert log == expected
+    assert log.strip() == expected.strip()
 
 
 def test_submit_update(in_process, hg_repo_path):
