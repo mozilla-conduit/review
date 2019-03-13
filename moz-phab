@@ -3109,7 +3109,7 @@ def parse_args(argv):
         "--nobookmark",
         action="store_true",
         dest="no_bookmark",
-        help="(Merucrial only) Do not create the bookmark",
+        help="(Mercurial only) Do not create the bookmark",
     )
     patch_parser.add_argument(
         "--no-branch",
