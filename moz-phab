@@ -1009,7 +1009,7 @@ class Mercurial(Repository):
 
     def commit(self, body):
         """Commit the changes in the working directory."""
-        with temporary_file(body) as temp_f:
+        with temporary_file(body.encode("utf8")) as temp_f:
             self.hg(["commit", "--logfile", temp_f])
 
     def before_patch(self, node, name):
@@ -1045,11 +1045,13 @@ class Mercurial(Repository):
         if author_date:
             commands.extend(["-d", author_date])
 
-        with temporary_file(diff) as patch_file, temporary_file(body) as body_file:
+        with temporary_file(diff) as patch_file, temporary_file(
+            body.encode("utf8")
+        ) as body_file:
             self.hg(["import", patch_file, "-l", body_file] + commands)
 
     def _amend_commit_body(self, node, body):
-        with temporary_file(body) as body_file:
+        with temporary_file(body.encode("utf8")) as body_file:
             self.checkout(node)
             self.hg(["commit", "--amend", "--logfile", body_file])
 
@@ -1651,7 +1653,7 @@ class Git(Repository):
         if author_date:
             commands.append('--date="%s"' % author_date)
 
-        with temporary_file(body) as temp_f:
+        with temporary_file(body.encode("utf8")) as temp_f:
             commands += ["-F", temp_f]
             self.git(commands)
 
@@ -1730,7 +1732,7 @@ class Git(Repository):
         Returns:
             str: SHA1 of the new commit.
         """
-        with temporary_file(message) as message_file:
+        with temporary_file(message.encode("utf8")) as message_file:
             return self.git_out(
                 ["commit-tree", "-p", parent, "-F", message_file, tree_hash],
                 split=False,
@@ -2452,7 +2454,7 @@ def submit(repo, args):
         message = arc_message(template_vars)
 
         # Run arc.
-        with temporary_file(message) as message_file:
+        with temporary_file(message.encode("utf8")) as message_file:
             arc_args = (
                 ["diff"]
                 + ["--base", "arc:this"]

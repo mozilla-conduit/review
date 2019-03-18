@@ -277,19 +277,19 @@ def test_hg_patch_with_commit(
 REV_1 = dict(
     id=1,
     phid="PHID-REV-1",
-    fields=dict(title="title R1", summary="", diffPHID="PHID-DIFF-1"),
+    fields=dict(title="title R1", summary=u"\u0105", diffPHID="PHID-DIFF-1"),
 )
 
 REV_2 = dict(
     id=2,
     phid="PHID-REV-2",
-    fields=dict(title="title R2", summary="", diffPHID="PHID-DIFF-2"),
+    fields=dict(title="title R2", summary=u"\u0105", diffPHID="PHID-DIFF-2"),
 )
 
 REV_BIN = dict(
     id=3,
     phid="PHID-REV-3",
-    fields=dict(title="title BIN", summary="", diffPHID="PHID-DIFF-3"),
+    fields=dict(title="title BIN", summary=u"\u0105", diffPHID="PHID-DIFF-3"),
 )
 ATTACHMENTS = dict(
     commits=dict(
