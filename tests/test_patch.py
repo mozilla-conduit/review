@@ -48,12 +48,16 @@ def test_get_revisions(m_arc):
     m_arc.return_value = {}
     assert get_revs("x", ids=[1]) is None
     m_arc.assert_called_with(
-        "differential.revision.search", dict(constraints=dict(ids=[1])), "x"
+        "differential.revision.search",
+        dict(constraints=dict(ids=[1]), attachments=dict(reviewers=True)),
+        "x",
     )
     m_arc.reset_mock()
     assert get_revs("x", phids=[1]) is None
     m_arc.assert_called_with(
-        "differential.revision.search", dict(constraints=dict(phids=[1])), "x"
+        "differential.revision.search",
+        dict(constraints=dict(phids=[1]), attachments=dict(reviewers=True)),
+        "x",
     )
 
     m_arc.reset_mock()

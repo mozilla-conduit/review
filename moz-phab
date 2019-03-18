@@ -173,6 +173,32 @@ MINIMUM_MERCURIAL_VERSION = LooseVersion("4.3.3")
 #
 
 
+class SimpleCache:
+    """Simple key/value store with all lowercase keys."""
+
+    def __init__(self):
+        self._cache = dict()
+
+    def __contains__(self, key):
+        return key.lower() in self._cache
+
+    def get(self, key):
+        return self._cache.get(key.lower())
+
+    def set(self, key, value):
+        self._cache[key.lower()] = value
+
+    def delete(self, key):
+        if key in self:
+            del self._cache[key.lower()]
+
+    def reset(self):
+        self._cache = dict()
+
+
+cache = SimpleCache()
+
+
 def which_path(path):
     """Check if an executable is provided. Fall back to which if not.
 
@@ -2060,6 +2086,39 @@ def show_commit_stack(repo, commits, show_rev_urls=False, show_warnings=False):
             logger.warning("-> %s/D%s" % (repo.phab_url.rstrip("/"), commit["rev-id"]))
 
 
+def get_users(cwd, usernames):
+    """Get users using the user.query API.
+
+    Caches the result in the process.
+    Returns a list of existing Phabricator users data.
+    """
+    to_collect = []
+    users = []
+    for user in usernames:
+        u = user.rstrip("!")
+        key = "user-%s" % u
+        if key in cache:
+            users.append(cache.get(key))
+        else:
+            to_collect.append(u)
+
+    if not to_collect:
+        return users
+
+    api_call_args = {"usernames": to_collect}
+    # We're using the deprecated user.query API as the user.search does not
+    # provide the user availability information.
+    # See https://phabricator.services.mozilla.com/conduit/method/user.query/
+    response = arc_call_conduit("user.query", api_call_args, cwd)
+    for user in response:
+        users.append(user)
+        key = "user-%s" % user["userName"]
+        cache.set(key, user)
+        cache.set(user["phid"], key)
+
+    return users
+
+
 def check_for_invalid_reviewers(reviewers, cwd):
     """Return a list of invalid reviewer names.
 
@@ -2082,11 +2141,8 @@ def check_for_invalid_reviewers(reviewers, cwd):
 
     users = []
     if all_reviewers:
-        # We're using the deprecated user.query API as the user.search does not
-        # provide the user availability information.
-        # See https://phabricator.services.mozilla.com/conduit/method/user.query/
-        api_call_args = {"usernames": all_reviewers}
-        users = arc_call_conduit("user.query", api_call_args, cwd)
+        users = get_users(cwd, all_reviewers)
+
         found_names = [
             normalise_reviewer(data["userName"], strip_group=False) for data in users
         ]
@@ -2419,6 +2475,24 @@ def build_api_call_to_update_commit_title_and_summary(commit):
     return {"transactions": transactions, "objectIdentifier": commit["rev-id"]}
 
 
+def build_api_call_to_update_reviewers(repo_path, commit):
+    # Add reviewers
+    all_reviewers = commit["reviewers"]["request"] + commit["reviewers"]["granted"]
+    # preload all reviewers
+    get_users(repo_path, all_reviewers)
+
+    reviewers = [r for r in all_reviewers if not r.endswith("!")]
+    blocking = [r.rstrip("!") for r in all_reviewers if r.endswith("!")]
+    reviewers_phid = [user["phid"] for user in get_users(repo_path, reviewers)]
+    blocking_phid = [
+        "blocking(%s)" % user["phid"] for user in get_users(repo_path, blocking)
+    ]
+    return dict(
+        objectIdentifier="D%s" % commit["rev-id"],
+        transactions=[dict(type="reviewers.set", value=reviewers_phid + blocking_phid)],
+    )
+
+
 def update_phabricator_commit_summary(commit, repo):
     """Send a new commit summary and description to Phabricator.
 
@@ -2520,15 +2594,33 @@ def submit(repo, args):
 
     # Process.
     previous_commit = None
+    # Collect all existing revisions to get reviewers info.
+    rev_ids_to_update = [int(c["rev-id"]) for c in commits if c.get("rev-id")]
+    revisions_to_update = None
+    if rev_ids_to_update:
+        list_to_update = get_revisions(repo.path, ids=rev_ids_to_update)
+        revisions_to_update = {str(r["id"]): r for r in list_to_update}
+
     for commit in commits:
         # Only revisions being updated have an ID.  Newly created ones don't.
         is_update = bool(commit["rev-id"])
+        existing_reviewers = (
+            revisions_to_update[commit["rev-id"]]["attachments"]["reviewers"][
+                "reviewers"
+            ]
+            if commit["rev-id"]
+            else None
+        )
+        has_commit_reviewers = bool(
+            commit["reviewers"]["granted"] + commit["reviewers"]["request"]
+        )
 
         # Let the user know something's happening.
         if is_update:
             logger.info("\nUpdating revision D%s:" % commit["rev-id"])
         else:
             logger.info("\nCreating new revision:")
+
         logger.info("%s %s" % (commit["name"], commit["title-preview"]))
         repo.checkout(commit["node"])
 
@@ -2585,6 +2677,16 @@ def submit(repo, args):
                     "Warning: failed to update commit summary in Phabricator"
                 )
                 logger.debug(e)
+
+            if has_commit_reviewers:
+                # Add reviewers only if revision lacks them
+                if not existing_reviewers:
+                    api_call_args = build_api_call_to_update_reviewers(
+                        repo.path, commit
+                    )
+                    arc_call_conduit(
+                        "differential.revision.edit", api_call_args, repo.path
+                    )
 
         # Append/replace div rev url to/in commit description.
         body = amend_revision_url(commit["body"], revision_url)
@@ -2744,7 +2846,7 @@ def get_revisions(cwd, ids=None, phids=None):
         # Ordering would be too complicated
         raise ValueError("ids and phids are mutually exclusive")
 
-    api_call_args = {"constraints": {}}
+    api_call_args = {"constraints": {}, "attachments": {"reviewers": True}}
     if ids:
         api_call_args["constraints"]["ids"] = ids
     else:

@@ -24,6 +24,11 @@ def create_temp_fn(*filenames):
     return m_temp_fn
 
 
+@pytest.fixture(autouse=True)
+def reset_cache():
+    mozphab.cache.reset()
+
+
 @pytest.fixture
 @mock.patch("mozphab.Git.git_out")
 @mock.patch("mozphab.Git._get_current_head")
@@ -152,7 +157,11 @@ def in_process(monkeypatch, safe_environ, request):
         # Return alice as the only valid reviewer name from Phabricator.
         # See https://phabricator.services.mozilla.com/api/user.search
         return json.dumps(
-            {"error": None, "errorMessage": None, "response": [{"userName": "alice"}]}
+            {
+                "error": None,
+                "errorMessage": None,
+                "response": [{"userName": "alice", "phid": "PHID-USER-1"}],
+            }
         )
 
     def check_call_by_line_static(*args, **kwargs):
@@ -163,6 +172,11 @@ def in_process(monkeypatch, safe_environ, request):
         request.module, "check_call_by_line", check_call_by_line_static
     )
 
+    # Allow to define the arccall_conduit function in the testing module
+    arc_call_conduit = getattr(
+        request.module, "arc_call_conduit", mozphab.arc_call_conduit
+    )
     monkeypatch.setattr(mozphab, "arc_ping", arc_ping)
     monkeypatch.setattr(mozphab, "arc_out", arc_out)
     monkeypatch.setattr(mozphab, "check_call_by_line", check_call_by_line)
+    monkeypatch.setattr(mozphab, "arc_call_conduit", arc_call_conduit)

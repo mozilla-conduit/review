@@ -647,7 +647,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
         #     {
         #       "type": "title",
         #       "value": "Remove unnecessary branch statement"
-        #     }
+        #     },
         #     {
         #       "type": "summary",
         #       "value": "Blah"
@@ -673,6 +673,57 @@ class TestUpdateCommitSummary(unittest.TestCase):
 
         api_call_args = mozphab.build_api_call_to_update_commit_title_and_summary(c)
 
+        self.assertDictEqual(expected_json, api_call_args)
+
+    @mock.patch("mozphab.get_users")
+    def test_biuild_api_call_to_update_reviewers(self, m_get_users):
+        # From https://phabricator.services.mozilla.com/api/differential.revision.edit
+        #
+        # Example call format we are aiming for:
+        #
+        # $ echo '{
+        #   "transactions": [
+        #     {
+        #       "type": "reviewers.set",
+        #       "value": ["PHID-USER-1", "blocking(PHID-USER-2)"]
+        #     }
+        #   ],
+        #   "objectIdentifier": "D8095"
+        # }' | arc call-conduit --conduit-uri \
+        #       https://phabricator.services.mozilla.com/ \
+        #       --conduit-token <conduit-token> differential.revision.edit
+        m_get_users.side_effect = (
+            [
+                dict(phid="PHID-USER-1"),
+                dict(phid="PHID-USER-2"),
+                dict(phid="PHID-USER-3"),
+            ],
+            [dict(phid="PHID-USER-1")],
+            [dict(phid="PHID-USER-2"), dict(phid="PHID-USER-3")],
+        )
+        c = commit(rev_id="123", reviewers=[["alice", "bob!"], ["frankie!"]])
+        expected_json = {
+            "transactions": [
+                {
+                    "type": "reviewers.set",
+                    "value": [
+                        "PHID-USER-1",
+                        "blocking(PHID-USER-2)",
+                        "blocking(PHID-USER-3)",
+                    ],
+                }
+            ],
+            "objectIdentifier": "D123",
+        }
+        api_call_args = mozphab.build_api_call_to_update_reviewers("x", c)
+        self.assertEqual(
+            m_get_users.call_args_list,
+            [
+                mock.call("x", ["alice", "bob!", "frankie!"]),
+                mock.call("x", ["alice"]),
+                mock.call("x", ["bob", "frankie"]),
+            ],
+        )
         self.assertDictEqual(expected_json, api_call_args)
 
     def test_parse_api_response_with_no_problems(self):

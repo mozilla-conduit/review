@@ -219,7 +219,11 @@ def test_valid_reviewers_in_phabricator_returns_no_errors(arc_out):
     arc_out.side_effect = (
         # user.query
         json.dumps(
-            {"error": None, "errorMessage": None, "response": [{"userName": "alice"}]}
+            {
+                "error": None,
+                "errorMessage": None,
+                "response": [{"userName": "alice", "phid": "PHID-USER-1"}],
+            }
         ),
         # project.search
         json.dumps(
@@ -259,9 +263,12 @@ def test_non_existent_reviewers_or_groups_generates_error_list(arc_out):
                 "error": None,
                 "errorMessage": None,
                 "response": [
-                    dict(userName="alice"),
+                    dict(userName="alice", phid="PHID-USER-1"),
                     dict(
-                        userName="goober", currentStatus="away", currentStatusUntil=ts
+                        userName="goober",
+                        phid="PHID-USER-2",
+                        currentStatus="away",
+                        currentStatusUntil=ts,
                     ),
                 ],
             }
@@ -290,7 +297,11 @@ def test_reviwer_case_sensitivity(arc_out):
     arc_out.side_effect = (
         # See https://phabricator.services.mozilla.com/conduit/method/user.query/
         json.dumps(
-            {"error": None, "errorMessage": None, "response": [dict(userName="alice")]}
+            {
+                "error": None,
+                "errorMessage": None,
+                "response": [dict(userName="alice", phid="PHID-USER-1")],
+            }
         ),
         # See https://phabricator.services.mozilla.com/conduit/method/project.search/
         json.dumps(
@@ -361,3 +372,40 @@ def test_install(m_makedirs, m_exists, m_check_call):
     m_exists.return_value = False
     install()
     assert 2 == m_check_call.call_count
+
+
+def test_get_users_no_users():
+    assert [] == mozphab.get_users("x", [])
+
+
+@mock.patch("mozphab.arc_call_conduit")
+def test_get_users_with_user(m_conduit):
+    user = {"userName": "alice", "phid": "PHID-USER-1"}
+    m_conduit.return_value = [user]
+    assert [user] == mozphab.get_users("x", ["alice"])
+    m_conduit.assert_called_once()
+
+    mozphab.get_users("x", ["alice"])
+    m_conduit.assert_called_once()
+
+    mozphab.cache.reset()
+    m_conduit.reset_mock()
+    m_conduit.return_value = []
+    assert [] == mozphab.get_users("x", ["alice"])
+    m_conduit.assert_called_once()
+
+
+def test_simple_cache():
+    cache = mozphab.SimpleCache()
+    assert cache.get("nothing") is None
+
+    cache.set("something", 123)
+    assert cache.get("something") == 123
+
+    assert cache.get("SoMeThInG") == 123
+
+    cache.set("something", "foo")
+    assert cache.get("something") == "foo"
+
+    cache.delete("something")
+    assert cache.get("something") is None
