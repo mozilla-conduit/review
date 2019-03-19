@@ -43,6 +43,9 @@ no_ansi = False
 [vcs]
 safe_mode = False
 
+[git]
+remote =
+
 [submit]
 auto_submit = False
 always_blocking = False
@@ -60,6 +63,9 @@ arc_last_check = <time>
 
 - `ui.no_ansi` : never use ANSI colours (default: auto-detected).
 - `vcs.safe_mode` : use only safe VCS settings (default: false). Use `--safe-mode` option to switch it on for a one-time usage.
+- `git.remote`: comma separated string. Default remotes used to find the first
+    unpublished commit. Default, empty string, means that a list of remotes will
+    be read from `git remote` command.
 - `submit.auto_submit` : when true the confirmation prompt will be skipped
     (default: false).
 - `submit.always_blocking` : when true reviewers in commit descriptions will be marked

@@ -416,6 +416,9 @@ class Config(object):
             [vcs]
             safe_mode = False
 
+            [git]
+            remote =
+
             [submit]
             auto_submit = False
             always_blocking = False
@@ -452,6 +455,8 @@ class Config(object):
         self.always_full_stack = self._config.getboolean("patch", "always_full_stack")
         self.self_last_check = self._config.getint("updater", "self_last_check")
         self.arc_last_check = self._config.getint("updater", "arc_last_check")
+        git_remote = self._config.get("git", "remote")
+        self.git_remote = git_remote.replace(" ", "").split(",") if git_remote else []
 
         if should_access_file and not os.path.exists(self._filename):
             self.write()
@@ -475,6 +480,7 @@ class Config(object):
             logger.debug("creating %s" % self._filename)
             self._set("ui", "no_ansi", self.no_ansi)
             self._set("vcs", "safe_mode", self.safe_mode)
+            self._set("git", "remote", ", ".join(self.git_remote))
             self._set("submit", "auto_submit", self.auto_submit)
             self._set("submit", "always_blocking", self.always_blocking)
             self._set("submit", "warn_untracked", self.warn_untracked)
@@ -1384,10 +1390,10 @@ class Git(Repository):
     def _get_first_unpublished_node(self):
         """Check which commits should be pushed and return the oldest one."""
         cherry = ["cherry", "--abbrev=12"]
-        remotes = []
+        remotes = config.git_remote
         if self.args.upstream:
             cherry += self.args.upstream
-        else:
+        elif not remotes:
             remotes = self.git_out(["remote"])
             if len(remotes) > 1:
                 logger.warning(

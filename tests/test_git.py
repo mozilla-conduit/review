@@ -21,14 +21,16 @@ def test_cherry(m_git_git_out, git):
 
 @mock.patch("mozphab.Git.git_out")
 @mock.patch("mozphab.Git._cherry")
-def test_first_unpublished(m_git_cherry, m_git_git_out, git):
+@mock.patch("mozphab.config")
+def test_first_unpublished(m_config, m_git_cherry, m_git_git_out, git):
     class Args:
         def __init__(self, upstream=None, start_rev="(auto)"):
             self.upstream = upstream
             self.start_rev = start_rev
 
+    m_config.git_remote = []
     m_git_git_out.side_effect = (["a", "b"], ["c"], ["d"])
-    m_git_cherry.side_effect = (["- sha1", "+ sha2"], [], None, [])
+    m_git_cherry.side_effect = (["- sha1", "+ sha2"], [], None)
     git.args = Args()
     first = git._get_first_unpublished_node
     assert "sha2" == first()
@@ -38,9 +40,17 @@ def test_first_unpublished(m_git_cherry, m_git_git_out, git):
         first()
         m_git_cherry.assert_called_with(["cherry", "--abbrev=12", "upstream"], [])
 
+    m_git_cherry.side_effect = ([],)
     git.args = Args(upstream=["upstream"])
     first()
     m_git_cherry.assert_called_with(["cherry", "--abbrev=12", "upstream"], [])
+
+    m_git_cherry.side_effect = ([],)
+    m_config.git_remote = ["someremote"]
+    git.args = Args()
+    first()
+    m_git_cherry.assert_called_with(["cherry", "--abbrev=12"], ["someremote"])
+    m_config.git_remote = []
 
     m_git_cherry.side_effect = (["+ %s" % i for i in range(101)],)
     m_git_git_out.side_effect = (["origin"],)
