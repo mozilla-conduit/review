@@ -2997,6 +2997,16 @@ def patch(repo, args):
                 raise Error("Patch failed to apply")
 
 
+def arc_pass(args):
+    if DEBUG:
+        ARC.append("--trace")
+
+    try:
+        check_call(ARC + args.commands)
+    except subprocess.CalledProcessError:
+        pass
+
+
 #
 # Main
 #
@@ -3208,10 +3218,16 @@ def parse_args(argv):
     )
     cert_parser.set_defaults(func=arc_install_certificate, needs_repo=False)
 
+    # arc
+
+    arc_parser = commands.add_parser("arc", help="Call Arcanist")
+    arc_parser.add_argument("commands", type=str, nargs=argparse.REMAINDER)
+    arc_parser.set_defaults(func=arc_pass, needs_repo=False)
+
     # if we're called without a command and from within a repository, default to submit.
     if not argv or (
         not (set(argv) & {"-h", "--help"})
-        and argv[0] not in ["submit", "self-update", "patch", "install-certificate"]
+        and argv[0] not in [choice for choice in commands.choices]
         and find_repo_root(os.getcwd())
     ):
         logger.debug("defaulting to `submit`")

@@ -151,7 +151,7 @@ Note that if you do not have Python in your path, you will need to run
 
 ### Downloading a patch from the Phabricator
 
-moz-phab patch allows patching an entire stack of revisions. The simplest 
+`moz-phab patch` allows patching an entire stack of revisions. The simplest
 invocation is
 
 ```
@@ -188,6 +188,16 @@ This behavior can be modified with few options:
     in switching the repository to the 'detached HEAD' state.
 
 - `--skip-dependencies` : patch only one revision, ignore dependencies.
+
+### Running arc commands
+
+`moz-phab arc` allows running Arcanist commands indirectly:
+
+```
+$ moz-phab arc ARG [ARG ...]
+```
+
+`arc land --preview` will become `moz-phab arc land --preview`.
 
 ## Reporting Issues
 
