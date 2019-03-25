@@ -190,13 +190,20 @@ def test_patch(
 
     class Args:
         def __init__(
-            self, rev_id="D123", no_commit=False, raw=False, apply_to="base", yes=False
+            self,
+            rev_id="D123",
+            no_commit=False,
+            raw=False,
+            apply_to="base",
+            yes=False,
+            skip_dependencies=False,
         ):
             self.rev_id = rev_id
             self.no_commit = no_commit
             self.raw = raw
             self.apply_to = apply_to
             self.yes = yes
+            self.skip_dependencies = skip_dependencies
 
     m_git_check_arc.return_value = True
     m_git_is_worktree_clean.return_value = False
@@ -265,6 +272,13 @@ def test_patch(
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_not_called()
     m_logger.info.assert_called_with("raw")
+
+    # skip-dependencies
+    m_has_successor.reset_mock()
+    m_get_successor_phids.reset_mock()
+    mozphab.patch(git, Args(raw=True, skip_dependencies=True))
+    m_has_successor.assert_not_called()
+    m_get_successor_phids.assert_not_called()
 
     m_git_before_patch.reset_mock()
     # --no_commit

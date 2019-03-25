@@ -57,8 +57,8 @@ create_bookmark = True
 always_full_stack = False
 
 [updater]
-self_last_check = <time>
-arc_last_check = <time>
+self_last_check = 
+arc_last_check = 
 ```
 
 - `ui.no_ansi` : never use ANSI colours (default: auto-detected).
@@ -186,6 +186,8 @@ This behavior can be modified with few options:
     `moz-phab` will create a branch (based on the revision number). Otherwise
     commits will be added just on top of the *base commit* which might result
     in switching the repository to the 'detached HEAD' state.
+
+- `--skip-dependencies` : patch only one revision, ignore dependencies.
 
 ## Reporting Issues
 

@@ -2856,60 +2856,60 @@ def patch(repo, args):
 
     revision = revs[0]
 
-    # Check if revision is the last in the stack
-    has_child = False
-    try:
-        has_child = has_successor(revision["phid"], repo.path)
-    except NonLinearException:
-        has_child = True
-
-    patch_children = False
-    if has_child:
-        if args.yes or config.always_full_stack:
-            patch_children = True
-        else:
-            res = prompt(
-                "Revision D%s has child(ren). Would you like to patch the full stack?."
-                % rev_id,
-                ["Yes", "No", "Always"],
-            )
-            if res == "Always":
-                config.always_full_stack = True
-                config.write()
-
-            patch_children = res == "Yes" or res == "Always"
-
-    children = []
-    if patch_children:
-        multiple_children = False
+    if not args.skip_dependencies:
+        # Check if revision is the last in the stack
         try:
-            children = get_successor_phids(revision["phid"], repo.path)
+            has_child = has_successor(revision["phid"], repo.path)
         except NonLinearException:
-            multiple_children = True
+            has_child = True
 
-        if multiple_children and not args.yes:
-            res = prompt(
-                "Revision D%s has a non-linear successor graph. "
-                "Unable to detect the full stack. Would you like to continue "
-                "with only part of the stack?" % rev_id,
-                ["Yes", "No"],
-            )
-            if res == "No":
-                return
+        patch_children = False
+        if has_child:
+            if args.yes or config.always_full_stack:
+                patch_children = True
+            else:
+                res = prompt(
+                    "Revision D%s has child(ren). Would you like to patch the full stack?."
+                    % rev_id,
+                    ["Yes", "No", "Always"],
+                )
+                if res == "Always":
+                    config.always_full_stack = True
+                    config.write()
 
-    # Get list of PHIDs in the stack
-    try:
-        phids = get_ancestor_phids(revision["phid"], repo.path)
-    except NonLinearException:
-        raise Error("Non linear dependency detected. Unable to patch the stack.")
+                patch_children = res == "Yes" or res == "Always"
 
-    # Pull revisions data
-    if phids:
-        revs.extend(get_revisions(repo.path, phids=phids))
-        revs.reverse()
+        children = []
+        if patch_children:
+            multiple_children = False
+            try:
+                children = get_successor_phids(revision["phid"], repo.path)
+            except NonLinearException:
+                multiple_children = True
 
-    if children:
-        revs.extend(get_revisions(repo.path, phids=children))
+            if multiple_children and not args.yes:
+                res = prompt(
+                    "Revision D%s has a non-linear successor graph. "
+                    "Unable to detect the full stack. Would you like to continue "
+                    "with only part of the stack?" % rev_id,
+                    ["Yes", "No"],
+                )
+                if res == "No":
+                    return
+
+        # Get list of PHIDs in the stack
+        try:
+            phids = get_ancestor_phids(revision["phid"], repo.path)
+        except NonLinearException:
+            raise Error("Non linear dependency detected. Unable to patch the stack.")
+
+        # Pull revisions data
+        if phids:
+            revs.extend(get_revisions(repo.path, phids=phids))
+            revs.reverse()
+
+        if children:
+            revs.extend(get_revisions(repo.path, phids=children))
 
     # Set the target id
     rev_id = revs[-1]["id"]
@@ -3181,6 +3181,11 @@ def parse_args(argv):
         action="store_true",
         dest="no_branch",
         help="(Git only) Do not create the branch",
+    )
+    patch_parser.add_argument(
+        "--skip-dependencies",
+        action="store_true",
+        help="Do not search for dependencies. Patch only one revision.",
     )
     patch_parser.add_argument(
         "--yes",
