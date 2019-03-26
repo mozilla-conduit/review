@@ -207,3 +207,5 @@ and `patch` commands.
 
 All python code must be formatted with [black](https://github.com/ambv/black)
 using the default settings.
+
+Pull Requests are not accepted here; please submit changes with Phabricator.
