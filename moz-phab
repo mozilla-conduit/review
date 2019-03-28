@@ -2650,7 +2650,7 @@ def update_arc():
             "Would you like to skip arc upgrades in the future?", ["Yes", "No"]
         )
 
-        if result == "YES":
+        if result == "Yes":
             config.arc_last_check = -1
             config.write()
     else:
