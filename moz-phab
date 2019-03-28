@@ -152,9 +152,10 @@ REVIEWERS_RE = (
     + r")*)?"
 )
 ALL_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"[=?]")
-REQUEST_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"\?")
+REQUEST_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"[?]")
 GRANTED_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"=")
 R_SPECIFIER_RE = re.compile(r"\br[=?]")
+BLOCKING_REVIEWERS_RE = re.compile(r"\b(r!)(" + IRC_NICK + ")")
 
 DEPENDS_ON_RE = re.compile(r"^\s*Depends on\s*D(\d+)\s*$", flags=re.MULTILINE)
 
@@ -1907,6 +1908,19 @@ def has_arc_rejections(body):
     return all(r.search(body) for r in ARC_REJECT_RE_LIST)
 
 
+def morph_blocking_reviewers(commits):
+    """Automatically fix common typo by replacing r!user with r=user!"""
+
+    def morph_reviewer(matchobj):
+        if matchobj.group(1) == "r!":
+            return "r=%s!" % matchobj.group(2).rstrip("!")
+        else:
+            return matchobj.group(0)
+
+    for commit in commits:
+        commit["title"] = BLOCKING_REVIEWERS_RE.sub(morph_reviewer, commit["title"])
+
+
 def augment_commits_from_body(commits):
     """Extract metadata from commit body as fields.
 
@@ -2449,6 +2463,7 @@ def submit(repo, args):
     )
 
     # Pre-process to load metadata.
+    morph_blocking_reviewers(commits)
     augment_commits_from_body(commits)
     update_commits_from_args(commits, args)
 
@@ -2877,8 +2892,7 @@ def patch(repo, args):
             else:
                 res = prompt(
                     "Revision D%s has child(ren).  Would you like to patch the "
-                    "full stack?."
-                    % rev_id,
+                    "full stack?." % rev_id,
                     ["Yes", "No", "Always"],
                 )
                 if res == "Always":

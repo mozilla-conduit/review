@@ -159,6 +159,24 @@ class CommitParsing(unittest.TestCase):
             ),
         )
 
+    def test_morph_blocking_reviewers(self):
+        def morph(title):
+            commits = [dict(title=title)]
+            mozphab.morph_blocking_reviewers(commits)
+            return commits[0]["title"]
+
+        self.assertEqual("stuff", morph("stuff"))
+        self.assertEqual("stuff; r=romulus!", morph("stuff; r!romulus"))
+        self.assertEqual(
+            "stuff; r=romulus!, r=remus!", morph("stuff; r!romulus, r!remus")
+        )
+        self.assertEqual(
+            "stuff; r=romulus!, r=remus", morph("stuff; r!romulus, r=remus")
+        )
+        self.assertEqual("stuff; r=romulus!", morph("stuff; r!romulus!"))
+        self.assertEqual("stuff; r=romulus!", morph("stuff; r=romulus!"))
+        self.assertEqual("stuff; r=romulus!.", morph("stuff; r!romulus."))
+
     def test_arc_diff_rev(self):
         parse = mozphab.parse_arc_diff_rev
 
