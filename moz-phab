@@ -228,7 +228,8 @@ def check_call_by_line(command, cwd=None, never_log=False):
     # similar to check_call, yields for line-by-line processing
     logger.debug("$ %s" % " ".join(shell_quote(s) for s in command))
 
-    # Connecting the STDIN to the PIPE will make arc throw an exception on reading user input
+    # Connecting the STDIN to the PIPE will make arc throw an exception on reading
+    # user input
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stdin=subprocess.PIPE, cwd=cwd
     )
@@ -768,6 +769,11 @@ class Mercurial(Repository):
         self.revset = None
         self.strip_nodes = []
         self.status = None
+        self.obsstore = None
+        self.unlink_obsstore = False
+        self.use_evolve = False
+        self.has_mq = False
+        self.has_shelve = False
 
         # Normalise/standardise Mercurial's output.
         os.environ["HGPLAIN"] = "1"
@@ -1655,7 +1661,8 @@ class Git(Repository):
                 elif not self.is_node(hashtag):
                     # the found hashtag is not a valid node in the repository.
                     raise NotFoundError(
-                        "Mercurial SHA1 detected, but commit not found in the repository."
+                        "Mercurial SHA1 detected, but commit not found in the "
+                        "repository."
                     )
             else:
                 raise NotFoundError("Cinnabar extension not enabled.")
@@ -2218,7 +2225,7 @@ def install_arc_if_required():
     check_call(["git", "clone", "--depth", "1", LIBPHUTIL_URL, LIBPHUTIL_PATH])
 
 
-def arc_install_certificate(args):
+def arc_install_certificate(_):
     """Calls arc to install the Phabricator's certificate."""
     check_call([ARC_COMMAND, "install-certificate"])
 
@@ -2869,7 +2876,8 @@ def patch(repo, args):
                 patch_children = True
             else:
                 res = prompt(
-                    "Revision D%s has child(ren). Would you like to patch the full stack?."
+                    "Revision D%s has child(ren).  Would you like to patch the "
+                    "full stack?."
                     % rev_id,
                     ["Yes", "No", "Always"],
                 )
