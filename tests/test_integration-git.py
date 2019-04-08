@@ -15,6 +15,10 @@ mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
 
+
+arc_call_conduit = mock.Mock()
+arc_call_conduit.return_value = [{"userName": "alice", "phid": "PHID-USER-1"}]
+
 initial_sha = None
 
 
@@ -106,3 +110,47 @@ Bug 1 - A
 Differential Revision: http://example.test/D123
 """
     assert log == expected
+
+
+def test_submit_update_bug_id(in_process, git_repo_path, init_sha):
+    arc_call_conduit.reset_mock()
+    arc_call_conduit.side_effect = (
+        {
+            "data": [
+                {
+                    "id": 123,
+                    "phid": "PHID-REV-1",
+                    "fields": {"bugzilla.bug-id": "1"},
+                    "attachments": {"reviewers": {"reviewers": []}},
+                }
+            ]
+        },  # get reviewers for updated revision
+        {"data": {}},
+    )
+    testfile = git_repo_path / "X"
+    testfile.write_text(u"a")
+    git_out("add", ".")
+
+    # Write out our commit message as if the program had already run and appended
+    # a Differential Revision keyword to the commit body for tracking.
+    git_out(
+        "commit",
+        "--message",
+        """\
+Bug 1 - A
+
+Differential Revision: http://example.test/D123
+""",
+    )
+
+    mozphab.main(["submit", "--yes", "--bug", "2", init_sha])
+
+    assert arc_call_conduit.call_count == 2
+    assert arc_call_conduit.call_args_list[1] == mock.call(
+        "differential.revision.edit",
+        {
+            "objectIdentifier": "D123",
+            "transactions": [{"type": "bugzilla.bug-id", "value": "2"}],
+        },
+        mock.ANY,
+    )

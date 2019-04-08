@@ -2057,7 +2057,9 @@ def replace_reviewers(commit_description, reviewers):
         return commit_title.strip() + "\n" + commit_description
 
 
-def show_commit_stack(repo, commits, show_rev_urls=False, show_warnings=False):
+def show_commit_stack(
+    repo, commits, show_rev_urls=False, show_warnings=False, submited=False
+):
     """Log the commit stack in a human readable form."""
 
     # keep output in columns by sizing the action column to the longest rev + 1 ("D")
@@ -2066,13 +2068,33 @@ def show_commit_stack(repo, commits, show_rev_urls=False, show_warnings=False):
     )
     action_template = "(%" + str(max_len) + "s)"
 
+    if not submited:
+        # preload all revisions
+        get_revisions(
+            repo.path, ids=[int(c["rev-id"]) for c in commits if c.get("rev-id")]
+        )
+
     for commit in reversed(commits):
+        change_bug_id = False
         if commit.get("rev-id"):
             action = action_template % ("D" + commit["rev-id"])
+            if not submited:
+                # Check if target bug ID is the same as in the Phabricator revision
+                revision = get_revisions(repo.path, ids=[int(commit["rev-id"])])[0]
+                change_bug_id = (
+                    commit["bug-id"] != revision["fields"]["bugzilla.bug-id"]
+                )
         else:
             action = action_template % "New"
+
         logger.info("%s %s %s" % (action, commit["name"], commit["title-preview"]))
         if show_warnings:
+            if change_bug_id:
+                logger.warning(
+                    "!! Bug ID in Phabricator revision will be changed from %s to %s"
+                    % (revision["fields"]["bugzilla.bug-id"], commit["bug-id"])
+                )
+
             if commit["bug-id-orig"] and commit["bug-id"] != commit["bug-id-orig"]:
                 logger.warning(
                     "!! Bug ID changed from %s to %s"
@@ -2475,7 +2497,7 @@ def build_api_call_to_update_commit_title_and_summary(commit):
     return {"transactions": transactions, "objectIdentifier": commit["rev-id"]}
 
 
-def build_api_call_to_update_reviewers(repo_path, commit):
+def build_transaction_to_update_reviewers(repo_path, commit):
     # Add reviewers
     all_reviewers = commit["reviewers"]["request"] + commit["reviewers"]["granted"]
     # preload all reviewers
@@ -2487,10 +2509,7 @@ def build_api_call_to_update_reviewers(repo_path, commit):
     blocking_phid = [
         "blocking(%s)" % user["phid"] for user in get_users(repo_path, blocking)
     ]
-    return dict(
-        objectIdentifier="D%s" % commit["rev-id"],
-        transactions=[dict(type="reviewers.set", value=reviewers_phid + blocking_phid)],
-    )
+    return [dict(type="reviewers.set", value=reviewers_phid + blocking_phid)]
 
 
 def update_phabricator_commit_summary(commit, repo):
@@ -2678,15 +2697,28 @@ def submit(repo, args):
                 )
                 logger.debug(e)
 
+            # Update bug id if different
+            revision = get_revisions(repo.path, ids=[int(commit["rev-id"])])[0]
+            transactions = []
+            if revision["fields"]["bugzilla.bug-id"] != commit["bug-id"]:
+                transactions.append(
+                    dict(type="bugzilla.bug-id", value=commit["bug-id"])
+                )
+
+            # Add reviewers only if revision lacks them
             if has_commit_reviewers:
                 # Add reviewers only if revision lacks them
                 if not existing_reviewers:
-                    api_call_args = build_api_call_to_update_reviewers(
-                        repo.path, commit
+                    transactions.extend(
+                        build_transaction_to_update_reviewers(repo.path, commit)
                     )
-                    arc_call_conduit(
-                        "differential.revision.edit", api_call_args, repo.path
-                    )
+
+            if transactions:
+                api_call_args = {
+                    "objectIdentifier": "D%s" % commit["rev-id"],
+                    "transactions": transactions,
+                }
+                arc_call_conduit("differential.revision.edit", api_call_args, repo.path)
 
         # Append/replace div rev url to/in commit description.
         body = amend_revision_url(commit["body"], revision_url)
@@ -2707,7 +2739,7 @@ def submit(repo, args):
     repo.refresh_commit_stack(commits)
 
     logger.warning("\nCompleted")
-    show_commit_stack(repo, commits, show_rev_urls=True)
+    show_commit_stack(repo, commits, show_rev_urls=True, submited=True)
 
 
 #
@@ -2830,6 +2862,14 @@ def self_update(args):
     logger.info("%s updated" % SELF_FILE)
 
 
+def order_revisions_by_id(phids_by_id, revs, ids):
+    return [revs[phids_by_id[str(id)]] for id in ids if phids_by_id[str(id)]]
+
+
+def order_revisions_by_phid(revs, phids):
+    return [revs[phid] for phid in phids]
+
+
 def get_revisions(cwd, ids=None, phids=None):
     """Get revisions info from Phabricator.
 
@@ -2846,29 +2886,64 @@ def get_revisions(cwd, ids=None, phids=None):
         # Ordering would be too complicated
         raise ValueError("ids and phids are mutually exclusive")
 
+    if not ids and not phids:
+        return []
+
+    collected_ids = (
+        dict(
+            [
+                (str(id), cache.get("rev-id-%s" % id))
+                for id in ids
+                if "rev-id-%s" % id in cache
+            ]
+        )
+        if ids
+        else {}
+    )
+
+    found_phids = collected_ids.values() if ids else phids[:]
+
+    collected_revs = (
+        dict(
+            [
+                (phid, cache.get("rev-%s" % phid))
+                for phid in found_phids
+                if "rev-%s" % phid in cache
+            ]
+        )
+        if found_phids
+        else {}
+    )
+
+    if ids and len(ids) == len(collected_ids):
+        return order_revisions_by_id(collected_ids, collected_revs, ids)
+
+    if phids and len(phids) == len(collected_revs):
+        return order_revisions_by_phid(collected_revs, phids)
+
     api_call_args = {"constraints": {}, "attachments": {"reviewers": True}}
     if ids:
-        api_call_args["constraints"]["ids"] = ids
+        to_collect = list(set(ids) - set([int(key) for key in collected_ids.keys()]))
+        api_call_args["constraints"]["ids"] = to_collect
     else:
-        api_call_args["constraints"]["phids"] = phids
+        to_collect = list(set(phids) - set(collected_ids.values()))
+        api_call_args["constraints"]["phids"] = to_collect
 
     response = arc_call_conduit("differential.revision.search", api_call_args, cwd)
-    rev_list = response.get("data", [])
+    rev_list = response.get("data")
     if not rev_list:
         return
 
-    # Order by the ids or phids
-    rev_dict_by_id = {}
-    rev_dict_by_phid = {}
-
     for r in rev_list:
-        rev_dict_by_id[r["id"]] = r
-        rev_dict_by_phid[r["phid"]] = r
+        collected_ids[str(r["id"])] = r["phid"]
+        collected_revs[r["phid"]] = r
+        cache.set("rev-id-%s" % r["id"], r["phid"])
+        cache.set("rev-%s" % r["phid"], r)
 
     if ids:
-        return [rev_dict_by_id[i] for i in ids]
+        return order_revisions_by_id(collected_ids, collected_revs, ids)
 
-    return [rev_dict_by_phid[phid] for phid in phids]
+    return order_revisions_by_phid(collected_revs, phids)
 
 
 def get_diffs(cwd, phids):

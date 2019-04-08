@@ -401,12 +401,16 @@ class Commits(unittest.TestCase):
         # r?one,two
         self.assertEqual("r?one", replace("r?one,two", reviewers_dict([["one"], []])))
 
+    @mock.patch("mozphab.get_revisions")
     @mock.patch("mozphab.logger")
-    def test_show_commit_stack(self, mock_logger):
+    def test_show_commit_stack(self, mock_logger, m_get_revisions):
         class Repository:
             phab_url = "http://phab/"
+            path = "x"
 
         repo = Repository()
+
+        m_get_revisions.return_value = [{"fields": {"bugzilla.bug-id": "1"}}]
 
         mozphab.show_commit_stack(repo, [])
         self.assertFalse(mock_logger.info.called, "logger.info() shouldn't be called")
@@ -422,7 +426,8 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
 
         mozphab.show_commit_stack(
-            repo, [{"name": "aaa000", "title-preview": "A", "rev-id": "12"}]
+            repo,
+            [{"name": "aaa000", "title-preview": "A", "rev-id": "12", "bug-id": "1"}],
         )
         mock_logger.info.assert_called_with("(D12) aaa000 A")
         self.assertFalse(
@@ -478,10 +483,44 @@ class Commits(unittest.TestCase):
 
         mozphab.show_commit_stack(
             repo,
-            [{"name": "aaa000", "title-preview": "A", "rev-id": "123"}],
+            [{"name": "aaa000", "title-preview": "A", "rev-id": "123", "bug-id": "1"}],
             show_rev_urls=True,
         )
         mock_logger.warning.assert_called_with("-> http://phab/D123")
+
+        m_get_revisions.reset_mock()
+        m_get_revisions.return_value = [
+            {"id": "1", "phid": "PHID-1", "fields": {"bugzilla.bug-id": "1"}},
+            {"id": "2", "phid": "PHID-2", "fields": {"bugzilla.bug-id": "1"}},
+        ]
+        # we're changing bug id in the first revision to 2
+        mozphab.show_commit_stack(
+            repo,
+            [
+                {
+                    "name": "aaa000",
+                    "title-preview": "A",
+                    "bug-id-orig": 1,
+                    "bug-id": "2",
+                    "rev-id": "1",
+                    "reviewers": {"granted": [], "request": [""]},
+                },
+                {
+                    "name": "bbb000",
+                    "title-preview": "B",
+                    "bug-id-orig": "1",
+                    "bug-id": "1",
+                    "rev-id": "2",
+                    "reviewers": {"granted": [], "request": [""]},
+                },
+            ],
+            show_warnings=True,
+        )
+        assert mock_logger.warning.call_args_list[1] == mock.call(
+            "!! Bug ID in Phabricator revision will be changed from 1 to 2"
+        )
+        assert m_get_revisions.call_count == 3
+        mock_logger.reset_mock()
 
     @mock.patch("mozphab.update_commit_title_previews")
     def test_update_commits_from_args(self, m_update_title):
@@ -676,7 +715,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
         self.assertDictEqual(expected_json, api_call_args)
 
     @mock.patch("mozphab.get_users")
-    def test_biuild_api_call_to_update_reviewers(self, m_get_users):
+    def test_biuild_transaction_to_update_reviewers(self, m_get_users):
         # From https://phabricator.services.mozilla.com/api/differential.revision.edit
         #
         # Example call format we are aiming for:
@@ -702,8 +741,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
             [dict(phid="PHID-USER-2"), dict(phid="PHID-USER-3")],
         )
         c = commit(rev_id="123", reviewers=[["alice", "bob!"], ["frankie!"]])
-        expected_json = {
-            "transactions": [
+        expected_json = [
                 {
                     "type": "reviewers.set",
                     "value": [
@@ -712,10 +750,9 @@ class TestUpdateCommitSummary(unittest.TestCase):
                         "blocking(PHID-USER-3)",
                     ],
                 }
-            ],
-            "objectIdentifier": "D123",
-        }
-        api_call_args = mozphab.build_api_call_to_update_reviewers("x", c)
+            ]
+
+        api_call_args = mozphab.build_transaction_to_update_reviewers("x", c)
         self.assertEqual(
             m_get_users.call_args_list,
             [
@@ -724,7 +761,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
                 mock.call("x", ["bob", "frankie"]),
             ],
         )
-        self.assertDictEqual(expected_json, api_call_args)
+        self.assertEqual(expected_json, api_call_args)
 
     def test_parse_api_response_with_no_problems(self):
         # Response comes from running:
