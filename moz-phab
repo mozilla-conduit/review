@@ -22,6 +22,7 @@ import errno
 import io
 import json
 import logging
+import logging.handlers
 import os
 import re
 import ssl
@@ -3053,8 +3054,21 @@ class ColourFormatter(logging.Formatter):
 def init_logging():
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setFormatter(ColourFormatter())
+    stdout_handler.setLevel(logging.DEBUG if DEBUG else logging.INFO)
     logger.addHandler(stdout_handler)
-    logger.setLevel(logging.DEBUG if DEBUG else logging.INFO)
+
+    file_handler = logging.handlers.TimedRotatingFileHandler(
+        filename=os.path.join(HOME_DIR, ".mozbuild", "moz-phab", "moz-phab.log"),
+        when="midnight",
+        backupCount=7,
+    )
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)-13s %(levelname)-8s %(message)s")
+    )
+    file_handler.setLevel(logging.DEBUG)
+    logger.addHandler(file_handler)
+
+    logger.setLevel(logging.DEBUG)
 
 
 def parse_args(argv):
