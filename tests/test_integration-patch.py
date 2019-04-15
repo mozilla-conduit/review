@@ -293,17 +293,17 @@ REV_BIN = dict(
 )
 ATTACHMENTS = dict(
     commits=dict(
-        commits=[
-            dict(author=dict(name="user", email="author@example.com", epoch=1547806078))
-        ]
+        commits=[dict(author=dict(name="user", email="author@example.com", epoch=None))]
     )
 )
 
 DIFF_1 = dict(
-    fields=dict(refs=[dict(identifier="0", type="base")]), id=1, attachments=ATTACHMENTS
+    fields=dict(dateCreated=1547806078, refs=[dict(identifier="0", type="base")]),
+    id=1,
+    attachments=ATTACHMENTS,
 )
 
-DIFF_2 = dict(fields=dict(), id=2, attachments=ATTACHMENTS)
+DIFF_2 = dict(fields=dict(dateCreated=1547806078), id=2, attachments=ATTACHMENTS)
 
 PATCH_1 = """\
 diff --git a/X b/X

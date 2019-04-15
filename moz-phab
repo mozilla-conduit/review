@@ -3010,7 +3010,7 @@ def patch(repo, args):
                 diff_commits[0]["author"]["email"],
             )
             author_date = datetime.datetime.fromtimestamp(
-                diff_commits[0]["author"]["epoch"]
+                diff["fields"]["dateCreated"]
             ).isoformat()
 
             try:

@@ -231,6 +231,7 @@ def test_patch(
     m_get_diffs.return_value = {
         "DIFFPHID-1": {
             "id": 1,
+            "fields": dict(dateCreated=1547806078),
             "attachments": dict(
                 commits=dict(
                     commits=[
@@ -258,6 +259,32 @@ def test_patch(
     m_apply_patch.assert_not_called()
     m_get_base_ref.assert_called_once()
     m_git_before_patch.assert_called_once_with("sha111", "D1")
+
+    m_git_apply_patch.reset_mock()
+    m_get_diffs.return_value = {
+        "DIFFPHID-1": {
+            "id": 1,
+            "fields": dict(dateCreated=1547806078),
+            "attachments": dict(
+                commits=dict(
+                    commits=[
+                        dict(
+                            author=dict(
+                                name="user", email="author@example.com", epoch=None
+                            )
+                        )
+                    ]
+                )
+            ),
+        }
+    }
+    mozphab.patch(git, Args())
+    m_git_apply_patch.assert_called_once_with(
+        "raw",
+        "commit message",
+        "user <author@example.com>",
+        datetime.datetime.fromtimestamp(1547806078).isoformat(),
+    )
 
     m_get_base_ref.return_value = None
     with pytest.raises(mozphab.Error):
