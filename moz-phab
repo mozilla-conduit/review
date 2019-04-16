@@ -77,6 +77,7 @@ HOME_DIR = os.path.expanduser("~")
 
 # Arcanist
 MOZBUILD_PATH = os.path.join(HOME_DIR, ".mozbuild", "moz-phab")
+LOG_FILE = os.path.join(MOZBUILD_PATH, "moz-phab.log")
 LIBPHUTIL_PATH = os.path.join(MOZBUILD_PATH, "libphutil")
 ARC_PATH = os.path.join(MOZBUILD_PATH, "arcanist")
 ARC_COMMAND = os.path.join(ARC_PATH, "bin", "arc.bat" if IS_WINDOWS else "arc")
@@ -2230,11 +2231,8 @@ def install_arc_if_required():
         return
 
     logger.warning("Installing arc")
-    logger.debug("arc command: ", ARC_COMMAND)
-    logger.debug("libphutil path: ", LIBPHUTIL_PATH)
-
-    if not os.path.exists(MOZBUILD_PATH):
-        os.makedirs(MOZBUILD_PATH)
+    logger.debug("arc command: %s", ARC_COMMAND)
+    logger.debug("libphutil path: %s", LIBPHUTIL_PATH)
 
     check_call(["git", "clone", "--depth", "1", ARC_URL, ARC_PATH])
     check_call(["git", "clone", "--depth", "1", LIBPHUTIL_URL, LIBPHUTIL_PATH])
@@ -3058,9 +3056,7 @@ def init_logging():
     logger.addHandler(stdout_handler)
 
     file_handler = logging.handlers.TimedRotatingFileHandler(
-        filename=os.path.join(HOME_DIR, ".mozbuild", "moz-phab", "moz-phab.log"),
-        when="midnight",
-        backupCount=7,
+        filename=LOG_FILE, when="midnight", backupCount=7
     )
     file_handler.setFormatter(
         logging.Formatter("%(asctime)-13s %(levelname)-8s %(message)s")
@@ -3275,6 +3271,9 @@ def parse_args(argv):
 def main(argv):
     global config, HAS_ANSI, DEBUG
     try:
+        if not os.path.exists(MOZBUILD_PATH):
+            os.makedirs(MOZBUILD_PATH)
+
         init_logging()
         config = Config()
 
