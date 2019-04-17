@@ -75,9 +75,14 @@ GUIDE_URL = (
 GIT_COMMAND = ["git.exe" if IS_WINDOWS else "git"]
 HOME_DIR = os.path.expanduser("~")
 
-# Arcanist
-MOZBUILD_PATH = os.path.join(HOME_DIR, ".mozbuild", "moz-phab")
+# ~/.mozbuild/moz-phab
+MOZBUILD_PATH = os.path.join(
+    os.environ.get("MOZBUILD_STATE_PATH", os.path.join(HOME_DIR, ".mozbuild")),
+    "moz-phab",
+)
 LOG_FILE = os.path.join(MOZBUILD_PATH, "moz-phab.log")
+
+# Arcanist
 LIBPHUTIL_PATH = os.path.join(MOZBUILD_PATH, "libphutil")
 ARC_PATH = os.path.join(MOZBUILD_PATH, "arcanist")
 ARC_COMMAND = os.path.join(ARC_PATH, "bin", "arc.bat" if IS_WINDOWS else "arc")
