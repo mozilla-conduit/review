@@ -989,6 +989,10 @@ class Mercurial(Repository):
             strip=False,
         )[: -len(boundary)]
 
+        # Guard against conditions where the stack is empty (see bug 1547083).
+        if not hg_log:
+            return []
+
         commits = []
         nodes = []
         branching_children = []
