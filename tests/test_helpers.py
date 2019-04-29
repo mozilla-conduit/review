@@ -278,7 +278,10 @@ def test_non_existent_reviewers_or_groups_generates_error_list(arc_out):
             {
                 "error": None,
                 "errorMessage": None,
-                "response": {"data": [{"fields": {"slug": "user-group"}}]},
+                "response": {
+                    "data": [{"fields": {"slug": "user-group"}}],
+                    "maps": {"slugMap": []},
+                },
             }
         ),
     )
