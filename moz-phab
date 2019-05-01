@@ -146,9 +146,8 @@ ARC_REJECT_RE_LIST = [
 BUG_ID_RE = re.compile(r"(?:(?:bug|b=)(?:\s*)(\d+)(?=\b))", flags=re.IGNORECASE)
 LIST = r"[;,\/\\]\s*"
 LIST_RE = re.compile(LIST)
-IRC_NICK = (
-    r"#?[a-zA-Z0-9\-\_!]+"
-)  # Note this includes !, which is different from commitparser
+IRC_NICK_CHARS = r"a-zA-Z0-9\-\_!"  # includes !, which is different from commitparser
+IRC_NICK = r"#?[" + IRC_NICK_CHARS + "]+"
 REVIEWERS_RE = (
     r"([\s(.\[;,])(r%s)("
     + IRC_NICK
@@ -162,7 +161,7 @@ ALL_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"[=?]")
 REQUEST_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"[?]")
 GRANTED_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"=")
 R_SPECIFIER_RE = re.compile(r"\br[=?]")
-BLOCKING_REVIEWERS_RE = re.compile(r"\b(r!)(" + IRC_NICK + ")")
+BLOCKING_REVIEWERS_RE = re.compile(r"\b(r!)([" + IRC_NICK_CHARS + ",]+)")
 
 DEPENDS_ON_RE = re.compile(r"^\s*Depends on\s*D(\d+)\s*$", flags=re.MULTILINE)
 
@@ -1950,7 +1949,20 @@ def morph_blocking_reviewers(commits):
 
     def morph_reviewer(matchobj):
         if matchobj.group(1) == "r!":
-            return "r=%s!" % matchobj.group(2).rstrip("!")
+            nick = matchobj.group(2)
+
+            # strip trailing , so we can put it back later
+            if nick.endswith(","):
+                suffix = ","
+                nick = nick[:-1]
+            else:
+                suffix = ""
+
+            # split on comma to support r!a,b -> r=a!,b!
+            return "r=%s%s" % (
+                ",".join(["%s!" % n.rstrip("!") for n in nick.split(",")]),
+                suffix,
+            )
         else:
             return matchobj.group(0)
 

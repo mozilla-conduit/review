@@ -171,6 +171,9 @@ class CommitParsing(unittest.TestCase):
             "stuff; r=romulus!, r=remus!", morph("stuff; r!romulus, r!remus")
         )
         self.assertEqual(
+            "stuff; r=romulus!,remus!", morph("stuff; r!romulus,remus")
+        )
+        self.assertEqual(
             "stuff; r=romulus!, r=remus", morph("stuff; r!romulus, r=remus")
         )
         self.assertEqual("stuff; r=romulus!", morph("stuff; r!romulus!"))
