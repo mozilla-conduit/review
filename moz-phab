@@ -2683,6 +2683,8 @@ def submit(repo, args):
                 arc_args.append("--nolint")
             if args.wip:
                 arc_args.append("--plan-changes")
+            if args.lesscontext:
+                arc_args.append("--less-context")
             if is_update:
                 message = args.message if args.message else DEFAULT_UPDATE_MESSAGE
                 arc_args.extend(["--message", message] + ["--update", commit["rev-id"]])
@@ -3342,6 +3344,19 @@ def parse_args(argv):
         "--plan-changes",
         action="store_true",
         help="Create or update a revision without requesting a code review",
+    )
+    submit_parser.add_argument(
+        "--less-context",
+        "--lesscontext",
+        action="store_true",
+        dest="lesscontext",
+        help=(
+            "Normally, files are diffed with full context: the entire file "
+            "is sent to Phabricator so reviewers can 'show more' and see "
+            "it. If you are making changes to very large files with tens of "
+            "thousands of lines, this may not work well. With this flag, a "
+            "revision will be created that has only a few lines of context."
+        ),
     )
     submit_parser.add_argument(
         "--no-stack",
