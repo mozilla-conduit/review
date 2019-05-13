@@ -28,15 +28,13 @@ def test_get_successor(m_hg_hg_out, hg):
 @mock.patch("mozphab.Mercurial._get_successor")
 @mock.patch("mozphab.Mercurial.rebase_commit")
 @mock.patch("mozphab.Mercurial._get_parent")
-@mock.patch("mozphab.Mercurial._find_forks_to_rebase")
-def test_finalize(m_hg_find_forks, m_get_parent, m_hg_rebase, m_hg_get_successor, hg):
+def test_finalize(m_get_parent, m_hg_rebase, m_hg_get_successor, hg):
     commits = [
         {"rev": "1", "node": "aaa", "orig-node": "aaa"},
         {"rev": "2", "node": "bbb", "orig-node": "bbb"},
         {"rev": "3", "node": "ccc", "orig-node": "ccc"},
     ]
 
-    m_hg_find_forks.return_value = []
     m_get_parent.return_value = "different:than_others"
     m_hg_get_successor.return_value = (None, None)
     hg.finalize(copy.deepcopy(commits))
@@ -77,11 +75,10 @@ def test_finalize(m_hg_find_forks, m_get_parent, m_hg_rebase, m_hg_get_successor
     m_hg_rebase.reset_mock()
     m_hg_get_successor.side_effect = None
     m_hg_get_successor.return_value = (None, None)
-    m_hg_find_forks.side_effect = (["YYY"], [], [])
     _commits = commits[:]
     _commits[0]["node"] = "AAA"  # node has been amended
     hg.finalize(_commits)
-    assert m_hg_rebase.call_count == 3
+    assert m_hg_rebase.call_count == 2
 
 
 @mock.patch("mozphab.Mercurial.rebase_commit")
@@ -89,26 +86,6 @@ def test_finalize_no_evolve(m_hg_rebase, hg):
     hg.use_evolve = False
     hg.finalize([dict(rev="1", node="aaa"), dict(rev="2", node="bbb")])
     assert m_hg_rebase.not_called()
-
-
-def test_find_forks(hg):
-    original_nodes = ["aaa", "bbb", "ccc", "ddd", "eee"]
-
-    # "aaa" amended, "bbb" in commit stack (but not amended), "xxx" is a fork
-    commit = {"node": "AAA", "orig-node": "aaa", "children": ["bbb", "xxx"]}
-    assert ["xxx"] == hg._find_forks_to_rebase(commit, original_nodes)
-    # "bbb" not amended, "yyy" is a fork
-    commit = {"node": "bbb", "orig-node": "bbb", "children": ["ccc", "yyy"]}
-    assert [] == hg._find_forks_to_rebase(commit, original_nodes)
-    # "ccc" amended, "ddd" in commit stack, "zzz" is a fork
-    commit = {"node": "CCC", "orig-node": "ccc", "children": ["ddd", "zzz"]}
-    assert ["zzz"] == hg._find_forks_to_rebase(commit, original_nodes)
-    # "ddd" amended, no forks found
-    commit = {"node": "DDD", "orig-node": "ddd", "children": ["eee"]}
-    assert [] == hg._find_forks_to_rebase(commit, original_nodes)
-    # "eee" amended, no children
-    commit = {"node": "EEE", "orig-node": "eee", "children": []}
-    assert [] == hg._find_forks_to_rebase(commit, original_nodes)
 
 
 @mock.patch("mozphab.config")

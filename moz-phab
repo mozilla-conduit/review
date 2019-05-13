@@ -1026,7 +1026,6 @@ class Mercurial(Repository):
             desc = desc.splitlines()
 
             children = self.hg_log("children(%s)" % node)
-
             if len(children) > 1 and not self.use_evolve:
                 branching_children.extend(children)
 
@@ -1035,7 +1034,6 @@ class Mercurial(Repository):
                     "name": "%s:%s" % (rev, node[:12]),
                     "node": node,
                     "orig-node": node,
-                    "children": children,
                     "title": desc[0],
                     "title-preview": desc[0],
                     "body": "\n".join(desc[1:]).rstrip(),
@@ -1130,22 +1128,14 @@ class Mercurial(Repository):
             ["log", "-T", "{node}", "-r", "parents(%s)" % node], split=False
         )
 
-    @staticmethod
-    def _find_forks_to_rebase(commit, original_nodes):
-        """Returns a list of split commits to rebase."""
-        if commit["node"] == commit["orig-node"]:
-            return []
-
-        return [ch for ch in commit["children"] if ch not in original_nodes]
-
     def finalize(self, commits):
         """Rebase stack children commits if needed."""
         # Currently we do all rebases in `amend_commit` if the evolve extension
         # is not installed.
+
         if not self.use_evolve:
             return
 
-        original_nodes = [c["orig-node"] for c in commits]
         parent = None
         for commit in commits:
             commit_parent = self._get_parent(commit["node"])
@@ -1154,9 +1144,6 @@ class Mercurial(Repository):
                 (rev, node) = self._get_successor(commit["node"])
                 if rev and node:
                     self._refresh_commit(commit, node, rev)
-
-            for fork in self._find_forks_to_rebase(commit, original_nodes):
-                self.rebase_commit(dict(node=fork), commit)
 
             parent = commit
 
@@ -1182,24 +1169,22 @@ class Mercurial(Repository):
                 first_child = c
                 break
 
-        # Track children of the last commit in the stack.
-        post_stack_children = []
-        if not first_child:
-            post_stack_children = self.hg_log("children(%s)" % commit["node"])
+        # Track children of this commit which aren't part of the stack.
+        stack_nodes = [c["node"] for c in commits]
+        non_stack_children = [
+            n
+            for n in self.hg_log("children(%s)" % commit["node"])
+            if n not in stack_nodes
+        ]
 
         if self.use_evolve:
             # If evolve is installed this is trivial.
-
-            # Amend and refresh the stack to get the new commit node.
             self._amend_commit_body(commit["node"], updated_body)
-            self.refresh_commit_stack(commits)
-            # Rebase will happen in `finalize`
 
-        elif not first_child and not post_stack_children:
+        elif not first_child and not non_stack_children:
             # Without evolve things are much more exciting.
 
             # If there's no children we can just amend.
-
             self._amend_commit_body(commit["node"], updated_body)
 
             # This should always result in an amended node, but we need to be
@@ -1253,8 +1238,8 @@ class Mercurial(Repository):
         # Ensure our view of the stack is up to date.
         self.refresh_commit_stack(commits)
 
-        # Commits that are descendants of the stack need to be rebased too.
-        for node in post_stack_children:
+        # Commits that aren't part of the stack need to be re-parented.
+        for node in non_stack_children:
             self.hg(["rebase", "--source", node, "--dest", commit["node"]])
 
     def rebase_commit(self, source_commit, dest_commit):
