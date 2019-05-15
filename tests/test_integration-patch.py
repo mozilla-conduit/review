@@ -138,7 +138,7 @@ def test_git_patch_with_commit(
     result = git_out("branch")
     assert "* D1" in result
 
-    time.sleep(1)
+    time.sleep(1)  # to ensure the patch is applied with a different timestamp
     mozphab.main(["patch", "D1"])
     assert [".arcconfig", ".git", "X"] == sorted(os.listdir(str(git_repo_path)))
     test_file = git_repo_path / "X"

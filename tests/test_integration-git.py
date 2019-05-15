@@ -36,6 +36,8 @@ def test_submit_create(in_process, git_repo_path, init_sha):
     testfile.write_text(u"a")
     git_out("add", ".")
     git_out("commit", "--message", "A r?alice")
+    testfile = git_repo_path / "untracked"
+    testfile.write_text(u"a")
 
     mozphab.main(["submit", "--yes", "--bug", "1", init_sha])
 

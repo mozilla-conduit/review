@@ -1332,7 +1332,9 @@ class Git(Repository):
         self.branch = None
 
     def is_worktree_clean(self):
-        return self.git_out(["status", "--short"], split=False) == ""
+        return all(
+            [l.startswith("?? ") for l in self.git_out(["status", "--porcelain"])]
+        )
 
     def before_submit(self):
         # Store current branch (fails if HEAD in detached state)
@@ -1698,10 +1700,6 @@ class Git(Repository):
     def checkout(self, node):
         self.git(["checkout", "--quiet", node])
 
-    def add(self):
-        """Add new files in the working directory."""
-        self.git(["add", "."])
-
     def commit(self, body, author=None, author_date=None):
         """Commit the changes in the working directory."""
         commands = ["commit", "-a"]
@@ -1759,8 +1757,7 @@ class Git(Repository):
 
     def apply_patch(self, diff, body, author, author_date):
         with temporary_file(diff) as patch_file:
-            self.git(["apply", patch_file])
-        self.add()
+            self.git(["apply", "--index", patch_file])
         self.commit(body, author, author_date)
 
     def _get_current_head(self):

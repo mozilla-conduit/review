@@ -257,14 +257,14 @@ def test_worktree_clean(m_git_out, git):
     m_git_out.return_value = ""
     assert git.is_worktree_clean()
 
-    m_git_out.return_value = "xxx"
+    m_git_out.return_value = ["xxx"]
     assert not git.is_worktree_clean()
 
+    m_git_out.return_value = ["?? one", "?? two"]
+    assert git.is_worktree_clean()
 
-@mock.patch("mozphab.Git.git")
-def test_add(m_git, git):
-    git.add()
-    assert m_git.called_once_with(["add", "."])
+    m_git_out.return_value = ["?? one", "?? two", " M xxx"]
+    assert not git.is_worktree_clean()
 
 
 @mock.patch("mozphab.Git.git")
@@ -375,13 +375,11 @@ def test_before_patch(m_logger, m_prompt, m_git, m_checkout, m_git_out, git):
 
 @mock.patch("mozphab.temporary_file")
 @mock.patch("mozphab.Git.git")
-@mock.patch("mozphab.Git.add")
 @mock.patch("mozphab.Git.commit")
-def test_apply_patch(m_commit, m_add, m_git, m_temp_fn, git):
+def test_apply_patch(m_commit, m_git, m_temp_fn, git):
     m_temp_fn.return_value = create_temp_fn("filename")
     git.apply_patch("diff", "commit message", "user", 1)
-    m_git.assert_called_once_with(["apply", "filename"])
-    m_add.assert_called_once()
+    m_git.assert_called_once_with(["apply", "--index", "filename"])
     m_commit.assert_called_with("commit message", "user", 1)
     m_temp_fn.assert_called_once_with("diff")
 
