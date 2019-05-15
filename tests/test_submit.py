@@ -418,7 +418,9 @@ class Commits(unittest.TestCase):
             mock_logger.warning.called, "logger.warning() shouldn't be called"
         )
 
-        mozphab.show_commit_stack(repo, [{"name": "aaa000", "title-preview": "A"}])
+        mozphab.show_commit_stack(
+            repo, [{"name": "aaa000", "title-preview": "A"}], validate=False
+        )
         mock_logger.info.assert_called_with("(New) aaa000 A")
         self.assertFalse(
             mock_logger.warning.called, "logger.warning() shouldn't be called"
@@ -428,6 +430,7 @@ class Commits(unittest.TestCase):
         mozphab.show_commit_stack(
             repo,
             [{"name": "aaa000", "title-preview": "A", "rev-id": "12", "bug-id": "1"}],
+            validate=False,
         )
         mock_logger.info.assert_called_with("(D12) aaa000 A")
         self.assertFalse(
@@ -441,6 +444,7 @@ class Commits(unittest.TestCase):
                 {"name": "aaa000", "title-preview": "A"},
                 {"name": "bbb000", "title-preview": "B"},
             ],
+            validate=False,
         )
         self.assertEqual(2, mock_logger.info.call_count)
         self.assertEqual(
@@ -460,7 +464,7 @@ class Commits(unittest.TestCase):
                     "reviewers": {"granted": [], "request": ["one"]},
                 }
             ],
-            show_warnings=True,
+            validate=True,
         )
         mock_logger.info.assert_called_with("(New) aaa000 A")
         mock_logger.warning.assert_called_with("!! Bug ID changed from 2 to 1")
@@ -476,7 +480,7 @@ class Commits(unittest.TestCase):
                     "reviewers": {"granted": [], "request": []},
                 }
             ],
-            show_warnings=True,
+            validate=True,
         )
         mock_logger.warning.assert_called_with("!! Missing reviewers")
         mock_logger.reset_mock()
@@ -484,6 +488,7 @@ class Commits(unittest.TestCase):
         mozphab.show_commit_stack(
             repo,
             [{"name": "aaa000", "title-preview": "A", "rev-id": "123", "bug-id": "1"}],
+            validate=False,
             show_rev_urls=True,
         )
         mock_logger.warning.assert_called_with("-> http://phab/D123")
@@ -514,7 +519,7 @@ class Commits(unittest.TestCase):
                     "reviewers": {"granted": [], "request": [""]},
                 },
             ],
-            show_warnings=True,
+            validate=True,
         )
         assert mock_logger.warning.call_args_list[1] == mock.call(
             "!! Bug ID in Phabricator revision will be changed from 1 to 2"
@@ -742,15 +747,15 @@ class TestUpdateCommitSummary(unittest.TestCase):
         )
         c = commit(rev_id="123", reviewers=[["alice", "bob!"], ["frankie!"]])
         expected_json = [
-                {
-                    "type": "reviewers.set",
-                    "value": [
-                        "PHID-USER-1",
-                        "blocking(PHID-USER-2)",
-                        "blocking(PHID-USER-3)",
-                    ],
-                }
-            ]
+            {
+                "type": "reviewers.set",
+                "value": [
+                    "PHID-USER-1",
+                    "blocking(PHID-USER-2)",
+                    "blocking(PHID-USER-3)",
+                ],
+            }
+        ]
 
         api_call_args = mozphab.build_transaction_to_update_reviewers("x", c)
         self.assertEqual(

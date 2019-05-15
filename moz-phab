@@ -685,7 +685,7 @@ class Repository(object):
     def apply_patch(self, diff, body, author, author_date):
         """Apply the patch and commit the changes."""
 
-    def check_commits_for_submit(self, commits):
+    def check_commits_for_submit(self, commits, validate_reviewers=True):
         """Validate the list of commits (from commit_stack) are ok to submit"""
         errors = []
         warnings = []
@@ -695,19 +695,21 @@ class Repository(object):
         all_reviewers = {}
         reviewer_commit_map = {}
         commit_invalid_reviewers = {}
-
-        # Flatten and deduplicate reviewer list, keeping track of the associated commit
         for commit in commits:
             commit_invalid_reviewers[commit["node"]] = []
 
-            for group in commit["reviewers"].keys():
-                for reviewer in commit["reviewers"][group]:
-                    all_reviewers.setdefault(group, set())
-                    all_reviewers[group].add(reviewer)
+        if validate_reviewers:
+            # Flatten and deduplicate reviewer list, keeping track of the
+            # associated commit
+            for commit in commits:
+                for group in commit["reviewers"].keys():
+                    for reviewer in commit["reviewers"][group]:
+                        all_reviewers.setdefault(group, set())
+                        all_reviewers[group].add(reviewer)
 
-                    reviewer = normalise_reviewer(reviewer)
-                    reviewer_commit_map.setdefault(reviewer, [])
-                    reviewer_commit_map[reviewer].append(commit["node"])
+                        reviewer = normalise_reviewer(reviewer)
+                        reviewer_commit_map.setdefault(reviewer, [])
+                        reviewer_commit_map[reviewer].append(commit["node"])
 
         # Verify all reviewers in a single call
         for invalid_reviewer in check_for_invalid_reviewers(all_reviewers, self.path):
@@ -1038,7 +1040,7 @@ class Mercurial(Repository):
                     "title-preview": desc[0],
                     "body": "\n".join(desc[1:]).rstrip(),
                     "bug-id": None,
-                    "reviewers": [],
+                    "reviewers": dict(request=[], granted=[]),
                     "rev-id": None,
                 }
             )
@@ -1249,7 +1251,7 @@ class Mercurial(Repository):
             + ["--dest", dest_commit["node"]]
         )
 
-    def check_commits_for_submit(self, commits):
+    def check_commits_for_submit(self, commits, validate_reviewers=True):
         # 'Greatest Common Ancestor'/'Merge Base' should be included in the revset.
         ancestor = self.hg_log("ancestor(%s)" % self.revset, split=False)
         if ancestor not in [c["node"] for c in commits]:
@@ -1294,7 +1296,9 @@ class Mercurial(Repository):
                 err.append("You can enable the shelve extension via `hg config --edit`")
             raise Error("\n".join(err))
 
-        super(Mercurial, self).check_commits_for_submit(commits)
+        super(Mercurial, self).check_commits_for_submit(
+            commits, validate_reviewers=validate_reviewers
+        )
 
 
 #
@@ -1640,7 +1644,7 @@ class Git(Repository):
                     "title-preview": desc[0],
                     "body": "\n".join(desc[1:]).rstrip(),
                     "bug-id": None,
-                    "reviewers": [],
+                    "reviewers": dict(request=[], granted=[]),
                     "rev-id": None,
                     "parent": parents[0],
                     "tree-hash": tree_hash,
@@ -2055,7 +2059,7 @@ def replace_reviewers(commit_description, reviewers):
 
 
 def show_commit_stack(
-    repo, commits, show_rev_urls=False, show_warnings=False, submited=False
+    repo, commits, validate=True, ignore_reviewers=False, show_rev_urls=False
 ):
     """Log the commit stack in a human readable form."""
 
@@ -2065,7 +2069,7 @@ def show_commit_stack(
     )
     action_template = "(%" + str(max_len) + "s)"
 
-    if not submited:
+    if validate:
         # preload all revisions
         get_revisions(
             repo.path, ids=[int(c["rev-id"]) for c in commits if c.get("rev-id")]
@@ -2073,9 +2077,11 @@ def show_commit_stack(
 
     for commit in reversed(commits):
         change_bug_id = False
+        revision = None
+
         if commit.get("rev-id"):
             action = action_template % ("D" + commit["rev-id"])
-            if not submited:
+            if validate:
                 # Check if target bug ID is the same as in the Phabricator revision
                 revision = get_revisions(repo.path, ids=[int(commit["rev-id"])])[0]
                 change_bug_id = (
@@ -2085,7 +2091,7 @@ def show_commit_stack(
             action = action_template % "New"
 
         logger.info("%s %s %s" % (action, commit["name"], commit["title-preview"]))
-        if show_warnings:
+        if validate:
             if change_bug_id:
                 logger.warning(
                     "!! Bug ID in Phabricator revision will be changed from %s to %s"
@@ -2098,7 +2104,10 @@ def show_commit_stack(
                     % (commit["bug-id-orig"], commit["bug-id"])
                 )
 
-            if not commit["reviewers"]["granted"] + commit["reviewers"]["request"]:
+            if (
+                not ignore_reviewers
+                and not commit["reviewers"]["granted"] + commit["reviewers"]["request"]
+            ):
                 logger.warning("!! Missing reviewers")
 
         if show_rev_urls and commit["rev-id"]:
@@ -2560,7 +2569,12 @@ def submit(repo, args):
     if not commits:
         raise Error("Failed to find any commits to submit")
     logger.warning(
-        "Submitting %s commit%s:" % (len(commits), "" if len(commits) == 1 else "s")
+        "Submitting %s commit%s %s:"
+        % (
+            len(commits),
+            "" if len(commits) == 1 else "s",
+            "as Work In Progress" if args.wip else "for review",
+        )
     )
 
     # Pre-process to load metadata.
@@ -2573,9 +2587,9 @@ def submit(repo, args):
         raise Error("Failed to run %s." % ARC_COMMAND)
 
     # Validate commit stack is suitable for review.
-    show_commit_stack(repo, commits, show_warnings=True)
+    show_commit_stack(repo, commits, validate=True, ignore_reviewers=args.wip)
     try:
-        repo.check_commits_for_submit(commits)
+        repo.check_commits_for_submit(commits, validate_reviewers=not args.wip)
     except Error as e:
         if not args.force:
             raise Error("Unable to submit commits:\n\n%s" % e)
@@ -2586,7 +2600,7 @@ def submit(repo, args):
         untracked = repo.untracked()
         if untracked:
             logger.warning(
-                "Warning: found %s untracked file%s (will not be submitted for review):"
+                "Warning: found %s untracked file%s (will not be submitted):"
                 % (len(untracked), "" if len(untracked) == 1 else "s")
             )
             if len(untracked) <= 5:
@@ -2643,13 +2657,19 @@ def submit(repo, args):
         logger.info("%s %s" % (commit["name"], commit["title-preview"]))
         repo.checkout(commit["node"])
 
+        # WIP submissions shouldn't set reviewers on phabricator.
+        if args.wip:
+            reviewers = ""
+        else:
+            reviewers = ", ".join(
+                commit["reviewers"]["granted"] + commit["reviewers"]["request"]
+            )
+
         # Create arc-annotated commit description.
         template_vars = dict(
             title=commit["title-preview"],
             body=commit["body"],
-            reviewers=", ".join(
-                commit["reviewers"]["granted"] + commit["reviewers"]["request"]
-            ),
+            reviewers=reviewers,
             bug_id=commit["bug-id"],
         )
         if previous_commit and not args.no_stack:
@@ -2708,7 +2728,7 @@ def submit(repo, args):
                 )
 
             # Add reviewers only if revision lacks them
-            if has_commit_reviewers:
+            if has_commit_reviewers and not args.wip:
                 # Add reviewers only if revision lacks them
                 if not existing_reviewers:
                     transactions.extend(
@@ -2741,7 +2761,7 @@ def submit(repo, args):
     repo.refresh_commit_stack(commits)
 
     logger.warning("\nCompleted")
-    show_commit_stack(repo, commits, show_rev_urls=True, submited=True)
+    show_commit_stack(repo, commits, validate=False, show_rev_urls=True)
 
 
 #
