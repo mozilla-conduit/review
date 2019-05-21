@@ -765,10 +765,7 @@ class Repository(object):
             logger.warning("\n\n".join(warnings))
 
         if unavailable_reviewers_warning:
-            logger.warning(
-                "\nYou're forcing unavailable reviewer(s).\nIf stuck, please read the "
-                "discussion under https://bugzilla.mozilla.org/show_bug.cgi?id=1499205"
-            )
+            logger.warning("Notice: reviewer availability overridden.")
 
     def check_arc(self):
         """Check if arc can communicate with Phabricator."""
@@ -2081,7 +2078,7 @@ def show_commit_stack(
             if validate:
                 # Check if target bug ID is the same as in the Phabricator revision
                 revision = get_revisions(repo.path, ids=[int(commit["rev-id"])])[0]
-                change_bug_id = (
+                change_bug_id = revision["fields"]["bugzilla.bug-id"] and (
                     commit["bug-id"] != revision["fields"]["bugzilla.bug-id"]
                 )
         else:
@@ -3494,6 +3491,7 @@ def main(argv):
 
         init_logging()
         config = Config()
+        os.environ["MOZPHAB"] = "1"
 
         if config.no_ansi:
             HAS_ANSI = False
