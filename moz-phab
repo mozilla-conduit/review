@@ -2878,88 +2878,72 @@ def self_update(args):
     logger.info("%s updated" % SELF_FILE)
 
 
-def order_revisions_by_id(phids_by_id, revs, ids):
-    return [revs[phids_by_id[str(id)]] for id in ids if phids_by_id[str(id)]]
-
-
-def order_revisions_by_phid(revs, phids):
-    return [revs[phid] for phid in phids]
-
-
 def get_revisions(cwd, ids=None, phids=None):
     """Get revisions info from Phabricator.
 
     Args:
         cwd - current working directory
-        ids - list of ids
+        ids - list of revision ids
         phids - list of revision phids
 
     Returns a list of revisions ordered by ids or phids
-
-    Raises Exception if both ids and phids are provided
     """
-    if ids and phids:
-        # Ordering would be too complicated
-        raise ValueError("ids and phids are mutually exclusive")
+
+    if (ids and phids) or (ids is None and phids is None):
+        raise ValueError("Internal Error: Invalid args to get_revisions")
 
     if not ids and not phids:
         return []
 
-    collected_ids = (
-        dict(
-            [
-                (str(id), cache.get("rev-id-%s" % id))
-                for id in ids
-                if "rev-id-%s" % id in cache
-            ]
-        )
-        if ids
-        else {}
-    )
-
-    found_phids = collected_ids.values() if ids else phids[:]
-
-    collected_revs = (
-        dict(
-            [
-                (phid, cache.get("rev-%s" % phid))
-                for phid in found_phids
-                if "rev-%s" % phid in cache
-            ]
-        )
-        if found_phids
-        else {}
-    )
-
-    if ids and len(ids) == len(collected_ids):
-        return order_revisions_by_id(collected_ids, collected_revs, ids)
-
-    if phids and len(phids) == len(collected_revs):
-        return order_revisions_by_phid(collected_revs, phids)
-
-    api_call_args = {"constraints": {}, "attachments": {"reviewers": True}}
+    # Initialise depending on if we're passed revision IDs or PHIDs.
     if ids:
-        to_collect = list(set(ids) - set([int(key) for key in collected_ids.keys()]))
-        api_call_args["constraints"]["ids"] = to_collect
+        ids = [str(rev_id) for rev_id in ids]
+        phids_by_id = dict(
+            [
+                (rev_id, cache.get("rev-id-%s" % rev_id))
+                for rev_id in ids
+                if "rev-id-%s" % rev_id in cache
+            ]
+        )
+        found_phids = phids_by_id.values()
+        query_field = "ids"
+        query_values = [int(rev_id) for rev_id in set(ids) - set(phids_by_id.keys())]
+
     else:
-        to_collect = list(set(phids) - set(collected_ids.values()))
-        api_call_args["constraints"]["phids"] = to_collect
+        phids_by_id = {}
+        found_phids = phids[:]
+        query_field = "phids"
+        query_values = list(set(phids) - set(phids_by_id.values()))
 
-    response = arc_call_conduit("differential.revision.search", api_call_args, cwd)
-    rev_list = response.get("data")
-    if not rev_list:
-        return
+    # Revisions metadata keyed by PHID.
+    revisions = dict(
+        [
+            (phid, cache.get("rev-%s" % phid))
+            for phid in found_phids
+            if "rev-%s" % phid in cache
+        ]
+    )
 
-    for r in rev_list:
-        collected_ids[str(r["id"])] = r["phid"]
-        collected_revs[r["phid"]] = r
-        cache.set("rev-id-%s" % r["id"], r["phid"])
-        cache.set("rev-%s" % r["phid"], r)
+    # Query Phabricator if we don't have cached values for revisions.
+    if query_values:
+        api_call_args = {
+            "constraints": {query_field: query_values},
+            "attachments": {"reviewers": True},
+        }
+        response = arc_call_conduit("differential.revision.search", api_call_args, cwd)
+        rev_list = response.get("data")
 
+        for r in rev_list:
+            phids_by_id[str(r["id"])] = r["phid"]
+            revisions[r["phid"]] = r
+            cache.set("rev-id-%s" % r["id"], r["phid"])
+            cache.set("rev-%s" % r["phid"], r)
+
+    # Return revisions in the same order requested.
     if ids:
-        return order_revisions_by_id(collected_ids, collected_revs, ids)
-
-    return order_revisions_by_phid(collected_revs, phids)
+        return [revisions[phids_by_id[rev_id]] for rev_id in ids if phids_by_id[rev_id]]
+    else:
+        return [revisions[phid] for phid in phids]
 
 
 def get_diffs(cwd, phids):

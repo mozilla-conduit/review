@@ -42,25 +42,58 @@ def test_prepare_body():
 @mock.patch("mozphab.arc_call_conduit")
 def test_get_revisions(m_arc):
     get_revs = mozphab.get_revisions
-    with pytest.raises(ValueError):
-        get_revs("x", ids=[1], phids=[1])
 
-    m_arc.return_value = {}
-    assert get_revs("x", ids=[1]) is None
+    # sanity checks
+    with pytest.raises(ValueError):
+        get_revs("x", ids=[1], phids=["PHID-1"])
+    with pytest.raises(ValueError):
+        get_revs("x", ids=None)
+    with pytest.raises(ValueError):
+        get_revs("x", phids=None)
+
+    m_arc.return_value = {"data": [dict(id=1, phid="PHID-1")]}
+
+    # differential.revision.search by revision-id
+    assert len(get_revs("x", ids=[1])) == 1
     m_arc.assert_called_with(
         "differential.revision.search",
         dict(constraints=dict(ids=[1]), attachments=dict(reviewers=True)),
         "x",
     )
+
+    # differential.revision.search by phid
     m_arc.reset_mock()
-    assert get_revs("x", phids=[1]) is None
+    mozphab.cache.reset()
+    assert len(get_revs("x", phids=["PHID-1"])) == 1
     m_arc.assert_called_with(
         "differential.revision.search",
-        dict(constraints=dict(phids=[1]), attachments=dict(reviewers=True)),
+        dict(constraints=dict(phids=["PHID-1"]), attachments=dict(reviewers=True)),
         "x",
     )
 
+    # differential.revision.search by revision-id with duplicates
     m_arc.reset_mock()
+    mozphab.cache.reset()
+    assert len(get_revs("x", ids=[1, 1])) == 2
+    m_arc.assert_called_with(
+        "differential.revision.search",
+        dict(constraints=dict(ids=[1]), attachments=dict(reviewers=True)),
+        "x",
+    )
+
+    # differential.revision.search by phid with duplicates
+    m_arc.reset_mock()
+    mozphab.cache.reset()
+    assert len(get_revs("x", phids=["PHID-1", "PHID-1"])) == 2
+    m_arc.assert_called_with(
+        "differential.revision.search",
+        dict(constraints=dict(phids=["PHID-1"]), attachments=dict(reviewers=True)),
+        "x",
+    )
+
+    # ordering of results must match input
+    m_arc.reset_mock()
+    mozphab.cache.reset()
     m_arc.return_value = {
         "data": [
             dict(id=1, phid="PHID-1"),
