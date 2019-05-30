@@ -17,7 +17,7 @@ mozphab = imp.load_source(
 
 @mock.patch("mozphab.get_revisions")
 @mock.patch("mozphab.get_diffs")
-@mock.patch("mozphab.arc_call_conduit")
+@mock.patch("mozphab.Repository.call_conduit")
 @mock.patch("mozphab.has_successor")
 @mock.patch("mozphab.get_ancestor_phids")
 @mock.patch("mozphab.logger")
@@ -25,7 +25,7 @@ def test_patch_raw(
     m_logger,
     m_ancestor_phids,
     m_has_ancestor,
-    m_arc_conduit,
+    m_call_conduit,
     m_get_diffs,
     m_get_revs,
     in_process,
@@ -35,12 +35,12 @@ def test_patch_raw(
     m_get_revs.return_value = [REV_1]
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
-    m_arc_conduit.return_value = PATCH_1
+    m_call_conduit.return_value = PATCH_1
     mozphab.main(["patch", "D1", "--raw"])
     assert m_logger.info.call_args_list == [mock.call(PATCH_1)]
 
     m_logger.reset_mock()
-    m_arc_conduit.return_value = BIN_PATCH
+    m_call_conduit.return_value = BIN_PATCH
     mozphab.main(["patch", "D1", "--raw"])
     assert m_logger.info.call_args_list == [mock.call(BIN_PATCH)]
 
@@ -48,14 +48,14 @@ def test_patch_raw(
     m_get_revs.side_effect = ([REV_2], [REV_1])
     m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
-    m_arc_conduit.side_effect = [PATCH_1, PATCH_2]
+    m_call_conduit.side_effect = [PATCH_1, PATCH_2]
     mozphab.main(["patch", "D2", "--raw"])
     assert m_logger.info.call_args_list == [mock.call(PATCH_1), mock.call(PATCH_2)]
 
 
 @mock.patch("mozphab.get_revisions")
 @mock.patch("mozphab.get_diffs")
-@mock.patch("mozphab.arc_call_conduit")
+@mock.patch("mozphab.Repository.call_conduit")
 @mock.patch("mozphab.has_successor")
 @mock.patch("mozphab.get_ancestor_phids")
 @mock.patch("mozphab.logger")
@@ -63,7 +63,7 @@ def test_patch_no_commit(
     m_logger,
     m_ancestor_phids,
     m_has_ancestor,
-    m_arc_conduit,
+    m_call_conduit,
     m_get_diffs,
     m_get_revs,
     in_process,
@@ -73,7 +73,7 @@ def test_patch_no_commit(
     m_get_revs.return_value = [REV_1]
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
-    m_arc_conduit.return_value = PATCH_1
+    m_call_conduit.return_value = PATCH_1
     hg_out("add")
     hg_out("commit", "--message", "ARCCONFIG")
 
@@ -85,7 +85,7 @@ def test_patch_no_commit(
     assert "@  changeset:   0:" in result
     test_file.unlink()
 
-    m_arc_conduit.return_value = BIN_PATCH
+    m_call_conduit.return_value = BIN_PATCH
     mozphab.main(["patch", "D1", "--no-commit"])
     assert [".arcconfig", ".hg", "sample.bin"] == sorted(os.listdir(str(hg_repo_path)))
     test_file = hg_repo_path / "sample.bin"
@@ -94,7 +94,7 @@ def test_patch_no_commit(
     m_get_revs.side_effect = ([REV_2], [REV_1])
     m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
-    m_arc_conduit.side_effect = [PATCH_1, PATCH_2]
+    m_call_conduit.side_effect = [PATCH_1, PATCH_2]
     mozphab.main(["patch", "D2", "--no-commit"])
     assert [".arcconfig", ".hg", "X"] == sorted(os.listdir(str(hg_repo_path)))
     test_file = hg_repo_path / "X"
@@ -104,7 +104,7 @@ def test_patch_no_commit(
 
 @mock.patch("mozphab.get_revisions")
 @mock.patch("mozphab.get_diffs")
-@mock.patch("mozphab.arc_call_conduit")
+@mock.patch("mozphab.Repository.call_conduit")
 @mock.patch("mozphab.has_successor")
 @mock.patch("mozphab.get_ancestor_phids")
 @mock.patch("mozphab.logger")
@@ -112,7 +112,7 @@ def test_git_patch_with_commit(
     m_logger,
     m_ancestor_phids,
     m_has_ancestor,
-    m_arc_conduit,
+    m_call_conduit,
     m_get_diffs,
     m_get_revs,
     in_process,
@@ -125,7 +125,7 @@ def test_git_patch_with_commit(
     m_get_revs.return_value = [REV_1]
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": diff_1}
-    m_arc_conduit.return_value = PATCH_1
+    m_call_conduit.return_value = PATCH_1
 
     mozphab.main(["patch", "D1", "--apply-to", "here"])
     assert [".arcconfig", ".git", "X"] == sorted(os.listdir(str(git_repo_path)))
@@ -154,7 +154,7 @@ def test_git_patch_with_commit(
     time.sleep(1)
     m_get_revs.return_value = [REV_BIN]
     m_get_diffs.return_value = {"PHID-DIFF-3": diff_1}
-    m_arc_conduit.return_value = BIN_PATCH
+    m_call_conduit.return_value = BIN_PATCH
     mozphab.main(["patch", "D3"])
     assert [".arcconfig", ".git", "sample.bin"] == sorted(
         os.listdir(str(git_repo_path))
@@ -174,7 +174,7 @@ def test_git_patch_with_commit(
     m_get_revs.side_effect = ([REV_2], [REV_1])
     m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
     m_get_diffs.return_value = {"PHID-DIFF-1": diff_1, "PHID-DIFF-2": DIFF_2}
-    m_arc_conduit.side_effect = [PATCH_1, PATCH_2]
+    m_call_conduit.side_effect = [PATCH_1, PATCH_2]
     mozphab.main(["patch", "D2"])
     assert [".arcconfig", ".git", "X"] == sorted(os.listdir(str(git_repo_path)))
     test_file = git_repo_path / "X"
@@ -195,7 +195,7 @@ def test_git_patch_with_commit(
     time.sleep(1)
     m_get_revs.side_effect = ([REV_BIN],)
     m_get_diffs.return_value = {"PHID-DIFF-3": diff_1}
-    m_arc_conduit.side_effect = (PATCH_UTF8,)
+    m_call_conduit.side_effect = (PATCH_UTF8,)
     mozphab.main(["patch", "D4"])
     path = git_repo_path / "X"
     with path.open() as f:
@@ -206,7 +206,7 @@ def test_git_patch_with_commit(
 
 @mock.patch("mozphab.get_revisions")
 @mock.patch("mozphab.get_diffs")
-@mock.patch("mozphab.arc_call_conduit")
+@mock.patch("mozphab.Repository.call_conduit")
 @mock.patch("mozphab.has_successor")
 @mock.patch("mozphab.get_ancestor_phids")
 @mock.patch("mozphab.logger")
@@ -214,7 +214,7 @@ def test_hg_patch_with_commit(
     m_logger,
     m_ancestor_phids,
     m_has_ancestor,
-    m_arc_conduit,
+    m_call_conduit,
     m_get_diffs,
     m_get_revs,
     in_process,
@@ -224,7 +224,7 @@ def test_hg_patch_with_commit(
     m_get_revs.return_value = [REV_1]
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
-    m_arc_conduit.return_value = PATCH_1
+    m_call_conduit.return_value = PATCH_1
     hg_out("add")
     hg_out("commit", "--message", "ARCCONFIG")
 
@@ -240,7 +240,7 @@ def test_hg_patch_with_commit(
     assert "|  summary:     title R1" in result
     assert "o  changeset:   0:" in result
 
-    m_arc_conduit.return_value = BIN_PATCH
+    m_call_conduit.return_value = BIN_PATCH
     mozphab.main(["patch", "D1"])
     assert [".arcconfig", ".hg", "sample.bin"] == sorted(os.listdir(str(hg_repo_path)))
     result = hg_out("log", "-G")
@@ -255,7 +255,7 @@ def test_hg_patch_with_commit(
     m_get_revs.side_effect = ([REV_2], [REV_1])
     m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
-    m_arc_conduit.side_effect = [PATCH_1, PATCH_2]
+    m_call_conduit.side_effect = [PATCH_1, PATCH_2]
     mozphab.main(["patch", "D2"])
     assert [".arcconfig", ".hg", "X", "unknown"] == sorted(
         os.listdir(str(hg_repo_path))

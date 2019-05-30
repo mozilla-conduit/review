@@ -17,9 +17,14 @@ mozphab = imp.load_source(
 arc_call_conduit = mock.Mock()
 arc_call_conduit.return_value = [{"userName": "alice", "phid": "PHID-USER-1"}]
 
+call_conduit = mock.Mock()
+call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
+
+check_call_by_line = mock.Mock()
+check_call_by_line.return_value = ["Revision URI: http://example.test/D123"]
+
 
 def test_submit_create(in_process, hg_repo_path):
-    arc_call_conduit.reset_mock()
     testfile = hg_repo_path / "X"
     testfile.write_text(u"a")
     hg_out("add")
@@ -37,7 +42,9 @@ Differential Revision: http://example.test/D123
 
 
 def test_submit_update(in_process, hg_repo_path):
-    arc_call_conduit.side_effect = (
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        {},
         {
             "data": [
                 {
@@ -48,7 +55,6 @@ def test_submit_update(in_process, hg_repo_path):
                 }
             ]
         },  # get reviewers for updated revision
-        {"data": {}},  # set reviewers response
         {
             "data": [
                 {
@@ -62,6 +68,7 @@ def test_submit_update(in_process, hg_repo_path):
             ]
         },  # get reviewers for updated revision
     )
+    check_call_by_line.reset_mock()
     testfile = hg_repo_path / "X"
     testfile.write_text(u"a")
     hg_out("add")
@@ -87,12 +94,15 @@ Bug 1 - A
 Differential Revision: http://example.test/D123
 """
     assert log == expected
-    assert arc_call_conduit.call_count == 2
+    assert call_conduit.call_count == 2
+    arc_call_conduit.assert_not_called()
+    check_call_by_line.assert_called_once()  # update
 
 
 def test_submit_update_reviewers_not_updated(in_process, hg_repo_path):
-    arc_call_conduit.reset_mock()
-    arc_call_conduit.side_effect = (
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        {},
         {
             "data": [
                 {
@@ -107,6 +117,8 @@ def test_submit_update_reviewers_not_updated(in_process, hg_repo_path):
         },  # get reviewers for updated revision
         [{"userName": "alice", "phid": "PHID-USER-1"}],
     )
+    arc_call_conduit.reset_mock()
+    check_call_by_line.reset_mock()
     testfile = hg_repo_path / "X"
     testfile.write_text(u"a")
     hg_out("add")
@@ -125,12 +137,14 @@ Differential Revision: http://example.test/D123
 
     mozphab.main(["submit", "--yes", "--bug", "1", "-r", "alice"])
 
-    assert arc_call_conduit.call_count == 2
+    arc_call_conduit.assert_not_called()
+    check_call_by_line.assert_called_once()
 
 
 def test_submit_update_no_new_reviewers(in_process, hg_repo_path):
-    arc_call_conduit.reset_mock()
-    arc_call_conduit.side_effect = (
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        {},
         {
             "data": [
                 {
@@ -142,8 +156,10 @@ def test_submit_update_no_new_reviewers(in_process, hg_repo_path):
             ]
         },  # get reviewers for updated revision
         [{"userName": "alice", "phid": "PHID-USER-1"}],
-        {"data": {}},  # set reviewers response
     )
+    arc_call_conduit.reset_mock()
+    arc_call_conduit.side_effect = ({"data": {}},)  # set reviewers response
+    check_call_by_line.reset_mock()
     testfile = hg_repo_path / "X"
     testfile.write_text(u"a")
     hg_out("add")
@@ -161,12 +177,39 @@ Differential Revision: http://example.test/D123
     )
 
     mozphab.main(["submit", "--yes", "--bug", "1", "-r", "alice"])
-    assert arc_call_conduit.call_count == 3
+    arc_call_conduit.assert_called_with(
+        "differential.revision.edit",
+        {
+            "objectIdentifier": "D123",
+            "transactions": [{"type": "reviewers.set", "value": ["PHID-USER-1"]}],
+        },
+        mock.ANY,
+    )
+    check_call_by_line.assert_called_once()
+    # [
+    #     mock.ANY,  # arc command with full path
+    #     '--trace',
+    #     'diff',
+    #     '--base',
+    #     'arc:this',
+    #     '--allow-untracked',
+    #     '--no-amend',
+    #     '--no-ansi',
+    #     '--message-file',
+    #     mock.ANY,  # temp message file
+    #     '--message',
+    #     'Revision updated.',
+    #     '--update',
+    #     '123'
+    # ],
+    # cwd=mock.ANY,
+    # never_log=True
 
 
 def test_submit_update_bug_id(in_process, hg_repo_path):
-    arc_call_conduit.reset_mock()
-    arc_call_conduit.side_effect = (
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        {},
         {
             "data": [
                 {
@@ -180,8 +223,9 @@ def test_submit_update_bug_id(in_process, hg_repo_path):
             ]
         },  # get reviewers for updated revision
         [{"userName": "alice", "phid": "PHID-USER-1"}],
-        {"data": {}},  # response from setting the bug id
     )
+    arc_call_conduit.reset_mock()
+    arc_call_conduit.side_effect = ({"data": {}},)  # response from setting the bug id
     testfile = hg_repo_path / "X"
     testfile.write_text(u"a")
     hg_out("add")
@@ -200,15 +244,12 @@ Differential Revision: http://example.test/D123
 
     mozphab.main(["submit", "--yes", "--bug", "2", "-r", "alice"])
 
-    assert (
-        mock.call(
-            "differential.revision.edit",
-            {
-                "objectIdentifier": "D123",
-                "transactions": [{"type": "bugzilla.bug-id", "value": "2"}],
-            },
-            mock.ANY,
-        )
-        == arc_call_conduit.call_args_list[2]
+    arc_call_conduit.assert_called_once_with(
+        "differential.revision.edit",
+        {
+            "objectIdentifier": "D123",
+            "transactions": [{"type": "bugzilla.bug-id", "value": "2"}],
+        },
+        mock.ANY,
     )
-    assert arc_call_conduit.call_count == 3
+    assert call_conduit.call_count == 3

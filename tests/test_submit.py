@@ -662,23 +662,24 @@ class Commits(unittest.TestCase):
 
 
 class TestUpdateCommitSummary(unittest.TestCase):
-    @mock.patch("mozphab.check_output")
-    def test_update_summary_cli_args(self, check_output):
+    @mock.patch("mozphab.Repository.call_conduit")
+    def test_update_summary_conduit_args(self, call_conduit):
         mozphab.ARC = ["arc"]
         c = commit(rev_id="D123")
-        check_output.return_value = (
-            '{"error": null, "errorMessage": null, "response": {}}'
-        )
+        call_conduit.return_value = {}
 
-        mozphab.update_phabricator_commit_summary(c, mock.Mock())
+        repo = mozphab.Repository(None, None, "dummy")
+        mozphab.update_phabricator_commit_summary(c, repo)
 
-        check_output.assert_called_once_with(
-            ["arc", "call-conduit", "differential.revision.edit"],
-            cwd=mock.ANY,
-            split=mock.ANY,
-            stdin=mock.ANY,
-            stderr=mock.ANY,
-            search_error=mozphab.ARC_CONDUIT_ERROR,
+        call_conduit.assert_called_once_with(
+            "differential.revision.edit",
+            {
+                "objectIdentifier": "D123",
+                "transactions": [
+                    {"type": "title", "value": ""},
+                    {"type": "summary", "value": ""},
+                ],
+            },
         )
 
     def test_build_api_call_to_update_title_and_summary(self):

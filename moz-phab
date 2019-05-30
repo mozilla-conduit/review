@@ -832,6 +832,9 @@ class Repository(object):
             api_method: The API method name to call, like 'differential.revision.edit'.
             api_call_args: JSON dict of call args to send.
 
+        Returns:
+            JSON API call result object
+
         Raises:
             ConduitAPIError if the API threw an error back at us.
         """
@@ -848,10 +851,7 @@ class Repository(object):
         # Manually concatenate query parameters because Conduit doesn't accept
         # URL encoded parameter names.
         data = "&".join(
-            [
-                "{}={}".format(k, urllib2.quote(v))
-                for (k, v) in api_call_params
-            ]
+            ["{}={}".format(k, urllib2.quote(v)) for (k, v) in api_call_params]
         )
 
         req.add_data(data)
@@ -2162,9 +2162,9 @@ def show_commit_stack(
 
     if validate:
         # preload all revisions
-        get_revisions(
-            repo.path, ids=[int(c["rev-id"]) for c in commits if c.get("rev-id")]
-        )
+        ids = [int(c["rev-id"]) for c in commits if c.get("rev-id")]
+        if ids:
+            get_revisions(repo, ids=ids)
 
     for commit in reversed(commits):
         change_bug_id = False
@@ -2174,7 +2174,7 @@ def show_commit_stack(
             action = action_template % ("D" + commit["rev-id"])
             if validate:
                 # Check if target bug ID is the same as in the Phabricator revision
-                revision = get_revisions(repo.path, ids=[int(commit["rev-id"])])[0]
+                revision = get_revisions(repo, ids=[int(commit["rev-id"])])[0]
                 change_bug_id = revision["fields"]["bugzilla.bug-id"] and (
                     commit["bug-id"] != revision["fields"]["bugzilla.bug-id"]
                 )
@@ -2764,7 +2764,7 @@ def submit(repo, args):
     rev_ids_to_update = [int(c["rev-id"]) for c in commits if c.get("rev-id")]
     revisions_to_update = None
     if rev_ids_to_update:
-        list_to_update = get_revisions(repo.path, ids=rev_ids_to_update)
+        list_to_update = get_revisions(repo, ids=rev_ids_to_update)
         revisions_to_update = {str(r["id"]): r for r in list_to_update}
 
     for commit in commits:
@@ -2853,7 +2853,7 @@ def submit(repo, args):
                 logger.debug(e)
 
             # Update bug id if different
-            revision = get_revisions(repo.path, ids=[int(commit["rev-id"])])[0]
+            revision = get_revisions(repo, ids=[int(commit["rev-id"])])[0]
             transactions = []
             if revision["fields"]["bugzilla.bug-id"] != commit["bug-id"]:
                 transactions.append(
@@ -3027,7 +3027,6 @@ def get_revisions(repo, ids=None, phids=None):
 
     Returns a list of revisions ordered by ids or phids
     """
-
     if (ids and phids) or (ids is None and phids is None):
         raise ValueError("Internal Error: Invalid args to get_revisions")
 

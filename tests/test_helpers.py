@@ -213,36 +213,25 @@ class Helpers(unittest.TestCase):
         m_which.assert_called_once_with(path)
 
 
-@mock.patch("mozphab.arc_out")
-def test_valid_reviewers_in_phabricator_returns_no_errors(arc_out):
+@mock.patch("mozphab.Repository.call_conduit")
+def test_valid_reviewers_in_phabricator_returns_no_errors(call_conduit):
     # See https://phabricator.services.mozilla.com/api/user.search
-    arc_out.side_effect = (
+    call_conduit.side_effect = (
         # user.query
-        json.dumps(
-            {
-                "error": None,
-                "errorMessage": None,
-                "response": [{"userName": "alice", "phid": "PHID-USER-1"}],
-            }
-        ),
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
         # project.search
-        json.dumps(
-            {
-                "error": None,
-                "errorMessage": None,
-                "response": {
-                    "data": [{"fields": {"slug": "user-group"}}],
-                    "maps": {"slugMap": {"alias1": {}, "#alias2": {}}},
-                },
-            }
-        ),
+        {
+            "data": [{"fields": {"slug": "user-group"}}],
+            "maps": {"slugMap": {"alias1": {}, "#alias2": {}}},
+        },
     )
     reviewers = dict(granted=[], request=["alice", "#user-group", "#alias1", "#alias2"])
-    assert [] == mozphab.check_for_invalid_reviewers(reviewers, "")
+    repo = mozphab.Repository(None, None, "dummy")
+    assert [] == mozphab.check_for_invalid_reviewers(reviewers, repo)
 
 
-@mock.patch("mozphab.arc_out")
-def test_non_existent_reviewers_or_groups_generates_error_list(arc_out):
+@mock.patch("mozphab.Repository.call_conduit")
+def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
     ts = 1543622400
     ts_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
     reviewers = dict(
@@ -256,34 +245,19 @@ def test_non_existent_reviewers_or_groups_generates_error_list(arc_out):
             "#gon-group",
         ],
     )
-    arc_out.side_effect = (
+    call_conduit.side_effect = (
         # user.query
-        json.dumps(
-            {
-                "error": None,
-                "errorMessage": None,
-                "response": [
-                    dict(userName="alice", phid="PHID-USER-1"),
-                    dict(
-                        userName="goober",
-                        phid="PHID-USER-2",
-                        currentStatus="away",
-                        currentStatusUntil=ts,
-                    ),
-                ],
-            }
-        ),
+        [
+            dict(userName="alice", phid="PHID-USER-1"),
+            dict(
+                userName="goober",
+                phid="PHID-USER-2",
+                currentStatus="away",
+                currentStatusUntil=ts,
+            ),
+        ],
         # project.search
-        json.dumps(
-            {
-                "error": None,
-                "errorMessage": None,
-                "response": {
-                    "data": [{"fields": {"slug": "user-group"}}],
-                    "maps": {"slugMap": []},
-                },
-            }
-        ),
+        {"data": [{"fields": {"slug": "user-group"}}], "maps": {"slugMap": []}},
     )
     expected_errors = [
         dict(name="goober", until=ts_str),
@@ -291,31 +265,21 @@ def test_non_existent_reviewers_or_groups_generates_error_list(arc_out):
         dict(name="#gon-group"),
         dict(name="goozer"),
     ]
-    assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers, "")
+    repo = mozphab.Repository(None, None, "dummy")
+    assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers, repo)
 
 
-@mock.patch("mozphab.arc_out")
-def test_reviwer_case_sensitivity(arc_out):
+@mock.patch("mozphab.Repository.call_conduit")
+def test_reviwer_case_sensitivity(call_conduit):
     reviewers = dict(granted=[], request=["Alice", "#uSeR-gRoUp"])
-    arc_out.side_effect = (
+    call_conduit.side_effect = (
         # See https://phabricator.services.mozilla.com/conduit/method/user.query/
-        json.dumps(
-            {
-                "error": None,
-                "errorMessage": None,
-                "response": [dict(userName="alice", phid="PHID-USER-1")],
-            }
-        ),
+        [dict(userName="alice", phid="PHID-USER-1")],
         # See https://phabricator.services.mozilla.com/conduit/method/project.search/
-        json.dumps(
-            {
-                "error": None,
-                "errorMessage": None,
-                "response": {"data": [{"fields": {"slug": "user-group"}}]},
-            }
-        ),
+        {"data": [{"fields": {"slug": "user-group"}}]},
     )
-    assert [] == mozphab.check_for_invalid_reviewers(reviewers, "")
+    repo = mozphab.Repository(None, None, "dummy")
+    assert [] == mozphab.check_for_invalid_reviewers(reviewers, repo)
 
 
 @mock.patch("mozphab.arc_out")
@@ -381,20 +345,22 @@ def test_get_users_no_users():
     assert [] == mozphab.get_users("x", [])
 
 
-@mock.patch("mozphab.arc_call_conduit")
+@mock.patch("mozphab.Repository.call_conduit")
 def test_get_users_with_user(m_conduit):
+    repo = mozphab.Repository(None, None, "dummy")
+
     user = {"userName": "alice", "phid": "PHID-USER-1"}
     m_conduit.return_value = [user]
-    assert [user] == mozphab.get_users("x", ["alice"])
+    assert [user] == mozphab.get_users(repo, ["alice"])
     m_conduit.assert_called_once()
 
-    mozphab.get_users("x", ["alice"])
+    mozphab.get_users(repo, ["alice"])
     m_conduit.assert_called_once()
 
     mozphab.cache.reset()
     m_conduit.reset_mock()
     m_conduit.return_value = []
-    assert [] == mozphab.get_users("x", ["alice"])
+    assert [] == mozphab.get_users(repo, ["alice"])
     m_conduit.assert_called_once()
 
 

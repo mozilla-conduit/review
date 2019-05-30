@@ -19,6 +19,12 @@ mozphab = imp.load_source(
 arc_call_conduit = mock.Mock()
 arc_call_conduit.return_value = [{"userName": "alice", "phid": "PHID-USER-1"}]
 
+call_conduit = mock.Mock()
+call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
+
+check_call_by_line = mock.Mock()
+check_call_by_line.return_value = ["Revision URI: http://example.test/D123"]
+
 initial_sha = None
 
 
@@ -51,6 +57,8 @@ Differential Revision: http://example.test/D123
 
 
 def test_submit_different_author(in_process, git_repo_path, init_sha):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
     testfile = git_repo_path / "X"
     testfile.write_text(u"a")
     git_out("add", ".")
@@ -115,8 +123,9 @@ Differential Revision: http://example.test/D123
 
 
 def test_submit_update_bug_id(in_process, git_repo_path, init_sha):
-    arc_call_conduit.reset_mock()
-    arc_call_conduit.side_effect = (
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        {},
         {
             "data": [
                 {
@@ -127,8 +136,9 @@ def test_submit_update_bug_id(in_process, git_repo_path, init_sha):
                 }
             ]
         },  # get reviewers for updated revision
-        {"data": {}},
     )
+    arc_call_conduit.reset_mock()
+    arc_call_conduit.side_effect = ({"data": {}},)
     testfile = git_repo_path / "X"
     testfile.write_text(u"a")
     git_out("add", ".")
@@ -147,8 +157,7 @@ Differential Revision: http://example.test/D123
 
     mozphab.main(["submit", "--yes", "--bug", "2", init_sha])
 
-    assert arc_call_conduit.call_count == 2
-    assert arc_call_conduit.call_args_list[1] == mock.call(
+    arc_call_conduit.assert_called_once_with(
         "differential.revision.edit",
         {
             "objectIdentifier": "D123",
