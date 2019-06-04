@@ -36,6 +36,7 @@ import urllib2
 import uuid
 from contextlib import contextmanager
 from distutils.version import LooseVersion
+from glob import glob
 
 # Known Issues
 # - reordering, folding, etc commits doesn't result in the stack being updated
@@ -81,6 +82,8 @@ MOZBUILD_PATH = os.path.join(
     "moz-phab",
 )
 LOG_FILE = os.path.join(MOZBUILD_PATH, "moz-phab.log")
+LOG_MAX_SIZE = 1024 * 1024 * 50
+LOG_BACKUPS = 5
 
 # Arcanist
 LIBPHUTIL_PATH = os.path.join(MOZBUILD_PATH, "libphutil")
@@ -3241,8 +3244,8 @@ def init_logging():
     stdout_handler.setLevel(logging.DEBUG if DEBUG else logging.INFO)
     logger.addHandler(stdout_handler)
 
-    file_handler = logging.handlers.TimedRotatingFileHandler(
-        filename=LOG_FILE, when="midnight", backupCount=7
+    file_handler = logging.handlers.RotatingFileHandler(
+        filename=LOG_FILE, maxBytes=LOG_MAX_SIZE, backupCount=LOG_BACKUPS
     )
     file_handler.setFormatter(
         logging.Formatter("%(asctime)-13s %(levelname)-8s %(message)s")
@@ -3251,6 +3254,19 @@ def init_logging():
     logger.addHandler(file_handler)
 
     logger.setLevel(logging.DEBUG)
+
+    # clean up old date-based logs
+    now = time.time()
+    for filename in sorted(glob("%s/*.log.*" % os.path.dirname(LOG_FILE))):
+        m = re.search(r"\.(\d\d\d\d)-(\d\d)-(\d\d)$", filename)
+        if not m:
+            continue
+        file_time = calendar.timegm(
+            (int(m.group(1)), int(m.group(2)), int(m.group(3)), 0, 0, 0)
+        )
+        if (now - file_time) / (60 * 60 * 24) > 8:
+            logger.debug("deleting old log file: %s" % os.path.basename(filename))
+            os.unlink(filename)
 
 
 def parse_args(argv):
