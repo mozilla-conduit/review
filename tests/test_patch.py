@@ -45,23 +45,24 @@ def test_prepare_body():
     )
 
 
-@mock.patch("mozphab.Repository.call_conduit")
+@mock.patch("mozphab.ConduitAPI.call")
 def test_get_revisions(call_conduit):
     repo = mozphab.Repository(None, None, "dummy")
-    get_revs = mozphab.get_revisions
+    mozphab.conduit.set_args_from_repo(repo)
+    get_revs = mozphab.conduit.get_revisions
 
     # sanity checks
     with pytest.raises(ValueError):
-        get_revs(repo, ids=[1], phids=["PHID-1"])
+        get_revs(ids=[1], phids=["PHID-1"])
     with pytest.raises(ValueError):
-        get_revs(repo, ids=None)
+        get_revs(ids=None)
     with pytest.raises(ValueError):
-        get_revs(repo, phids=None)
+        get_revs(phids=None)
 
     call_conduit.return_value = {"data": [dict(id=1, phid="PHID-1")]}
 
     # differential.revision.search by revision-id
-    assert len(get_revs(repo, ids=[1])) == 1
+    assert len(get_revs(ids=[1])) == 1
     call_conduit.assert_called_with(
         "differential.revision.search",
         dict(constraints=dict(ids=[1]), attachments=dict(reviewers=True)),
@@ -70,7 +71,7 @@ def test_get_revisions(call_conduit):
     # differential.revision.search by phid
     call_conduit.reset_mock()
     mozphab.cache.reset()
-    assert len(get_revs(repo, phids=["PHID-1"])) == 1
+    assert len(get_revs(phids=["PHID-1"])) == 1
     call_conduit.assert_called_with(
         "differential.revision.search",
         dict(constraints=dict(phids=["PHID-1"]), attachments=dict(reviewers=True)),
@@ -79,7 +80,7 @@ def test_get_revisions(call_conduit):
     # differential.revision.search by revision-id with duplicates
     call_conduit.reset_mock()
     mozphab.cache.reset()
-    assert len(get_revs(repo, ids=[1, 1])) == 2
+    assert len(get_revs(ids=[1, 1])) == 2
     call_conduit.assert_called_with(
         "differential.revision.search",
         dict(constraints=dict(ids=[1]), attachments=dict(reviewers=True)),
@@ -88,7 +89,7 @@ def test_get_revisions(call_conduit):
     # differential.revision.search by phid with duplicates
     call_conduit.reset_mock()
     mozphab.cache.reset()
-    assert len(get_revs(repo, phids=["PHID-1", "PHID-1"])) == 2
+    assert len(get_revs(phids=["PHID-1", "PHID-1"])) == 2
     call_conduit.assert_called_with(
         "differential.revision.search",
         dict(constraints=dict(phids=["PHID-1"]), attachments=dict(reviewers=True)),
@@ -104,62 +105,64 @@ def test_get_revisions(call_conduit):
             dict(id=3, phid="PHID-3"),
         ]
     }
-    assert get_revs(repo, ids=[2, 1, 3]) == [
+    assert get_revs(ids=[2, 1, 3]) == [
         dict(id=2, phid="PHID-2"),
         dict(id=1, phid="PHID-1"),
         dict(id=3, phid="PHID-3"),
     ]
 
-    assert get_revs(repo, phids=["PHID-2", "PHID-1", "PHID-3"]) == [
+    assert get_revs(phids=["PHID-2", "PHID-1", "PHID-3"]) == [
         dict(id=2, phid="PHID-2"),
         dict(id=1, phid="PHID-1"),
         dict(id=3, phid="PHID-3"),
     ]
 
 
-@mock.patch("mozphab.Repository.call_conduit")
+@mock.patch("mozphab.ConduitAPI.call")
 def test_get_diffs(call_conduit):
-    get_diffs = mozphab.get_diffs
+    conduit = mozphab.conduit
+    get_diffs = conduit.get_diffs
 
     call_conduit.return_value = {}
     call_conduit.return_value = dict(
         data=[dict(phid="PHID-1"), dict(phid="PHID-2"), dict(phid="PHID-3")]
     )
     repo = mozphab.Repository(None, None, "dummy")
-    assert get_diffs(repo, ["PHID-2", "PHID-1", "PHID-3"]) == {
+    assert get_diffs(["PHID-2", "PHID-1", "PHID-3"]) == {
         "PHID-1": dict(phid="PHID-1"),
         "PHID-2": dict(phid="PHID-2"),
         "PHID-3": dict(phid="PHID-3"),
     }
 
 
-@mock.patch("mozphab.Repository.call_conduit")
-def test_get_related_phids(call_conduit):
-    get_phids = mozphab.get_related_phids
+@mock.patch("mozphab.ConduitAPI.call")
+def test_get_related_phids(m_call):
+    conduit = mozphab.conduit
+    get_phids = conduit.get_related_phids
 
-    call_conduit.return_value = {}
+    m_call.return_value = {}
 
     repo = mozphab.Repository(None, None, "dummy")
-    assert [] == get_phids("aaa", None, repo)
-    call_conduit.assert_called_once_with(
+    assert [] == get_phids("aaa", None)
+    m_call.assert_called_once_with(
         "edge.search", {"sourcePHIDs": ["aaa"], "types": ["revision.parent"]}
     )
 
-    assert ["bbb"] == get_phids("aaa", ["bbb"], repo)
+    assert ["bbb"] == get_phids("aaa", ["bbb"])
 
-    call_conduit.side_effect = [
+    m_call.side_effect = [
         dict(data=[dict(destinationPHID="bbb")]),
         dict(data=[dict(destinationPHID="aaa")]),
         dict(),
     ]
-    assert ["bbb", "aaa"] == get_phids("ccc", None, repo)
+    assert ["bbb", "aaa"] == get_phids("ccc", None)
 
-    call_conduit.side_effect = [
+    m_call.side_effect = [
         dict(data=[dict(destinationPHID="bbb")]),
         dict(data=[dict(destinationPHID="aaa")]),
         dict(),
     ]
-    assert ["bbb"] == get_phids("ccc", None, repo, proceed=False)
+    assert ["bbb"] == get_phids("ccc", None, proceed=False)
 
 
 @mock.patch("mozphab.check_call")
@@ -178,14 +181,14 @@ def test_base_ref():
     assert mozphab.get_base_ref(diff) == "sha1"
 
 
-@mock.patch("mozphab.Repository.call_conduit")
+@mock.patch("mozphab.ConduitAPI.call")
 @mock.patch("mozphab.Git.is_worktree_clean")
 @mock.patch("mozphab.config")
-@mock.patch("mozphab.Git.check_conduit")
-@mock.patch("mozphab.get_revisions")
-@mock.patch("mozphab.get_ancestor_phids")
-@mock.patch("mozphab.get_successor_phids")
-@mock.patch("mozphab.get_diffs")
+@mock.patch("mozphab.ConduitAPI.check")
+@mock.patch("mozphab.ConduitAPI.get_revisions")
+@mock.patch("mozphab.ConduitAPI.get_ancestor_phids")
+@mock.patch("mozphab.ConduitAPI.get_successor_phids")
+@mock.patch("mozphab.ConduitAPI.get_diffs")
 @mock.patch("mozphab.get_base_ref")
 @mock.patch("mozphab.Git.before_patch")
 @mock.patch("mozphab.apply_patch")
@@ -211,6 +214,8 @@ def test_patch(
     m_call_conduit,
     git,
 ):
+    mozphab.conduit.set_args_from_repo(git)
+
     m_git_check_conduit.return_value = False
     m_config.arc_command = "arc"
     with pytest.raises(mozphab.Error):
@@ -416,8 +421,8 @@ def test_patch(
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1, "DIFFPHID-2": DIFF_2}
     mozphab.patch(git, Args(rev_id="D1", raw=True, yes=True))
     assert m_get_revisions.call_args_list == [
-        mock.call(git, ids=[1]),
-        mock.call(git, phids=["PHID-2"]),
+        mock.call(ids=[1]),
+        mock.call(phids=["PHID-2"]),
     ]
 
     # multiple successors
@@ -427,7 +432,7 @@ def test_patch(
     m_call_conduit.side_effect = ("raw",)
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
     mozphab.patch(git, Args(rev_id="D1", raw=True, yes=True))
-    m_get_revisions.assert_called_once_with(git, ids=[1])
+    m_get_revisions.assert_called_once_with(ids=[1])
 
 
 REV_1 = dict(

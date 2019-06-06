@@ -84,7 +84,7 @@ class Commits(unittest.TestCase):
             def __init__(self):
                 self.force = False
 
-        def fail_gonzo(reviewers, _):
+        def fail_gonzo(reviewers):
             # Replace the check_for_invalid_reviewers() function with something that
             # fails if "gonzo" is in the reviewers list.
             if "gonzo" in reviewers["request"]:
@@ -402,25 +402,28 @@ class Commits(unittest.TestCase):
         # r?one,two
         self.assertEqual("r?one", replace("r?one,two", reviewers_dict([["one"], []])))
 
-    @mock.patch("mozphab.get_revisions")
+    @mock.patch("mozphab.ConduitAPI.get_revisions")
     @mock.patch("mozphab.logger")
     def test_show_commit_stack(self, mock_logger, m_get_revisions):
         class Repository:
             phab_url = "http://phab/"
             path = "x"
+            api_url = "x"
+            dot_path = "x"
 
         repo = Repository()
+        mozphab.conduit.set_args_from_repo(repo)
 
         m_get_revisions.return_value = [{"fields": {"bugzilla.bug-id": "1"}}]
 
-        mozphab.show_commit_stack(repo, [])
+        mozphab.show_commit_stack([])
         self.assertFalse(mock_logger.info.called, "logger.info() shouldn't be called")
         self.assertFalse(
             mock_logger.warning.called, "logger.warning() shouldn't be called"
         )
 
         mozphab.show_commit_stack(
-            repo, [{"name": "aaa000", "title-preview": "A"}], validate=False
+            [{"name": "aaa000", "title-preview": "A"}], validate=False
         )
         mock_logger.info.assert_called_with("(New) aaa000 A")
         self.assertFalse(
@@ -429,7 +432,6 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
 
         mozphab.show_commit_stack(
-            repo,
             [{"name": "aaa000", "title-preview": "A", "rev-id": "12", "bug-id": "1"}],
             validate=False,
         )
@@ -440,7 +442,6 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
 
         mozphab.show_commit_stack(
-            repo,
             [
                 {"name": "aaa000", "title-preview": "A"},
                 {"name": "bbb000", "title-preview": "B"},
@@ -455,7 +456,6 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
 
         mozphab.show_commit_stack(
-            repo,
             [
                 {
                     "name": "aaa000",
@@ -472,7 +472,6 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
 
         mozphab.show_commit_stack(
-            repo,
             [
                 {
                     "name": "aaa000",
@@ -487,7 +486,6 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
 
         mozphab.show_commit_stack(
-            repo,
             [{"name": "aaa000", "title-preview": "A", "rev-id": "123", "bug-id": "1"}],
             validate=False,
             show_rev_urls=True,
@@ -501,7 +499,6 @@ class Commits(unittest.TestCase):
         ]
         # we're changing bug id in the first revision to 2
         mozphab.show_commit_stack(
-            repo,
             [
                 {
                     "name": "aaa000",
@@ -663,14 +660,14 @@ class Commits(unittest.TestCase):
 
 
 class TestUpdateCommitSummary(unittest.TestCase):
-    @mock.patch("mozphab.Repository.call_conduit")
+    @mock.patch("mozphab.ConduitAPI.call")
     def test_update_summary_conduit_args(self, call_conduit):
         mozphab.ARC = ["arc"]
         c = commit(rev_id="D123")
         call_conduit.return_value = {}
 
         repo = mozphab.Repository(None, None, "dummy")
-        mozphab.update_phabricator_commit_summary(c, repo)
+        mozphab.conduit.update_phabricator_commit_summary(c)
 
         call_conduit.assert_called_once_with(
             "differential.revision.edit",
@@ -721,7 +718,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
 
         self.assertDictEqual(expected_json, api_call_args)
 
-    @mock.patch("mozphab.get_users")
+    @mock.patch("mozphab.ConduitAPI.get_users")
     def test_biuild_transaction_to_update_reviewers(self, m_get_users):
         # From https://phabricator.services.mozilla.com/api/differential.revision.edit
         #
@@ -759,13 +756,13 @@ class TestUpdateCommitSummary(unittest.TestCase):
             }
         ]
 
-        api_call_args = mozphab.build_transaction_to_update_reviewers("x", c)
+        api_call_args = mozphab.build_transaction_to_update_reviewers(c)
         self.assertEqual(
             m_get_users.call_args_list,
             [
-                mock.call("x", ["alice", "bob!", "frankie!"]),
-                mock.call("x", ["alice"]),
-                mock.call("x", ["bob", "frankie"]),
+                mock.call(["alice", "bob!", "frankie!"]),
+                mock.call(["alice"]),
+                mock.call(["bob", "frankie"]),
             ],
         )
         self.assertEqual(expected_json, api_call_args)

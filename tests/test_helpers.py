@@ -214,7 +214,7 @@ class Helpers(unittest.TestCase):
         m_which.assert_called_once_with(path)
 
 
-@mock.patch("mozphab.Repository.call_conduit")
+@mock.patch("mozphab.ConduitAPI.call")
 def test_valid_reviewers_in_phabricator_returns_no_errors(call_conduit):
     # See https://phabricator.services.mozilla.com/api/user.search
     call_conduit.side_effect = (
@@ -227,11 +227,10 @@ def test_valid_reviewers_in_phabricator_returns_no_errors(call_conduit):
         },
     )
     reviewers = dict(granted=[], request=["alice", "#user-group", "#alias1", "#alias2"])
-    repo = mozphab.Repository(None, None, "dummy")
-    assert [] == mozphab.check_for_invalid_reviewers(reviewers, repo)
+    assert [] == mozphab.check_for_invalid_reviewers(reviewers)
 
 
-@mock.patch("mozphab.Repository.call_conduit")
+@mock.patch("mozphab.ConduitAPI.call")
 def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
     ts = 1543622400
     ts_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
@@ -267,10 +266,10 @@ def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
         dict(name="goozer"),
     ]
     repo = mozphab.Repository(None, None, "dummy")
-    assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers, repo)
+    assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers)
 
 
-@mock.patch("mozphab.Repository.call_conduit")
+@mock.patch("mozphab.ConduitAPI.call")
 def test_reviwer_case_sensitivity(call_conduit):
     reviewers = dict(granted=[], request=["Alice", "#uSeR-gRoUp"])
     call_conduit.side_effect = (
@@ -280,7 +279,7 @@ def test_reviwer_case_sensitivity(call_conduit):
         {"data": [{"fields": {"slug": "user-group"}}]},
     )
     repo = mozphab.Repository(None, None, "dummy")
-    assert [] == mozphab.check_for_invalid_reviewers(reviewers, repo)
+    assert [] == mozphab.check_for_invalid_reviewers(reviewers)
 
 
 @mock.patch("mozphab.arc_out")
@@ -343,25 +342,27 @@ def test_install(m_makedirs, m_exists, m_check_call):
 
 
 def test_get_users_no_users():
-    assert [] == mozphab.get_users("x", [])
+    conduit = mozphab.conduit
+    assert [] == conduit.get_users([])
 
 
-@mock.patch("mozphab.Repository.call_conduit")
+@mock.patch("mozphab.ConduitAPI.call")
 def test_get_users_with_user(m_conduit):
     repo = mozphab.Repository(None, None, "dummy")
+    conduit = mozphab.conduit
 
     user = {"userName": "alice", "phid": "PHID-USER-1"}
     m_conduit.return_value = [user]
-    assert [user] == mozphab.get_users(repo, ["alice"])
+    assert [user] == conduit.get_users(["alice"])
     m_conduit.assert_called_once()
 
-    mozphab.get_users(repo, ["alice"])
+    conduit.get_users(["alice"])
     m_conduit.assert_called_once()
 
     mozphab.cache.reset()
     m_conduit.reset_mock()
     m_conduit.return_value = []
-    assert [] == mozphab.get_users(repo, ["alice"])
+    assert [] == conduit.get_users(["alice"])
     m_conduit.assert_called_once()
 
 

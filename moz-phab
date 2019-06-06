@@ -71,6 +71,7 @@ SHOW_SPINNER = True
 
 logger = logging.getLogger("moz-phab")
 config = None
+conduit = None
 
 # Where to direct people when `arc` isn't installed.
 GUIDE_URL = (
@@ -596,6 +597,320 @@ class Config(object):
 
 
 #
+# Conduit
+#
+
+
+def json_args_to_query_params(args):
+    """Convert JSON arguments for Conduit API to query parameters.
+
+    Args:
+        args: JSON arguments.
+
+    Returns:
+        A list that contains query parameters as key-value pair tuple.
+
+        The order of items in the list is important.
+        An array `names = ['foo', 'bar']` is converted to
+        `[('names[0]', 'foo'), ('names[1]', 'bar')` and it should be sent as
+        `names[0]=foo&names[1]=bar`.
+        If it's sent as `names[1]=foo&names[0]=bar`, it means an object
+        `names = { 1: 'foo', 0: 'bar' }`.
+    """
+    params = []
+
+    def convert(path, v):
+        if type(v) == list:
+            for (index, elem) in enumerate(v):
+                convert("{}[{}]".format(path, index), elem)
+        elif type(v) == dict:
+            for (key, value) in v.iteritems():
+                convert("{}[{}]".format(path, key), value)
+        else:
+            params.append((path, str(v)))
+
+    for (key, value) in args.iteritems():
+        convert(key, value)
+
+    return params
+
+
+class ConduitAPI:
+    api_url = None
+    dot_path = None
+    phab_url = None
+
+    def set_args_from_repo(self, repo):
+        self.api_url = repo.api_url
+        self.dot_path = repo.dot_path
+        self.phab_url = repo.phab_url
+
+    def load_api_token(self):
+        """Return a API Token for given repository.
+
+        Returns:
+            API Token string
+        """
+        token = read_json_field([get_arcrc_path()], ["hosts", self.api_url, "token"])
+        if not token:
+            raise ConduitAPIError(INSTALL_CERT_MSG)
+        return token
+
+    def call(self, api_method, api_call_args):
+        """Call Conduit API and return the JSON API call result.
+
+        Args:
+            api_method: The API method name to call, like 'differential.revision.edit'.
+            api_call_args: JSON dict of call args to send.
+
+        Returns:
+            JSON API call result object
+
+        Raises:
+            ConduitAPIError if the API threw an error back at us.
+        """
+        api_call_params = json_args_to_query_params(api_call_args)
+        api_call_params.append(("api.token", self.load_api_token()))
+
+        url = urlparse.urljoin(self.api_url, api_method)
+
+        if DEBUG:
+            logger.debug("Calling Conduit API {}".format(url))
+
+        req = urllib2.Request(url)
+
+        # Manually concatenate query parameters because Conduit doesn't accept
+        # URL encoded parameter names.
+        data = "&".join(
+            ["{}={}".format(k, urllib2.quote(v)) for (k, v) in api_call_params]
+        )
+
+        req.add_data(data)
+
+        output = urllib2.urlopen(req, timeout=30).read()
+
+        response = json.loads(output)
+
+        if response["error_code"] and response["error_info"]:
+            raise ConduitAPIError(response["error_info"])
+
+        return response["result"]
+
+    def ping(self):
+        """Sends a ping to the Phabricator server using `conduit.ping` API.
+
+        Returns: `True` if no error, otherwise - `False`
+        """
+        try:
+            self.call("conduit.ping", {})
+        except ConduitAPIError as err:
+            logger.error(err)
+            return False
+        except CommandError:
+            return False
+        return True
+
+    def check(self):
+        """Check if raw Conduit API can be used."""
+        # Check if the cache file exists
+        path = os.path.join(self.dot_path, ".moz-phab_conduit-configured")
+        if os.path.isfile(path):
+            return True
+
+        if self.ping():
+            # Create the cache file
+            with open(path, "a"):
+                os.utime(path, None)
+            return True
+
+        return False
+
+    def get_revisions(self, ids=None, phids=None):
+        """Get revisions info from Phabricator.
+
+        Args:
+            ids - list of revision ids
+            phids - list of revision phids
+
+        Returns a list of revisions ordered by ids or phids
+        """
+        if (ids and phids) or (ids is None and phids is None):
+            raise ValueError("Internal Error: Invalid args to get_revisions")
+
+        # Initialise depending on if we're passed revision IDs or PHIDs.
+        if ids:
+            ids = [str(rev_id) for rev_id in ids]
+            phids_by_id = dict(
+                [
+                    (rev_id, cache.get("rev-id-%s" % rev_id))
+                    for rev_id in ids
+                    if "rev-id-%s" % rev_id in cache
+                ]
+            )
+            found_phids = phids_by_id.values()
+            query_field = "ids"
+            query_values = [
+                int(rev_id) for rev_id in set(ids) - set(phids_by_id.keys())
+            ]
+
+        else:
+            phids_by_id = {}
+            found_phids = phids[:]
+            query_field = "phids"
+            query_values = list(set(phids) - set(phids_by_id.values()))
+
+        # Revisions metadata keyed by PHID.
+        revisions = dict(
+            [
+                (phid, cache.get("rev-%s" % phid))
+                for phid in found_phids
+                if "rev-%s" % phid in cache
+            ]
+        )
+
+        # Query Phabricator if we don't have cached values for revisions.
+        if query_values:
+            api_call_args = {
+                "constraints": {query_field: query_values},
+                "attachments": {"reviewers": True},
+            }
+            response = self.call("differential.revision.search", api_call_args)
+            rev_list = response.get("data")
+
+            for r in rev_list:
+                phids_by_id[str(r["id"])] = r["phid"]
+                revisions[r["phid"]] = r
+                cache.set("rev-id-%s" % r["id"], r["phid"])
+                cache.set("rev-%s" % r["phid"], r)
+
+        # Return revisions in the same order requested.
+        if ids:
+            return [
+                revisions[phids_by_id[rev_id]] for rev_id in ids if phids_by_id[rev_id]
+            ]
+        else:
+            return [revisions[phid] for phid in phids]
+
+    def get_diffs(self, phids):
+        """Get diffs from Phabricator.
+
+        Args:
+            phids - a list of diff PHIDs to pull
+
+        Returns a dict of diffs identified by their PHID
+        """
+        api_call_args = {
+            "constraints": {"phids": phids},
+            "attachments": {"commits": True},
+        }
+        response = self.call("differential.diff.search", api_call_args)
+        diff_list = response.get("data", [])
+
+        diff_dict = {}
+        for d in diff_list:
+            diff_dict[d["phid"]] = d
+
+        return diff_dict
+
+    def update_phabricator_commit_summary(self, commit):
+        """Send a new commit summary and description to Phabricator.
+
+        Args:
+            commit: A VCS commit data dict to use for the call args.
+
+        """
+        # From https://phabricator.services.mozilla.com/api/differential.revision.edit
+        #
+        # Example call format we are aiming for:
+        #
+        # $ echo '{
+        #   "transactions": [
+        #     {
+        #       "type": "title",
+        #       "value": "Remove unnecessary branch statement"
+        #     }
+        #     {
+        #       "type": "summary",
+        #       "value": "Blah"
+        #     }
+        #   ],
+        #   "objectIdentifier": "D8095"
+        # }' | arc call-conduit --conduit-uri https://phabricator.services.mozilla.com/ \
+        #       --conduit-token <conduit-token> differential.revision.edit
+        logger.debug("updating revision title and summary in Phabricator")
+        api_call_args = build_api_call_to_update_commit_title_and_summary(commit)
+        try:
+            self.call("differential.revision.edit", api_call_args)
+        except (ConduitAPIError, CommandError) as err:
+            logger.warn(
+                "Error attempting to update revision summary and title in Phabricator"
+            )
+            logger.warn("Error was: %s", err)
+
+    def get_successor_phids(self, phid):
+        return self.get_related_phids(phid, None, relation="child")
+
+    def get_ancestor_phids(self, phid):
+        return self.get_related_phids(phid, None, relation="parent")
+
+    def get_related_phids(self, phid, related, relation="parent", proceed=True):
+        """Returns the list of PHIDs with direct dependency"""
+        if not related:
+            related = []
+
+        api_call_args = {"sourcePHIDs": [phid], "types": ["revision.%s" % relation]}
+        edge = self.call("edge.search", api_call_args)
+        if edge.get("data"):
+            if len(edge["data"]) > 1:
+                raise NonLinearException()
+
+            dep_phid = edge["data"][0]["destinationPHID"]
+            grand = (
+                self.get_related_phids(dep_phid, related, relation=relation)
+                if proceed
+                else []
+            )
+            related.append(dep_phid)
+            related.extend(grand)
+
+        return related
+
+    def get_users(self, usernames):
+        """Get users using the user.query API.
+
+        Caches the result in the process.
+        Returns a list of existing Phabricator users data.
+        """
+        to_collect = []
+        users = []
+        for user in usernames:
+            u = user.rstrip("!")
+            key = "user-%s" % u
+            if key in cache:
+                users.append(cache.get(key))
+            else:
+                to_collect.append(u)
+
+        if not to_collect:
+            return users
+
+        api_call_args = {"usernames": to_collect}
+        # We're using the deprecated user.query API as the user.search does not
+        # provide the user availability information.
+        # See https://phabricator.services.mozilla.com/conduit/method/user.query/
+        response = self.call("user.query", api_call_args)
+        for user in response:
+            users.append(user)
+            key = "user-%s" % user["userName"]
+            cache.set(key, user)
+            cache.set(user["phid"], key)
+
+        return users
+
+
+conduit = ConduitAPI()
+
+#
 # Repository
 #
 
@@ -788,7 +1103,7 @@ class Repository(object):
                         reviewer_commit_map[reviewer].append(commit["node"])
 
         # Verify all reviewers in a single call
-        for invalid_reviewer in check_for_invalid_reviewers(all_reviewers, self):
+        for invalid_reviewer in check_for_invalid_reviewers(all_reviewers):
             for node in reviewer_commit_map[
                 normalise_reviewer(invalid_reviewer["name"])
             ]:
@@ -858,91 +1173,10 @@ class Repository(object):
 
         return False
 
-    def check_conduit(self):
-        """Check if raw Conduit API can be used."""
-        # Check if the cache file exists
-        path = os.path.join(self.dot_path, ".moz-phab_conduit-configured")
-        if os.path.isfile(path):
-            return True
-
-        if self.conduit_ping():
-            # Create the cache file
-            with open(path, "a"):
-                os.utime(path, None)
-            return True
-
-        return False
-
     def _api_url(self):
         """Return a base URL for conduit API call
         """
         return urlparse.urljoin(self.phab_url, "api/")
-
-    def load_api_token(self):
-        """Return a API Token for given repository.
-
-        Returns:
-            API Token string
-        """
-
-        token = read_json_field([get_arcrc_path()], ["hosts", self.api_url, "token"])
-        if not token:
-            raise ConduitAPIError(INSTALL_CERT_MSG)
-        return token
-
-    def call_conduit(self, api_method, api_call_args):
-        """Call Conduit API and return the JSON API call result.
-
-        Args:
-            api_method: The API method name to call, like 'differential.revision.edit'.
-            api_call_args: JSON dict of call args to send.
-
-        Returns:
-            JSON API call result object
-
-        Raises:
-            ConduitAPIError if the API threw an error back at us.
-        """
-        api_call_params = json_args_to_query_params(api_call_args)
-        api_call_params.append(("api.token", self.load_api_token()))
-
-        url = urlparse.urljoin(self.api_url, api_method)
-
-        if DEBUG:
-            logger.debug("Calling Conduit API {}".format(url))
-
-        req = urllib2.Request(url)
-
-        # Manually concatenate query parameters because Conduit doesn't accept
-        # URL encoded parameter names.
-        data = "&".join(
-            ["{}={}".format(k, urllib2.quote(v)) for (k, v) in api_call_params]
-        )
-
-        req.add_data(data)
-
-        output = urllib2.urlopen(req, timeout=30).read()
-
-        response = json.loads(output)
-
-        if response["error_code"] and response["error_info"]:
-            raise ConduitAPIError(response["error_info"])
-
-        return response["result"]
-
-    def conduit_ping(self):
-        """Sends a ping to the Phabricator server using `conduit.ping` API.
-
-        Returns: `True` if no error, otherwise - `False`
-        """
-        try:
-            self.call_conduit("conduit.ping", {})
-        except ConduitAPIError as err:
-            logger.error(err)
-            return False
-        except CommandError:
-            return False
-        return True
 
 
 #
@@ -2217,7 +2451,7 @@ def replace_reviewers(commit_description, reviewers):
 
 
 def show_commit_stack(
-    repo, commits, validate=True, ignore_reviewers=False, show_rev_urls=False
+    commits, validate=True, ignore_reviewers=False, show_rev_urls=False
 ):
     """Log the commit stack in a human readable form."""
 
@@ -2231,7 +2465,7 @@ def show_commit_stack(
         # preload all revisions
         ids = [int(c["rev-id"]) for c in commits if c.get("rev-id")]
         if ids:
-            get_revisions(repo, ids=ids)
+            conduit.get_revisions(ids=ids)
 
     for commit in reversed(commits):
         change_bug_id = False
@@ -2241,7 +2475,7 @@ def show_commit_stack(
             action = action_template % ("D" + commit["rev-id"])
             if validate:
                 # Check if target bug ID is the same as in the Phabricator revision
-                revision = get_revisions(repo, ids=[int(commit["rev-id"])])[0]
+                revision = conduit.get_revisions(ids=[int(commit["rev-id"])])[0]
                 change_bug_id = revision["fields"]["bugzilla.bug-id"] and (
                     commit["bug-id"] != revision["fields"]["bugzilla.bug-id"]
                 )
@@ -2269,48 +2503,16 @@ def show_commit_stack(
                 logger.warning("!! Missing reviewers")
 
         if show_rev_urls and commit["rev-id"]:
-            logger.warning("-> %s/D%s" % (repo.phab_url.rstrip("/"), commit["rev-id"]))
+            logger.warning(
+                "-> %s/D%s" % (conduit.phab_url.rstrip("/"), commit["rev-id"])
+            )
 
 
-def get_users(repo, usernames):
-    """Get users using the user.query API.
-
-    Caches the result in the process.
-    Returns a list of existing Phabricator users data.
-    """
-    to_collect = []
-    users = []
-    for user in usernames:
-        u = user.rstrip("!")
-        key = "user-%s" % u
-        if key in cache:
-            users.append(cache.get(key))
-        else:
-            to_collect.append(u)
-
-    if not to_collect:
-        return users
-
-    api_call_args = {"usernames": to_collect}
-    # We're using the deprecated user.query API as the user.search does not
-    # provide the user availability information.
-    # See https://phabricator.services.mozilla.com/conduit/method/user.query/
-    response = repo.call_conduit("user.query", api_call_args)
-    for user in response:
-        users.append(user)
-        key = "user-%s" % user["userName"]
-        cache.set(key, user)
-        cache.set(user["phid"], key)
-
-    return users
-
-
-def check_for_invalid_reviewers(reviewers, repo):
+def check_for_invalid_reviewers(reviewers):
     """Return a list of invalid reviewer names.
 
     Args:
         reviewers: A commit reviewers dict of granted and requested reviewers.
-        repo: The Repository that the commit lives in.
     """
 
     # Combine the lists of requested reviewers and granted reviewers.
@@ -2327,7 +2529,7 @@ def check_for_invalid_reviewers(reviewers, repo):
 
     users = []
     if all_reviewers:
-        users = get_users(repo, all_reviewers)
+        users = conduit.get_users(all_reviewers)
         found_names = [
             normalise_reviewer(data["userName"], strip_group=False) for data in users
         ]
@@ -2347,7 +2549,7 @@ def check_for_invalid_reviewers(reviewers, repo):
     if all_groups:
         # See https://phabricator.services.mozilla.com/conduit/method/project.search/
         api_call_args = {"queryKey": "active", "constraints": {"slugs": all_groups}}
-        result = repo.call_conduit("project.search", api_call_args)
+        result = conduit.call("project.search", api_call_args)
         found_groups = [
             "#%s" % normalise_reviewer(data["fields"]["slug"])
             for data in result["data"]
@@ -2381,45 +2583,6 @@ def check_for_invalid_reviewers(reviewers, repo):
     ]
 
     return unavailable_reviewers + [dict(name=r) for r in invalid_reviewers]
-
-
-#
-# Conduit API helpers
-#
-
-
-def json_args_to_query_params(args):
-    """Convert JSON arguments for Conduit API to query parameters.
-
-    Args:
-        args: JSON arguments.
-
-    Returns:
-        A list that contains query parameters as key-value pair tuple.
-
-        The order of items in the list is important.
-        An array `names = ['foo', 'bar']` is converted to
-        `[('names[0]', 'foo'), ('names[1]', 'bar')` and it should be sent as
-        `names[0]=foo&names[1]=bar`.
-        If it's sent as `names[1]=foo&names[0]=bar`, it means an object
-        `names = { 1: 'foo', 0: 'bar' }`.
-    """
-    params = []
-
-    def convert(path, v):
-        if type(v) == list:
-            for (index, elem) in enumerate(v):
-                convert("{}[{}]".format(path, index), elem)
-        elif type(v) == dict:
-            for (key, value) in v.iteritems():
-                convert("{}[{}]".format(path, key), value)
-        else:
-            params.append((path, str(v)))
-
-    for (key, value) in args.iteritems():
-        convert(key, value)
-
-    return params
 
 
 #
@@ -2702,56 +2865,19 @@ def build_api_call_to_update_commit_title_and_summary(commit):
     return {"transactions": transactions, "objectIdentifier": commit["rev-id"]}
 
 
-def build_transaction_to_update_reviewers(repo_path, commit):
+def build_transaction_to_update_reviewers(commit):
     # Add reviewers
     all_reviewers = commit["reviewers"]["request"] + commit["reviewers"]["granted"]
     # preload all reviewers
-    get_users(repo_path, all_reviewers)
+    conduit.get_users(all_reviewers)
 
     reviewers = [r for r in all_reviewers if not r.endswith("!")]
     blocking = [r.rstrip("!") for r in all_reviewers if r.endswith("!")]
-    reviewers_phid = [user["phid"] for user in get_users(repo_path, reviewers)]
+    reviewers_phid = [user["phid"] for user in conduit.get_users(reviewers)]
     blocking_phid = [
-        "blocking(%s)" % user["phid"] for user in get_users(repo_path, blocking)
+        "blocking(%s)" % user["phid"] for user in conduit.get_users(blocking)
     ]
     return [dict(type="reviewers.set", value=reviewers_phid + blocking_phid)]
-
-
-def update_phabricator_commit_summary(commit, repo):
-    """Send a new commit summary and description to Phabricator.
-
-    Args:
-        commit: A VCS commit data dict to use for the call args.
-        repo: The Repository that the commit lives in.
-
-    """
-    # From https://phabricator.services.mozilla.com/api/differential.revision.edit
-    #
-    # Example call format we are aiming for:
-    #
-    # $ echo '{
-    #   "transactions": [
-    #     {
-    #       "type": "title",
-    #       "value": "Remove unnecessary branch statement"
-    #     }
-    #     {
-    #       "type": "summary",
-    #       "value": "Blah"
-    #     }
-    #   ],
-    #   "objectIdentifier": "D8095"
-    # }' | arc call-conduit --conduit-uri https://phabricator.services.mozilla.com/ \
-    #       --conduit-token <conduit-token> differential.revision.edit
-    logger.debug("updating revision title and summary in Phabricator")
-    api_call_args = build_api_call_to_update_commit_title_and_summary(commit)
-    try:
-        repo.call_conduit("differential.revision.edit", api_call_args)
-    except (ConduitAPIError, CommandError) as err:
-        logger.warn(
-            "Error attempting to update revision summary and title in Phabricator:\n%s"
-            % err
-        )
 
 
 def submit(repo, args):
@@ -2785,11 +2911,11 @@ def submit(repo, args):
             raise Error("Failed to run %s." % ARC_COMMAND)
 
         # Check if raw Conduit API can be used
-        if not repo.check_conduit():
+        if not conduit.check():
             raise Error("Failed to use Conduit API")
 
     # Validate commit stack is suitable for review.
-    show_commit_stack(repo, commits, validate=True, ignore_reviewers=args.wip)
+    show_commit_stack(commits, validate=True, ignore_reviewers=args.wip)
     try:
         with wait_message("Checking commits.."):
             repo.check_commits_for_submit(commits, validate_reviewers=not args.wip)
@@ -2842,7 +2968,8 @@ def submit(repo, args):
     revisions_to_update = None
     if rev_ids_to_update:
         with wait_message("Checking Phabricator.."):
-            list_to_update = get_revisions(repo, ids=rev_ids_to_update)
+            list_to_update = conduit.get_revisions(ids=rev_ids_to_update)
+
         revisions_to_update = {str(r["id"]): r for r in list_to_update}
 
     for commit in commits:
@@ -2924,7 +3051,7 @@ def submit(repo, args):
         if is_update:
             with wait_message("Updating D%s.." % commit["rev-id"]):
                 try:
-                    update_phabricator_commit_summary(commit, repo)
+                    conduit.update_phabricator_commit_summary(commit)
                 except Exception as e:
                     logger.warning(
                         "Warning: failed to update commit summary in Phabricator"
@@ -2932,7 +3059,7 @@ def submit(repo, args):
                     logger.debug(e)
 
                 # Update bug id if different
-                revision = get_revisions(repo, ids=[int(commit["rev-id"])])[0]
+                revision = conduit.get_revisions(ids=[int(commit["rev-id"])])[0]
                 transactions = []
                 if revision["fields"]["bugzilla.bug-id"] != commit["bug-id"]:
                     transactions.append(
@@ -2943,9 +3070,7 @@ def submit(repo, args):
                 if has_commit_reviewers and not args.wip:
                     # Add reviewers only if revision lacks them
                     if not existing_reviewers:
-                        transactions.extend(
-                            build_transaction_to_update_reviewers(repo.path, commit)
-                        )
+                        transactions.extend(build_transaction_to_update_reviewers(commit))
 
                 if transactions:
                     api_call_args = {
@@ -2977,7 +3102,7 @@ def submit(repo, args):
         repo.refresh_commit_stack(commits)
 
     logger.warning("\nCompleted")
-    show_commit_stack(repo, commits, validate=False, show_rev_urls=True)
+    show_commit_stack(commits, validate=False, show_rev_urls=True)
 
 
 #
@@ -3106,90 +3231,6 @@ def self_update(args):
     logger.info("%s updated" % SELF_FILE)
 
 
-def get_revisions(repo, ids=None, phids=None):
-    """Get revisions info from Phabricator.
-
-    Args:
-        repo - The Repository that the commit lives in.
-        ids - list of revision ids
-        phids - list of revision phids
-
-    Returns a list of revisions ordered by ids or phids
-    """
-    if (ids and phids) or (ids is None and phids is None):
-        raise ValueError("Internal Error: Invalid args to get_revisions")
-
-    # Initialise depending on if we're passed revision IDs or PHIDs.
-    if ids:
-        ids = [str(rev_id) for rev_id in ids]
-        phids_by_id = dict(
-            [
-                (rev_id, cache.get("rev-id-%s" % rev_id))
-                for rev_id in ids
-                if "rev-id-%s" % rev_id in cache
-            ]
-        )
-        found_phids = phids_by_id.values()
-        query_field = "ids"
-        query_values = [int(rev_id) for rev_id in set(ids) - set(phids_by_id.keys())]
-
-    else:
-        phids_by_id = {}
-        found_phids = phids[:]
-        query_field = "phids"
-        query_values = list(set(phids) - set(phids_by_id.values()))
-
-    # Revisions metadata keyed by PHID.
-    revisions = dict(
-        [
-            (phid, cache.get("rev-%s" % phid))
-            for phid in found_phids
-            if "rev-%s" % phid in cache
-        ]
-    )
-
-    # Query Phabricator if we don't have cached values for revisions.
-    if query_values:
-        api_call_args = {
-            "constraints": {query_field: query_values},
-            "attachments": {"reviewers": True},
-        }
-        response = repo.call_conduit("differential.revision.search", api_call_args)
-        rev_list = response.get("data")
-
-        for r in rev_list:
-            phids_by_id[str(r["id"])] = r["phid"]
-            revisions[r["phid"]] = r
-            cache.set("rev-id-%s" % r["id"], r["phid"])
-            cache.set("rev-%s" % r["phid"], r)
-
-    # Return revisions in the same order requested.
-    if ids:
-        return [revisions[phids_by_id[rev_id]] for rev_id in ids if phids_by_id[rev_id]]
-    else:
-        return [revisions[phid] for phid in phids]
-
-
-def get_diffs(repo, phids):
-    """Get diffs from Phabricator.
-
-    Args:
-        repo - The Repository that the commit lives in.
-        phids - a list of diff PHIDs to pull
-
-    Returns a dict of diffs identified by their PHID
-    """
-    api_call_args = {"constraints": {"phids": phids}, "attachments": {"commits": True}}
-    response = repo.call_conduit("differential.diff.search", api_call_args)
-    diff_list = response.get("data", [])
-
-    diff_dict = {}
-    for d in diff_list:
-        diff_dict[d["phid"]] = d
-
-    return diff_dict
-
-
 def apply_patch(diff, cwd):
     """Apply a patch provided in the `diff`."""
     with temporary_file(diff) as temp_f:
@@ -3200,37 +3241,6 @@ def get_base_ref(diff):
     for ref in diff["fields"].get("refs", []):
         if ref["type"] == "base":
             return ref["identifier"]
-
-
-def get_successor_phids(phid, repo):
-    return get_related_phids(phid, None, repo, relation="child")
-
-
-def get_ancestor_phids(phid, repo):
-    return get_related_phids(phid, None, repo, relation="parent")
-
-
-def get_related_phids(phid, related, repo, relation="parent", proceed=True):
-    """Returns the list of PHIDs with direct dependency"""
-    if not related:
-        related = []
-
-    api_call_args = {"sourcePHIDs": [phid], "types": ["revision.%s" % relation]}
-    edge = repo.call_conduit("edge.search", api_call_args)
-    if edge.get("data"):
-        if len(edge["data"]) > 1:
-            raise NonLinearException()
-
-        dep_phid = edge["data"][0]["destinationPHID"]
-        grand = (
-            get_related_phids(dep_phid, related, repo, relation=relation)
-            if proceed
-            else []
-        )
-        related.append(dep_phid)
-        related.extend(grand)
-
-    return related
 
 
 def patch(repo, args):
@@ -3256,7 +3266,7 @@ def patch(repo, args):
     """
 
     # Check if raw Conduit API can be used
-    if not repo.check_conduit():
+    if not conduit.check():
         raise Error("Failed to use Conduit API")
 
     # Look for any uncommited changes
@@ -3272,7 +3282,8 @@ def patch(repo, args):
     # Get the target revision
     rev_id = int(args.rev_id.lstrip("D"))
     with wait_message("Fetching D%s.." % rev_id):
-        revs = get_revisions(repo, ids=[rev_id])
+        revs = conduit.get_revisions(ids=[rev_id])
+
     if not revs:
         raise Error("Revision not found")
 
@@ -3281,7 +3292,7 @@ def patch(repo, args):
     if not args.skip_dependencies:
         with wait_message("Fetching D%s children.." % rev_id):
             try:
-                children = get_successor_phids(revision["phid"], repo)
+                children = conduit.get_successor_phids(revision["phid"])
                 non_linear = False
             except NonLinearException:
                 children = []
@@ -3319,19 +3330,19 @@ def patch(repo, args):
         # Get list of PHIDs in the stack
         try:
             with wait_message("Fetching D%s parents.." % rev_id):
-                phids = get_ancestor_phids(revision["phid"], repo)
+                phids = conduit.get_ancestor_phids(revision["phid"])
         except NonLinearException:
             raise Error("Non linear dependency detected. Unable to patch the stack.")
 
         # Pull revisions data
         if phids:
             with wait_message("Fetching related revisions.."):
-                revs.extend(get_revisions(repo, phids=phids))
+                revs.extend(conduit.get_revisions(phids=phids))
             revs.reverse()
 
         if children:
             with wait_message("Fetching related revisions.."):
-                revs.extend(get_revisions(repo, phids=children))
+                revs.extend(conduit.get_revisions(phids=children))
 
     # Set the target id
     rev_id = revs[-1]["id"]
@@ -3344,7 +3355,7 @@ def patch(repo, args):
 
     # Pull diffs
     with wait_message("Downloading patch information.."):
-        diffs = get_diffs(repo, [r["fields"]["diffPHID"] for r in revs])
+        diffs = conduit.get_diffs([r["fields"]["diffPHID"] for r in revs])
 
     if not args.no_commit and not args.raw:
         for rev in revs:
@@ -3398,7 +3409,7 @@ def patch(repo, args):
         parent = rev["id"]
         diff = diffs[rev["fields"]["diffPHID"]]
         with wait_message("Downloading D%s.." % rev["id"]):
-            raw = repo.call_conduit("differential.getrawdiff", {"diffID": diff["id"]})
+            raw = conduit.call("differential.getrawdiff", {"diffID": diff["id"]})
 
         raw = raw.encode("utf8")
         if args.no_commit:
@@ -3753,6 +3764,8 @@ def main(argv):
         if args.needs_repo:
             with wait_message("Starting up.."):
                 repo = repo_from_args(args)
+
+            conduit.set_args_from_repo(repo)
             args.func(repo, args)
             repo.cleanup()
 

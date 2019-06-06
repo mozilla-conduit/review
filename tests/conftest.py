@@ -147,8 +147,10 @@ def in_process(monkeypatch, safe_environ, request):
     monkeypatch.setattr(sys, "exit", reraise)
 
     # Disable uploading a new commit title and summary to Phabricator.  This operation
-    # is safe to skip and doing so makes it easier to test other arc_out call sites.
-    monkeypatch.setattr(mozphab, "update_phabricator_commit_summary", mock.MagicMock())
+    # is safe to skip and doing so makes it easier to test other conduit call sites.
+    monkeypatch.setattr(
+        mozphab.ConduitAPI, "update_phabricator_commit_summary", mock.MagicMock()
+    )
 
     def arc_ping(self, *args):
         return True
@@ -185,4 +187,4 @@ def in_process(monkeypatch, safe_environ, request):
         return [{"userName": "alice"}]
 
     call_conduit = getattr(request.module, "call_conduit", call_conduit_static)
-    monkeypatch.setattr(mozphab.Repository, "call_conduit", call_conduit)
+    monkeypatch.setattr(mozphab.ConduitAPI, "call", call_conduit)
