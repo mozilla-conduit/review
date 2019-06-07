@@ -394,3 +394,18 @@ def test_is_node(m_git_out, git):
 
     m_git_out.side_effect = mozphab.CommandError
     assert not git.is_node("aaa")
+
+
+@mock.patch("mozphab.Git.git_out")
+def test_is_cinnabar(m_git_out, git):
+    m_git_out.return_value = ["reset", "cinnabar"]
+    assert git.is_cinnabar_installed
+    m_git_out.assert_called_once_with(["--list-cmds=main,others"])
+
+    m_git_out.return_value = ["reset"]
+    assert git.is_cinnabar_installed
+    m_git_out.assert_called_once_with(["--list-cmds=main,others"])
+    m_git_out.reset_mock()
+    git._cinnabar_installed = None
+    assert not git.is_cinnabar_installed
+    m_git_out.assert_called_once_with(["--list-cmds=main,others"])

@@ -59,126 +59,6 @@ def test_prepare_body():
     )
 
 
-@mock.patch("mozphab.ConduitAPI.call")
-def test_get_revisions(call_conduit):
-    repo = mozphab.Repository(None, None, "dummy")
-    mozphab.conduit.set_args_from_repo(repo)
-    get_revs = mozphab.conduit.get_revisions
-
-    # sanity checks
-    with pytest.raises(ValueError):
-        get_revs(ids=[1], phids=["PHID-1"])
-    with pytest.raises(ValueError):
-        get_revs(ids=None)
-    with pytest.raises(ValueError):
-        get_revs(phids=None)
-
-    call_conduit.return_value = {"data": [dict(id=1, phid="PHID-1")]}
-
-    # differential.revision.search by revision-id
-    assert len(get_revs(ids=[1])) == 1
-    call_conduit.assert_called_with(
-        "differential.revision.search",
-        dict(constraints=dict(ids=[1]), attachments=dict(reviewers=True)),
-    )
-
-    # differential.revision.search by phid
-    call_conduit.reset_mock()
-    mozphab.cache.reset()
-    assert len(get_revs(phids=["PHID-1"])) == 1
-    call_conduit.assert_called_with(
-        "differential.revision.search",
-        dict(constraints=dict(phids=["PHID-1"]), attachments=dict(reviewers=True)),
-    )
-
-    # differential.revision.search by revision-id with duplicates
-    call_conduit.reset_mock()
-    mozphab.cache.reset()
-    assert len(get_revs(ids=[1, 1])) == 2
-    call_conduit.assert_called_with(
-        "differential.revision.search",
-        dict(constraints=dict(ids=[1]), attachments=dict(reviewers=True)),
-    )
-
-    # differential.revision.search by phid with duplicates
-    call_conduit.reset_mock()
-    mozphab.cache.reset()
-    assert len(get_revs(phids=["PHID-1", "PHID-1"])) == 2
-    call_conduit.assert_called_with(
-        "differential.revision.search",
-        dict(constraints=dict(phids=["PHID-1"]), attachments=dict(reviewers=True)),
-    )
-
-    # ordering of results must match input
-    call_conduit.reset_mock()
-    mozphab.cache.reset()
-    call_conduit.return_value = {
-        "data": [
-            dict(id=1, phid="PHID-1"),
-            dict(id=2, phid="PHID-2"),
-            dict(id=3, phid="PHID-3"),
-        ]
-    }
-    assert get_revs(ids=[2, 1, 3]) == [
-        dict(id=2, phid="PHID-2"),
-        dict(id=1, phid="PHID-1"),
-        dict(id=3, phid="PHID-3"),
-    ]
-
-    assert get_revs(phids=["PHID-2", "PHID-1", "PHID-3"]) == [
-        dict(id=2, phid="PHID-2"),
-        dict(id=1, phid="PHID-1"),
-        dict(id=3, phid="PHID-3"),
-    ]
-
-
-@mock.patch("mozphab.ConduitAPI.call")
-def test_get_diffs(call_conduit):
-    conduit = mozphab.conduit
-    get_diffs = conduit.get_diffs
-
-    call_conduit.return_value = {}
-    call_conduit.return_value = dict(
-        data=[dict(phid="PHID-1"), dict(phid="PHID-2"), dict(phid="PHID-3")]
-    )
-    assert get_diffs(["PHID-2", "PHID-1", "PHID-3"]) == {
-        "PHID-1": dict(phid="PHID-1"),
-        "PHID-2": dict(phid="PHID-2"),
-        "PHID-3": dict(phid="PHID-3"),
-    }
-
-
-@mock.patch("mozphab.ConduitAPI.call")
-def test_get_related_phids(m_call):
-    get_related_phids = mozphab.conduit.get_related_phids
-
-    m_call.return_value = {}
-    assert [] == get_related_phids("aaa", include_abandoned=True)
-    m_call.assert_called_once_with(
-        "edge.search", {"sourcePHIDs": ["aaa"], "types": ["revision.parent"]}
-    )
-
-    m_call.side_effect = [
-        dict(data=[dict(destinationPHID="bbb")]),
-        dict(data=[dict(destinationPHID="aaa")]),
-        dict(),
-    ]
-    assert ["bbb", "aaa"] == get_related_phids("ccc", include_abandoned=True)
-
-    m_call.side_effect = [
-        dict(data=[dict(destinationPHID="bbb")]),
-        dict(data=[dict(destinationPHID="aaa")]),
-        dict(),
-        dict(
-            data=[
-                dict(id=1, phid="aaa", fields=dict(status=dict(value="-"))),
-                dict(id=2, phid="bbb", fields=dict(status=dict(value="abandoned"))),
-            ]
-        ),
-    ]
-    assert ["aaa"] == get_related_phids("ccc", include_abandoned=False)
-
-
 @mock.patch("mozphab.check_call")
 def test_apply_patch(m_check_call):
     mozphab.apply_patch("diff", "x")
@@ -228,7 +108,7 @@ def test_patch(
     m_call_conduit,
     git,
 ):
-    mozphab.conduit.set_args_from_repo(git)
+    mozphab.conduit.set_repo(git)
 
     m_git_check_conduit.return_value = False
     m_config.arc_command = "arc"

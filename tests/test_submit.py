@@ -55,7 +55,7 @@ class Commits(unittest.TestCase):
     @mock.patch("mozphab.check_for_invalid_reviewers")
     def test_commit_validation(self, check_reviewers):
         check_reviewers.return_value = []
-        repo = mozphab.Repository(None, None, "dummy")
+        repo = mozphab.Repository("", "", "dummy")
         check = repo.check_commits_for_submit
 
         self._assertNoError(check, [])
@@ -96,7 +96,7 @@ class Commits(unittest.TestCase):
                 return []
 
         check_reviewers.side_effect = fail_gonzo
-        repo = mozphab.Repository(None, None, "dummy")
+        repo = mozphab.Repository("", "", "dummy")
         repo.args = Args()
 
         self._assertError(
@@ -413,7 +413,7 @@ class Commits(unittest.TestCase):
             dot_path = "x"
 
         repo = Repository()
-        mozphab.conduit.set_args_from_repo(repo)
+        mozphab.conduit.set_repo(repo)
 
         m_get_revisions.return_value = [{"fields": {"bugzilla.bug-id": "1"}}]
 

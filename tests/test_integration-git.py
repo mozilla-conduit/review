@@ -20,7 +20,6 @@ arc_call_conduit = mock.Mock()
 arc_call_conduit.return_value = [{"userName": "alice", "phid": "PHID-USER-1"}]
 
 call_conduit = mock.Mock()
-call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
 
 
 def by_line_mock(*args, **_kwargs):
@@ -44,7 +43,8 @@ def init_sha(in_process, git_repo_path):
     return get_sha()
 
 
-def test_submit_create(in_process, git_repo_path, init_sha):
+def test_submit_create_arc(in_process, git_repo_path, init_sha):
+    call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
     testfile = git_repo_path / "X"
     testfile.write_text(u"a")
     git_out("add", ".")
@@ -61,6 +61,149 @@ Bug 1 - A r?alice
 Differential Revision: http://example.test/D123
 """
     assert log.strip() == expected.strip()
+
+
+def test_submit_create(in_process, git_repo_path, init_sha):
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        [dict(userName="alice", phid="PHID-USER-1")],
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    testfile = git_repo_path / "X"
+    testfile.write_text(u"ą")
+    git_out("add", ".")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text(u"Ą r?alice")
+    git_out("commit", "--file", "msg")
+    testfile = git_repo_path / "untracked"
+    testfile.write_text(u"a")
+
+    mozphab.main(["submit", "--no-arc", "--yes", "--bug", "1", init_sha])
+
+    log = git_out("log", "--format=%s%n%n%b", "-1").decode("utf8")
+    expected = u"""
+Bug 1 - Ą r?alice
+
+Differential Revision: http://example.test/D123
+"""
+    assert log.strip() == expected.strip()
+    assert mock.call("conduit.ping", {}) in call_conduit.call_args_list
+    assert (
+        mock.call("user.query", dict(usernames=["alice"]))
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call(
+            "diffusion.repository.search",
+            dict(limit=1, constraints=dict(callsigns=["TEST"])),
+        )
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call(
+            "differential.creatediff",
+            {
+                "sourceControlPath": "/",
+                "sourceControlSystem": "git",
+                "lintStatus": "none",
+                "sourcePath": mock.ANY,
+                "unitStatus": "none",
+                "sourceMachine": "http://example.test",
+                "sourceControlBaseRevision": mock.ANY,
+                "repositoryPHID": "PHID-REPO-1",
+                "branch": "HEAD",
+                "changes": [
+                    {
+                        "commitHash": mock.ANY,
+                        "awayPaths": [],
+                        "newProperties": {"unix:filemode": "100644"},
+                        "oldPath": None,
+                        "hunks": [
+                            {
+                                "corpus": u"+ą",
+                                "addLines": 1,
+                                "oldOffset": 0,
+                                "newOffset": 1,
+                                "newLength": 1,
+                                "delLines": 0,
+                                "isMissingOldNewline": False,
+                                "oldLength": 0,
+                                "isMissingNewNewline": False,
+                            }
+                        ],
+                        "oldProperties": {},
+                        "currentPath": "X",
+                        "fileType": 1,
+                        "type": 1,
+                        "metadata": {},
+                    }
+                ],
+                "creationMethod": "moz-phab",
+            },
+        )
+        in call_conduit.call_args_list
+    )
+
+
+def test_submit_update(in_process, git_repo_path, init_sha):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        dict(
+            data=[
+                {
+                    "fields": {"bugzilla.bug-id": "1"},
+                    "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
+                    "id": 123,
+                    "attachments": {"reviewers": {"reviewers": []}},
+                }
+            ]
+        ),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    testfile = git_repo_path / "X"
+    testfile.write_text(u"ą")
+    git_out("add", ".")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text(u"""\
+Bug 1 - Ą
+
+Differential Revision: http://example.test/D123
+""")
+    git_out("commit", "--file", "msg")
+
+    mozphab.main(
+        ["submit", "--yes", "--no-arc"]
+        + ["--bug", "1"]
+        + ["--message", "update message ćwikła"]
+        + [init_sha]
+    )
+
+    log = git_out("log", "--format=%s%n%n%b", "-1")
+    expected = """\
+Bug 1 - Ą
+
+Differential Revision: http://example.test/D123
+
+"""
+    assert log == expected
+
 
 
 def test_submit_different_author(in_process, git_repo_path, init_sha):
@@ -123,7 +266,7 @@ def test_submit_utf8_author(in_process, git_repo_path, init_sha):
     assert log.decode("utf-8") == expected
 
 
-def test_submit_update(in_process, git_repo_path, init_sha):
+def test_submit_update_arc(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         {},  # ping
@@ -174,7 +317,7 @@ Differential Revision: http://example.test/D123
 def test_submit_update_bug_id(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
-        {},
+        dict(),
         {
             "data": [
                 {

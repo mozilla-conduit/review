@@ -36,7 +36,9 @@ def reset_cache():
 @mock.patch("mozphab.os.path")
 @mock.patch("mozphab.which")
 @mock.patch("mozphab.Repository._phab_url")
+@mock.patch("mozphab.read_json_field")
 def git(
+    m_read_json_field,
     m_repository_phab_url,
     m_which,
     m_os_path,
@@ -44,6 +46,7 @@ def git(
     m_git_get_current_head,
     m_git_git_out,
 ):
+    m_read_json_field.return_value = "TEST"
     m_os_path.join = os.path.join
     m_os_path.exists.return_value = True
     m_which.return_value = True
@@ -58,7 +61,17 @@ def git(
 @mock.patch("mozphab.os.path")
 @mock.patch("mozphab.which")
 @mock.patch("mozphab.Repository._phab_url")
-def hg(m_repository_phab_url, m_which, m_os_path, m_config, m_hg_hg_out, safe_environ):
+@mock.patch("mozphab.read_json_field")
+def hg(
+    m_read_json_field,
+    m_repository_phab_url,
+    m_which,
+    m_os_path,
+    m_config,
+    m_hg_hg_out,
+    safe_environ,
+):
+    m_read_json_field.return_value = "TEST"
     m_os_path.join = os.path.join
     m_config.safe_mode = False
     m_os_path.exists.return_value = True
@@ -186,3 +199,12 @@ def in_process(monkeypatch, safe_environ, request):
 
     call_conduit = getattr(request.module, "call_conduit", call_conduit_static)
     monkeypatch.setattr(mozphab.ConduitAPI, "call", call_conduit)
+
+    def read_json_field_local(self, *args):
+        if args[0][0] == "phabricator.uri":
+            return "http://example.test"
+        elif args[0][0] == "repository.callsign":
+            return "TEST"
+
+    read_json_field = getattr(request.module, "read_json_field", read_json_field_local)
+    monkeypatch.setattr(mozphab, "read_json_field", read_json_field)
