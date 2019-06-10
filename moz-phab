@@ -2943,17 +2943,23 @@ def get_self_release():
 
 def update_arc():
     """Write the last check and update arc."""
+
+    def update_repo(name, path):
+        logger.info("Updating %s..." % name)
+        rev = check_output(["git", "rev-parse", "HEAD"], split=False, cwd=path)
+        check_call(["git", "pull", "--quiet"], cwd=path)
+        if rev != check_output(["git", "rev-parse", "HEAD"], split=False, cwd=path):
+            logger.info("%s updated" % name)
+        else:
+            logger.info("Update of %s not required" % name)
+
     try:
-        check_call(ARC + ["upgrade"])
+        update_repo("libphutil", LIBPHUTIL_PATH)
+        update_repo("arcanist", ARC_PATH)
     except subprocess.CalledProcessError:
-        logger.warning(
-            "arc failed to upgrade, which may be caused by using an arcanist "
-            "package from\nyour system package manager."
-        )
         result = prompt(
             "Would you like to skip arc upgrades in the future?", ["Yes", "No"]
         )
-
         if result == "Yes":
             config.arc_last_check = -1
             config.write()
