@@ -2740,6 +2740,13 @@ def submit(repo, args):
                 for filename in untracked:
                     logger.info("  %s" % filename)
 
+    # Show a warning if -m is used and there are new commits.
+    if args.message and any([c for c in commits if not c["rev-id"]]):
+        logger.warning(
+            "Warning: --message works with updates only, and will not\n"
+            "be result in a comment on new revisions."
+        )
+
     # Confirmation prompt.
     if args.yes:
         pass
