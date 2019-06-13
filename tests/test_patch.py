@@ -8,6 +8,7 @@ import pytest
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
+mozphab.SHOW_SPINNER = False
 
 
 def test_strip_depends_on():
@@ -30,11 +31,16 @@ def test_prepare_body():
         == prep("", "", 2, "http://phabricator.test", depends_on=1)
     )
     assert (
-        "title\n\nDifferential Revision: http://phabricator.test/D2\n\nDepends on D1"
-        == prep("title", "", 2, "http://phabricator.test", depends_on=1)
+        "title\n\n"
+        "Differential Revision: http://phabricator.test/D2\n\n"
+        "Depends on D1" == prep("title", "", 2, "http://phabricator.test", depends_on=1)
     )
     assert (
-        "title\n\nsome\nsummary\n\nDifferential Revision: http://phabricator.test/D2\n\nDepends on D1"
+        "title\n\n"
+        "some\n"
+        "summary\n\n"
+        "Differential Revision: http://phabricator.test/D2\n\n"
+        "Depends on D1"
         == prep("title", "some\nsummary", 2, "http://phabricator.test", depends_on=1)
     )
 
@@ -127,18 +133,6 @@ def test_get_diffs(call_conduit):
     }
 
 
-@mock.patch("mozphab.get_related_phids")
-def test_successor(m_get_related):
-    m_get_related.return_value = []
-    assert not mozphab.has_successor("SOME-PHID", "x")
-    m_get_related.assert_called_once_with(
-        "SOME-PHID", None, "x", relation="child", proceed=False
-    )
-
-    m_get_related.return_value = ["A-PHID"]
-    assert mozphab.has_successor("SOME-PHID", "x")
-
-
 @mock.patch("mozphab.Repository.call_conduit")
 def test_get_related_phids(call_conduit):
     get_phids = mozphab.get_related_phids
@@ -178,7 +172,7 @@ def test_base_ref():
     assert mozphab.get_base_ref({"fields": {}}) is None
 
     diff = {"fields": {"refs": [{"identifier": "sha1", "type": "sometype"}]}}
-    assert mozphab.get_base_ref({"fields": {}}) is None
+    assert mozphab.get_base_ref(diff) is None
 
     diff = {"fields": {"refs": [{"identifier": "sha1", "type": "base"}]}}
     assert mozphab.get_base_ref(diff) == "sha1"
@@ -189,7 +183,6 @@ def test_base_ref():
 @mock.patch("mozphab.config")
 @mock.patch("mozphab.Git.check_conduit")
 @mock.patch("mozphab.get_revisions")
-@mock.patch("mozphab.has_successor")
 @mock.patch("mozphab.get_ancestor_phids")
 @mock.patch("mozphab.get_successor_phids")
 @mock.patch("mozphab.get_diffs")
@@ -211,7 +204,6 @@ def test_patch(
     m_get_diffs,
     m_get_successor_phids,
     m_get_ancestor_phids,
-    m_has_successor,
     m_get_revisions,
     m_git_check_conduit,
     m_config,
@@ -253,7 +245,7 @@ def test_patch(
         mozphab.patch(git, args)
 
     m_config.always_full_stack = False
-    m_has_successor.return_value = False
+    m_get_successor_phids.return_value = []
     m_get_ancestor_phids.return_value = []
     m_get_base_ref.return_value = "sha111"
     m_call_conduit.return_value = "raw"  # differential.getrawdiff
@@ -337,10 +329,8 @@ def test_patch(
     m_logger.info.assert_called_with("raw")
 
     # skip-dependencies
-    m_has_successor.reset_mock()
     m_get_successor_phids.reset_mock()
     mozphab.patch(git, Args(raw=True, skip_dependencies=True))
-    m_has_successor.assert_not_called()
     m_get_successor_phids.assert_not_called()
 
     m_git_before_patch.reset_mock()
@@ -419,9 +409,7 @@ def test_patch(
 
     # successors
     m_get_revisions.reset_mock()
-    m_has_successor.return_value = True
     m_get_revisions.side_effect = ([REV_1], [REV_2])
-    m_has_successor.return_value = True
     m_get_successor_phids.side_effect = (["PHID-2"], ["PHID-2"], [])
     m_get_ancestor_phids.return_value = []
     m_call_conduit.side_effect = ("raw2", "raw1")

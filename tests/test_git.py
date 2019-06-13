@@ -8,6 +8,7 @@ from conftest import create_temp_fn
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
+mozphab.SHOW_SPINNER = False
 
 
 @mock.patch("mozphab.Git.git_out")

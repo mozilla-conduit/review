@@ -25,11 +25,13 @@ import logging
 import logging.handlers
 import os
 import re
+import signal
 import ssl
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 import urllib2
@@ -63,6 +65,7 @@ HAS_ANSI = not IS_WINDOWS and (
     or os.getenv("PYCHARM_HOSTED", "") == "1"
 )
 SELF_FILE = os.getenv("UPDATE_FILE") if os.getenv("UPDATE_FILE") else __file__
+SHOW_SPINNER = True
 
 # Constants and Globals
 
@@ -410,6 +413,68 @@ def temporary_file(content):
         yield f.name
     finally:
         os.remove(f.name)
+
+
+# py2 doesn't handle SIGINT with background threads; hook up our own handler
+# to allow background threads to check sig_int.triggered and stop.
+
+
+class SigIntHandler(object):
+    def __init__(self):
+        self.triggered = False
+
+    # noinspection PyUnusedLocal
+    def signal_handler(self, sig, frame):
+        self.triggered = True
+        raise KeyboardInterrupt()
+
+
+sig_int = SigIntHandler()
+signal.signal(signal.SIGINT, sig_int.signal_handler)
+
+
+class Spinner(threading.Thread):
+    def __init__(self):
+        super(Spinner, self).__init__()
+        self.daemon = True
+        self.running = False
+
+    def run(self):
+        self.running = True
+        spinner = ["-", "\\", "|", "/"]
+        spin = 0
+        sys.stdout.write(" ")
+        try:
+            while self.running:
+                sys.stdout.write(chr(8) + spinner[spin])
+                sys.stdout.flush()
+                spin = (spin + 1) % len(spinner)
+                time.sleep(0.2)
+        finally:
+            sys.stdout.write(chr(8) + " ")
+            sys.stdout.flush()
+
+
+@contextmanager
+def wait_message(message):
+    if not SHOW_SPINNER:
+        yield
+        return
+
+    sys.stdout.write("\033[90m%s " % message if HAS_ANSI else "%s " % message)
+    sys.stdout.flush()
+    spinner = Spinner()
+    spinner.start()
+    try:
+        yield
+    finally:
+        spinner.running = False
+        spinner.join()
+        sys.stdout.write("\033[0m\r\033[K" if HAS_ANSI else "\n")
+        sys.stdout.flush()
+        if sig_int.triggered:
+            print("Cancelled")
+            sys.exit(3)
 
 
 class Error(Exception):
@@ -1156,7 +1221,7 @@ class Mercurial(Repository):
 
     def is_node(self, node):
         try:
-            self.hg(["identify", "-q", "-r", node])
+            self.hg_out(["identify", "-q", "-r", node])
         except subprocess.CalledProcessError:
             return False
 
@@ -1185,9 +1250,10 @@ class Mercurial(Repository):
         """
         # Checkout sha
         if node:
-            self.checkout(node)
+            with wait_message("Checking out %s.." % node[:12]):
+                self.checkout(node)
             if not self.args.raw:
-                logger.warning("Checked out %s" % node)
+                logger.info("Checked out %s" % node[:12])
 
         if name and config.create_bookmark and not self.args.no_bookmark:
             bookmarks = self.hg_out(["bookmarks", "-T", "{bookmark}\n"])
@@ -1199,7 +1265,7 @@ class Mercurial(Repository):
 
             self.hg(["bookmark", bookmark_name])
             if not self.args.raw:
-                logger.warning("Bookmark set to %s" % bookmark_name)
+                logger.info("Bookmark set to %s" % bookmark_name)
 
     def apply_patch(self, diff, body, author, author_date):
         commands = []
@@ -1212,7 +1278,7 @@ class Mercurial(Repository):
         with temporary_file(diff) as patch_file, temporary_file(
             body.encode("utf8")
         ) as body_file:
-            self.hg(["import", patch_file, "-l", body_file] + commands)
+            self.hg(["import", patch_file, "--quiet", "-l", body_file] + commands)
 
     def _amend_commit_body(self, node, body):
         with temporary_file(body.encode("utf8")) as body_file:
@@ -1834,8 +1900,9 @@ class Git(Repository):
 
         # Checkout sha
         if node:
-            self.checkout(node)
-            logger.warning("Checked out %s" % node[:12])
+            with wait_message("Checking out %s.." % node[:12]):
+                self.checkout(node)
+            logger.info("Checked out %s" % node[:12])
 
         if name and not self.args.no_branch:
             branches = self.git_out(["branch", "--list", "%s*" % name])
@@ -1847,7 +1914,7 @@ class Git(Repository):
                 branch_name = "%s_%s" % (name, i)
 
             self.git(["checkout", "-q", "-b", branch_name])
-            logger.warning("Created branch %s" % branch_name)
+            logger.info("Created branch %s" % branch_name)
 
     def apply_patch(self, diff, body, author, author_date):
         with temporary_file(diff) as patch_file:
@@ -2455,7 +2522,7 @@ def install_arc_if_required():
     if os.path.exists(ARC_COMMAND) and os.path.exists(LIBPHUTIL_PATH):
         return
 
-    logger.warning("Installing arc")
+    logger.info("Installing arc")
     logger.debug("arc command: %s", ARC_COMMAND)
     logger.debug("libphutil path: %s", LIBPHUTIL_PATH)
 
@@ -2682,9 +2749,9 @@ def update_phabricator_commit_summary(commit, repo):
         repo.call_conduit("differential.revision.edit", api_call_args)
     except (ConduitAPIError, CommandError) as err:
         logger.warn(
-            "Error attempting to update revision summary and title in Phabricator"
+            "Error attempting to update revision summary and title in Phabricator:\n%s"
+            % err
         )
-        logger.warn("Error was: %s", err)
 
 
 def submit(repo, args):
@@ -2694,7 +2761,8 @@ def submit(repo, args):
     repo.before_submit()
 
     # Find and preview commits to submits.
-    commits = repo.commit_stack()
+    with wait_message("Looking for commits.."):
+        commits = repo.commit_stack()
     if not commits:
         raise Error("Failed to find any commits to submit")
     logger.warning(
@@ -2706,23 +2774,25 @@ def submit(repo, args):
         )
     )
 
-    # Pre-process to load metadata.
-    morph_blocking_reviewers(commits)
-    augment_commits_from_body(commits)
-    update_commits_from_args(commits, args)
+    with wait_message("Loading commits.."):
+        # Pre-process to load metadata.
+        morph_blocking_reviewers(commits)
+        augment_commits_from_body(commits)
+        update_commits_from_args(commits, args)
 
-    # Check if arc is configured
-    if not repo.check_arc():
-        raise Error("Failed to run %s." % ARC_COMMAND)
+        # Check if arc is configured
+        if not repo.check_arc():
+            raise Error("Failed to run %s." % ARC_COMMAND)
 
-    # Check if raw Conduit API can be used
-    if not repo.check_conduit():
-        raise Error("Failed to use Conduit API")
+        # Check if raw Conduit API can be used
+        if not repo.check_conduit():
+            raise Error("Failed to use Conduit API")
 
     # Validate commit stack is suitable for review.
     show_commit_stack(repo, commits, validate=True, ignore_reviewers=args.wip)
     try:
-        repo.check_commits_for_submit(commits, validate_reviewers=not args.wip)
+        with wait_message("Checking commits.."):
+            repo.check_commits_for_submit(commits, validate_reviewers=not args.wip)
     except Error as e:
         if not args.force:
             raise Error("Unable to submit commits:\n\n%s" % e)
@@ -2771,7 +2841,8 @@ def submit(repo, args):
     rev_ids_to_update = [int(c["rev-id"]) for c in commits if c.get("rev-id")]
     revisions_to_update = None
     if rev_ids_to_update:
-        list_to_update = get_revisions(repo, ids=rev_ids_to_update)
+        with wait_message("Checking Phabricator.."):
+            list_to_update = get_revisions(repo, ids=rev_ids_to_update)
         revisions_to_update = {str(r["id"]): r for r in list_to_update}
 
     for commit in commits:
@@ -2851,36 +2922,39 @@ def submit(repo, args):
             raise Error("Failed to find 'Revision URL' in arc output")
 
         if is_update:
-            try:
-                update_phabricator_commit_summary(commit, repo)
-            except Exception as e:
-                logger.warning(
-                    "Warning: failed to update commit summary in Phabricator"
-                )
-                logger.debug(e)
+            with wait_message("Updating D%s.." % commit["rev-id"]):
+                try:
+                    update_phabricator_commit_summary(commit, repo)
+                except Exception as e:
+                    logger.warning(
+                        "Warning: failed to update commit summary in Phabricator"
+                    )
+                    logger.debug(e)
 
-            # Update bug id if different
-            revision = get_revisions(repo, ids=[int(commit["rev-id"])])[0]
-            transactions = []
-            if revision["fields"]["bugzilla.bug-id"] != commit["bug-id"]:
-                transactions.append(
-                    dict(type="bugzilla.bug-id", value=commit["bug-id"])
-                )
-
-            # Add reviewers only if revision lacks them
-            if has_commit_reviewers and not args.wip:
-                # Add reviewers only if revision lacks them
-                if not existing_reviewers:
-                    transactions.extend(
-                        build_transaction_to_update_reviewers(repo.path, commit)
+                # Update bug id if different
+                revision = get_revisions(repo, ids=[int(commit["rev-id"])])[0]
+                transactions = []
+                if revision["fields"]["bugzilla.bug-id"] != commit["bug-id"]:
+                    transactions.append(
+                        dict(type="bugzilla.bug-id", value=commit["bug-id"])
                     )
 
-            if transactions:
-                api_call_args = {
-                    "objectIdentifier": "D%s" % commit["rev-id"],
-                    "transactions": transactions,
-                }
-                arc_call_conduit("differential.revision.edit", api_call_args, repo.path)
+                # Add reviewers only if revision lacks them
+                if has_commit_reviewers and not args.wip:
+                    # Add reviewers only if revision lacks them
+                    if not existing_reviewers:
+                        transactions.extend(
+                            build_transaction_to_update_reviewers(repo.path, commit)
+                        )
+
+                if transactions:
+                    api_call_args = {
+                        "objectIdentifier": "D%s" % commit["rev-id"],
+                        "transactions": transactions,
+                    }
+                    arc_call_conduit(
+                        "differential.revision.edit", api_call_args, repo.path
+                    )
 
         # Append/replace div rev url to/in commit description.
         body = amend_revision_url(commit["body"], revision_url)
@@ -2890,15 +2964,17 @@ def submit(repo, args):
             commit["title"] = commit["title-preview"]
             commit["body"] = body
             commit["rev-id"] = parse_arc_diff_rev(commit["body"])
-            repo.amend_commit(commit, commits)
+            with wait_message("Updating commit.."):
+                repo.amend_commit(commit, commits)
 
         previous_commit = commit
 
     # Cleanup (eg. strip nodes) and refresh to ensure the stack is right for the
     # final showing.
-    repo.finalize(commits)
-    repo.cleanup()
-    repo.refresh_commit_stack(commits)
+    with wait_message("Cleaning up.."):
+        repo.finalize(commits)
+        repo.cleanup()
+        repo.refresh_commit_stack(commits)
 
     logger.warning("\nCompleted")
     show_commit_stack(repo, commits, validate=False, show_rev_urls=True)
@@ -3009,10 +3085,10 @@ def self_update(args):
     release = get_self_release()
 
     if not release["update_required"] and not args.force:
-        logger.warning("Update of `moz-phab` not required")
+        logger.info("Update of `moz-phab` not required")
         return
 
-    logger.warning("Updating `moz-phab` to v%s" % release["tag"])
+    logger.info("Updating `moz-phab` to v%s" % release["tag"])
 
     url = "https://raw.githubusercontent.com/%s/%s/moz-phab" % (
         SELF_REPO,
@@ -3115,26 +3191,15 @@ def get_diffs(repo, phids):
 
 
 def apply_patch(diff, cwd):
-    """Apply a patch provided in the `diff`.
-
-    Requires `patch` command to be installed.
-    """
+    """Apply a patch provided in the `diff`."""
     with temporary_file(diff) as temp_f:
-        try:
-            check_call(["git", "apply", temp_f], cwd=cwd)
-        except OSError:
-            raise Error("Can't access the `git` command. Is Git installed?")
+        check_call(["git", "apply", temp_f], cwd=cwd)
 
 
 def get_base_ref(diff):
     for ref in diff["fields"].get("refs", []):
         if ref["type"] == "base":
             return ref["identifier"]
-
-
-def has_successor(phid, repo):
-    successor = get_related_phids(phid, None, repo, relation="child", proceed=False)
-    return True if successor else False
 
 
 def get_successor_phids(phid, repo):
@@ -3195,35 +3260,44 @@ def patch(repo, args):
         raise Error("Failed to use Conduit API")
 
     # Look for any uncommited changes
-    if not args.raw and not repo.is_worktree_clean():
-        raise Error(
-            "Uncommited changes present. Please %s them or commit before patching."
-            % ("shelve" if isinstance(repo, Mercurial) else "stash")
-        )
+    if not args.raw:
+        with wait_message("Checking repository.."):
+            clean = repo.is_worktree_clean()
+        if not clean:
+            raise Error(
+                "Uncommited changes present. Please %s them or commit before patching."
+                % ("shelve" if isinstance(repo, Mercurial) else "stash")
+            )
 
     # Get the target revision
     rev_id = int(args.rev_id.lstrip("D"))
-    revs = get_revisions(repo, ids=[rev_id])
+    with wait_message("Fetching D%s.." % rev_id):
+        revs = get_revisions(repo, ids=[rev_id])
     if not revs:
         raise Error("Revision not found")
 
     revision = revs[0]
 
     if not args.skip_dependencies:
-        # Check if revision is the last in the stack
-        try:
-            has_child = has_successor(revision["phid"], repo)
-        except NonLinearException:
-            has_child = True
+        with wait_message("Fetching D%s children.." % rev_id):
+            try:
+                children = get_successor_phids(revision["phid"], repo)
+                non_linear = False
+            except NonLinearException:
+                children = []
+                non_linear = True
 
-        patch_children = False
-        if has_child:
+        if children:
             if args.yes or config.always_full_stack:
                 patch_children = True
+
             else:
+                children_msg = (
+                    "a child commit" if len(children) == 1 else "child commits"
+                )
                 res = prompt(
-                    "Revision D%s has child(ren).  Would you like to patch the "
-                    "full stack?." % rev_id,
+                    "Revision D%s has %s.  Would you like to patch the "
+                    "full stack?." % (rev_id, children_msg),
                     ["Yes", "No", "Always"],
                 )
                 if res == "Always":
@@ -3232,49 +3306,45 @@ def patch(repo, args):
 
                 patch_children = res == "Yes" or res == "Always"
 
-        children = []
-        if patch_children:
-            multiple_children = False
-            try:
-                children = get_successor_phids(revision["phid"], repo)
-            except NonLinearException:
-                multiple_children = True
-
-            if multiple_children and not args.yes:
-                res = prompt(
-                    "Revision D%s has a non-linear successor graph. "
-                    "Unable to detect the full stack. Would you like to continue "
-                    "with only part of the stack?" % rev_id,
-                    ["Yes", "No"],
-                )
-                if res == "No":
-                    return
+            if patch_children:
+                if non_linear and not args.yes:
+                    logger.warning(
+                        "Revision D%s has a non-linear successor graph.\n"
+                        "Unable to apply the full stack." % rev_id
+                    )
+                    res = prompt("Continue with only part of the stack?", ["Yes", "No"])
+                    if res == "No":
+                        return
 
         # Get list of PHIDs in the stack
         try:
-            phids = get_ancestor_phids(revision["phid"], repo)
+            with wait_message("Fetching D%s parents.." % rev_id):
+                phids = get_ancestor_phids(revision["phid"], repo)
         except NonLinearException:
             raise Error("Non linear dependency detected. Unable to patch the stack.")
 
         # Pull revisions data
         if phids:
-            revs.extend(get_revisions(repo, phids=phids))
+            with wait_message("Fetching related revisions.."):
+                revs.extend(get_revisions(repo, phids=phids))
             revs.reverse()
 
         if children:
-            revs.extend(get_revisions(repo, phids=children))
+            with wait_message("Fetching related revisions.."):
+                revs.extend(get_revisions(repo, phids=children))
 
     # Set the target id
     rev_id = revs[-1]["id"]
 
     if not args.raw:
-        logger.warning(
+        logger.info(
             "Patching revision%s: %s"
             % ("s" if len(revs) > 1 else "", " ".join(["D%s" % r["id"] for r in revs]))
         )
 
     # Pull diffs
-    diffs = get_diffs(repo, [r["fields"]["diffPHID"] for r in revs])
+    with wait_message("Downloading patch information.."):
+        diffs = get_diffs(repo, [r["fields"]["diffPHID"] for r in revs])
 
     if not args.no_commit and not args.raw:
         for rev in revs:
@@ -3300,7 +3370,8 @@ def patch(repo, args):
 
         if args.apply_to != "here":
             try:
-                base_node = repo.check_node(base_node)
+                with wait_message("Checking out %s.." % base_node[:12]):
+                    base_node = repo.check_node(base_node)
             except NotFoundError as e:
                 msg = "Unknown revision: %s" % base_node[:12]
                 if str(e):
@@ -3326,12 +3397,17 @@ def patch(repo, args):
         )
         parent = rev["id"]
         diff = diffs[rev["fields"]["diffPHID"]]
-        raw = repo.call_conduit("differential.getrawdiff", {"diffID": diff["id"]})
+        with wait_message("Downloading D%s.." % rev["id"]):
+            raw = repo.call_conduit("differential.getrawdiff", {"diffID": diff["id"]})
+
         raw = raw.encode("utf8")
         if args.no_commit:
-            apply_patch(raw, repo.path)
+            with wait_message("Applying D%s.." % rev["id"]):
+                apply_patch(raw, repo.path)
+
         elif args.raw:
             logger.info(raw)
+
         else:
             diff_commits = diff["attachments"]["commits"]["commits"]
             author = "%s <%s>" % (
@@ -3343,9 +3419,16 @@ def patch(repo, args):
             ).isoformat()
 
             try:
-                repo.apply_patch(raw, body, author, author_date)
+                with wait_message("Applying D%s.." % rev["id"]):
+                    repo.apply_patch(raw, body, author, author_date)
             except subprocess.CalledProcessError:
                 raise Error("Patch failed to apply")
+
+        if not args.raw and rev["id"] != revs[-1]["id"]:
+            logger.info("D%s applied" % rev["id"])
+
+    if not args.raw:
+        logger.warning("D%s applied" % rev_id)
 
 
 def arc_pass(args):
@@ -3625,7 +3708,7 @@ def parse_args(argv):
 
 
 def main(argv):
-    global config, HAS_ANSI, DEBUG
+    global config, HAS_ANSI, DEBUG, SHOW_SPINNER
     try:
         if not os.path.exists(MOZBUILD_PATH):
             os.makedirs(MOZBUILD_PATH)
@@ -3658,6 +3741,8 @@ def main(argv):
 
         if hasattr(args, "trace") and args.trace:
             DEBUG = True
+        if DEBUG:
+            SHOW_SPINNER = False
 
         if args.command != "self-update":
             check_for_updates()
@@ -3666,7 +3751,8 @@ def main(argv):
             args.apply_to = config.apply_patch_to
 
         if args.needs_repo:
-            repo = repo_from_args(args)
+            with wait_message("Starting up.."):
+                repo = repo_from_args(args)
             args.func(repo, args)
             repo.cleanup()
 

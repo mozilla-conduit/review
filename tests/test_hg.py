@@ -10,6 +10,7 @@ from subprocess import CalledProcessError
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
+mozphab.SHOW_SPINNER = False
 
 
 @mock.patch("mozphab.Mercurial.hg_out")
@@ -240,17 +241,17 @@ def test_apply_patch(m_hg, m_temp_fn, hg):
     m_temp_fn.return_value = create_temp_fn("diff_fn", "body_fn")
     hg.apply_patch("diff", "body", "user", 1)
     m_hg.assert_called_once_with(
-        ["import", "diff_fn", "-l", "body_fn", "-u", "user", "-d", 1]
+        ["import", "diff_fn", "--quiet", "-l", "body_fn", "-u", "user", "-d", 1]
     )
     assert m_temp_fn.call_count == 2
 
 
-@mock.patch("mozphab.Mercurial.hg")
-def test_is_node(m_hg, hg):
+@mock.patch("mozphab.Mercurial.hg_out")
+def test_is_node(m_hg_out, hg):
     assert hg.is_node("aabbcc")
-    m_hg.assert_called_once_with(["identify", "-q", "-r", "aabbcc"])
+    m_hg_out.assert_called_once_with(["identify", "-q", "-r", "aabbcc"])
 
-    m_hg.side_effect = mock.Mock(side_effect=CalledProcessError(None, None))
+    m_hg_out.side_effect = mock.Mock(side_effect=CalledProcessError(None, None))
     assert not hg.is_node("aaa")
 
 

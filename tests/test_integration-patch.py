@@ -13,25 +13,26 @@ from conftest import hg_out, git_out
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
+mozphab.SHOW_SPINNER = False
 
 
 @mock.patch("mozphab.get_revisions")
 @mock.patch("mozphab.get_diffs")
 @mock.patch("mozphab.Repository.call_conduit")
-@mock.patch("mozphab.has_successor")
+@mock.patch("mozphab.get_successor_phids")
 @mock.patch("mozphab.get_ancestor_phids")
 @mock.patch("mozphab.logger")
 def test_patch_raw(
     m_logger,
     m_ancestor_phids,
-    m_has_ancestor,
+    m_get_successor_phids,
     m_call_conduit,
     m_get_diffs,
     m_get_revs,
     in_process,
     hg_repo_path,
 ):
-    m_has_ancestor.return_value = False
+    m_get_successor_phids.return_value = []
     m_get_revs.return_value = [REV_1]
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
@@ -56,20 +57,20 @@ def test_patch_raw(
 @mock.patch("mozphab.get_revisions")
 @mock.patch("mozphab.get_diffs")
 @mock.patch("mozphab.Repository.call_conduit")
-@mock.patch("mozphab.has_successor")
+@mock.patch("mozphab.get_successor_phids")
 @mock.patch("mozphab.get_ancestor_phids")
 @mock.patch("mozphab.logger")
 def test_patch_no_commit(
     m_logger,
     m_ancestor_phids,
-    m_has_ancestor,
+    m_get_successor_phids,
     m_call_conduit,
     m_get_diffs,
     m_get_revs,
     in_process,
     hg_repo_path,
 ):
-    m_has_ancestor.return_value = False
+    m_get_successor_phids.return_value = []
     m_get_revs.return_value = [REV_1]
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
@@ -105,20 +106,20 @@ def test_patch_no_commit(
 @mock.patch("mozphab.get_revisions")
 @mock.patch("mozphab.get_diffs")
 @mock.patch("mozphab.Repository.call_conduit")
-@mock.patch("mozphab.has_successor")
+@mock.patch("mozphab.get_successor_phids")
 @mock.patch("mozphab.get_ancestor_phids")
 @mock.patch("mozphab.logger")
 def test_git_patch_with_commit(
     m_logger,
     m_ancestor_phids,
-    m_has_ancestor,
+    m_get_successor_phids,
     m_call_conduit,
     m_get_diffs,
     m_get_revs,
     in_process,
     git_repo_path,
 ):
-    m_has_ancestor.return_value = False
+    m_get_successor_phids.return_value = []
     sha = git_out("rev-parse", "HEAD").rstrip("\n")
     diff_1 = copy.deepcopy(DIFF_1)
     diff_1["fields"]["refs"][0]["identifier"] = sha
@@ -207,20 +208,20 @@ def test_git_patch_with_commit(
 @mock.patch("mozphab.get_revisions")
 @mock.patch("mozphab.get_diffs")
 @mock.patch("mozphab.Repository.call_conduit")
-@mock.patch("mozphab.has_successor")
+@mock.patch("mozphab.get_successor_phids")
 @mock.patch("mozphab.get_ancestor_phids")
 @mock.patch("mozphab.logger")
 def test_hg_patch_with_commit(
     m_logger,
     m_ancestor_phids,
-    m_has_ancestor,
+    m_get_successor_phids,
     m_call_conduit,
     m_get_diffs,
     m_get_revs,
     in_process,
     hg_repo_path,
 ):
-    m_has_ancestor.return_value = False
+    m_get_successor_phids.return_value = []
     m_get_revs.return_value = [REV_1]
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
