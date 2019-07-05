@@ -3340,7 +3340,7 @@ def patch(repo, args):
                 revs.extend(conduit.get_revisions(phids=phids))
             revs.reverse()
 
-        if children:
+        if children and patch_children:
             with wait_message("Fetching related revisions.."):
                 revs.extend(conduit.get_revisions(phids=children))
 
