@@ -127,7 +127,6 @@ def test_get_diffs(call_conduit):
     call_conduit.return_value = dict(
         data=[dict(phid="PHID-1"), dict(phid="PHID-2"), dict(phid="PHID-3")]
     )
-    repo = mozphab.Repository(None, None, "dummy")
     assert get_diffs(["PHID-2", "PHID-1", "PHID-3"]) == {
         "PHID-1": dict(phid="PHID-1"),
         "PHID-2": dict(phid="PHID-2"),
@@ -137,32 +136,33 @@ def test_get_diffs(call_conduit):
 
 @mock.patch("mozphab.ConduitAPI.call")
 def test_get_related_phids(m_call):
-    conduit = mozphab.conduit
-    get_phids = conduit.get_related_phids
+    get_related_phids = mozphab.conduit.get_related_phids
 
     m_call.return_value = {}
-
-    repo = mozphab.Repository(None, None, "dummy")
-    assert [] == get_phids("aaa", None)
+    assert [] == get_related_phids("aaa", include_abandoned=True)
     m_call.assert_called_once_with(
         "edge.search", {"sourcePHIDs": ["aaa"], "types": ["revision.parent"]}
     )
 
-    assert ["bbb"] == get_phids("aaa", ["bbb"])
-
     m_call.side_effect = [
         dict(data=[dict(destinationPHID="bbb")]),
         dict(data=[dict(destinationPHID="aaa")]),
         dict(),
     ]
-    assert ["bbb", "aaa"] == get_phids("ccc", None)
+    assert ["bbb", "aaa"] == get_related_phids("ccc", include_abandoned=True)
 
     m_call.side_effect = [
         dict(data=[dict(destinationPHID="bbb")]),
         dict(data=[dict(destinationPHID="aaa")]),
         dict(),
+        dict(
+            data=[
+                dict(id=1, phid="aaa", fields=dict(status=dict(value="-"))),
+                dict(id=2, phid="bbb", fields=dict(status=dict(value="abandoned"))),
+            ]
+        ),
     ]
-    assert ["bbb"] == get_phids("ccc", None, proceed=False)
+    assert ["aaa"] == get_related_phids("ccc", include_abandoned=False)
 
 
 @mock.patch("mozphab.check_call")
@@ -230,6 +230,7 @@ def test_patch(
             apply_to="base",
             yes=False,
             skip_dependencies=False,
+            include_abandoned=False,
         ):
             self.rev_id = rev_id
             self.no_commit = no_commit
@@ -237,6 +238,7 @@ def test_patch(
             self.apply_to = apply_to
             self.yes = yes
             self.skip_dependencies = skip_dependencies
+            self.include_abandoned = include_abandoned
 
     m_git_check_conduit.return_value = True
     m_git_is_worktree_clean.return_value = False

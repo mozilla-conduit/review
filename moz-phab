@@ -624,8 +624,8 @@ def json_args_to_query_params(args):
             for (index, elem) in enumerate(v):
                 convert("{}[{}]".format(path, index), elem)
         elif type(v) == dict:
-            for (key, value) in v.iteritems():
-                convert("{}[{}]".format(path, key), value)
+            for (k, val) in v.iteritems():
+                convert("{}[{}]".format(path, k), val)
         else:
             params.append((path, str(v)))
 
@@ -636,9 +636,10 @@ def json_args_to_query_params(args):
 
 
 class ConduitAPI:
-    api_url = None
-    dot_path = None
-    phab_url = None
+    def __init__(self):
+        self.api_url = None
+        self.dot_path = None
+        self.phab_url = None
 
     def set_args_from_repo(self, repo):
         self.api_url = repo.api_url
@@ -669,26 +670,19 @@ class ConduitAPI:
         Raises:
             ConduitAPIError if the API threw an error back at us.
         """
-        api_call_params = json_args_to_query_params(api_call_args)
-        api_call_params.append(("api.token", self.load_api_token()))
-
         url = urlparse.urljoin(self.api_url, api_method)
-
-        if DEBUG:
-            logger.debug("Calling Conduit API {}".format(url))
-
-        req = urllib2.Request(url)
+        logger.debug("%s %s" % (url, api_call_args))
 
         # Manually concatenate query parameters because Conduit doesn't accept
         # URL encoded parameter names.
+        api_call_args = api_call_args.copy()
+        api_call_args["api.token"] = self.load_api_token()
+        api_call_params = json_args_to_query_params(api_call_args)
         data = "&".join(
             ["{}={}".format(k, urllib2.quote(v)) for (k, v) in api_call_params]
         )
 
-        req.add_data(data)
-
-        output = urllib2.urlopen(req, timeout=30).read()
-
+        output = urllib2.urlopen(urllib2.Request(url, data=data), timeout=30).read()
         response = json.loads(output)
 
         if response["error_code"] and response["error_info"]:
@@ -757,7 +751,7 @@ class ConduitAPI:
             phids_by_id = {}
             found_phids = phids[:]
             query_field = "phids"
-            query_values = list(set(phids) - set(phids_by_id.values()))
+            query_values = set([phid for phid in phids if "rev-%s" % phid not in cache])
 
         # Revisions metadata keyed by PHID.
         revisions = dict(
@@ -771,7 +765,7 @@ class ConduitAPI:
         # Query Phabricator if we don't have cached values for revisions.
         if query_values:
             api_call_args = {
-                "constraints": {query_field: query_values},
+                "constraints": {query_field: sorted(query_values)},
                 "attachments": {"reviewers": True},
             }
             response = self.call("differential.revision.search", api_call_args)
@@ -835,7 +829,8 @@ class ConduitAPI:
         #     }
         #   ],
         #   "objectIdentifier": "D8095"
-        # }' | arc call-conduit --conduit-uri https://phabricator.services.mozilla.com/ \
+        # }' | arc call-conduit \
+        #       --conduit-uri https://phabricator.services.mozilla.com/ \
         #       --conduit-token <conduit-token> differential.revision.edit
         logger.debug("updating revision title and summary in Phabricator")
         api_call_args = build_api_call_to_update_commit_title_and_summary(commit)
@@ -847,33 +842,41 @@ class ConduitAPI:
             )
             logger.warn("Error was: %s", err)
 
-    def get_successor_phids(self, phid):
-        return self.get_related_phids(phid, None, relation="child")
+    def get_successor_phids(self, phid, include_abandoned=False):
+        return self.get_related_phids(
+            phid, relation="child", include_abandoned=include_abandoned
+        )
 
-    def get_ancestor_phids(self, phid):
-        return self.get_related_phids(phid, None, relation="parent")
+    def get_ancestor_phids(self, phid, include_abandoned=False):
+        return self.get_related_phids(
+            phid, relation="parent", include_abandoned=include_abandoned
+        )
 
-    def get_related_phids(self, phid, related, relation="parent", proceed=True):
+    def get_related_phids(self, base_phid, relation="parent", include_abandoned=False):
         """Returns the list of PHIDs with direct dependency"""
-        if not related:
-            related = []
+        result = []
 
-        api_call_args = {"sourcePHIDs": [phid], "types": ["revision.%s" % relation]}
-        edge = self.call("edge.search", api_call_args)
-        if edge.get("data"):
-            if len(edge["data"]) > 1:
-                raise NonLinearException()
+        def _get_related(phid):
+            api_call_args = {"sourcePHIDs": [phid], "types": ["revision.%s" % relation]}
+            edge = self.call("edge.search", api_call_args)
+            if edge.get("data"):
+                if len(edge["data"]) > 1:
+                    raise NonLinearException()
 
-            dep_phid = edge["data"][0]["destinationPHID"]
-            grand = (
-                self.get_related_phids(dep_phid, related, relation=relation)
-                if proceed
-                else []
-            )
-            related.append(dep_phid)
-            related.extend(grand)
+                result.append(edge["data"][0]["destinationPHID"])
+                _get_related(result[-1])
 
-        return related
+        _get_related(base_phid)
+
+        if not result or include_abandoned:
+            return result
+
+        revisions = self.get_revisions(phids=result)
+        return [
+            r["phid"]
+            for r in revisions
+            if r["fields"]["status"]["value"] != "abandoned"
+        ]
 
     def get_users(self, usernames):
         """Get users using the user.query API.
@@ -3070,7 +3073,9 @@ def submit(repo, args):
                 if has_commit_reviewers and not args.wip:
                     # Add reviewers only if revision lacks them
                     if not existing_reviewers:
-                        transactions.extend(build_transaction_to_update_reviewers(commit))
+                        transactions.extend(
+                            build_transaction_to_update_reviewers(commit)
+                        )
 
                 if transactions:
                     api_call_args = {
@@ -3292,12 +3297,15 @@ def patch(repo, args):
     if not args.skip_dependencies:
         with wait_message("Fetching D%s children.." % rev_id):
             try:
-                children = conduit.get_successor_phids(revision["phid"])
+                children = conduit.get_successor_phids(
+                    revision["phid"], include_abandoned=args.include_abandoned
+                )
                 non_linear = False
             except NonLinearException:
                 children = []
                 non_linear = True
 
+        patch_children = True
         if children:
             if args.yes or config.always_full_stack:
                 patch_children = True
@@ -3677,7 +3685,10 @@ def parse_args(argv):
     patch_parser.add_argument(
         "--skip-dependencies",
         action="store_true",
-        help="Do not search for dependencies. Patch only one revision.",
+        help="Do not search for dependencies; patch only one revision",
+    )
+    patch_parser.add_argument(
+        "--include-abandoned", action="store_true", help="Apply abandoned revisions"
     )
     patch_parser.add_argument(
         "--yes",
@@ -3703,7 +3714,7 @@ def parse_args(argv):
     # arc
 
     arc_parser = commands.add_parser("arc", help="Call Arcanist")
-    arc_parser.add_argument("commands", type=str, nargs=argparse.REMAINDER)
+    arc_parser.add_argument("commands", nargs=argparse.REMAINDER)
     arc_parser.set_defaults(func=arc_pass, needs_repo=False)
 
     # if we're called without a command and from within a repository, default to submit.
