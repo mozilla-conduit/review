@@ -108,8 +108,8 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
     m_parse_config.return_value = {"ui.username": "username", "extensions.evolve": ""}
     hg.set_args(Args())
     assert ["--config", "extensions.rebase="] == hg._hg
-    assert hg.use_evolve == True
-    assert hg.has_shelve == False
+    assert hg.use_evolve
+    assert not hg.has_shelve
 
     # safe_mode
     safe_mode_options = (
@@ -136,8 +136,8 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
         + ["--config", "experimental.evolution.createmarkers=true"]
         + ["--config", "extensions.strip="]
     ) == hg._hg
-    assert hg.use_evolve == False
-    assert hg.has_shelve == True
+    assert not hg.use_evolve
+    assert hg.has_shelve
 
     m_hg_hg_log.side_effect = [("1234567890123",), ("0987654321098",)]
     hg.set_args(Args())

@@ -86,7 +86,7 @@ class Helpers(unittest.TestCase):
         # TODO test walking the path
         repo = None
 
-        def probe_repo(path):
+        def probe_repo(_):
             return repo
 
         m_probe.side_effect = probe_repo
@@ -127,7 +127,11 @@ class Helpers(unittest.TestCase):
         )
 
         self.assertEqual(
-            "\n\nSummary:\n\n\n\n\nTest Plan:\n\nReviewers: \n\nSubscribers:\n\nBug #: ",
+            "\n\nSummary:\n\n\n"
+            "\n\nTest Plan:"
+            "\n\nReviewers: "
+            "\n\nSubscribers:"
+            "\n\nBug #: ",
             mozphab.arc_message(
                 dict(title=None, body=None, reviewers=None, bug_id=None)
             ),
@@ -162,7 +166,9 @@ class Helpers(unittest.TestCase):
         self.assertEqual(
             "title\n\nsummary",
             mozphab.strip_differential_revision(
-                "title\n\nsummary\n\nDifferential Revision: http://phabricator.test/D123"
+                "title\n\n"
+                "summary\n\n"
+                "Differential Revision: http://phabricator.test/D123"
             ),
         )
 
@@ -202,7 +208,7 @@ class Helpers(unittest.TestCase):
     @mock.patch("mozphab.os.path")
     @mock.patch("mozphab.os.environ")
     @mock.patch("mozphab.which")
-    def test_which_b(self, m_which, m_os_environ, m_os_path, m_os_access):
+    def test_which_b(self, m_which, _os_environ, m_os_path, m_os_access):
         m_os_path.exists.side_effect = (True, False)
         m_os_access.return_value = True
         m_os_path.isdir.return_value = False
@@ -265,7 +271,6 @@ def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
         dict(name="#gon-group"),
         dict(name="goozer"),
     ]
-    repo = mozphab.Repository(None, None, "dummy")
     assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers)
 
 
@@ -278,7 +283,6 @@ def test_reviwer_case_sensitivity(call_conduit):
         # See https://phabricator.services.mozilla.com/conduit/method/project.search/
         {"data": [{"fields": {"slug": "user-group"}}]},
     )
-    repo = mozphab.Repository(None, None, "dummy")
     assert [] == mozphab.check_for_invalid_reviewers(reviewers)
 
 
@@ -330,7 +334,7 @@ def test_arc_ping_with_invalid_certificate_returns_false(arc_out):
 @mock.patch("mozphab.check_call")
 @mock.patch("os.path.exists")
 @mock.patch("os.makedirs")
-def test_install(m_makedirs, m_exists, m_check_call):
+def test_install(_makedirs, m_exists, m_check_call):
     install = mozphab.install_arc_if_required
     m_exists.return_value = True
     install()
@@ -348,7 +352,6 @@ def test_get_users_no_users():
 
 @mock.patch("mozphab.ConduitAPI.call")
 def test_get_users_with_user(m_conduit):
-    repo = mozphab.Repository(None, None, "dummy")
     conduit = mozphab.conduit
 
     user = {"userName": "alice", "phid": "PHID-USER-1"}

@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/python:2.7
+      - image: circleci/python:3
 
     working_directory: ~/repo
 
@@ -12,23 +12,29 @@ jobs:
       - run:
           name: install dependencies
           command: |
-            # venv
+            # py2.7 & venv
+            sudo apt-get install python2.7 python2.7-dev
             virtualenv -p python2.7 venv
             . venv/bin/activate
             pip install -r dev-requirements.txt
             # modern hg
             pip install --upgrade mercurial hg-evolve
-            # install arc, etc
-            mkdir venv/arc
-            git clone https://github.com/phacility/libphutil.git venv/arc/libphutil
-            git clone https://github.com/phacility/arcanist.git venv/arc/arcanist
-            ln -s $( pwd )/venv/arc/arcanist/bin/arc venv/bin/arc
             # configure git
             git config --global user.email "moz-phab-tests@example.com"
             git config --global user.name "moz-phab tests"
             # configure hg
             echo -e "[ui]\nusername=mozophab test <moz-phab@example.com>" > ~/.hgrc
             echo -e "[extensions]\nevolve=$( pwd )/venv/lib/python2.7/site-packages/hgext3rd/evolve" >> ~/.hgrc
+            # linting tools
+            pip install flake8
+            sudo pip3 install black
+
+      - run:
+          name: linting
+          command: |
+            . venv/bin/activate
+            black --check moz-phab *.py **/*.py
+            flake8 --max-line-length=88 --ignore=E203,W503 --disable-noqa moz-phab *.py **/*.py
 
       - run:
           name: run tests

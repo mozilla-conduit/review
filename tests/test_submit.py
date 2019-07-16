@@ -666,7 +666,6 @@ class TestUpdateCommitSummary(unittest.TestCase):
         c = commit(rev_id="D123")
         call_conduit.return_value = {}
 
-        repo = mozphab.Repository(None, None, "dummy")
         mozphab.conduit.update_phabricator_commit_summary(c)
 
         call_conduit.assert_called_once_with(

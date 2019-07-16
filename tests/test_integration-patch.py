@@ -5,7 +5,6 @@ import copy
 import imp
 import os
 import mock
-import pytest
 import time
 
 from conftest import hg_out, git_out
