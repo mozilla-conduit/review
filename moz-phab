@@ -59,10 +59,14 @@ from glob import glob
 
 DEBUG = bool(os.getenv("DEBUG"))
 IS_WINDOWS = sys.platform == "win32"
-HAS_ANSI = not IS_WINDOWS and (
-    (hasattr(sys.stdout, "isatty") and sys.stdout.isatty())
-    or os.getenv("TERM", "") == "ANSI"
-    or os.getenv("PYCHARM_HOSTED", "") == "1"
+HAS_ANSI = (
+    not IS_WINDOWS
+    and not os.getenv("NO_ANSI")
+    and (
+        (hasattr(sys.stdout, "isatty") and sys.stdout.isatty())
+        or os.getenv("TERM", "") == "ANSI"
+        or os.getenv("PYCHARM_HOSTED", "") == "1"
+    )
 )
 SELF_FILE = os.getenv("UPDATE_FILE") if os.getenv("UPDATE_FILE") else __file__
 SHOW_SPINNER = True
@@ -435,24 +439,34 @@ signal.signal(signal.SIGINT, sig_int.signal_handler)
 
 
 class Spinner(threading.Thread):
-    def __init__(self):
+    def __init__(self, message):
         super(Spinner, self).__init__()
+        self.message = message
         self.daemon = True
         self.running = False
 
     def run(self):
         self.running = True
+
+        if not HAS_ANSI:
+            sys.stdout.write("%s  " % self.message)
+
         spinner = ["-", "\\", "|", "/"]
         spin = 0
-        sys.stdout.write(" ")
         try:
             while self.running:
-                sys.stdout.write(chr(8) + spinner[spin])
+                if HAS_ANSI:
+                    sys.stdout.write("%s %s\r" % (self.message, spinner[spin]))
+                else:
+                    sys.stdout.write(chr(8) + spinner[spin])
                 sys.stdout.flush()
                 spin = (spin + 1) % len(spinner)
                 time.sleep(0.2)
         finally:
-            sys.stdout.write(chr(8) + " ")
+            if HAS_ANSI:
+                sys.stdout.write("\r\033[K")
+            else:
+                sys.stdout.write(chr(8) + " \n")
             sys.stdout.flush()
 
 
@@ -462,17 +476,13 @@ def wait_message(message):
         yield
         return
 
-    sys.stdout.write("\033[90m%s " % message if HAS_ANSI else "%s " % message)
-    sys.stdout.flush()
-    spinner = Spinner()
+    spinner = Spinner(message)
     spinner.start()
     try:
         yield
     finally:
         spinner.running = False
         spinner.join()
-        sys.stdout.write("\033[0m\r\033[K" if HAS_ANSI else "\n")
-        sys.stdout.flush()
         if sig_int.triggered:
             print("Cancelled")
             sys.exit(3)
