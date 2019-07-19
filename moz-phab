@@ -3266,6 +3266,23 @@ def get_base_ref(diff):
             return ref["identifier"]
 
 
+def check_revision_id(value):
+    # D123 or 123
+    m = re.search(r"^D?(\d+)$", value)
+    if m:
+        return int(m.group(1))
+
+    # Full URL
+    m = re.search(r"^https?://[^/]+/D(\d+)", value)
+    if m:
+        return int(m.group(1))
+
+    # Invalid
+    raise argparse.ArgumentTypeError(
+        "Invalid Revision ID (expected number or URL): %s\n" % value
+    )
+
+
 def patch(repo, args):
     """Patch repository from Phabricator's revisions.
 
@@ -3303,9 +3320,8 @@ def patch(repo, args):
             )
 
     # Get the target revision
-    rev_id = int(args.rev_id.lstrip("D"))
-    with wait_message("Fetching D%s.." % rev_id):
-        revs = conduit.get_revisions(ids=[rev_id])
+    with wait_message("Fetching D%s.." % args.revision_id):
+        revs = conduit.get_revisions(ids=[args.revision_id])
 
     if not revs:
         raise Error("Revision not found")
@@ -3313,7 +3329,7 @@ def patch(repo, args):
     revision = revs[0]
 
     if not args.skip_dependencies:
-        with wait_message("Fetching D%s children.." % rev_id):
+        with wait_message("Fetching D%s children.." % args.revision_id):
             try:
                 children = conduit.get_successor_phids(
                     revision["phid"], include_abandoned=args.include_abandoned
@@ -3334,7 +3350,7 @@ def patch(repo, args):
                 )
                 res = prompt(
                     "Revision D%s has %s.  Would you like to patch the "
-                    "full stack?." % (rev_id, children_msg),
+                    "full stack?." % (args.revision_id, children_msg),
                     ["Yes", "No", "Always"],
                 )
                 if res == "Always":
@@ -3347,7 +3363,7 @@ def patch(repo, args):
                 if non_linear and not args.yes:
                     logger.warning(
                         "Revision D%s has a non-linear successor graph.\n"
-                        "Unable to apply the full stack." % rev_id
+                        "Unable to apply the full stack." % args.revision_id
                     )
                     res = prompt("Continue with only part of the stack?", ["Yes", "No"])
                     if res == "No":
@@ -3355,7 +3371,7 @@ def patch(repo, args):
 
         # Get list of PHIDs in the stack
         try:
-            with wait_message("Fetching D%s parents.." % rev_id):
+            with wait_message("Fetching D%s parents.." % args.revision_id):
                 phids = conduit.get_ancestor_phids(revision["phid"])
         except NonLinearException:
             raise Error("Non linear dependency detected. Unable to patch the stack.")
@@ -3665,7 +3681,9 @@ def parse_args(argv):
     # patch
 
     patch_parser = commands.add_parser("patch", help="Patch from Phabricator revision")
-    patch_parser.add_argument("rev_id", help="Revision number")
+    patch_parser.add_argument(
+        "revision_id", type=check_revision_id, help="Revision number"
+    )
     patch_group = patch_parser.add_mutually_exclusive_group()
     patch_group.add_argument(
         "--apply-to",

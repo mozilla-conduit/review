@@ -2,6 +2,7 @@ import datetime
 import imp
 import mock
 import os
+import argparse
 
 import pytest
 
@@ -9,6 +10,19 @@ mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
 mozphab.SHOW_SPINNER = False
+
+
+def test_check_revision_id():
+    check_revision_id = mozphab.check_revision_id
+
+    assert check_revision_id("123") == 123
+    assert check_revision_id("D123") == 123
+    assert check_revision_id("https://phabricator.example.com/D123") == 123
+    assert check_revision_id("https://phabricator.example.com/D123?") == 123
+    with pytest.raises(argparse.ArgumentTypeError):
+        check_revision_id("D")
+    with pytest.raises(argparse.ArgumentTypeError):
+        check_revision_id("https://example.com/")
 
 
 def test_strip_depends_on():
@@ -224,7 +238,7 @@ def test_patch(
     class Args:
         def __init__(
             self,
-            rev_id="D123",
+            revision_id=123,
             no_commit=False,
             raw=False,
             apply_to="base",
@@ -232,7 +246,7 @@ def test_patch(
             skip_dependencies=False,
             include_abandoned=False,
         ):
-            self.rev_id = rev_id
+            self.revision_id = revision_id
             self.no_commit = no_commit
             self.raw = raw
             self.apply_to = apply_to
@@ -421,7 +435,7 @@ def test_patch(
     m_get_ancestor_phids.return_value = []
     m_call_conduit.side_effect = ("raw2", "raw1")
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1, "DIFFPHID-2": DIFF_2}
-    mozphab.patch(git, Args(rev_id="D1", raw=True, yes=True))
+    mozphab.patch(git, Args(revision_id=1, raw=True, yes=True))
     assert m_get_revisions.call_args_list == [
         mock.call(ids=[1]),
         mock.call(phids=["PHID-2"]),
@@ -433,7 +447,7 @@ def test_patch(
     m_get_successor_phids.side_effect = (mozphab.NonLinearException,)
     m_call_conduit.side_effect = ("raw",)
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
-    mozphab.patch(git, Args(rev_id="D1", raw=True, yes=True))
+    mozphab.patch(git, Args(revision_id=1, raw=True, yes=True))
     m_get_revisions.assert_called_once_with(ids=[1])
 
 
