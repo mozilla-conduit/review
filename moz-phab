@@ -818,42 +818,6 @@ class ConduitAPI:
 
         return diff_dict
 
-    def update_phabricator_commit_summary(self, commit):
-        """Send a new commit summary and description to Phabricator.
-
-        Args:
-            commit: A VCS commit data dict to use for the call args.
-
-        """
-        # From https://phabricator.services.mozilla.com/api/differential.revision.edit
-        #
-        # Example call format we are aiming for:
-        #
-        # $ echo '{
-        #   "transactions": [
-        #     {
-        #       "type": "title",
-        #       "value": "Remove unnecessary branch statement"
-        #     }
-        #     {
-        #       "type": "summary",
-        #       "value": "Blah"
-        #     }
-        #   ],
-        #   "objectIdentifier": "D8095"
-        # }' | arc call-conduit \
-        #       --conduit-uri https://phabricator.services.mozilla.com/ \
-        #       --conduit-token <conduit-token> differential.revision.edit
-        logger.debug("updating revision title and summary in Phabricator")
-        api_call_args = build_api_call_to_update_commit_title_and_summary(commit)
-        try:
-            self.call("differential.revision.edit", api_call_args)
-        except (ConduitAPIError, CommandError) as err:
-            logger.warn(
-                "Error attempting to update revision summary and title in Phabricator"
-            )
-            logger.warn("Error was: %s", err)
-
     def get_successor_phids(self, phid, include_abandoned=False):
         return self.get_related_phids(
             phid, relation="child", include_abandoned=include_abandoned
@@ -2892,31 +2856,32 @@ def update_commits_from_args(commits, args):
     update_commit_title_previews(commits)
 
 
-def build_api_call_to_update_commit_title_and_summary(commit):
-    """Build a Conduit API transaction to update a commit title and summary.
+def update_revision_description(transactions, commit, revision):
+    # Appends differential.revision.edit transaction(s) to `transactions` if
+    # updating the commit title and/or summary is required.
 
-    See https://phabricator.services.mozilla.com/api/differential.revision.edit for
-    the returned JSON object format.
+    if commit["title"] != revision["fields"]["title"]:
+        transactions.append(dict(type="title", value=commit["title"]))
 
-    Args:
-        commit: A VCS commit data dict to use for the call args.
-
-    Returns:
-        A JSON dict that can be passed to a Conduit differential.revision.edit API call.
-    """
     # The Phabricator API will refuse the new summary value if we include the
     # "Differential Revision:" keyword in the summary body.
-    transactions = [
-        dict(type="title", value=commit["title"]),
-        dict(
-            type="summary",
-            value=strip_differential_revision(commit["body"]).encode("utf8"),
-        ),
-    ]
-    return {"transactions": transactions, "objectIdentifier": commit["rev-id"]}
+    local_body = strip_differential_revision(commit["body"]).strip()
+    remote_body = strip_differential_revision(revision["fields"]["summary"]).strip()
+    if local_body != remote_body:
+        transactions.append(dict(type="summary", value=local_body))
 
 
-def build_transaction_to_update_reviewers(commit):
+def update_revision_bug_id(transactions, commit, revision):
+    # Appends differential.revision.edit transaction(s) to `transactions` if
+    # updating the commit bug-id is required.
+    if commit["bug-id"] != revision["fields"]["bugzilla.bug-id"]:
+        transactions.append(dict(type="bugzilla.bug-id", value=commit["bug-id"]))
+
+
+def update_revision_reviewers(transactions, commit):
+    # Appends differential.revision.edit transaction(s) to `transactions` to
+    # set the reviewers.
+
     # Add reviewers
     all_reviewers = commit["reviewers"]["request"] + commit["reviewers"]["granted"]
     # preload all reviewers
@@ -2928,7 +2893,10 @@ def build_transaction_to_update_reviewers(commit):
     blocking_phid = [
         "blocking(%s)" % user["phid"] for user in conduit.get_users(blocking)
     ]
-    return [dict(type="reviewers.set", value=reviewers_phid + blocking_phid)]
+
+    transactions.extend(
+        [dict(type="reviewers.set", value=reviewers_phid + blocking_phid)]
+    )
 
 
 def submit(repo, args):
@@ -3104,37 +3072,25 @@ def submit(repo, args):
 
         if is_update:
             with wait_message("Updating D%s.." % commit["rev-id"]):
-                try:
-                    conduit.update_phabricator_commit_summary(commit)
-                except Exception as e:
-                    logger.warning(
-                        "Warning: failed to update commit summary in Phabricator"
-                    )
-                    logger.debug(e)
-
-                # Update bug id if different
-                revision = conduit.get_revisions(ids=[int(commit["rev-id"])])[0]
                 transactions = []
-                if revision["fields"]["bugzilla.bug-id"] != commit["bug-id"]:
-                    transactions.append(
-                        dict(type="bugzilla.bug-id", value=commit["bug-id"])
-                    )
+                revision = conduit.get_revisions(ids=[int(commit["rev-id"])])[0]
+
+                update_revision_description(transactions, commit, revision)
+                update_revision_bug_id(transactions, commit, revision)
 
                 # Add reviewers only if revision lacks them
-                if has_commit_reviewers and not args.wip:
-                    # Add reviewers only if revision lacks them
-                    if not existing_reviewers:
-                        transactions.extend(
-                            build_transaction_to_update_reviewers(commit)
-                        )
+                if not args.wip and has_commit_reviewers and not existing_reviewers:
+                    update_revision_reviewers(transactions, commit)
+                    transactions.append(dict(type="request-review"))
 
                 if transactions:
-                    api_call_args = {
-                        "objectIdentifier": "D%s" % commit["rev-id"],
-                        "transactions": transactions,
-                    }
                     arc_call_conduit(
-                        "differential.revision.edit", api_call_args, repo.path
+                        "differential.revision.edit",
+                        {
+                            "objectIdentifier": "D%s" % commit["rev-id"],
+                            "transactions": transactions,
+                        },
+                        repo.path,
                     )
 
         # Append/replace div rev url to/in commit description.

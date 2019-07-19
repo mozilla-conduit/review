@@ -180,29 +180,14 @@ Differential Revision: http://example.test/D123
         "differential.revision.edit",
         {
             "objectIdentifier": "D123",
-            "transactions": [{"type": "reviewers.set", "value": ["PHID-USER-1"]}],
+            "transactions": [
+                {"type": "reviewers.set", "value": ["PHID-USER-1"]},
+                {"type": "request-review"},
+            ],
         },
         mock.ANY,
     )
     check_call_by_line.assert_called_once()
-    # [
-    #     mock.ANY,  # arc command with full path
-    #     '--trace',
-    #     'diff',
-    #     '--base',
-    #     'arc:this',
-    #     '--allow-untracked',
-    #     '--no-amend',
-    #     '--no-ansi',
-    #     '--message-file',
-    #     mock.ANY,  # temp message file
-    #     '--message',
-    #     'Revision updated.',
-    #     '--update',
-    #     '123'
-    # ],
-    # cwd=mock.ANY,
-    # never_log=True
 
 
 def test_submit_update_bug_id(in_process, hg_repo_path):

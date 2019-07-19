@@ -142,15 +142,13 @@ def in_process(monkeypatch, safe_environ, request):
     # to make test debugging easier.
     def reraise(*args, **kwargs):
         t, v, tb = sys.exc_info()
-        raise t, v, tb
+        raise (t, v, tb)
 
     monkeypatch.setattr(sys, "exit", reraise)
 
     # Disable uploading a new commit title and summary to Phabricator.  This operation
     # is safe to skip and doing so makes it easier to test other conduit call sites.
-    monkeypatch.setattr(
-        mozphab.ConduitAPI, "update_phabricator_commit_summary", mock.MagicMock()
-    )
+    monkeypatch.setattr(mozphab, "update_revision_description", mock.MagicMock())
 
     def arc_ping(self, *args):
         return True

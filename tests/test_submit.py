@@ -661,66 +661,40 @@ class Commits(unittest.TestCase):
 
 
 class TestUpdateCommitSummary(unittest.TestCase):
-    @mock.patch("mozphab.ConduitAPI.call")
-    def test_update_summary_conduit_args(self, call_conduit):
-        mozphab.ARC = ["arc"]
-        c = commit(rev_id="D123")
-        call_conduit.return_value = {}
-
-        mozphab.conduit.update_phabricator_commit_summary(c)
-
-        call_conduit.assert_called_once_with(
-            "differential.revision.edit",
-            {
-                "objectIdentifier": "D123",
-                "transactions": [
-                    {"type": "title", "value": ""},
-                    {"type": "summary", "value": ""},
-                ],
-            },
-        )
-
-    def test_build_api_call_to_update_title_and_summary(self):
-        # From https://phabricator.services.mozilla.com/api/differential.revision.edit
-        #
-        # Example call format we are aiming for:
-        #
-        # $ echo '{
-        #   "transactions": [
-        #     {
-        #       "type": "title",
-        #       "value": "Remove unnecessary branch statement"
-        #     },
-        #     {
-        #       "type": "summary",
-        #       "value": "Blah"
-        #     }
-        #   ],
-        #   "objectIdentifier": "D8095"
-        # }' | arc call-conduit --conduit-uri \
-        #       https://phabricator.services.mozilla.com/ \
-        #       --conduit-token <conduit-token> differential.revision.edit
-
+    def test_update_revision_description(self):
         c = commit(
             rev_id="D123",
             title="hi!",
-            body=u"hello!  µ-benchmarks are a thing.\n\n"
+            body="hello!  µ-benchmarks are a thing.\n\n"
             "Differential Revision: http://phabricator.test/D123",
         )
-        expected_json = {
-            "transactions": [
-                {"type": "title", "value": "hi!"},
-                {"type": "summary", "value": "hello!  µ-benchmarks are a thing."},
-            ],
-            "objectIdentifier": "D123",
-        }
+        r = dict(fields=dict(title="", summary=""))
+        t = []
 
-        api_call_args = mozphab.build_api_call_to_update_commit_title_and_summary(c)
+        expected = [
+            dict(type="title", value="hi!"),
+            dict(type="summary", value="hello!  µ-benchmarks are a thing."),
+        ]
+        mozphab.update_revision_description(t, c, r)
 
-        self.assertDictEqual(expected_json, api_call_args)
+        self.assertListEqual(t, expected)
+
+    def test_update_revision_description_no_op(self):
+        c = commit(
+            rev_id="D123",
+            title="hi!",
+            body="hello!\n\nDifferential Revision: http://phabricator.test/D123",
+        )
+        r = dict(fields=dict(title="hi!", summary="hello!\n\n"))
+        t = []
+
+        expected = []
+        mozphab.update_revision_description(t, c, r)
+
+        self.assertListEqual(t, expected)
 
     @mock.patch("mozphab.ConduitAPI.get_users")
-    def test_biuild_transaction_to_update_reviewers(self, m_get_users):
+    def test_update_revision_reviewers(self, m_get_users):
         # From https://phabricator.services.mozilla.com/api/differential.revision.edit
         #
         # Example call format we are aiming for:
@@ -746,18 +720,16 @@ class TestUpdateCommitSummary(unittest.TestCase):
             [dict(phid="PHID-USER-2"), dict(phid="PHID-USER-3")],
         )
         c = commit(rev_id="123", reviewers=[["alice", "bob!"], ["frankie!"]])
-        expected_json = [
-            {
-                "type": "reviewers.set",
-                "value": [
-                    "PHID-USER-1",
-                    "blocking(PHID-USER-2)",
-                    "blocking(PHID-USER-3)",
-                ],
-            }
-        ]
+        t = []
 
-        api_call_args = mozphab.build_transaction_to_update_reviewers(c)
+        expected = [
+            dict(
+                type="reviewers.set",
+                value=["PHID-USER-1", "blocking(PHID-USER-2)", "blocking(PHID-USER-3)"],
+            )
+        ]
+        mozphab.update_revision_reviewers(t, c)
+
         self.assertEqual(
             m_get_users.call_args_list,
             [
@@ -766,7 +738,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
                 mock.call(["bob", "frankie"]),
             ],
         )
-        self.assertEqual(expected_json, api_call_args)
+        self.assertListEqual(t, expected)
 
     def test_parse_api_response_with_no_problems(self):
         # Response comes from running:
