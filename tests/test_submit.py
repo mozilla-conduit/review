@@ -705,7 +705,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
             rev_id="D123",
             title="hi!",
             body=u"hello!  µ-benchmarks are a thing.\n\n"
-                  "Differential Revision: http://phabricator.test/D123",
+            "Differential Revision: http://phabricator.test/D123",
         )
         expected_json = {
             "transactions": [
