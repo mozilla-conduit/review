@@ -322,6 +322,8 @@ def check_output(
             "command '%s' failed to complete successfully" % command[0], e.returncode
         )
 
+    output = output.decode("utf8")
+
     if strip:
         output = output.rstrip()
     if output and not never_log:
@@ -2743,7 +2745,7 @@ def arc_message(template_vars):
     if "depends_on" not in template_vars:
         template_vars["depends_on"] = ""
 
-    message = ARC_COMMIT_DESC_TEMPLATE.format(**template_vars)
+    message = ARC_COMMIT_DESC_TEMPLATE.decode("utf8").format(**template_vars)
     logger.debug("--- arc message\n%s\n---" % message)
     return message
 
@@ -2873,7 +2875,10 @@ def build_api_call_to_update_commit_title_and_summary(commit):
     # "Differential Revision:" keyword in the summary body.
     transactions = [
         dict(type="title", value=commit["title"]),
-        dict(type="summary", value=strip_differential_revision(commit["body"])),
+        dict(
+            type="summary",
+            value=strip_differential_revision(commit["body"]).encode("utf8"),
+        ),
     ]
     return {"transactions": transactions, "objectIdentifier": commit["rev-id"]}
 
@@ -3043,7 +3048,10 @@ def submit(repo, args):
                 arc_args.append("--less-context")
             if is_update:
                 message = args.message if args.message else DEFAULT_UPDATE_MESSAGE
-                arc_args.extend(["--message", message] + ["--update", commit["rev-id"]])
+                arc_args.extend(
+                    ["--message", message.decode("utf8")]
+                    + ["--update", commit["rev-id"]]
+                )
             else:
                 arc_args.append("--create")
 

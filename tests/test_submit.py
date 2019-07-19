@@ -1,3 +1,4 @@
+# coding=utf-8
 import copy
 import imp
 import mock
@@ -20,7 +21,7 @@ def reviewers_dict(reviewers=None):
     )
 
 
-def commit(bug_id=None, reviewers=None, body="", name="", title="", rev_id=None):
+def commit(bug_id=None, reviewers=None, body=u"", name="", title="", rev_id=None):
     return {
         "name": name,
         "title": title,
@@ -703,12 +704,13 @@ class TestUpdateCommitSummary(unittest.TestCase):
         c = commit(
             rev_id="D123",
             title="hi!",
-            body="hello!\n\nDifferential Revision: http://phabricator.test/D123",
+            body=u"hello!  µ-benchmarks are a thing.\n\n"
+                  "Differential Revision: http://phabricator.test/D123",
         )
         expected_json = {
             "transactions": [
                 {"type": "title", "value": "hi!"},
-                {"type": "summary", "value": "hello!"},
+                {"type": "summary", "value": "hello!  µ-benchmarks are a thing."},
             ],
             "objectIdentifier": "D123",
         }
