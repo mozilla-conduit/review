@@ -997,7 +997,10 @@ class Repository(object):
         """Check if the working tree is clean."""
 
     def before_submit(self):
-        """Add special step for the submit command."""
+        """Executed before the submit commit."""
+
+    def after_submit(self):
+        """Executed after the submit commit."""
 
     def _phab_url(self):
         """Determine the phab/conduit URL."""
@@ -1217,6 +1220,7 @@ class Mercurial(Repository):
         self.use_evolve = False
         self.has_mq = False
         self.has_shelve = False
+        self.previous_bookmark = None
 
         # Normalise/standardise Mercurial's output.
         os.environ["HGPLAIN"] = "1"
@@ -1264,6 +1268,28 @@ class Mercurial(Repository):
     def hg_log(self, revset, split=True, select="node"):
         return self.hg_out(["log", "-T", "{%s}\n" % select, "-r", revset], split=split)
 
+    def before_submit(self):
+        # Remember the currently checked out commit.  If a bookmark is active
+        # just use that, otherwise create a randomly named bookmark which will
+        # be deleted in cleanup(). Mercurial will automatically move the
+        # bookmark to the successors as we update commits.
+        for active, bookmark in [
+            l.split(" ")
+            for l in self.hg_out(["bookmark", "-T", "{active} {bookmark}\n"])
+        ]:
+            if active == "True":
+                self.previous_bookmark = bookmark
+                break
+        else:
+            self.previous_bookmark = "moz-phab_%s" % self.hg_out(
+                ["id", "-q"], split=False, strip=True
+            )
+            self.hg(["bookmark", self.previous_bookmark])
+
+    def after_submit(self):
+        # Restore the previously active commit.
+        self.hg(["update", self.previous_bookmark])
+
     def cleanup(self):
         # Remove the store of obsolescence markers; if the user doesn't have evolve
         # installed mercurial will warn if this exists.
@@ -1279,6 +1305,13 @@ class Mercurial(Repository):
             # we need to strip them completely from the repo.
             self.hg(["strip", "--hidden"] + self.strip_nodes)
             self.strip_nodes = []
+
+        # Remove temporary bookmark
+        if self.previous_bookmark:
+            bookmarks = self.hg_out(["bookmark", "-T", "{bookmark}\n"])
+            if self.previous_bookmark in bookmarks:
+                self.hg(["bookmark", "--delete", self.previous_bookmark])
+            self.previous_bookmark = None
 
     def _status(self):
         # `hg status` is slow on large repos.  As we'll need both uncommitted changes
@@ -3121,6 +3154,7 @@ def submit(repo, args):
     # final showing.
     with wait_message("Cleaning up.."):
         repo.finalize(commits)
+        repo.after_submit()
         repo.cleanup()
         repo.refresh_commit_stack(commits)
 
@@ -3813,8 +3847,10 @@ def main(argv):
                 repo = repo_from_args(args)
 
             conduit.set_args_from_repo(repo)
-            args.func(repo, args)
-            repo.cleanup()
+            try:
+                args.func(repo, args)
+            finally:
+                repo.cleanup()
 
         else:
             args.func(args)

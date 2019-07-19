@@ -40,6 +40,10 @@ def _add_commit(repo, parent, name):
     repo["rev_map"][name] = str(repo["rev"])
 
 
+def _checkout(repo, name):
+    hg_out("update", repo["rev_map"][name])
+
+
 def _submit(repo, start, end, expected):
     mozphab.main(
         ["submit", "--yes", "--bug", "1", repo["rev_map"][start], repo["rev_map"][end]]
@@ -59,11 +63,11 @@ def test_submit_single_1(in_process, hg_repo_path):
         "A1",
         "A1",
         """
-o  C1
+@  C1
 |
 o  B1
 |
-@  Bug 1 - A1
+o  Bug 1 - A1
 |
 o  R0
 """,
@@ -81,11 +85,11 @@ def test_submit_single_2(in_process, hg_repo_path):
         "A1",
         "A1",
         """
-o  B2
+@  B2
 |
 | o  B1
 |/
-@  Bug 1 - A1
+o  Bug 1 - A1
 |
 o  R0
 """,
@@ -104,13 +108,13 @@ def test_submit_single_3(in_process, hg_repo_path):
         "A1",
         "A1",
         """
-o  C2
+@  C2
 |
 | o  C1
 |/
 o  B1
 |
-@  Bug 1 - A1
+o  Bug 1 - A1
 |
 o  R0
 """,
@@ -122,14 +126,15 @@ def test_submit_stack_1(in_process, hg_repo_path):
 
     _add_commit(repo, "R0", "A1")
     _add_commit(repo, "A1", "B1")
+    _checkout(repo, "A1")
     _submit(
         repo,
         "A1",
         "B1",
         """
-@  Bug 1 - B1
+o  Bug 1 - B1
 |
-o  Bug 1 - A1
+@  Bug 1 - A1
 |
 o  R0
 """,
@@ -147,9 +152,9 @@ def test_submit_stack_2(in_process, hg_repo_path):
         "A1",
         "B1",
         """
-@  Bug 1 - B1
+o  Bug 1 - B1
 |
-| o  B2
+| @  B2
 |/
 o  Bug 1 - A1
 |
@@ -170,9 +175,9 @@ def test_submit_stack_3(in_process, hg_repo_path):
         "A1",
         "B1",
         """
-o  C1
+@  C1
 |
-@  Bug 1 - B1
+o  Bug 1 - B1
 |
 | o  B2
 |/
