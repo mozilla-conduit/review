@@ -101,7 +101,7 @@ To get information about all available commands run
 All commands involving VCS (like `submit` and `patch`) might be used with a
 `--safe-mode` switch. It will run the VCS command with only chosen set of extensions.
 
-### Submiting commits to the Phabricator
+### Submitting commits to the Phabricator
 The simplest invocation is
 
 ```
