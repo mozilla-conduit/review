@@ -2200,8 +2200,8 @@ class Git(Repository):
                 ["commit-tree", "-p", parent, "-F", message_file, tree_hash],
                 split=False,
                 extra_env={
-                    "GIT_AUTHOR_NAME": author_name,
-                    "GIT_AUTHOR_EMAIL": author_email,
+                    "GIT_AUTHOR_NAME": author_name.encode("utf-8"),
+                    "GIT_AUTHOR_EMAIL": author_email.encode("utf-8"),
                     "GIT_AUTHOR_DATE": author_date,
                 },
             )

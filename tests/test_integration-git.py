@@ -100,6 +100,29 @@ Tue, 22 Jan 2019 13:42:48 +0000+++foo+++foo@bar.com
     assert log == expected
 
 
+def test_submit_utf8_author(in_process, git_repo_path, init_sha):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
+    testfile = git_repo_path / "X"
+    testfile.write_text(u"a")
+    git_out("add", ".")
+    git_out(
+        "commit",
+        "--date",
+        "Tue, 22 Jan 2019 13:42:48 +0000",
+        "--author",
+        "ćwikła <ćwikła@bar.com>",
+        "--message",
+        "A r?alice",
+    )
+
+    mozphab.main(["submit", "--yes", "--bug", "1", init_sha])
+
+    log = git_out("log", "--format=%aD+++%an+++%ae", "-1")
+    expected = u"Tue, 22 Jan 2019 13:42:48 +0000+++ćwikła+++ćwikła@bar.com\n"
+    assert log.decode("utf-8") == expected
+
+
 def test_submit_update(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
