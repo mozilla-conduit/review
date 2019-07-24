@@ -1516,7 +1516,7 @@ class Mercurial(Repository):
     def apply_patch(self, diff, body, author, author_date):
         commands = []
         if author:
-            commands.extend(["-u", author])
+            commands.extend(["-u", author.encode("utf8")])
 
         if author_date:
             commands.extend(["-d", author_date])
@@ -2110,7 +2110,7 @@ class Git(Repository):
         """Commit the changes in the working directory."""
         commands = ["commit", "-a"]
         if author:
-            commands.append('--author="%s"' % author)
+            commands.append('--author="%s"' % author.encode("utf8"))
 
         if author_date:
             commands.append('--date="%s"' % author_date)
