@@ -1874,7 +1874,7 @@ class Git(Repository):
         """Store moz-phab command line args and set the revset."""
         super(Git, self).set_args(args)
 
-        git_config = parse_config(self.git_out(["config", "--list"]))
+        git_config = parse_config(self.git_out(["config", "--list"], never_log=True))
 
         safe_options = []
 
