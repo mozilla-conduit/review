@@ -69,7 +69,8 @@ HAS_ANSI = (
     )
 )
 SELF_FILE = os.getenv("UPDATE_FILE") if os.getenv("UPDATE_FILE") else __file__
-SHOW_SPINNER = True
+# Switched off temporarily due to https://bugzilla.mozilla.org/show_bug.cgi?id=1565502
+SHOW_SPINNER = False
 
 # Constants and Globals
 
