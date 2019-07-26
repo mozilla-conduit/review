@@ -39,12 +39,11 @@ def test_first_unpublished(m_config, m_git_cherry, m_git_git_out, git):
     assert first() is None
     with pytest.raises(mozphab.Error):
         first()
-        m_git_cherry.assert_called_with(["cherry", "--abbrev=12", "upstream"], [])
 
     m_git_cherry.side_effect = ([],)
     git.args = Args(upstream=["upstream"])
     first()
-    m_git_cherry.assert_called_with(["cherry", "--abbrev=12", "upstream"], [])
+    m_git_cherry.assert_called_with(["cherry", "--abbrev=12"], ["upstream"])
 
     m_git_cherry.side_effect = ([],)
     m_config.git_remote = ["someremote"]

@@ -1833,7 +1833,7 @@ class Git(Repository):
         cherry = ["cherry", "--abbrev=12"]
         remotes = config.git_remote
         if self.args.upstream:
-            cherry += self.args.upstream
+            remotes = self.args.upstream
         elif not remotes:
             remotes = self.git_out(["remote"])
             if len(remotes) > 1:
