@@ -1629,6 +1629,7 @@ class Mercurial(Repository):
         self.has_mq = False
         self.has_shelve = False
         self.previous_bookmark = None
+        self.has_temporary_bookmark = False
 
         # Normalise/standardise Mercurial's output.
         os.environ["HGPLAIN"] = "1"
@@ -1692,6 +1693,7 @@ class Mercurial(Repository):
             self.previous_bookmark = "moz-phab_%s" % self.hg_out(
                 ["id", "-q"], split=False, strip=True
             )
+            self.has_temporary_bookmark = True
             self.hg(["bookmark", self.previous_bookmark])
 
     def after_submit(self):
@@ -1715,11 +1717,12 @@ class Mercurial(Repository):
             self.strip_nodes = []
 
         # Remove temporary bookmark
-        if self.previous_bookmark:
+        if self.has_temporary_bookmark:
             bookmarks = self.hg_out(["bookmark", "-T", "{bookmark}\n"])
             if self.previous_bookmark in bookmarks:
                 self.hg(["bookmark", "--delete", self.previous_bookmark])
             self.previous_bookmark = None
+            self.has_temporary_bookmark = False
 
     def _status(self):
         # `hg status` is slow on large repos.  As we'll need both uncommitted changes
