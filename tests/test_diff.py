@@ -62,9 +62,11 @@ def test_change_file(m_git_out, m_cat_file, m_file_size, git):
     diff = mozphab.Diff()
     m_cat_file.side_effect = ("a\n", "a\nb\n")
     m_git_out.return_value = """\
-diff --git a/78981922613b2afb6025042ff6bd878ac1994e85 b/422c2b7ab3b3c668038da977e4e93a5fc623169c
+diff --git a/78981922613b2afb6025042ff6bd878ac1994e85 \
+b/422c2b7ab3b3c668038da977e4e93a5fc623169c
 index 7898192..422c2b7 100644
---- a/78981922613b2afb6025042ff6bd878ac1994e85\n+++ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
+--- a/78981922613b2afb6025042ff6bd878ac1994e85\n+++ \
+b/422c2b7ab3b3c668038da977e4e93a5fc623169c
 @@ -1 +1,2 @@
  a
 +b"""
@@ -187,16 +189,18 @@ def test_less_context(m_git_out, m_cat_file, m_file_size, git):
     diff = mozphab.Diff()
     m_cat_file.side_effect = ("a\n", "a\nb\n")
     m_git_out.return_value = """\
-diff --git a/78981922613b2afb6025042ff6bd878ac1994e85 b/422c2b7ab3b3c668038da977e4e93a5fc623169c
+diff --git a/78981922613b2afb6025042ff6bd878ac1994e85 \
+b/422c2b7ab3b3c668038da977e4e93a5fc623169c
 index 7898192..422c2b7 100644
---- a/78981922613b2afb6025042ff6bd878ac1994e85\n+++ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
+--- a/78981922613b2afb6025042ff6bd878ac1994e85\n+++ \
+b/422c2b7ab3b3c668038da977e4e93a5fc623169c
 @@ -1 +1,2 @@
  a
 +b"""
     m_file_size.return_value = 5
     git.args = Args(less_context=True)
 
-    change = git._parse_diff_change(raw, diff)
+    git._parse_diff_change(raw, diff)
     m_git_out.assert_called_once_with(
         [
             "diff",

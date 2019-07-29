@@ -181,11 +181,13 @@ def test_submit_update(in_process, git_repo_path, init_sha):
     testfile.write_text(u"ą")
     git_out("add", ".")
     msgfile = git_repo_path / "msg"
-    msgfile.write_text(u"""\
+    msgfile.write_text(
+        u"""\
 Bug 1 - Ą
 
 Differential Revision: http://example.test/D123
-""")
+"""
+    )
     git_out("commit", "--file", "msg")
 
     mozphab.main(
@@ -203,7 +205,6 @@ Differential Revision: http://example.test/D123
 
 """
     assert log == expected
-
 
 
 def test_submit_different_author(in_process, git_repo_path, init_sha):
