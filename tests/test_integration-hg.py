@@ -39,6 +39,33 @@ Differential Revision: http://example.test/D123
 """
     assert log.strip() == expected.strip()
 
+    assert hg_out("bookmark").strip() == "no bookmarks set"
+
+
+def test_submit_create_with_user_bookmark(in_process, hg_repo_path):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
+
+    testfile = hg_repo_path / "X"
+    testfile.write_text(u"a")
+    hg_out("add")
+    hg_out("commit", "--message", "A r?alice")
+
+    user_bookmark_name = "user_bookmark"
+    hg_out("bookmark", user_bookmark_name)
+
+    mozphab.main(["submit", "--yes", "--bug", "1"])
+
+    log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
+    expected = """
+Bug 1 - A r?alice
+
+Differential Revision: http://example.test/D123
+"""
+    assert log.strip() == expected.strip()
+
+    assert hg_out("bookmark").startswith(" * " + user_bookmark_name)
+
 
 def test_submit_update(in_process, hg_repo_path):
     call_conduit.reset_mock()
