@@ -161,7 +161,10 @@ def test_submit_update(in_process, git_repo_path, init_sha):
         dict(
             data=[
                 {
-                    "fields": {"bugzilla.bug-id": "1"},
+                    "fields": {
+                        "bugzilla.bug-id": "1",
+                        "status": {"value": "needs-review"},
+                    },
                     "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
                     "id": 123,
                     "attachments": {"reviewers": {"reviewers": []}},
@@ -274,7 +277,10 @@ def test_submit_update_arc(in_process, git_repo_path, init_sha):
         {  # differential.revision.search
             "data": [
                 {
-                    "fields": {"bugzilla.bug-id": "1"},
+                    "fields": {
+                        "bugzilla.bug-id": "1",
+                        "status": {"value": "needs-review"},
+                    },
                     "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
                     "id": 123,
                     "attachments": {"reviewers": {"reviewers": []}},
@@ -324,7 +330,10 @@ def test_submit_update_bug_id(in_process, git_repo_path, init_sha):
                 {
                     "id": 123,
                     "phid": "PHID-REV-1",
-                    "fields": {"bugzilla.bug-id": "1"},
+                    "fields": {
+                        "bugzilla.bug-id": "1",
+                        "status": {"value": "needs-review"},
+                    },
                     "attachments": {"reviewers": {"reviewers": []}},
                 }
             ]

@@ -76,7 +76,10 @@ def test_submit_update(in_process, hg_repo_path):
                 {
                     "id": 123,
                     "phid": "PHID-REV-1",
-                    "fields": {"bugzilla.bug-id": "1"},
+                    "fields": {
+                        "bugzilla.bug-id": "1",
+                        "status": {"value": "needs-review"},
+                    },
                     "attachments": {"reviewers": {"reviewers": []}},
                 }
             ]
@@ -86,7 +89,10 @@ def test_submit_update(in_process, hg_repo_path):
                 {
                     "id": "123",
                     "phid": "PHID-REV-1",
-                    "fields": {"bugzilla.bug-id": "1"},
+                    "fields": {
+                        "bugzilla.bug-id": "1",
+                        "status": {"value": "needs-review"},
+                    },
                     "attachments": {
                         "reviewers": {"reviewers": [{"reviewerPHID": "PHID-USER-1"}]}
                     },
@@ -134,7 +140,10 @@ def test_submit_update_reviewers_not_updated(in_process, hg_repo_path):
                 {
                     "id": 123,
                     "phid": "PHID-REV-1",
-                    "fields": {"bugzilla.bug-id": "1"},
+                    "fields": {
+                        "bugzilla.bug-id": "1",
+                        "status": {"value": "needs-review"},
+                    },
                     "attachments": {
                         "reviewers": {"reviewers": [{"reviewerPHID": "PHID-USER-1"}]}
                     },
@@ -176,7 +185,10 @@ def test_submit_update_no_new_reviewers(in_process, hg_repo_path):
                 {
                     "id": 123,
                     "phid": "PHID-REV-1",
-                    "fields": {"bugzilla.bug-id": "1"},
+                    "fields": {
+                        "bugzilla.bug-id": "1",
+                        "status": {"value": "changes-planned"},
+                    },
                     "attachments": {"reviewers": {"reviewers": []}},
                 }
             ]
@@ -226,7 +238,10 @@ def test_submit_update_bug_id(in_process, hg_repo_path):
                 {
                     "id": 123,
                     "phid": "PHID-REV-1",
-                    "fields": {"bugzilla.bug-id": "1"},
+                    "fields": {
+                        "bugzilla.bug-id": "1",
+                        "status": {"value": "needs-review"},
+                    },
                     "attachments": {
                         "reviewers": {"reviewers": [{"reviewerPHID": "PHID-USER-1"}]}
                     },

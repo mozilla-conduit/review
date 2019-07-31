@@ -3646,11 +3646,12 @@ def submit(repo, args):
     for commit in commits:
         # Only revisions being updated have an ID.  Newly created ones don't.
         is_update = bool(commit["rev-id"])
+        revision_to_update = (
+            revisions_to_update[commit["rev-id"]] if is_update else None
+        )
         existing_reviewers = (
-            revisions_to_update[commit["rev-id"]]["attachments"]["reviewers"][
-                "reviewers"
-            ]
-            if commit["rev-id"]
+            revision_to_update["attachments"]["reviewers"]["reviewers"]
+            if revision_to_update
             else None
         )
         has_commit_reviewers = bool(
@@ -3764,6 +3765,7 @@ def submit(repo, args):
                 raise Error("Failed to find 'Revision URL' in arc output")
 
             if is_update:
+                current_status = revision_to_update["fields"]["status"]["value"]
                 with wait_message("Updating D%s.." % commit["rev-id"]):
                     transactions = []
                     revision = conduit.get_revisions(ids=[int(commit["rev-id"])])[0]
@@ -3774,7 +3776,8 @@ def submit(repo, args):
                     # Add reviewers only if revision lacks them
                     if not args.wip and has_commit_reviewers and not existing_reviewers:
                         update_revision_reviewers(transactions, commit)
-                        transactions.append(dict(type="request-review"))
+                        if current_status != "needs-review":
+                            transactions.append(dict(type="request-review"))
 
                     if transactions:
                         arc_call_conduit(
