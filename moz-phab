@@ -1047,9 +1047,9 @@ class ConduitAPI:
         )
         self.call("differential.setdiffproperty", api_call_args)
 
-    def file_upload(seld, data):
+    def file_upload(self, data):
         data_base64 = base64.standard_b64encode(data)
-        return conduit.call("file.upload", dict(data_base64=data_base64.decode()))
+        return self.call("file.upload", dict(data_base64=data_base64.decode()))
 
 
 conduit = ConduitAPI()
