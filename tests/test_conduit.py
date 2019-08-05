@@ -8,6 +8,7 @@ import json
 import mock
 import os
 import pytest
+from frozendict import frozendict
 
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
@@ -115,72 +116,105 @@ def test_check(m_open, m_os, m_ping, m_call):
     assert not check()
 
 
-@mock.patch("mozphab.ConduitAPI.call")
-def test_get_revisions(m_call):
-    repo = mozphab.Repository("", "", "dummy")
-    mozphab.conduit.set_repo(repo)
-    get_revs = mozphab.conduit.get_revisions
+@pytest.fixture
+def get_revs():
+    mozphab.conduit.set_repo(mozphab.Repository("", "", "dummy"))
+    return mozphab.conduit.get_revisions
 
-    # sanity checks
+
+@pytest.fixture
+def m_call(request):
+    request.addfinalizer(mozphab.cache.reset)
+    with mock.patch("mozphab.ConduitAPI.call") as xmock:
+        yield xmock
+
+
+def test_get_revisions_both_ids_and_phids_fails(get_revs, m_call):
     with pytest.raises(ValueError):
         get_revs(ids=[1], phids=["PHID-1"])
+
+
+def test_get_revisions_none_ids_fails(get_revs, m_call):
     with pytest.raises(ValueError):
         get_revs(ids=None)
+
+
+def test_get_revisions_none_phids_fails(get_revs, m_call):
     with pytest.raises(ValueError):
         get_revs(phids=None)
 
-    m_call.return_value = {"data": [dict(id=1, phid="PHID-1")]}
 
-    # differential.revision.search by revision-id
+basic_phab_result = frozendict({"data": [dict(id=1, phid="PHID-1")]})
+
+
+def test_get_revisions_search_by_revid(get_revs, m_call):
+    """differential.revision.search by revision-id"""
+    m_call.return_value = basic_phab_result
+
     assert len(get_revs(ids=[1])) == 1
     m_call.assert_called_with(
         "differential.revision.search",
         dict(constraints=dict(ids=[1]), attachments=dict(reviewers=True)),
     )
 
-    # differential.revision.search by phid
-    m_call.reset_mock()
-    mozphab.cache.reset()
+
+def test_get_revisions_search_by_phid(get_revs, m_call):
+    """differential.revision.search by phid"""
+    m_call.return_value = basic_phab_result
+
     assert len(get_revs(phids=["PHID-1"])) == 1
     m_call.assert_called_with(
         "differential.revision.search",
         dict(constraints=dict(phids=["PHID-1"]), attachments=dict(reviewers=True)),
     )
 
-    # differential.revision.search by revision-id with duplicates
-    m_call.reset_mock()
-    mozphab.cache.reset()
+
+def test_get_revisions_search_by_revid_with_dups(get_revs, m_call):
+    """differential.revision.search by revision-id with duplicates"""
+    m_call.return_value = basic_phab_result
+
     assert len(get_revs(ids=[1, 1])) == 2
     m_call.assert_called_with(
         "differential.revision.search",
         dict(constraints=dict(ids=[1]), attachments=dict(reviewers=True)),
     )
 
-    # differential.revision.search by phid with duplicates
-    m_call.reset_mock()
-    mozphab.cache.reset()
+
+def test_get_revisions_search_by_phid_with_dups(get_revs, m_call):
+    """differential.revision.search by phid with duplicates"""
+    m_call.return_value = basic_phab_result
+
     assert len(get_revs(phids=["PHID-1", "PHID-1"])) == 2
     m_call.assert_called_with(
         "differential.revision.search",
         dict(constraints=dict(phids=["PHID-1"]), attachments=dict(reviewers=True)),
     )
 
-    # ordering of results must match input
-    m_call.reset_mock()
-    mozphab.cache.reset()
-    m_call.return_value = {
+
+multiple_phab_result = frozendict(
+    {
         "data": [
             dict(id=1, phid="PHID-1"),
             dict(id=2, phid="PHID-2"),
             dict(id=3, phid="PHID-3"),
         ]
     }
+)
+
+
+def test_get_revisions_search_by_revids_ordering(get_revs, m_call):
+    """ordering of results must match input when querying by revids"""
+    m_call.return_value = multiple_phab_result
     assert get_revs(ids=[2, 1, 3]) == [
         dict(id=2, phid="PHID-2"),
         dict(id=1, phid="PHID-1"),
         dict(id=3, phid="PHID-3"),
     ]
 
+
+def test_get_revisions_search_by_phids_ordering(get_revs, m_call):
+    """ordering of results must match input when querying by phids"""
+    m_call.return_value = multiple_phab_result
     assert get_revs(phids=["PHID-2", "PHID-1", "PHID-3"]) == [
         dict(id=2, phid="PHID-2"),
         dict(id=1, phid="PHID-1"),
