@@ -5,7 +5,7 @@ import mock
 import os
 import pytest
 
-from conftest import create_temp_fn
+from .conftest import create_temp_fn
 
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")

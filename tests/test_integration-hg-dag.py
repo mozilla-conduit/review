@@ -5,7 +5,7 @@ import imp
 import os
 import mock
 
-from conftest import hg_out
+from .conftest import hg_out
 
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
@@ -27,14 +27,14 @@ check_call_by_line = mock.Mock(side_effect=_check_call_by_line_gen)
 
 def _init_repo(hg_repo_path):
     test_file = hg_repo_path / "X"
-    test_file.write_text(u"R0")
+    test_file.write_text("R0")
     hg_out("commit", "--addremove", "--message", "R0")
     return dict(test_file=test_file, rev=0, rev_map={"R0": "0"})
 
 
 def _add_commit(repo, parent, name):
     hg_out("update", repo["rev_map"][parent])
-    repo["test_file"].write_text(name.decode("utf8"))
+    repo["test_file"].write_text(name)
     hg_out("commit", "--message", name)
     repo["rev"] += 1
     repo["rev_map"][name] = str(repo["rev"])

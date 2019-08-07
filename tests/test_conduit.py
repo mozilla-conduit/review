@@ -3,6 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import collections
 import imp
 import json
 import mock
@@ -30,8 +31,8 @@ def test_set_args_from_repo():
 
 
 args_query_testdata = [
-    [dict(a=u"Ą"), [("a", u"Ą")]],
-    [dict(a="A", B="b"), [("a", "A"), ("B", "b")]],
+    [dict(a="Ą"), [("a", "Ą")]],
+    [dict(a="A", B="b"), [("B", "b"), ("a", "A")]],
     [dict(a=1), [("a", "1")]],
     [dict(arr=["a", 1, 2]), [("arr[0]", "a"), ("arr[1]", "1"), ("arr[2]", "2")]],
     [dict(a=dict(b=[1])), [("a[b][0]", "1")]],
@@ -53,8 +54,8 @@ def test_load_api_token(m_read):
     assert mozphab.conduit.load_api_token() == "x"
 
 
-@mock.patch("mozphab.urllib2.Request")
-@mock.patch("mozphab.urllib2.urlopen")
+@mock.patch("mozphab.urllib.request.Request")
+@mock.patch("mozphab.urllib.request.urlopen")
 @mock.patch("mozphab.ConduitAPI.load_api_token")
 def test_call(m_token, m_urlopen, m_Request):
     req = mock.Mock()
@@ -67,13 +68,13 @@ def test_call(m_token, m_urlopen, m_Request):
 
     assert mozphab.conduit.call("method", dict(call="args")) == "x"
     m_Request.assert_called_once_with(
-        "http://api_url/method", data="api.token=token&call=args"
+        "http://api_url/method", data=b"api.token=token&call=args"
     )
     m_urlopen.assert_called_once()
 
-    assert mozphab.conduit.call("method", dict(call=u"ćwikła")) == "x"
+    assert mozphab.conduit.call("method", dict(call="ćwikła")) == "x"
     m_Request.assert_called_with(
-        "http://api_url/method", data="api.token=token&call=%C4%87wik%C5%82a"
+        "http://api_url/method", data=b"api.token=token&call=%C4%87wik%C5%82a"
     )
 
     response.read.return_value = json.dumps(dict(error_code=1, error_info="x"))
@@ -97,7 +98,7 @@ def test_ping(m_call):
 @mock.patch("mozphab.ConduitAPI.call")
 @mock.patch("mozphab.ConduitAPI.ping")
 @mock.patch("mozphab.os")
-@mock.patch("__builtin__.open")
+@mock.patch("builtins.open")
 def test_check(m_open, m_os, m_ping, m_call):
     check = mozphab.conduit.check
 

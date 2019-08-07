@@ -1,13 +1,13 @@
+import builtins
 import datetime
 import errno
 import imp
 import json
 import mock
 import os
-import unittest
-import __builtin__
-
 import pytest
+import subprocess
+import unittest
 
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
@@ -16,7 +16,7 @@ mozphab.SHOW_SPINNER = False
 
 
 class Helpers(unittest.TestCase):
-    @mock.patch("__builtin__.open")
+    @mock.patch("builtins.open")
     @mock.patch("mozphab.json")
     def test_read_json_field(self, m_json, m_open):
         m_open.side_effect = IOError(errno.ENOENT, "Not a file")
@@ -54,15 +54,15 @@ class Helpers(unittest.TestCase):
             "value CA", mozphab.read_json_field(["file_a", "file_b"], ["c", "a"])
         )
 
-    @mock.patch.object(__builtin__, "raw_input")
+    @mock.patch.object(builtins, "input")
     @mock.patch("mozphab.sys")
-    def test_prompt(self, m_sys, m_raw_input):
+    def test_prompt(self, m_sys, m_input):
         input_response = None
 
-        def _raw_input(_):
+        def _input(_):
             return input_response
 
-        m_raw_input.side_effect = _raw_input
+        m_input.side_effect = _input
 
         # Default
         input_response = ""
@@ -192,23 +192,8 @@ class Helpers(unittest.TestCase):
     @mock.patch("mozphab.os.access")
     @mock.patch("mozphab.os.path")
     @mock.patch("mozphab.os.environ")
-    def test_which_a(self, m_os_environ, m_os_path, m_os_access):
-        m_os_environ.get.return_value = "/one:/two"
-        m_os_path.expanduser = lambda x: x
-        m_os_path.normcase = lambda x: x
-        m_os_path.join = lambda x, y: "%s/%s" % (x, y)
-        m_os_path.exists.side_effect = (False, True)
-        m_os_access.return_value = True
-        m_os_path.isdir.return_value = False
-
-        path = "x"
-        self.assertEqual("/two/x", mozphab.which(path))
-
-    @mock.patch("mozphab.os.access")
-    @mock.patch("mozphab.os.path")
-    @mock.patch("mozphab.os.environ")
     @mock.patch("mozphab.which")
-    def test_which_b(self, m_which, _os_environ, m_os_path, m_os_access):
+    def test_which_path(self, m_which, _os_environ, m_os_path, m_os_access):
         m_os_path.exists.side_effect = (True, False)
         m_os_access.return_value = True
         m_os_path.isdir.return_value = False
@@ -266,16 +251,19 @@ def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
         {"data": [{"fields": {"slug": "user-group"}}], "maps": {"slugMap": []}},
     )
     expected_errors = [
-        dict(name="goober", until=ts_str),
-        dict(name="#goo-group"),
         dict(name="#gon-group"),
+        dict(name="#goo-group"),
+        dict(name="goober", until=ts_str),
         dict(name="goozer"),
     ]
-    assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers)
+
+    errors = mozphab.check_for_invalid_reviewers(reviewers)
+    errors.sort(key=lambda k: k["name"])
+    assert expected_errors == errors
 
 
 @mock.patch("mozphab.ConduitAPI.call")
-def test_reviwer_case_sensitivity(call_conduit):
+def test_reviewer_case_sensitivity(call_conduit):
     reviewers = dict(granted=[], request=["Alice", "#uSeR-gRoUp"])
     call_conduit.side_effect = (
         # See https://phabricator.services.mozilla.com/conduit/method/user.query/
@@ -383,3 +371,98 @@ def test_simple_cache():
 
     cache.delete("something")
     assert cache.get("something") is None
+
+
+@mock.patch("subprocess.check_output")
+def test_check_output(m_check_output):
+    m_check_output.side_effect = subprocess.CalledProcessError(cmd="", returncode=1)
+    with pytest.raises(mozphab.CommandError):
+        mozphab.check_output(["command"])
+
+    m_check_output.side_effect = ("response \nline \n",)
+    assert ["response ", "line"] == mozphab.check_output(["command"])
+
+    m_check_output.side_effect = ("response \nline \n",)
+    assert ["response ", "line "] == mozphab.check_output(["command"], strip=False)
+
+    m_check_output.side_effect = ("response \nline \n",)
+    assert "response \nline" == mozphab.check_output(["command"], split=False)
+
+
+@mock.patch.object(builtins, "input")
+@mock.patch("mozphab.sys")
+def test_prompt(m_sys, m_input):
+    input_response = None
+
+    def _input(_):
+        return input_response
+
+    m_input.side_effect = _input
+
+    # Default
+    input_response = ""
+    assert "AAA" == mozphab.prompt("", ["AAA", "BBB"])
+
+    # Escape
+    m_sys.exit.side_effect = SystemExit()
+    with pytest.raises(SystemExit):
+        input_response = chr(27)
+        mozphab.prompt("", ["AAA"])
+
+    input_response = "aaa"
+
+
+def test_git_find_repo(git_repo_path):
+    path = str(git_repo_path)
+    assert path == mozphab.find_repo_root(path)
+    subdir = git_repo_path / "test_dir"
+    subdir.mkdir()
+    assert path == mozphab.find_repo_root(str(subdir))
+
+
+def test_hg_find_repo(hg_repo_path):
+    path = str(hg_repo_path)
+    assert path == mozphab.find_repo_root(path)
+
+
+def test_fail_find_repo():
+    path = "/non/existing/path"
+    assert mozphab.find_repo_root(path) is None
+
+
+@mock.patch("mozphab.Mercurial")
+@mock.patch("mozphab.Git")
+def test_probe_repo(m_git, m_hg):
+    m_hg.return_value = "HG"
+
+    assert "HG" == mozphab.probe_repo("path")
+
+    m_hg.side_effect = ValueError
+    m_git.return_value = "GIT"
+    assert "GIT" == mozphab.probe_repo("path")
+
+    m_git.side_effect = ValueError
+    assert mozphab.probe_repo("path") is None
+
+
+@mock.patch("mozphab.probe_repo")
+def test_repo_from_args(m_probe):
+    # TODO test walking the path
+    repo = None
+
+    def probe_repo(path):
+        return repo
+
+    m_probe.side_effect = probe_repo
+
+    class Args:
+        def __init__(self, path=None):
+            self.path = path
+
+    with pytest.raises(mozphab.Error):
+        mozphab.repo_from_args(Args(path="some path"))
+
+    repo = mock.MagicMock()
+    args = Args(path="some path")
+    assert repo == mozphab.repo_from_args(args)
+    repo.set_args.assert_called_once_with(args)
