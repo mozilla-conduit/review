@@ -7,7 +7,7 @@ import os
 import mock
 import time
 
-from conftest import hg_out, git_out
+from .conftest import hg_out, git_out
 
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
@@ -132,6 +132,7 @@ def test_git_patch_with_commit(
     test_file = git_repo_path / "X"
     assert "a\n" == test_file.read_text()
     result = git_out("log", "--all", "--format=[%at] %an <%ae>%n%s %P%n%b")
+    print("xxx", result)
     assert 1 == result.count("[1547806078] user <author@example.com>")
     assert 1 == result.count("title R1")
     assert 1 == result.count("Differential Revision: http://example.test/D1")
@@ -201,7 +202,7 @@ def test_git_patch_with_commit(
     with path.open() as f:
         line = f.readline().rstrip()
 
-    assert line == u"\u0105"
+    assert line == "\u0105"
 
 
 @mock.patch("mozphab.ConduitAPI.get_revisions")
@@ -251,7 +252,7 @@ def test_hg_patch_with_commit(
     assert "|/   bookmark:    D1" in result
 
     testfile = hg_repo_path / "unknown"
-    testfile.write_text(u"not added to repository")
+    testfile.write_text("not added to repository")
     m_get_revs.side_effect = ([REV_2], [REV_1])
     m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
@@ -277,19 +278,19 @@ def test_hg_patch_with_commit(
 REV_1 = dict(
     id=1,
     phid="PHID-REV-1",
-    fields=dict(title="title R1", summary=u"\u0105", diffPHID="PHID-DIFF-1"),
+    fields=dict(title="title R1", summary="\u0105", diffPHID="PHID-DIFF-1"),
 )
 
 REV_2 = dict(
     id=2,
     phid="PHID-REV-2",
-    fields=dict(title="title R2", summary=u"\u0105", diffPHID="PHID-DIFF-2"),
+    fields=dict(title="title R2", summary="\u0105", diffPHID="PHID-DIFF-2"),
 )
 
 REV_BIN = dict(
     id=3,
     phid="PHID-REV-3",
-    fields=dict(title="title BIN", summary=u"\u0105", diffPHID="PHID-DIFF-3"),
+    fields=dict(title="title BIN", summary="\u0105", diffPHID="PHID-DIFF-3"),
 )
 ATTACHMENTS = dict(
     commits=dict(
@@ -325,7 +326,7 @@ diff --git a/X b/X
 
 """
 
-PATCH_UTF8 = u"""\
+PATCH_UTF8 = """\
 diff --git a/X b/X
 new file mode 100644
 --- /dev/null

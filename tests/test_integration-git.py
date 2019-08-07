@@ -8,7 +8,7 @@ import shutil
 import mock
 import pytest
 
-from conftest import git_out
+from .conftest import git_out
 
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
@@ -46,11 +46,11 @@ def init_sha(in_process, git_repo_path):
 def test_submit_create_arc(in_process, git_repo_path, init_sha):
     call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
     testfile = git_repo_path / "X"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
     git_out("add", ".")
     git_out("commit", "--message", "A r?alice")
     testfile = git_repo_path / "untracked"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
 
     mozphab.main(["submit", "--yes", "--bug", "1", init_sha])
 
@@ -78,18 +78,18 @@ def test_submit_create(in_process, git_repo_path, init_sha):
         dict(object=dict(id="123")),
     )
     testfile = git_repo_path / "X"
-    testfile.write_text(u"ą")
+    testfile.write_text("ą")
     git_out("add", ".")
     msgfile = git_repo_path / "msg"
-    msgfile.write_text(u"Ą r?alice")
+    msgfile.write_text("Ą r?alice")
     git_out("commit", "--file", "msg")
     testfile = git_repo_path / "untracked"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
 
     mozphab.main(["submit", "--no-arc", "--yes", "--bug", "1", init_sha])
 
-    log = git_out("log", "--format=%s%n%n%b", "-1").decode("utf8")
-    expected = u"""
+    log = git_out("log", "--format=%s%n%n%b", "-1")
+    expected = """
 Bug 1 - Ą r?alice
 
 Differential Revision: http://example.test/D123
@@ -128,7 +128,7 @@ Differential Revision: http://example.test/D123
                         "oldPath": None,
                         "hunks": [
                             {
-                                "corpus": u"+ą",
+                                "corpus": "+ą",
                                 "addLines": 1,
                                 "oldOffset": 0,
                                 "newOffset": 1,
@@ -231,11 +231,11 @@ def test_submit_update(in_process, git_repo_path, init_sha):
         dict(object=dict(id="123")),
     )
     testfile = git_repo_path / "X"
-    testfile.write_text(u"ą")
+    testfile.write_text("ą")
     git_out("add", ".")
     msgfile = git_repo_path / "msg"
     msgfile.write_text(
-        u"""\
+        """\
 Bug 1 - Ą
 
 Differential Revision: http://example.test/D123
@@ -318,7 +318,7 @@ def test_submit_different_author(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
     testfile = git_repo_path / "X"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
     git_out("add", ".")
     git_out(
         "commit",
@@ -329,7 +329,7 @@ def test_submit_different_author(in_process, git_repo_path, init_sha):
         "--message",
         "A r?alice",
     )
-    testfile.write_text(u"b")
+    testfile.write_text("b")
     git_out(
         "commit",
         "--date",
@@ -355,7 +355,7 @@ def test_submit_utf8_author(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
     testfile = git_repo_path / "X"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
     git_out("add", ".")
     git_out(
         "commit",
@@ -370,8 +370,8 @@ def test_submit_utf8_author(in_process, git_repo_path, init_sha):
     mozphab.main(["submit", "--yes", "--bug", "1", init_sha])
 
     log = git_out("log", "--format=%aD+++%an+++%ae", "-1")
-    expected = u"Tue, 22 Jan 2019 13:42:48 +0000+++ćwikła+++ćwikła@bar.com\n"
-    assert log.decode("utf-8") == expected
+    expected = "Tue, 22 Jan 2019 13:42:48 +0000+++ćwikła+++ćwikła@bar.com\n"
+    assert log == expected
 
 
 def test_submit_update_arc(in_process, git_repo_path, init_sha):
@@ -395,7 +395,7 @@ def test_submit_update_arc(in_process, git_repo_path, init_sha):
         dict(phid="PHID-USER-1"),
     )
     testfile = git_repo_path / "X"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
     git_out("add", ".")
 
     # Write out our commit message as if the program had already run and appended
@@ -450,7 +450,7 @@ def test_submit_update_bug_id(in_process, git_repo_path, init_sha):
     arc_call_conduit.reset_mock()
     arc_call_conduit.side_effect = ({"data": {}},)
     testfile = git_repo_path / "X"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
     git_out("add", ".")
 
     # Write out our commit message as if the program had already run and appended

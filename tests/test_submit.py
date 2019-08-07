@@ -23,7 +23,7 @@ def reviewers_dict(reviewers=None):
     )
 
 
-def commit(bug_id=None, reviewers=None, body=u"", name="", title="", rev_id=None):
+def commit(bug_id=None, reviewers=None, body="", name="", title="", rev_id=None):
     return {
         "name": name,
         "title": title,
@@ -31,7 +31,7 @@ def commit(bug_id=None, reviewers=None, body=u"", name="", title="", rev_id=None
         "reviewers": reviewers_dict(reviewers),
         "body": body,
         "rev-id": rev_id,
-        "node": uuid.uuid4().get_hex(),
+        "node": uuid.uuid4().hex,
     }
 
 
@@ -570,6 +570,7 @@ class Commits(unittest.TestCase):
     @mock.patch("mozphab.update_commit_title_previews")
     def test_update_commits_from_args(self, m_update_title):
         m_update_title.side_effect = lambda x: x
+        lwr = lambda x: [r.lower() for r in x]
 
         update = mozphab.update_commits_from_args
 
@@ -609,21 +610,15 @@ class Commits(unittest.TestCase):
         # Adding and removing reviewers, forcing the bug ID
         commits = copy.deepcopy(_commits)
         update(commits, Args(reviewer=["two", "three"], bug=2))
-        self.assertEqual(
-            commits,
-            [
-                {
-                    "title": "A",
-                    "reviewers": dict(granted=["two", "three"], request=[]),
-                    "bug-id": 2,
-                },
-                {
-                    "title": "B",
-                    "reviewers": dict(granted=["two", "three"], request=[]),
-                    "bug-id": 2,
-                },
-            ],
-        )
+        assert commits[0]["title"] == "A"
+        assert commits[0]["bug-id"] == 2
+        assert "two" in commits[0]["reviewers"]["granted"]
+        assert "three" in commits[0]["reviewers"]["granted"]
+
+        assert commits[1]["title"] == "B"
+        assert commits[1]["bug-id"] == 2
+        assert "two" in commits[1]["reviewers"]["granted"]
+        assert "three" in commits[1]["reviewers"]["granted"]
 
         # Removing duplicates
         commits = copy.deepcopy(_commits)
@@ -634,49 +629,38 @@ class Commits(unittest.TestCase):
                 blocker=["Two", "THREE!", "three", "two", "three"],
             ),
         )
-        self.assertEqual(
-            commits,
-            [
-                {
-                    "title": "A",
-                    "reviewers": dict(granted=["two!", "THREE!"], request=[]),
-                    "bug-id": None,
-                },
-                {
-                    "title": "B",
-                    "reviewers": dict(granted=["two!", "THREE!"], request=[]),
-                    "bug-id": 1,
-                },
-            ],
-        )
+        print(commits)
+        assert commits[0]["title"] == "A"
+        assert commits[0]["bug-id"] is None
+        assert "two!" in lwr(commits[0]["reviewers"]["granted"])
+        assert "three!" in lwr(commits[0]["reviewers"]["granted"])
+
+        assert commits[1]["title"] == "B"
+        assert commits[1]["bug-id"] == 1
+        assert "two!" in lwr(commits[1]["reviewers"]["granted"])
+        assert "three!" in lwr(commits[1]["reviewers"]["granted"])
 
         # Adding blocking reviewers via args
         commits = copy.deepcopy(_commits)
         commits[1]["reviewers"]["request"].append("three")
-        commits[0]["reviewers"]["granted"].append("four")
-        commits[0]["reviewers"]["granted"].append("five")
+        commits[1]["reviewers"]["granted"].append("four")
+        commits[1]["reviewers"]["granted"].append("five")
         update(
             commits, Args(reviewer=["one", "two!", "four"], blocker=["three", "four!"])
         )
-        self.assertEqual(
-            commits,
-            [
-                {
-                    "title": "A",
-                    "reviewers": dict(
-                        granted=["one", "four!", "three!", "two!"], request=[]
-                    ),
-                    "bug-id": None,
-                },
-                {
-                    "title": "B",
-                    "reviewers": dict(
-                        granted=["four!", "two!"], request=["one", "three!"]
-                    ),
-                    "bug-id": 1,
-                },
-            ],
-        )
+        assert commits[0]["title"] == "A"
+        assert commits[0]["bug-id"] is None
+        assert "one" in lwr(commits[0]["reviewers"]["granted"])
+        assert "two!" in lwr(commits[0]["reviewers"]["granted"])
+        assert "three!" in lwr(commits[0]["reviewers"]["granted"])
+        assert "four!" in lwr(commits[0]["reviewers"]["granted"])
+
+        assert commits[1]["title"] == "B"
+        assert commits[1]["bug-id"] == 1
+        assert "four!" in commits[1]["reviewers"]["granted"]
+        assert "two!" in commits[1]["reviewers"]["granted"]
+        assert "one" in commits[1]["reviewers"]["request"]
+        assert "three!" in commits[1]["reviewers"]["request"]
 
         # Forcing blocking reviewers
         commits = copy.deepcopy(_commits)

@@ -31,6 +31,13 @@ def reset_cache():
     mozphab.cache.reset()
 
 
+@pytest.fixture()
+def repo_phab_url():
+    with mock.patch("mozphab.Repository._phab_url") as xmock:
+        xmock.return_value = "http://phab.test"
+        yield xmock
+
+
 @pytest.fixture
 def data_file():
     return Path(__file__).parent / "data" / "img.png"
@@ -42,16 +49,15 @@ def data_file():
 @mock.patch("mozphab.Config")
 @mock.patch("mozphab.os.path")
 @mock.patch("mozphab.which")
-@mock.patch("mozphab.Repository._phab_url")
 @mock.patch("mozphab.read_json_field")
 def git(
     m_read_json_field,
-    m_repository_phab_url,
     m_which,
     m_os_path,
     m_config,
     m_git_get_current_head,
     m_git_git_out,
+    repo_phab_url,
 ):
     m_read_json_field.return_value = "TEST"
     m_os_path.join = os.path.join
@@ -67,16 +73,15 @@ def git(
 @mock.patch("mozphab.Config")
 @mock.patch("mozphab.os.path")
 @mock.patch("mozphab.which")
-@mock.patch("mozphab.Repository._phab_url")
 @mock.patch("mozphab.read_json_field")
 def hg(
     m_read_json_field,
-    m_repository_phab_url,
     m_which,
     m_os_path,
     m_config,
     m_hg_hg_out,
     safe_environ,
+    repo_phab_url,
 ):
     m_read_json_field.return_value = "TEST"
     m_os_path.join = os.path.join
@@ -96,7 +101,8 @@ def hg(
 
 def hg_out(*args):
     args = ["hg"] + list(args)
-    return subprocess.check_output(args)
+    # TODO: check to `text=True` or `encoding="utf-8"` when Python 3.7 allowed.
+    return subprocess.check_output(args, universal_newlines=True)
 
 
 @pytest.fixture
@@ -107,7 +113,7 @@ def hg_repo_path(monkeypatch, tmp_path):
     repo_path.mkdir()
     monkeypatch.chdir(str(repo_path))
     arcconfig = repo_path / ".arcconfig"
-    arcconfig.write_text(unicode(json.dumps({"phabricator.uri": phabricator_uri})))
+    arcconfig.write_text(json.dumps({"phabricator.uri": phabricator_uri}))
     hg_out("init")
     # graphshorten changes `log --graph` output, force to false
     with open(".hg/hgrc", "a") as f:
@@ -119,7 +125,8 @@ def git_out(*args):
     env = os.environ.copy()
     args = ["git"] + list(args)
     env["DEBUG"] = "1"
-    return subprocess.check_output(args, env=env)
+    # TODO: check to `text=True` or `encoding="utf-8"` when Python 3.7 allowed.
+    return subprocess.check_output(args, env=env, universal_newlines=True)
 
 
 @pytest.fixture
@@ -130,7 +137,7 @@ def git_repo_path(monkeypatch, tmp_path):
     repo_path.mkdir()
     monkeypatch.chdir(str(repo_path))
     arcconfig = repo_path / ".arcconfig"
-    arcconfig.write_text(unicode(json.dumps({"phabricator.uri": phabricator_uri})))
+    arcconfig.write_text(json.dumps({"phabricator.uri": phabricator_uri}))
     git_out("init")
     git_out("add", ".")
     git_out("commit", "--message", "initial commit")
@@ -162,7 +169,7 @@ def in_process(monkeypatch, safe_environ, request):
     # to make test debugging easier.
     def reraise(*args, **kwargs):
         t, v, tb = sys.exc_info()
-        raise (t, v, tb)
+        raise t(v).with_traceback(tb)
 
     monkeypatch.setattr(sys, "exit", reraise)
 

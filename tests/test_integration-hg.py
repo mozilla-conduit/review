@@ -5,7 +5,7 @@ import imp
 import os
 import mock
 
-from conftest import hg_out
+from .conftest import hg_out
 
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
@@ -25,7 +25,7 @@ check_call_by_line.return_value = ["Revision URI: http://example.test/D123"]
 
 def test_submit_create(in_process, hg_repo_path):
     testfile = hg_repo_path / "X"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
     hg_out("add")
     hg_out("commit", "--message", "A r?alice")
 
@@ -47,7 +47,7 @@ def test_submit_create_with_user_bookmark(in_process, hg_repo_path):
     call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
 
     testfile = hg_repo_path / "X"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
     hg_out("add")
     hg_out("commit", "--message", "A r?alice")
 
@@ -105,7 +105,7 @@ def test_submit_update(in_process, hg_repo_path):
     )
     check_call_by_line.reset_mock()
     testfile = hg_repo_path / "X"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
     hg_out("add")
 
     # Write out our commit message as if the program had already run and appended
@@ -160,7 +160,7 @@ def test_submit_update_reviewers_not_updated(in_process, hg_repo_path):
     arc_call_conduit.reset_mock()
     check_call_by_line.reset_mock()
     testfile = hg_repo_path / "X"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
     hg_out("add")
 
     # Write out our commit message as if the program had already run and appended
@@ -206,7 +206,7 @@ def test_submit_update_no_new_reviewers(in_process, hg_repo_path):
     arc_call_conduit.side_effect = ({"data": {}},)  # set reviewers response
     check_call_by_line.reset_mock()
     testfile = hg_repo_path / "X"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
     hg_out("add")
 
     # Write out our commit message as if the program had already run and appended
@@ -262,7 +262,7 @@ def test_submit_update_bug_id(in_process, hg_repo_path):
     arc_call_conduit.reset_mock()
     arc_call_conduit.side_effect = ({"data": {}},)  # response from setting the bug id
     testfile = hg_repo_path / "X"
-    testfile.write_text(u"a")
+    testfile.write_text("a")
     hg_out("add")
 
     # Write out our commit message as if the program had already run and appended

@@ -4,7 +4,7 @@ import mock
 import os
 import pytest
 
-from conftest import create_temp_fn
+from .conftest import create_temp_fn
 from subprocess import CalledProcessError
 
 mozphab = imp.load_source(
