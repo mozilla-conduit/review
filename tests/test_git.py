@@ -1,3 +1,5 @@
+# coding=utf-8
+
 import imp
 import mock
 import os
@@ -409,3 +411,18 @@ def test_is_cinnabar(m_git_out, git):
     git._cinnabar_installed = None
     assert not git.is_cinnabar_installed
     m_git_out.assert_called_once_with(["--list-cmds=main,others"])
+
+
+@mock.patch("mozphab.Git.git_out")
+def test_unicode_in_windows_env(m_git_out, git, monkeypatch):
+    utf8 = "ćwikła".decode("utf-8")
+    asci = "cwika"
+    monkeypatch.setattr(mozphab, "IS_WINDOWS", True)
+    git._commit_tree("parent", "tree_hash", "message", utf8, utf8, "date")
+    m_git_out.assert_called_once_with(
+        ["commit-tree", "-p", "parent", "-F", mock.ANY, "tree_hash"],
+        split=False,
+        extra_env=dict(
+            GIT_AUTHOR_NAME=asci, GIT_AUTHOR_EMAIL=asci, GIT_AUTHOR_DATE="date"
+        ),
+    )
