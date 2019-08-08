@@ -204,7 +204,7 @@ $ moz-phab arc ARG [ARG ...]
 We use [Bugzilla](https://bugzilla.mozilla.org/) to track development.
 
 File bugs in Bugzilla under
-[Conduit :: Review Wrapper](https://bugzilla.mozilla.org/enter_bug.cgi?product=Conduit&component=Review%20Wrapper).
+[Conduit :: moz-phab](https://bugzilla.mozilla.org/enter_bug.cgi?product=Conduit&component=moz-phab.
 
 ## Development
 
