@@ -210,6 +210,58 @@ Differential Revision: http://example.test/D123
     assert log == expected
 
 
+def test_submit_update_no_message(in_process, git_repo_path, init_sha):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        dict(
+            data=[
+                {
+                    "fields": {
+                        "bugzilla.bug-id": "1",
+                        "status": {"value": "needs-review"},
+                    },
+                    "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
+                    "id": 123,
+                    "attachments": {"reviewers": {"reviewers": []}},
+                }
+            ]
+        ),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    testfile = git_repo_path / "X"
+    testfile.write_text(u"ą")
+    git_out("add", ".")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text(
+        u"""\
+Bug 1 - Ą
+
+Differential Revision: http://example.test/D123
+"""
+    )
+    git_out("commit", "--file", "msg")
+
+    mozphab.main(["submit", "--yes", "--no-arc"] + ["--bug", "1"] + [init_sha])
+
+    log = git_out("log", "--format=%s%n%n%b", "-1")
+    expected = """\
+Bug 1 - Ą
+
+Differential Revision: http://example.test/D123
+
+"""
+    assert log == expected
+
+
 def test_submit_different_author(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])

@@ -3711,7 +3711,7 @@ def submit(repo, args):
                         existing_reviewers,
                         diff_phid=diff_phid,
                         wip=args.wip,
-                        comment=args.message.decode("utf8"),
+                        comment=args.message.decode("utf8") if args.message else None,
                     )
             else:
                 with wait_message("Creating a new revision..."):
