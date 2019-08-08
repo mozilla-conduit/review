@@ -7,6 +7,8 @@ import sys
 import unittest
 import uuid
 
+from callee import Contains
+
 
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
@@ -42,10 +44,13 @@ class Commits(unittest.TestCase):
             info = sys.exc_info()
             self.fail("%s raised" % repr(info[0]))
 
-    def _assertError(self, callableObj, *args):
+    def _assertError(self, callableObj, *args, **kwargs):
         try:
             callableObj(*args)
         except mozphab.Error:
+            info = sys.exc_info()
+            if "expected" in kwargs and kwargs["expected"] not in repr(info[1]):
+                self.fail("%s not raised" % kwargs["expected"])
             return
         except Exception:
             info = sys.exc_info()
@@ -53,7 +58,9 @@ class Commits(unittest.TestCase):
         self.fail("%s failed to raise Error" % callableObj)
 
     @mock.patch("mozphab.check_for_invalid_reviewers")
-    def test_commit_validation(self, check_reviewers):
+    @mock.patch("mozphab.ConduitAPI.get_revisions")
+    @mock.patch("mozphab.ConduitAPI.whoami")
+    def test_commit_validation(self, m_whoami, m_get_revs, check_reviewers):
         check_reviewers.return_value = []
         repo = mozphab.Repository("", "", "dummy")
         check = repo.check_commits_for_submit
@@ -78,6 +85,12 @@ class Commits(unittest.TestCase):
         )
 
         self._assertError(check, [commit("1", (["r"], [])), commit("", (["r"], []))])
+
+        m_whoami.return_value = dict(phid="PHID-1")
+        m_get_revs.return_value = [dict(fields=dict(authorPHID="PHID-1"))]
+        self._assertNoError(check, [commit(bug_id=1, rev_id=1)])
+        m_whoami.return_value = dict(phid="PHID-2")
+        self._assertNoError(check, [commit(bug_id=1, rev_id=1)])
 
     @mock.patch("mozphab.check_for_invalid_reviewers")
     def test_invalid_reviewers_fails_the_stack_validation_check(self, check_reviewers):
@@ -404,8 +417,9 @@ class Commits(unittest.TestCase):
         self.assertEqual("r?one", replace("r?one,two", reviewers_dict([["one"], []])))
 
     @mock.patch("mozphab.ConduitAPI.get_revisions")
+    @mock.patch("mozphab.ConduitAPI.whoami")
     @mock.patch("mozphab.logger")
-    def test_show_commit_stack(self, mock_logger, m_get_revisions):
+    def test_show_commit_stack(self, mock_logger, m_whoami, m_get_revisions):
         class Repository:
             phab_url = "http://phab"
             path = "x"
@@ -415,7 +429,10 @@ class Commits(unittest.TestCase):
         repo = Repository()
         mozphab.conduit.set_repo(repo)
 
-        m_get_revisions.return_value = [{"fields": {"bugzilla.bug-id": "1"}}]
+        m_whoami.return_value = dict(phid="PHID-USER-1")
+        m_get_revisions.return_value = [
+            {"fields": {"bugzilla.bug-id": "1", "authorPHID": "PHID-USER-1"}}
+        ]
 
         mozphab.show_commit_stack([])
         self.assertFalse(mock_logger.info.called, "logger.info() shouldn't be called")
@@ -495,8 +512,16 @@ class Commits(unittest.TestCase):
 
         m_get_revisions.reset_mock()
         m_get_revisions.return_value = [
-            {"id": "1", "phid": "PHID-1", "fields": {"bugzilla.bug-id": "1"}},
-            {"id": "2", "phid": "PHID-2", "fields": {"bugzilla.bug-id": "1"}},
+            {
+                "id": "1",
+                "phid": "PHID-1",
+                "fields": {"bugzilla.bug-id": "1", "authorPHID": "PHID-USER-1"},
+            },
+            {
+                "id": "2",
+                "phid": "PHID-2",
+                "fields": {"bugzilla.bug-id": "1", "authorPHID": "PHID-USER-1"},
+            },
         ]
         # we're changing bug id in the first revision to 2
         mozphab.show_commit_stack(
@@ -525,6 +550,22 @@ class Commits(unittest.TestCase):
         )
         assert m_get_revisions.call_count == 3
         mock_logger.reset_mock()
+
+        m_whoami.return_value = dict(phid="PHID-USER-2")
+        mozphab.show_commit_stack(
+            [
+                {
+                    "name": "aaa000",
+                    "title-preview": "A",
+                    "rev-id": "12",
+                    "bug-id-orig": "1",
+                    "bug-id": "1",
+                    "reviewers": {"granted": ["alice"], "request": []},
+                }
+            ],
+            validate=True,
+        )
+        mock_logger.warning.assert_called_once_with(Contains("Commandeer"))
 
     @mock.patch("mozphab.update_commit_title_previews")
     def test_update_commits_from_args(self, m_update_title):

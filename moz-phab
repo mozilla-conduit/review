@@ -1052,6 +1052,14 @@ class ConduitAPI:
         data_base64 = base64.standard_b64encode(data)
         return self.call("file.upload", dict(data_base64=data_base64.decode()))
 
+    def whoami(self):
+        if "whoami" in cache:
+            return cache.get("whoami")
+
+        who = self.call("user.whoami", {})
+        cache.set("whoami", who)
+        return who
+
 
 conduit = ConduitAPI()
 
@@ -3151,16 +3159,22 @@ def show_commit_stack(
 
     for commit in reversed(commits):
         change_bug_id = False
+        is_author = True
         revision = None
 
         if commit.get("rev-id"):
             action = action_template % ("D" + commit["rev-id"])
             if validate:
-                # Check if target bug ID is the same as in the Phabricator revision
                 revision = conduit.get_revisions(ids=[int(commit["rev-id"])])[0]
+                # Check if target bug ID is the same as in the Phabricator revision
                 change_bug_id = revision["fields"]["bugzilla.bug-id"] and (
                     commit["bug-id"] != revision["fields"]["bugzilla.bug-id"]
                 )
+                # Check if comandeering is required
+                whoami = conduit.whoami()
+                if revision["fields"]["authorPHID"] != whoami["phid"]:
+                    is_author = False
+
         else:
             action = action_template % "New"
 
@@ -3170,6 +3184,14 @@ def show_commit_stack(
                 logger.warning(
                     "!! Bug ID in Phabricator revision will be changed from %s to %s"
                     % (revision["fields"]["bugzilla.bug-id"], commit["bug-id"])
+                )
+
+            if not is_author:
+                logger.warning(
+                    "!! You don't own this revision.  Normally, you should only\n"
+                    '   update revisions you   own.  You can "Commandeer" this\n'
+                    "   revision from the web interface if you want to become\n"
+                    "   the owner."
                 )
 
             if commit["bug-id-orig"] and commit["bug-id"] != commit["bug-id-orig"]:

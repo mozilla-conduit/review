@@ -79,11 +79,13 @@ def test_submit_update(in_process, hg_repo_path):
                     "fields": {
                         "bugzilla.bug-id": "1",
                         "status": {"value": "needs-review"},
+                        "authorPHID": "PHID-USER-1",
                     },
                     "attachments": {"reviewers": {"reviewers": []}},
                 }
             ]
         },  # get reviewers for updated revision
+        dict(phid="PHID-USER-1"),
         {
             "data": [
                 {
@@ -92,6 +94,7 @@ def test_submit_update(in_process, hg_repo_path):
                     "fields": {
                         "bugzilla.bug-id": "1",
                         "status": {"value": "needs-review"},
+                        "authorPHID": "PHID-USER-1",
                     },
                     "attachments": {
                         "reviewers": {"reviewers": [{"reviewerPHID": "PHID-USER-1"}]}
@@ -126,7 +129,7 @@ Bug 1 - A
 Differential Revision: http://example.test/D123
 """
     assert log == expected
-    assert call_conduit.call_count == 2
+    assert call_conduit.call_count == 3
     arc_call_conduit.assert_not_called()
     check_call_by_line.assert_called_once()  # update
 
@@ -143,6 +146,7 @@ def test_submit_update_reviewers_not_updated(in_process, hg_repo_path):
                     "fields": {
                         "bugzilla.bug-id": "1",
                         "status": {"value": "needs-review"},
+                        "authorPHID": "PHID-USER-1",
                     },
                     "attachments": {
                         "reviewers": {"reviewers": [{"reviewerPHID": "PHID-USER-1"}]}
@@ -150,6 +154,7 @@ def test_submit_update_reviewers_not_updated(in_process, hg_repo_path):
                 }
             ]
         },  # get reviewers for updated revision
+        dict(phid="PHID-USER-1"),
         [{"userName": "alice", "phid": "PHID-USER-1"}],
     )
     arc_call_conduit.reset_mock()
@@ -188,11 +193,13 @@ def test_submit_update_no_new_reviewers(in_process, hg_repo_path):
                     "fields": {
                         "bugzilla.bug-id": "1",
                         "status": {"value": "changes-planned"},
+                        "authorPHID": "PHID-USER-1",
                     },
                     "attachments": {"reviewers": {"reviewers": []}},
                 }
             ]
         },  # get reviewers for updated revision
+        dict(phid="PHID-USER-1"),
         [{"userName": "alice", "phid": "PHID-USER-1"}],
     )
     arc_call_conduit.reset_mock()
@@ -241,6 +248,7 @@ def test_submit_update_bug_id(in_process, hg_repo_path):
                     "fields": {
                         "bugzilla.bug-id": "1",
                         "status": {"value": "needs-review"},
+                        "authorPHID": "PHID-USER-1",
                     },
                     "attachments": {
                         "reviewers": {"reviewers": [{"reviewerPHID": "PHID-USER-1"}]}
@@ -248,6 +256,7 @@ def test_submit_update_bug_id(in_process, hg_repo_path):
                 }
             ]
         },  # get reviewers for updated revision
+        dict(phid="PHID-USER-1"),
         [{"userName": "alice", "phid": "PHID-USER-1"}],
     )
     arc_call_conduit.reset_mock()
@@ -278,4 +287,4 @@ Differential Revision: http://example.test/D123
         },
         mock.ANY,
     )
-    assert call_conduit.call_count == 3
+    assert call_conduit.call_count == 4

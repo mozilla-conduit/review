@@ -164,6 +164,7 @@ def test_submit_update(in_process, git_repo_path, init_sha):
                     "fields": {
                         "bugzilla.bug-id": "1",
                         "status": {"value": "needs-review"},
+                        "authorPHID": "PHID-USER-1",
                     },
                     "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
                     "id": 123,
@@ -171,6 +172,8 @@ def test_submit_update(in_process, git_repo_path, init_sha):
                 }
             ]
         ),
+        # whoami
+        dict(phid="PHID-USER-1"),
         # diffusion.repository.search
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # differential.creatediff
@@ -221,6 +224,7 @@ def test_submit_update_no_message(in_process, git_repo_path, init_sha):
                     "fields": {
                         "bugzilla.bug-id": "1",
                         "status": {"value": "needs-review"},
+                        "authorPHID": "PHID-USER-1",
                     },
                     "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
                     "id": 123,
@@ -228,6 +232,7 @@ def test_submit_update_no_message(in_process, git_repo_path, init_sha):
                 }
             ]
         ),
+        dict(phid="PHID-USER-1"),
         # diffusion.repository.search
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # differential.creatediff
@@ -332,6 +337,7 @@ def test_submit_update_arc(in_process, git_repo_path, init_sha):
                     "fields": {
                         "bugzilla.bug-id": "1",
                         "status": {"value": "needs-review"},
+                        "authorPHID": "PHID-USER-1",
                     },
                     "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
                     "id": 123,
@@ -339,6 +345,7 @@ def test_submit_update_arc(in_process, git_repo_path, init_sha):
                 }
             ]
         },
+        dict(phid="PHID-USER-1"),
     )
     testfile = git_repo_path / "X"
     testfile.write_text(u"a")
@@ -385,11 +392,13 @@ def test_submit_update_bug_id(in_process, git_repo_path, init_sha):
                     "fields": {
                         "bugzilla.bug-id": "1",
                         "status": {"value": "needs-review"},
+                        "authorPHID": "PHID-USER-1",
                     },
                     "attachments": {"reviewers": {"reviewers": []}},
                 }
             ]
         },  # get reviewers for updated revision
+        dict(phid="PHID-USER-1"),
     )
     arc_call_conduit.reset_mock()
     arc_call_conduit.side_effect = ({"data": {}},)

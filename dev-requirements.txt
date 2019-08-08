@@ -46,3 +46,5 @@ scandir==1.9.0 \
     --hash=sha256:44975e209c4827fc18a3486f257154d34ec6eaec0f90fef0cca1caa482db7064
 frozendict==1.2 \
     --hash=sha256:774179f22db2ef8a106e9c38d4d1f8503864603db08de2e33be5b778230f6e45
+callee==0.3 \
+    --hash=sha256:f43c3b5619f8e8bc2a6ebbeed54977a65ef32f20a8bdcb25a67d711e588a09d2
