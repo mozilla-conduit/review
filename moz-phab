@@ -2154,6 +2154,11 @@ class Mercurial(Repository):
             commits, validate_reviewers=validate_reviewers
         )
 
+    def get_diff(self, commit):
+        raise NotImplementedError(
+            "Mercurial revisions can't be submitted without Arcanist"
+        )
+
 
 #
 # Git
