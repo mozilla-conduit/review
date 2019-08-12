@@ -407,7 +407,7 @@ class Commits(unittest.TestCase):
     @mock.patch("mozphab.logger")
     def test_show_commit_stack(self, mock_logger, m_get_revisions):
         class Repository:
-            phab_url = "http://phab/"
+            phab_url = "http://phab"
             path = "x"
             api_url = "x"
             dot_path = "x"
