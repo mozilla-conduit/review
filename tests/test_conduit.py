@@ -3,9 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import collections
 import imp
-import json
 import mock
 import os
 import pytest
@@ -62,7 +60,7 @@ def test_call(m_token, m_urlopen, m_Request):
     response = mock.Mock()
     m_Request.return_value = req
     m_urlopen.return_value = response
-    response.read.return_value = json.dumps(dict(result="x", error_code=False))
+    response.read.return_value = b'{"result": "x", "error_code": false}'
     m_token.return_value = "token"
     mozphab.conduit.set_repo(Repo())
 
@@ -77,7 +75,7 @@ def test_call(m_token, m_urlopen, m_Request):
         "http://api_url/method", data=b"api.token=token&call=%C4%87wik%C5%82a"
     )
 
-    response.read.return_value = json.dumps(dict(error_code=1, error_info="x"))
+    response.read.return_value = b'{"error_info": "x", "error_code": 1}'
 
     with pytest.raises(mozphab.ConduitAPIError):
         mozphab.conduit.call("method", dict(call="args"))

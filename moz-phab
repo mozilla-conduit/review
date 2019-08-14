@@ -694,7 +694,7 @@ class ConduitAPI:
         output = urllib.request.urlopen(
             urllib.request.Request(url, data=data), timeout=30
         ).read()
-        response = json.loads(output)
+        response = json.loads(output.decode("utf-8"))
 
         if response["error_code"] and response["error_info"]:
             raise ConduitAPIError(response["error_info"])
