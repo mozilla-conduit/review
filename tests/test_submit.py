@@ -569,9 +569,10 @@ class Commits(unittest.TestCase):
 
     @mock.patch("mozphab.update_commit_title_previews")
     def test_update_commits_from_args(self, m_update_title):
-        m_update_title.side_effect = lambda x: x
-        lwr = lambda x: [r.lower() for r in x]
+        def lwr(revs):
+            return [r.lower() for r in revs]
 
+        m_update_title.side_effect = lambda x: x
         update = mozphab.update_commits_from_args
 
         class Args:

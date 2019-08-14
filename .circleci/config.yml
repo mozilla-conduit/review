@@ -12,34 +12,29 @@ jobs:
       - run:
           name: install dependencies
           command: |
-            # py2.7 & venv
-            sudo apt-get install python2.7 python2.7-dev
-            virtualenv -p python2.7 venv
-            . venv/bin/activate
-            pip install -r dev-requirements.txt
-            # modern hg
-            pip install --upgrade mercurial hg-evolve
+            # py2.7 & modern hg
+            sudo apt-get install python2.7 python2.7-dev python-pip
+            sudo pip2 install --upgrade mercurial hg-evolve
+            # configure hg
+            echo -e "[ui]\nusername=mozphab test <moz-phab@example.com>" > ~/.hgrc
+            echo -e "[extensions]\nevolve=" >> ~/.hgrc
             # configure git
             git config --global user.email "moz-phab-tests@example.com"
             git config --global user.name "moz-phab tests"
-            # configure hg
-            echo -e "[ui]\nusername=mozophab test <moz-phab@example.com>" > ~/.hgrc
-            echo -e "[extensions]\nevolve=$( pwd )/venv/lib/python2.7/site-packages/hgext3rd/evolve" >> ~/.hgrc
             # linting tools
-            pip install flake8
-            sudo pip3 install black
+            sudo pip install flake8 black
+            # install test dependencies
+            sudo pip install -r dev-requirements.txt
 
       - run:
           name: linting
           command: |
-            . venv/bin/activate
             black --check moz-phab *.py **/*.py
             flake8 --max-line-length=88 --ignore=E203,W503 --disable-noqa moz-phab *.py **/*.py
 
       - run:
           name: run tests
           command: |
-            . venv/bin/activate
             mkdir test-reports
             pytest --junitxml=test-reports/junit.xml
 
