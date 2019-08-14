@@ -29,7 +29,6 @@ import os
 import re
 import signal
 import ssl
-import stat
 import subprocess
 import sys
 import tempfile
@@ -3495,8 +3494,11 @@ def install_arc_if_required():
     logger.debug("arc command: %s", ARC_COMMAND)
     logger.debug("libphutil path: %s", LIBPHUTIL_PATH)
 
-    check_call(["git", "clone", "--depth", "1", ARC_URL, ARC_PATH])
-    check_call(["git", "clone", "--depth", "1", LIBPHUTIL_URL, LIBPHUTIL_PATH])
+    if not os.path.exists(ARC_COMMAND):
+        check_call(["git", "clone", "--depth", "1", ARC_URL, ARC_PATH])
+
+    if not os.path.exists(LIBPHUTIL_PATH):
+        check_call(["git", "clone", "--depth", "1", LIBPHUTIL_URL, LIBPHUTIL_PATH])
 
 
 def arc_ping(cwd):
@@ -4076,41 +4078,78 @@ def check_for_updates():
         update_arc()
 
 
-def self_update(args):
-    """`self-update` command, updates arc and this script"""
-    if not which_path(GIT_COMMAND[0]):
-        raise Error(
-            "Failed to find 'git' executable, which is required to install "
-            "MozPhab's dependencies."
-        )
+def self_destroy(args):
+    """`self-update` command.
 
+    This is a one-time command.
+    It installs the `moz-phab` from PyPI and deletes the current file.
+    Due to the number of possible options for Windows this command will only
+    link to a documentation.
+    """
     # Update arc.
     if config.arc_last_check >= 0:
         update_arc()
 
     # Update moz-phab
-    release = get_self_release()
+    if IS_WINDOWS:
+        # ask for manual upgrade
+        raise Error(
+            "moz-phab now requires Python 3, and is now distributed as a package from "
+            "PyPI.\n"
+            "Please follow the instructions to install moz-phab on Windows:\n"
+            "https://moz-conduit.readthedocs.io/en/latest/mozphab-windows.html"
+        )
 
-    if not release["update_required"] and not args.force:
-        logger.info("Update of `moz-phab` not required")
-        return
+    os_name = "macos" if sys.platform == "darwin" else "linux"
 
-    logger.info("Updating `moz-phab` to v%s" % release["tag"])
+    pip3_command = which("pip3")
+    if not pip3_command:
+        raise Error(
+            "Please install Python 3 with pip.\n"
+            "https://moz-conduit.readthedocs.io/en/latest/mozphab-%s.html" % os_name
+        )
 
-    url = "https://raw.githubusercontent.com/%s/%s/moz-phab" % (
-        SELF_REPO,
-        release["tag"],
-    )
-    logger.debug("updating '%s' from %s" % (SELF_FILE, url))
-    try:
-        gh = urllib2.urlopen(url)
-        with open(SELF_FILE, "wb") as fh:
-            fh.write(gh.read())
-        os.chmod(SELF_FILE, stat.S_IRWXU)
-    except (urllib2.HTTPError, urllib2.URLError) as e:
-        raise Error("Failed to download update: %s" % e)
+    call_args = [pip3_command, "install", "MozPhab"]
 
-    logger.info("%s updated" % SELF_FILE)
+    check_local_bin = False
+    if os_name == "linux":
+        if not hasattr(sys, "real_prefix"):
+            # not in virtualenv
+            logger.info(
+                "moz-phab can be installed for all users into the system Python "
+                "(requires sudo) or just for yourself."
+            )
+            res = prompt("Should moz-phab be installed for all users?", ["Yes", "No"])
+            if res == "Yes":
+                call_args = ["sudo"] + call_args
+            else:
+                check_local_bin = True
+                call_args.append("--user")
+
+    check_call(call_args)
+
+    if not which("moz-phab"):
+        if check_local_bin and os.path.isfile(
+            os.path.join(HOME_DIR, ".local", "bin", "moz-phab")
+        ):
+            logger.info("moz-phab is installed but it's not in the PATH.")
+            res = prompt(
+                "Add ~/.local/bin/ to the PATH by editing the ~/.bash_profile ?",
+                ["Yes", "No"],
+            )
+            if res == "Yes":
+                with open(os.path.join(HOME_DIR, ".bash_profile"), "a") as f:
+                    f.write("export PATH=$PATH:%s/.local/bin" % HOME_DIR)
+        else:
+            raise Error(
+                "moz-phab is not in the PATH, nor it is installed in ~/.local/bin\n"
+                "Please run `pip3 show -f MozPhab` to find where it is installed "
+                "and change the PATH variable accordingly.\n"
+                "You can then delete the old `moz-phab` file: %s" % SELF_FILE
+            )
+
+    os.remove(SELF_FILE)
+    logger.info("%s removed" % SELF_FILE)
 
 
 def apply_patch(diff, cwd):
@@ -4547,7 +4586,7 @@ def parse_args(argv):
     update_parser.add_argument(
         "--force", "-f", action="store_true", help="Force update even if not necessary"
     )
-    update_parser.set_defaults(func=self_update, needs_repo=False)
+    update_parser.set_defaults(func=self_destroy, needs_repo=False)
 
     # patch
 
@@ -4668,6 +4707,10 @@ def main(argv):
                 "certificates.  Please consider upgrading to Python 2.7.9 "
                 "or later."
             )
+
+        logger.warning(
+            "moz-phab is now distributed via PyPI. Please run `moz-phab self-update`."
+        )
 
         args = parse_args(argv)
 
