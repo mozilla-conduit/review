@@ -312,6 +312,7 @@ def check_output(
     stderr=None,
     env=None,
     search_error=None,
+    expect_binary=False,
 ):
     # wrapper around subprocess.check_output with debug output and splitting
     logger.debug("$ %s" % " ".join(shell_quote(s) for s in command))
@@ -331,6 +332,10 @@ def check_output(
         raise CommandError(
             "command '%s' failed to complete successfully" % command[0], e.returncode
         )
+
+    if expect_binary:
+        logger.debug("%s bytes of data received" % len(output))
+        return output
 
     output = output.decode("utf8")
 
@@ -2784,7 +2789,7 @@ class Git(Repository):
         return int(self.git_out(["cat-file", "-s", blob], split=False))
 
     def _cat_file(self, blob):
-        return self.git_out(["cat-file", "blob", blob], split=False)
+        return self.git_out(["cat-file", "blob", blob], split=False, expect_binary=True)
 
     def _parse_diff_change(self, raw, diff):
         """Parse the changes provided in raw `git` response.
@@ -2821,7 +2826,23 @@ class Git(Repository):
         file_size = max(a_size, b_size)
 
         # Detect if we're binary, and generate a unified diff
-        change.binary = "\0" in a_body or "\0" in b_body or file_size > MAX_TEXT_SIZE
+        if a_body:
+            try:
+                a_body = a_body.decode("utf-8")
+            except UnicodeDecodeError:
+                change.binary = True
+
+        if b_body:
+            try:
+                b_body = b_body.decode("utf-8")
+            except UnicodeDecodeError:
+                change.binary = True
+
+        if not change.binary and (
+            "\0" in a_body or "\0" in b_body or file_size > MAX_TEXT_SIZE
+        ):
+            change.binary = True
+
         if change.binary:
             a_mime = mimetypes.guess_type(a_path)[0] or ""
             b_mime = mimetypes.guess_type(b_path)[0] or ""

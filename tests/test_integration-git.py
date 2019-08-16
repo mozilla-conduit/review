@@ -4,7 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import imp
 import os
-
+import shutil
 import mock
 import pytest
 
@@ -151,6 +151,53 @@ Differential Revision: http://example.test/D123
         )
         in call_conduit.call_args_list
     )
+
+
+def test_submit_create_binary_arc(in_process, git_repo_path, init_sha, data_file):
+    call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
+    shutil.copyfile(str(data_file), str(git_repo_path / "img.png"))
+    git_out("add", ".")
+    git_out("commit", "--message", "IMG")
+
+    mozphab.main(["submit", "--yes", "--bug", "1", init_sha])
+    expected = """
+Bug 1 - IMG
+
+Differential Revision: http://example.test/D123
+"""
+    log = git_out("log", "--format=%s%n%n%b", "-1")
+    assert log.strip() == expected.strip()
+
+
+def test_submit_create_binary(in_process, git_repo_path, init_sha, data_file):
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        [dict(userName="alice", phid="PHID-USER-1")],
+        # file.upload
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    shutil.copyfile(str(data_file), str(git_repo_path / "img.png"))
+    git_out("add", ".")
+    git_out("commit", "-m", "IMG")
+
+    mozphab.main(["submit", "--no-arc", "--yes", "--bug", "1", init_sha])
+
+    log = git_out("log", "--format=%s%n%n%b", "-1").decode("utf8")
+    expected = u"""
+Bug 1 - IMG
+
+Differential Revision: http://example.test/D123
+"""
+    assert log.strip() == expected.strip()
 
 
 def test_submit_update(in_process, git_repo_path, init_sha):

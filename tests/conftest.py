@@ -9,6 +9,8 @@ import pytest
 import subprocess
 import sys
 
+from pathlib2 import Path
+
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
 )
@@ -27,6 +29,11 @@ def create_temp_fn(*filenames):
 @pytest.fixture(autouse=True)
 def reset_cache():
     mozphab.cache.reset()
+
+
+@pytest.fixture
+def data_file():
+    return Path(__file__).parent / "data" / "img.png"
 
 
 @pytest.fixture

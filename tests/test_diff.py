@@ -140,6 +140,7 @@ def test_recognize_binary(m_git_out, m_cat_file, m_file_size, git):
     )
     diff = mozphab.Diff()
     content = "\x08\x00\x00\x10"
+    content.decode("utf-8")
     m_cat_file.side_effect = (content,)
     m_file_size.return_value = 5
     git.args = Args()
