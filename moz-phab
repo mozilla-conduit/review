@@ -911,6 +911,41 @@ class ConduitAPI:
 
         return users
 
+    def get_groups(self, slugs):
+        to_collect = []
+        groups = []
+        for slug in slugs:
+            s = slug.rstrip("!")
+            key = "group-%s" % s
+            if key in cache:
+                groups.append(cache.get(key))
+            else:
+                to_collect.append(s)
+
+        if not to_collect:
+            return groups
+
+        # See https://phabricator.services.mozilla.com/conduit/method/project.search/
+        api_call_args = {"queryKey": "active", "constraints": {"slugs": to_collect}}
+        response = self.call("project.search", api_call_args)
+        for data in response.get("data"):
+            group = dict(name=data["fields"]["slug"], phid=data["phid"])
+            groups.append(group)
+            key = "group-%s" % group["name"]
+            cache.set(key, group)
+
+        # projects might be received by an alias.
+        maps = response["maps"]["slugMap"]
+        for alias in maps.keys():
+            name = normalise_reviewer(alias)
+            group = dict(name=name, phid=maps[alias]["projectPHID"])
+            key = "group-%s" % alias
+            if key not in cache:
+                groups.append(group)
+                cache.set(key, group)
+
+        return groups
+
     def create_revision(
         self, commit, title, summary, diff_phid, has_commit_reviewers, wip=False
     ):
@@ -3270,24 +3305,8 @@ def check_for_invalid_reviewers(reviewers):
         )
 
     if all_groups:
-        # See https://phabricator.services.mozilla.com/conduit/method/project.search/
-        api_call_args = {"queryKey": "active", "constraints": {"slugs": all_groups}}
-        result = conduit.call("project.search", api_call_args)
-        found_groups = [
-            "#%s" % normalise_reviewer(data["fields"]["slug"])
-            for data in result["data"]
-        ]
-        # We might be searching by the hashtag.
-        try:
-            if result["maps"]["slugMap"]:
-                found_groups.extend(
-                    [
-                        "#%s" % normalise_reviewer(r)
-                        for r in result["maps"]["slugMap"].keys()
-                    ]
-                )
-        except KeyError:
-            pass
+        groups = conduit.get_groups(all_groups)
+        found_groups = ["#%s" % normalise_reviewer(group["name"]) for group in groups]
 
     all_reviewers.extend(all_groups)
     found_names.extend(found_groups)
@@ -3593,21 +3612,32 @@ def update_revision_reviewers(transactions, commit):
     # Appends differential.revision.edit transaction(s) to `transactions` to
     # set the reviewers.
 
-    # Add reviewers
-    all_reviewers = commit["reviewers"]["request"] + commit["reviewers"]["granted"]
+    all_reviewing = commit["reviewers"]["request"] + commit["reviewers"]["granted"]
+
+    # Find reviewers PHIDs
+    all_reviewers = [r for r in all_reviewing if not r.startswith("#")]
     # preload all reviewers
     conduit.get_users(all_reviewers)
-
     reviewers = [r for r in all_reviewers if not r.endswith("!")]
-    blocking = [r.rstrip("!") for r in all_reviewers if r.endswith("!")]
+    blocking_reviewers = [r.rstrip("!") for r in all_reviewers if r.endswith("!")]
     reviewers_phid = [user["phid"] for user in conduit.get_users(reviewers)]
     blocking_phid = [
-        "blocking(%s)" % user["phid"] for user in conduit.get_users(blocking)
+        "blocking(%s)" % user["phid"] for user in conduit.get_users(blocking_reviewers)
     ]
 
-    transactions.extend(
-        [dict(type="reviewers.set", value=reviewers_phid + blocking_phid)]
-    )
+    # Find groups PHIDs
+    all_groups = [g for g in all_reviewing if g.startswith("#")]
+    groups = [g for g in all_groups if not g.endswith("!")]
+    blocking_groups = [g.rstrip("!") for g in all_groups if g.endswith("!")]
+    # preload all groups
+    conduit.get_groups(all_groups)
+    groups_phid = [group["phid"] for group in conduit.get_groups(groups)]
+    bl_groups_phid = [
+        "blocking(%s)" % group["phid"] for group in conduit.get_groups(blocking_groups)
+    ]
+
+    all_reviewing_phid = reviewers_phid + blocking_phid + groups_phid + bl_groups_phid
+    transactions.extend([dict(type="reviewers.set", value=all_reviewing_phid)])
 
 
 def submit(repo, args):
