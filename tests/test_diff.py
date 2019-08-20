@@ -29,7 +29,7 @@ def test_create(m_git_out, m_cat_file, m_file_size, git):
         "78981922613b2afb6025042ff6bd878ac1994e85 A\x00a"
     )
     diff = mozphab.Diff()
-    m_cat_file.side_effect = ("a\n",)
+    m_cat_file.side_effect = (b"a\n",)
     m_file_size.return_value = 5
     git.args = Args()
 
@@ -60,7 +60,7 @@ def test_change_file(m_git_out, m_cat_file, m_file_size, git):
         "422c2b7ab3b3c668038da977e4e93a5fc623169c M\x00a"
     )
     diff = mozphab.Diff()
-    m_cat_file.side_effect = ("a\n", "a\nb\n")
+    m_cat_file.side_effect = (b"a\n", b"a\nb\n")
     m_git_out.return_value = """\
 diff --git a/78981922613b2afb6025042ff6bd878ac1994e85 \
 b/422c2b7ab3b3c668038da977e4e93a5fc623169c
@@ -110,7 +110,7 @@ def test_delete_file(m_git_out, m_cat_file, m_file_size, git):
         "0000000000000000000000000000000000000000 D\x00a"
     )
     diff = mozphab.Diff()
-    m_cat_file.side_effect = ("a\nb\n",)
+    m_cat_file.side_effect = (b"a\nb\n",)
     m_file_size.return_value = 5
     git.args = Args()
 
@@ -139,8 +139,7 @@ def test_recognize_binary(m_git_out, m_cat_file, m_file_size, git):
         "21be03052ed0c8dc31dff33eeb9275430241a727 A\x00sample.bin"
     )
     diff = mozphab.Diff()
-    content = "\x08\x00\x00\x10"
-    content.decode("utf-8")
+    content = b"\x08\x00\x00\x10"
     m_cat_file.side_effect = (content,)
     m_file_size.return_value = 5
     git.args = Args()
@@ -149,7 +148,7 @@ def test_recognize_binary(m_git_out, m_cat_file, m_file_size, git):
     assert change.file_type.name == "BINARY"
     m_git_out.assert_not_called()
     assert change.uploads == [
-        dict(type="old", value="", mime="application/octet-stream", phid=None),
+        dict(type="old", value=b"", mime="application/octet-stream", phid=None),
         dict(type="new", value=content, mime="application/octet-stream", phid=None),
     ]
     assert not change.hunks
@@ -164,7 +163,7 @@ def test_recognize_long_text_as_binary(m_git_out, m_cat_file, m_file_size, git):
         "78981922613b2afb6025042ff6bd878ac1994e85 A\x00a"
     )
     diff = mozphab.Diff()
-    content = "a\n"
+    content = b"a\n"
     m_cat_file.side_effect = (content,)
     m_file_size.return_value = mozphab.MAX_TEXT_SIZE + 1
     git.args = Args()
@@ -173,7 +172,7 @@ def test_recognize_long_text_as_binary(m_git_out, m_cat_file, m_file_size, git):
     assert change.file_type.name == "BINARY"
     m_git_out.assert_not_called()
     assert change.uploads == [
-        dict(type="old", value="", mime="", phid=None),
+        dict(type="old", value=b"", mime="", phid=None),
         dict(type="new", value=content, mime="", phid=None),
     ]
     assert not change.hunks
@@ -188,7 +187,7 @@ def test_less_context(m_git_out, m_cat_file, m_file_size, git):
         "422c2b7ab3b3c668038da977e4e93a5fc623169c M\x00a"
     )
     diff = mozphab.Diff()
-    m_cat_file.side_effect = ("a\n", "a\nb\n")
+    m_cat_file.side_effect = (b"a\n", b"a\nb\n")
     m_git_out.return_value = """\
 diff --git a/78981922613b2afb6025042ff6bd878ac1994e85 \
 b/422c2b7ab3b3c668038da977e4e93a5fc623169c
@@ -214,7 +213,7 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
 
     git.args = Args(less_context=False)
     m_file_size.return_value = mozphab.MAX_CONTEXT_SIZE + 1
-    m_cat_file.side_effect = ("a\n", "a\nb\n")
+    m_cat_file.side_effect = (b"a\n", b"a\nb\n")
     m_git_out.reset_mock()
 
     git._parse_diff_change(raw, diff)

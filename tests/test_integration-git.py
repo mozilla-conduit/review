@@ -173,8 +173,7 @@ def test_submit_create_binary(in_process, git_repo_path, init_sha, data_file):
     call_conduit.side_effect = (
         # ping
         dict(),
-        [dict(userName="alice", phid="PHID-USER-1")],
-        # file.upload
+        # file upload
         dict(),
         # diffusion.repository.search
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
@@ -191,8 +190,8 @@ def test_submit_create_binary(in_process, git_repo_path, init_sha, data_file):
 
     mozphab.main(["submit", "--no-arc", "--yes", "--bug", "1", init_sha])
 
-    log = git_out("log", "--format=%s%n%n%b", "-1").decode("utf8")
-    expected = u"""
+    log = git_out("log", "--format=%s%n%n%b", "-1")
+    expected = """
 Bug 1 - IMG
 
 Differential Revision: http://example.test/D123

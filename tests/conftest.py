@@ -9,7 +9,7 @@ import pytest
 import subprocess
 import sys
 
-from pathlib2 import Path
+from pathlib import Path
 
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")

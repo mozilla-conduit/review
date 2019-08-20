@@ -294,7 +294,10 @@ def check_output(
 ):
     # wrapper around subprocess.check_output with debug output and splitting
     logger.debug("$ %s" % " ".join(quote(s) for s in command))
-    kwargs = dict(cwd=cwd, stdin=stdin, stderr=stderr, universal_newlines=True)
+    kwargs = dict(cwd=cwd, stdin=stdin, stderr=stderr)
+    if not expect_binary:
+        kwargs["universal_newlines"] = True
+
     if env:
         kwargs["env"] = env
 
@@ -1031,6 +1034,8 @@ class ConduitAPI:
         self.call("differential.setdiffproperty", api_call_args)
 
     def file_upload(self, data):
+        if not data:
+            return
         data_base64 = base64.standard_b64encode(data)
         return self.call("file.upload", dict(data_base64=data_base64.decode()))
 
@@ -2784,13 +2789,13 @@ class Git(Repository):
 
         # Extract the bodies of blobs to compare
         if a_blob == NULL_SHA1:
-            a_blob, a_body, a_size = None, "", 0
+            a_blob, a_body, a_size = None, b"", 0
         else:
             a_body = self._cat_file(a_blob)
             a_size = self._file_size(a_blob)
 
         if b_blob == NULL_SHA1:
-            b_blob, b_body, b_size = None, "", 0
+            b_blob, b_body, b_size = None, b"", 0
         else:
             b_body = self._cat_file(b_blob)
             b_size = self._file_size(b_blob)
@@ -2798,22 +2803,20 @@ class Git(Repository):
         file_size = max(a_size, b_size)
 
         # Detect if we're binary, and generate a unified diff
-        if a_body:
-            try:
-                a_body = a_body.decode("utf-8")
-            except UnicodeDecodeError:
-                change.binary = True
-
-        if b_body:
-            try:
-                b_body = b_body.decode("utf-8")
-            except UnicodeDecodeError:
-                change.binary = True
-
-        if not change.binary and (
-            "\0" in a_body or "\0" in b_body or file_size > MAX_TEXT_SIZE
-        ):
+        if b"\0" in a_body or b"\0" in b_body or file_size > MAX_TEXT_SIZE:
             change.binary = True
+
+        if not change.binary and a_body:
+            try:
+                a_body = str(a_body, "utf-8")
+            except UnicodeDecodeError:
+                change.binary = True
+
+        if not change.binary and b_body:
+            try:
+                b_body = str(b_body, "utf-8")
+            except UnicodeDecodeError:
+                change.binary = True
 
         if change.binary:
             a_mime = mimetypes.guess_type(a_path)[0] or ""
