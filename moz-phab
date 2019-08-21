@@ -2225,6 +2225,8 @@ class Git(Repository):
         logger.debug("found git repo in %s" % path)
 
         self._git = GIT_COMMAND[:]
+        if not which_path(self._git[0]):
+            raise Error("Failed to find 'git' executable")
 
         # `self._env` is a dict representing environment used in all git commands.
         self._env = os.environ.copy()
@@ -4032,7 +4034,7 @@ def self_update(args):
 def apply_patch(diff, cwd):
     """Apply a patch provided in the `diff`."""
     with temporary_file(diff) as temp_f:
-        check_call(["git", "apply", temp_f], cwd=cwd)
+        check_call([GIT_COMMAND[0], "apply", temp_f], cwd=cwd)
 
 
 def get_base_ref(diff):
@@ -4079,7 +4081,6 @@ def patch(repo, args):
     * Error if `--apply-to base` and no base commit found in the first diff
     * Error if base commit not found in repository
     """
-
     # Check if raw Conduit API can be used
     if not conduit.check():
         raise Error("Failed to use Conduit API")
@@ -4230,6 +4231,11 @@ def patch(repo, args):
 
         raw = raw.encode("utf8")
         if args.no_commit:
+            if repo.vcs == "hg" and not which_path(GIT_COMMAND[0]):
+                raise Error(
+                    "Failed to find 'git' executable.\n"
+                    "Git is required to apply patches."
+                )
             with wait_message("Applying D%s.." % rev["id"]):
                 apply_patch(raw, repo.path)
 
@@ -4560,9 +4566,6 @@ def main(argv):
 
         if config.no_ansi:
             HAS_ANSI = False
-
-        if not which_path(GIT_COMMAND[0]):
-            raise Error("Failed to find 'git' executable")
 
         install_arc_if_required()
 
