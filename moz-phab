@@ -1543,7 +1543,9 @@ class Repository(object):
                 commit_errors.append("contains arc fields")
 
             for reviewer in commit_invalid_reviewers[commit["node"]]:
-                if "until" in reviewer:
+                if "disabled" in reviewer:
+                    commit_errors.append("User %s is disabled" % reviewer["name"])
+                elif "until" in reviewer:
                     unavailable_reviewers_warning = True
                     msg = "%s is not available until %s" % (
                         reviewer["name"],
@@ -3312,10 +3314,10 @@ def check_for_invalid_reviewers(reviewers):
 
     all_reviewers.extend(all_groups)
     found_names.extend(found_groups)
-    invalid_reviewers = list(set(all_reviewers) - set(found_names))
+    invalid = list(set(all_reviewers) - set(found_names))
 
     # Find users availability:
-    unavailable_reviewers = [
+    unavailable = [
         dict(
             name=r["userName"],
             until=datetime.datetime.fromtimestamp(r["currentStatusUntil"]).strftime(
@@ -3326,7 +3328,13 @@ def check_for_invalid_reviewers(reviewers):
         if r.get("currentStatus") == "away"
     ]
 
-    return unavailable_reviewers + [dict(name=r) for r in invalid_reviewers]
+    # Find disabled users:
+    disabled = [
+        dict(name=r["userName"], disabled=True)
+        for r in users
+        if "disabled" in r.get("roles", [])
+    ]
+    return disabled + unavailable + [dict(name=r) for r in invalid]
 
 
 #

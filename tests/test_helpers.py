@@ -242,6 +242,22 @@ def test_valid_reviewers_in_phabricator_returns_no_errors(call_conduit):
 
 
 @mock.patch("mozphab.ConduitAPI.call")
+def test_disabled_reviewers(call_conduit):
+    reviewers = dict(granted=[], request=["alice", "goober"])
+    call_conduit.side_effect = (
+        # user.query
+        [
+            dict(userName="alice", phid="PHID-USER-1"),
+            dict(userName="goober", phid="PHID-USER-2", roles=[u"disabled"]),
+        ],
+        # project.search
+        {"data": [], "maps": {"slugMap": {}}},
+    )
+    expected_errors = [dict(name="goober", disabled=True)]
+    assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers)
+
+
+@mock.patch("mozphab.ConduitAPI.call")
 def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
     ts = 1543622400
     ts_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
@@ -283,7 +299,7 @@ def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
 
 
 @mock.patch("mozphab.ConduitAPI.call")
-def test_reviwer_case_sensitivity(call_conduit):
+def test_reviewer_case_sensitivity(call_conduit):
     reviewers = dict(granted=[], request=["Alice", "#uSeR-gRoUp"])
     call_conduit.side_effect = (
         # See https://phabricator.services.mozilla.com/conduit/method/user.query/
