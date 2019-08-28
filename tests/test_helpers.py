@@ -213,12 +213,33 @@ def test_valid_reviewers_in_phabricator_returns_no_errors(call_conduit):
         [{"userName": "alice", "phid": "PHID-USER-1"}],
         # project.search
         {
-            "data": [{"fields": {"slug": "user-group"}}],
-            "maps": {"slugMap": {"alias1": {}, "#alias2": {}}},
+            "data": [{"fields": {"slug": "user-group"}, "phid": "PHID-PROJ-1"}],
+            "maps": {
+                "slugMap": {
+                    "alias1": {"slug": "name1", "projectPHID": "PHID-PROJ-2"},
+                    "#alias2": {"slug": "name2", "projectPHID": "PHID-PROJ-3"},
+                }
+            },
         },
     )
     reviewers = dict(granted=[], request=["alice", "#user-group", "#alias1", "#alias2"])
     assert [] == mozphab.check_for_invalid_reviewers(reviewers)
+
+
+@mock.patch("mozphab.ConduitAPI.call")
+def test_disabled_reviewers(call_conduit):
+    reviewers = dict(granted=[], request=["alice", "goober"])
+    call_conduit.side_effect = (
+        # user.query
+        [
+            dict(userName="alice", phid="PHID-USER-1"),
+            dict(userName="goober", phid="PHID-USER-2", roles=[u"disabled"]),
+        ],
+        # project.search
+        {"data": [], "maps": {"slugMap": {}}},
+    )
+    expected_errors = [dict(name="goober", disabled=True)]
+    assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers)
 
 
 @mock.patch("mozphab.ConduitAPI.call")
@@ -248,7 +269,10 @@ def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
             ),
         ],
         # project.search
-        {"data": [{"fields": {"slug": "user-group"}}], "maps": {"slugMap": []}},
+        {
+            "data": [{"fields": {"slug": "user-group"}, "phid": "PHID-PROJ-1"}],
+            "maps": {"slugMap": {}},
+        },
     )
     expected_errors = [
         dict(name="#gon-group"),
@@ -269,7 +293,10 @@ def test_reviewer_case_sensitivity(call_conduit):
         # See https://phabricator.services.mozilla.com/conduit/method/user.query/
         [dict(userName="alice", phid="PHID-USER-1")],
         # See https://phabricator.services.mozilla.com/conduit/method/project.search/
-        {"data": [{"fields": {"slug": "user-group"}}]},
+        {
+            "data": [{"fields": {"slug": "user-group"}, "phid": "PHID-PROJ-1"}],
+            "maps": {"slugMap": {}},
+        },
     )
     assert [] == mozphab.check_for_invalid_reviewers(reviewers)
 

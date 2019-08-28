@@ -891,6 +891,41 @@ class ConduitAPI:
 
         return users
 
+    def get_groups(self, slugs):
+        to_collect = []
+        groups = []
+        for slug in slugs:
+            s = slug.rstrip("!")
+            key = "group-%s" % s
+            if key in cache:
+                groups.append(cache.get(key))
+            else:
+                to_collect.append(s)
+
+        if not to_collect:
+            return groups
+
+        # See https://phabricator.services.mozilla.com/conduit/method/project.search/
+        api_call_args = {"queryKey": "active", "constraints": {"slugs": to_collect}}
+        response = self.call("project.search", api_call_args)
+        for data in response.get("data"):
+            group = dict(name=data["fields"]["slug"], phid=data["phid"])
+            groups.append(group)
+            key = "group-%s" % group["name"]
+            cache.set(key, group)
+
+        # projects might be received by an alias.
+        maps = response["maps"]["slugMap"]
+        for alias in maps.keys():
+            name = normalise_reviewer(alias)
+            group = dict(name=name, phid=maps[alias]["projectPHID"])
+            key = "group-%s" % alias
+            if key not in cache:
+                groups.append(group)
+                cache.set(key, group)
+
+        return groups
+
     def create_revision(
         self, commit, title, summary, diff_phid, has_commit_reviewers, wip=False
     ):
@@ -1490,7 +1525,9 @@ class Repository(object):
                 commit_errors.append("contains arc fields")
 
             for reviewer in commit_invalid_reviewers[commit["node"]]:
-                if "until" in reviewer:
+                if "disabled" in reviewer:
+                    commit_errors.append("User %s is disabled" % reviewer["name"])
+                elif "until" in reviewer:
                     unavailable_reviewers_warning = True
                     msg = "%s is not available until %s" % (
                         reviewer["name"],
@@ -2167,6 +2204,8 @@ class Git(Repository):
         logger.debug("found git repo in %s" % path)
 
         self._git = GIT_COMMAND[:]
+        if not which_path(self._git[0]):
+            raise Error("Failed to find 'git' executable")
 
         # `self._env` is a dict representing environment used in all git commands.
         self._env = os.environ.copy()
@@ -3245,31 +3284,15 @@ def check_for_invalid_reviewers(reviewers):
         )
 
     if all_groups:
-        # See https://phabricator.services.mozilla.com/conduit/method/project.search/
-        api_call_args = {"queryKey": "active", "constraints": {"slugs": all_groups}}
-        result = conduit.call("project.search", api_call_args)
-        found_groups = [
-            "#%s" % normalise_reviewer(data["fields"]["slug"])
-            for data in result["data"]
-        ]
-        # We might be searching by the hashtag.
-        try:
-            if result["maps"]["slugMap"]:
-                found_groups.extend(
-                    [
-                        "#%s" % normalise_reviewer(r)
-                        for r in list(result["maps"]["slugMap"].keys())
-                    ]
-                )
-        except KeyError:
-            pass
+        groups = conduit.get_groups(all_groups)
+        found_groups = ["#%s" % normalise_reviewer(group["name"]) for group in groups]
 
     all_reviewers.extend(all_groups)
     found_names.extend(found_groups)
-    invalid_reviewers = list(set(all_reviewers) - set(found_names))
+    invalid = list(set(all_reviewers) - set(found_names))
 
     # Find users availability:
-    unavailable_reviewers = [
+    unavailable = [
         dict(
             name=r["userName"],
             until=datetime.datetime.fromtimestamp(r["currentStatusUntil"]).strftime(
@@ -3280,7 +3303,13 @@ def check_for_invalid_reviewers(reviewers):
         if r.get("currentStatus") == "away"
     ]
 
-    return unavailable_reviewers + [dict(name=r) for r in invalid_reviewers]
+    # Find disabled users:
+    disabled = [
+        dict(name=r["userName"], disabled=True)
+        for r in users
+        if "disabled" in r.get("roles", [])
+    ]
+    return disabled + unavailable + [dict(name=r) for r in invalid]
 
 
 #
@@ -3570,21 +3599,32 @@ def update_revision_reviewers(transactions, commit):
     # Appends differential.revision.edit transaction(s) to `transactions` to
     # set the reviewers.
 
-    # Add reviewers
-    all_reviewers = commit["reviewers"]["request"] + commit["reviewers"]["granted"]
+    all_reviewing = commit["reviewers"]["request"] + commit["reviewers"]["granted"]
+
+    # Find reviewers PHIDs
+    all_reviewers = [r for r in all_reviewing if not r.startswith("#")]
     # preload all reviewers
     conduit.get_users(all_reviewers)
-
     reviewers = [r for r in all_reviewers if not r.endswith("!")]
-    blocking = [r.rstrip("!") for r in all_reviewers if r.endswith("!")]
+    blocking_reviewers = [r.rstrip("!") for r in all_reviewers if r.endswith("!")]
     reviewers_phid = [user["phid"] for user in conduit.get_users(reviewers)]
     blocking_phid = [
-        "blocking(%s)" % user["phid"] for user in conduit.get_users(blocking)
+        "blocking(%s)" % user["phid"] for user in conduit.get_users(blocking_reviewers)
     ]
 
-    transactions.extend(
-        [dict(type="reviewers.set", value=reviewers_phid + blocking_phid)]
-    )
+    # Find groups PHIDs
+    all_groups = [g for g in all_reviewing if g.startswith("#")]
+    groups = [g for g in all_groups if not g.endswith("!")]
+    blocking_groups = [g.rstrip("!") for g in all_groups if g.endswith("!")]
+    # preload all groups
+    conduit.get_groups(all_groups)
+    groups_phid = [group["phid"] for group in conduit.get_groups(groups)]
+    bl_groups_phid = [
+        "blocking(%s)" % group["phid"] for group in conduit.get_groups(blocking_groups)
+    ]
+
+    all_reviewing_phid = reviewers_phid + blocking_phid + groups_phid + bl_groups_phid
+    transactions.extend([dict(type="reviewers.set", value=all_reviewing_phid)])
 
 
 def submit(repo, args):
@@ -3982,7 +4022,7 @@ def self_update(args):
 def apply_patch(diff, cwd):
     """Apply a patch provided in the `diff`."""
     with temporary_file(diff) as temp_f:
-        check_call(["git", "apply", temp_f], cwd=cwd)
+        check_call([GIT_COMMAND[0], "apply", temp_f], cwd=cwd)
 
 
 def get_base_ref(diff):
@@ -4029,7 +4069,6 @@ def patch(repo, args):
     * Error if `--apply-to base` and no base commit found in the first diff
     * Error if base commit not found in repository
     """
-
     # Check if raw Conduit API can be used
     if not conduit.check():
         raise Error("Failed to use Conduit API")
@@ -4179,6 +4218,11 @@ def patch(repo, args):
             raw = conduit.call("differential.getrawdiff", {"diffID": diff["id"]})
 
         if args.no_commit:
+            if repo.vcs == "hg" and not which_path(GIT_COMMAND[0]):
+                raise Error(
+                    "Failed to find 'git' executable.\n"
+                    "Git is required to apply patches."
+                )
             with wait_message("Applying D%s.." % rev["id"]):
                 apply_patch(raw, repo.path)
 
@@ -4509,9 +4553,6 @@ def main(argv):
 
         if config.no_ansi:
             HAS_ANSI = False
-
-        if not which_path(GIT_COMMAND[0]):
-            raise Error("Failed to find 'git' executable")
 
         install_arc_if_required()
 
