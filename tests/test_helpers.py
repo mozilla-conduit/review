@@ -74,12 +74,18 @@ class Helpers(unittest.TestCase):
             input_response = chr(27)
             mozphab.prompt("", ["AAA"])
 
+        with self.assertRaises(SystemExit):
+            input_response = chr(27)
+            mozphab.prompt("")
+
         input_response = "aaa"
         self.assertEqual("AAA", mozphab.prompt("", ["AAA", "BBB"]))
         input_response = "a"
         self.assertEqual("AAA", mozphab.prompt("", ["AAA", "BBB"]))
         input_response = "b"
         self.assertEqual("BBB", mozphab.prompt("", ["AAA", "BBB"]))
+        input_response = "abc"
+        self.assertEqual("abc", mozphab.prompt(""))
 
     @mock.patch("mozphab.probe_repo")
     def test_repo_from_args(self, m_probe):
