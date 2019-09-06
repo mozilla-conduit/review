@@ -816,8 +816,11 @@ class ConduitAPI:
 
         # Return revisions in the same order requested.
         if ids:
+            # Skip revisions for which we do not have a query result.
             return [
-                revisions[phids_by_id[rev_id]] for rev_id in ids if phids_by_id[rev_id]
+                revisions[phids_by_id[rev_id]]
+                for rev_id in ids
+                if rev_id in phids_by_id
             ]
         else:
             return [revisions[phid] for phid in phids]
@@ -1542,6 +1545,21 @@ class Repository(object):
             if has_arc_rejections(commit["body"]):
                 commit_errors.append("contains arc fields")
 
+            if commit["rev-id"]:
+                revisions = conduit.get_revisions(ids=[int(commit["rev-id"])])
+                if len(revisions) == 0:
+                    commit_errors.append(
+                        "Phabricator did not return a query result for revision D%s"
+                        " (it might be inaccessible or not exist at all)"
+                        % commit["rev-id"]
+                    )
+
+            # commit_issues identified below this are commit_errors unless
+            # self.args.force is True, which makes them commit_warnings
+            commit_issues = (
+                commit_warnings if self.args and self.args.force else commit_errors
+            )
+
             for reviewer in commit_invalid_reviewers[commit["node"]]:
                 if "disabled" in reviewer:
                     commit_errors.append("User %s is disabled" % reviewer["name"])
@@ -1551,10 +1569,7 @@ class Repository(object):
                         reviewer["name"],
                         reviewer["until"],
                     )
-                    if self.args.force:
-                        commit_warnings.append(msg)
-                    else:
-                        commit_errors.append(msg)
+                    commit_issues.append(msg)
                 else:
                     commit_errors.append(
                         "%s is not a valid reviewer's name" % reviewer["name"]
@@ -3225,16 +3240,21 @@ def show_commit_stack(
         if commit.get("rev-id"):
             action = action_template % ("D" + commit["rev-id"])
             if validate:
-                revision = conduit.get_revisions(ids=[int(commit["rev-id"])])[0]
-                # Check if target bug ID is the same as in the Phabricator revision
-                change_bug_id = revision["fields"]["bugzilla.bug-id"] and (
-                    commit["bug-id"] != revision["fields"]["bugzilla.bug-id"]
-                )
-                # Check if comandeering is required
-                whoami = conduit.whoami()
-                if revision["fields"]["authorPHID"] != whoami["phid"]:
-                    is_author = False
+                revisions = conduit.get_revisions(ids=[int(commit["rev-id"])])
+                if len(revisions) > 0:
+                    revision = revisions[0]
 
+                    # Check if target bug ID is the same as in the Phabricator revision
+                    change_bug_id = revision["fields"]["bugzilla.bug-id"] and (
+                        commit["bug-id"] != revision["fields"]["bugzilla.bug-id"]
+                    )
+
+                    # Check if comandeering is required
+                    whoami = conduit.whoami()
+                    if "authorPHID" in revision["fields"] and (
+                        revision["fields"]["authorPHID"] != whoami["phid"]
+                    ):
+                        is_author = False
         else:
             action = action_template % "New"
 

@@ -161,8 +161,7 @@ def in_process(monkeypatch, safe_environ, request):
     # Disable calls to sys.exit() at the end of the script.  Re-raise errors instead
     # to make test debugging easier.
     def reraise(*args, **kwargs):
-        t, v, tb = sys.exc_info()
-        raise (t, v, tb)
+        raise
 
     monkeypatch.setattr(sys, "exit", reraise)
 

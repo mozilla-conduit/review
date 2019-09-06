@@ -475,3 +475,61 @@ Differential Revision: http://example.test/D123
         },
         mock.ANY,
     )
+
+
+def test_submit_update_revision_not_found(in_process, git_repo_path, init_sha):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # response for searching D123 and D124
+        dict(
+            data=[
+                {
+                    "fields": {
+                        "bugzilla.bug-id": "1",
+                        "status": {"value": "needs-review"},
+                    },
+                    "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
+                    "id": 123,
+                    "attachments": {"reviewers": {"reviewers": []}},
+                }
+            ]
+        ),
+        # moz-phab asks again for D124
+        dict(data=[]),
+        # moz-phab asks again for D124
+        dict(data=[]),
+        # moz-phab asks again for D124
+        dict(data=[]),
+    )
+    testfile = git_repo_path / "X"
+    testfile.write_text(u"ą")
+    git_out("add", ".")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text(
+        u"""\
+Bug 1 - Ą
+
+Differential Revision: http://example.test/D123
+"""
+    )
+    git_out("commit", "--file", "msg")
+    testfile.write_text(u"missing repo")
+    msgfile.write_text(
+        u"""\
+Bug 1 - missing revision
+
+Differential Revision: http://example.test/D124
+"""
+    )
+    git_out("commit", "--all", "--file", "./msg")
+
+    with pytest.raises(mozphab.Error) as excinfo:
+        mozphab.main(
+            ["submit", "--yes", "--no-arc"]
+            + ["--bug", "1"]
+            + ["--message", "update message ćwikła"]
+            + [init_sha]
+        )
+    assert "query result for revision D124" in str(excinfo.value)

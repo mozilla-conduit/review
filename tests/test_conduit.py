@@ -222,6 +222,16 @@ def test_get_revisions_search_by_phids_ordering(get_revs, m_call):
     ]
 
 
+def test_get_revisions_search_by_revids_missing(get_revs, m_call):
+    """phabricator does not return info on all rev ids"""
+    m_call.return_value = multiple_phab_result
+    assert get_revs(ids=[2, 4, 1, 3]) == [
+        dict(id=2, phid="PHID-2"),
+        dict(id=1, phid="PHID-1"),
+        dict(id=3, phid="PHID-3"),
+    ]
+
+
 @mock.patch("mozphab.ConduitAPI.call")
 def test_get_diffs(m_call):
     conduit = mozphab.conduit
