@@ -1749,7 +1749,7 @@ class Mercurial(Repository):
         # be deleted in cleanup(). Mercurial will automatically move the
         # bookmark to the successors as we update commits.
         for active, bookmark in [
-            l.split(" ")
+            l.split(" ", 1)
             for l in self.hg_out(["bookmark", "-T", "{active} {bookmark}\n"])
         ]:
             if active == "True":
