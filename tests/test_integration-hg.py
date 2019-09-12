@@ -51,7 +51,7 @@ def test_submit_create_with_user_bookmark(in_process, hg_repo_path):
     hg_out("add")
     hg_out("commit", "--message", "A r?alice")
 
-    user_bookmark_name = "user_bookmark"
+    user_bookmark_name = "user bookmark"
     hg_out("bookmark", user_bookmark_name)
 
     mozphab.main(["submit", "--yes", "--bug", "1"])

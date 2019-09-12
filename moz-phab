@@ -3955,9 +3955,11 @@ def update_arc():
 
     def update_repo(name, path):
         logger.info("Updating %s..." % name)
-        rev = check_output(["git", "rev-parse", "HEAD"], split=False, cwd=path)
-        check_call(["git", "pull", "--quiet"], cwd=path)
-        if rev != check_output(["git", "rev-parse", "HEAD"], split=False, cwd=path):
+        rev = check_output(GIT_COMMAND + ["rev-parse", "HEAD"], split=False, cwd=path)
+        check_call(GIT_COMMAND + ["pull", "--quiet"], cwd=path)
+        if rev != check_output(
+            GIT_COMMAND + ["rev-parse", "HEAD"], split=False, cwd=path
+        ):
             logger.info("%s updated" % name)
         else:
             logger.info("Update of %s not required" % name)
@@ -4010,6 +4012,12 @@ def check_for_updates():
 
 def self_update(args):
     """`self-update` command, updates arc and this script"""
+    if not which_path(GIT_COMMAND[0]):
+        raise Error(
+            "Failed to find 'git' executable, which is required to install "
+            "MozPhab's dependencies."
+        )
+
     # Update arc.
     if config.arc_last_check >= 0:
         update_arc()
