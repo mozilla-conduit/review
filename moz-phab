@@ -1081,13 +1081,17 @@ class ConduitAPI:
         return repo
 
     def create_diff(self, changes, base_revision):
+        creation_method = ["moz-phab", conduit.repo.vcs]
+        if conduit.repo.vcs == "git" and conduit.repo.is_cinnabar_required:
+            creation_method.append("cinnabar")
+
         api_call_args = dict(
             changes=changes,
             sourceMachine=self.repo.phab_url,
             sourceControlSystem=self.repo.phab_vcs,
             sourceControlPath="/",
             sourceControlBaseRevision=base_revision,
-            creationMethod="moz-phab",
+            creationMethod="-".join(creation_method),
             lintStatus="none",
             unitStatus="none",
             repositoryPHID=self.repo.phid,
@@ -1331,7 +1335,7 @@ class Diff:
             for upload in change.uploads:
                 upload["phid"] = conduit.file_upload(upload["value"])
 
-    def submit(self, repo_phid, commit, message):
+    def submit(self, commit, message):
         changes = [
             change.to_conduit(conduit.repo.get_public_node(commit["node"]))
             for change in self.changes.values()
@@ -3856,7 +3860,7 @@ def submit(repo, args):
                     diff.upload_files()
 
                 with wait_message("Submitting the diff..."):
-                    diff_phid = diff.submit(repo.phid, commit, message)
+                    diff_phid = diff.submit(commit, message)
             else:
                 diff_phid = None
 
