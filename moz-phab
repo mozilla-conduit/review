@@ -339,30 +339,37 @@ def read_json_field(files, field_path):
                 if not rc:
                     continue
                 return rc
-        except IOError as e:
-            if e.errno == errno.ENOENT:
-                continue
-            raise
+        except FileNotFoundError:
+            continue
         except ValueError:
             continue
     return None
 
 
-def prompt(question, options):
+def prompt(question, options=None):
     if HAS_ANSI:
         question = "\033[33m%s\033[0m" % question
-    prompt_options = list(options)
-    prompt_options[0] = prompt_options[0].upper()
-    prompt_str = "%s (%s)? " % (question, "/".join(prompt_options))
+    prompt_str = question
+    if options:
+        prompt_options = list(options)
+        prompt_options[0] = prompt_options[0].upper()
+        prompt_str = "%s (%s)? " % (question, "/".join(prompt_options))
 
-    options_map = {o[0].lower(): o for o in options}
-    options_map[""] = options[0]
+        options_map = {o[0].lower(): o for o in options}
+        options_map[""] = options[0]
+
     while True:
         res = input(prompt_str)
-        if len(res) > 1:
-            res = res[0].lower()
+
         if res == chr(27):  # escape
             sys.exit(1)
+
+        if not options:
+            return res
+
+        if len(res) > 1:
+            res = res[0].lower()
+
         if res in options_map:
             return options_map[res]
 
@@ -664,6 +671,21 @@ class ConduitAPI:
         if not token:
             raise ConduitAPIError(INSTALL_CERT_MSG)
         return token
+
+    def save_api_token(self, token):
+        filename = get_arcrc_path()
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                rc = json.load(f)
+        except FileNotFoundError:
+            rc = {}
+
+        rc.setdefault("hosts", {})
+        rc["hosts"].setdefault(self.repo.api_url, {})
+        rc["hosts"][self.repo.api_url]["token"] = token
+
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(rc, f, sort_keys=True, indent=2)
 
     def call(self, api_method, api_call_args):
         """Call Conduit API and return the JSON API call result.
@@ -1035,13 +1057,17 @@ class ConduitAPI:
         return repo
 
     def create_diff(self, changes, base_revision):
+        creation_method = ["moz-phab", conduit.repo.vcs]
+        if conduit.repo.vcs == "git" and conduit.repo.is_cinnabar_required:
+            creation_method.append("cinnabar")
+
         api_call_args = dict(
             changes=changes,
             sourceMachine=self.repo.phab_url,
             sourceControlSystem=self.repo.phab_vcs,
             sourceControlPath="/",
             sourceControlBaseRevision=base_revision,
-            creationMethod="moz-phab",
+            creationMethod="-".join(creation_method),
             lintStatus="none",
             unitStatus="none",
             repositoryPHID=self.repo.phid,
@@ -1287,7 +1313,7 @@ class Diff:
             for upload in change.uploads:
                 upload["phid"] = conduit.file_upload(upload["value"])
 
-    def submit(self, repo_phid, commit, message):
+    def submit(self, commit, message):
         changes = [
             change.to_conduit(conduit.repo.get_public_node(commit["node"]))
             for change in list(self.changes.values())
@@ -3440,11 +3466,6 @@ def install_arc_if_required():
     check_call(["git", "clone", "--depth", "1", LIBPHUTIL_URL, LIBPHUTIL_PATH])
 
 
-def arc_install_certificate(_):
-    """Calls arc to install the Phabricator's certificate."""
-    check_call([ARC_COMMAND, "install-certificate"])
-
-
 def arc_ping(cwd):
     """Sends a ping to the Phabricator server using `conduit.ping` API.
 
@@ -3458,6 +3479,23 @@ def arc_ping(cwd):
     except CommandError:
         return False
     return True
+
+
+#
+# "install-certificate" command
+#
+
+
+def install_certificate(repo, args):
+    """Asks user to enter the Phabricator's certificate.
+
+    The response is saved in the ~/.arcrc file."""
+    logger.info(
+        "LOGIN TO PHABRICATOR\nOpen this page in your browser and login "
+        "to Phabricator if necessary:\n\n%s/conduit/login/\n" % conduit.repo.phab_url
+    )
+    token = prompt("Paste API Token from that page: ")
+    conduit.save_api_token(token)
 
 
 #
@@ -3795,7 +3833,7 @@ def submit(repo, args):
                     diff.upload_files()
 
                 with wait_message("Submitting the diff..."):
-                    diff_phid = diff.submit(repo.phid, commit, message)
+                    diff_phid = diff.submit(commit, message)
             else:
                 diff_phid = None
 
@@ -4549,7 +4587,13 @@ def parse_args(argv):
     cert_parser = commands.add_parser(
         "install-certificate", help="Install Phabricator certificate locally"
     )
-    cert_parser.set_defaults(func=arc_install_certificate, needs_repo=False)
+    cert_parser.add_argument(
+        "--safe-mode",
+        dest="safe_mode",
+        action="store_true",
+        help="Run VCS with only necessary extensions.",
+    )
+    cert_parser.set_defaults(func=install_certificate, needs_repo=True)
 
     # arc
 

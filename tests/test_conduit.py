@@ -7,6 +7,7 @@ import imp
 import mock
 import os
 import pytest
+from contextlib import contextmanager
 from frozendict import frozendict
 
 mozphab = imp.load_source(
@@ -276,3 +277,55 @@ def test_get_related_phids(m_call):
         ),
     ]
     assert ["aaa"] == get_related_phids("ccc", include_abandoned=False)
+
+
+@mock.patch("builtins.open")
+@mock.patch("mozphab.json")
+@mock.patch("mozphab.get_arcrc_path")
+def test_save_api_token(m_get_arcrc_path, m_json, m_open, git):
+    save_api_token = mozphab.conduit.save_api_token
+
+    @contextmanager
+    def with_open():
+        yield None
+
+    mozphab.get_arcrc_path.return_value = ".arcrc"
+    git.api_url = "http://test/api/"
+    mozphab.conduit.set_repo(git)
+    m_open.side_effect = PermissionError
+    with pytest.raises(PermissionError):
+        save_api_token("abc")
+
+    m_open.side_effect = (FileNotFoundError, with_open())
+    save_api_token("abc")
+
+    m_json.dump.assert_called_once_with(
+        {"hosts": {git.api_url: {"token": "abc"}}}, mock.ANY, sort_keys=True, indent=2
+    )
+
+    m_json.reset_mock()
+    m_open.side_effect = None
+    m_json.load.return_value = {"existing_key": "existing_value"}
+    save_api_token("abc")
+    m_json.dump.assert_called_once_with(
+        {"hosts": {git.api_url: {"token": "abc"}}, "existing_key": "existing_value"},
+        mock.ANY,
+        sort_keys=True,
+        indent=2,
+    )
+
+    m_json.reset_mock()
+    m_json.load.return_value = {
+        "hosts": {git.api_url: {"token": "token1"}, "address2": {"token": "token2"}},
+        "existing_key": "existing_value",
+    }
+    save_api_token("abc")
+    m_json.dump.assert_called_once_with(
+        {
+            "hosts": {git.api_url: {"token": "abc"}, "address2": {"token": "token2"}},
+            "existing_key": "existing_value",
+        },
+        mock.ANY,
+        sort_keys=True,
+        indent=2,
+    )

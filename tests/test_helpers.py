@@ -1,6 +1,5 @@
 import builtins
 import datetime
-import errno
 import imp
 import json
 import mock
@@ -19,11 +18,11 @@ class Helpers(unittest.TestCase):
     @mock.patch("builtins.open")
     @mock.patch("mozphab.json")
     def test_read_json_field(self, m_json, m_open):
-        m_open.side_effect = IOError(errno.ENOENT, "Not a file")
+        m_open.side_effect = FileNotFoundError
         self.assertEqual(None, mozphab.read_json_field(["nofile"], ["not existing"]))
 
-        m_open.side_effect = IOError(errno.ENOTDIR, "Not a directory")
-        with self.assertRaises(IOError):
+        m_open.side_effect = NotADirectoryError
+        with self.assertRaises(NotADirectoryError):
             mozphab.read_json_field(["nofile"], ["not existing"])
 
         m_open.side_effect = ValueError()
@@ -74,12 +73,18 @@ class Helpers(unittest.TestCase):
             input_response = chr(27)
             mozphab.prompt("", ["AAA"])
 
+        with self.assertRaises(SystemExit):
+            input_response = chr(27)
+            mozphab.prompt("")
+
         input_response = "aaa"
         self.assertEqual("AAA", mozphab.prompt("", ["AAA", "BBB"]))
         input_response = "a"
         self.assertEqual("AAA", mozphab.prompt("", ["AAA", "BBB"]))
         input_response = "b"
         self.assertEqual("BBB", mozphab.prompt("", ["AAA", "BBB"]))
+        input_response = "abc"
+        self.assertEqual("abc", mozphab.prompt(""))
 
     @mock.patch("mozphab.probe_repo")
     def test_repo_from_args(self, m_probe):

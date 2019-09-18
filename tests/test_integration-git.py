@@ -146,7 +146,7 @@ Differential Revision: http://example.test/D123
                         "metadata": {},
                     }
                 ],
-                "creationMethod": "moz-phab",
+                "creationMethod": "moz-phab-git",
             },
         )
         in call_conduit.call_args_list
