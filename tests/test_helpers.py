@@ -416,3 +416,23 @@ def test_simple_cache():
 
     cache.delete("something")
     assert cache.get("something") is None
+
+
+def test_parse_config():
+    res = mozphab.parse_config(
+        ["key=value 1", "key2 = value2 ", "key3=", "key4=one=two=three"]
+    )
+    assert res == dict(key="value 1", key2="value2", key3="", key4="one=two=three")
+
+
+def test_parse_config_key_only():
+    assert mozphab.parse_config(["key"]) == dict()
+
+
+def test_parse_config_with_filter():
+    def _filter(name, value):
+        if name != "out":
+            return True
+
+    res = mozphab.parse_config(["imin=I'm in", "out=not here"], _filter)
+    assert res == dict(imin="I'm in")
