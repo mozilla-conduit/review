@@ -329,3 +329,8 @@ def test_save_api_token(m_get_arcrc_path, m_json, m_open, git):
         sort_keys=True,
         indent=2,
     )
+
+
+def test_parse_git_diff():
+    parse = mozphab.Diff.parse_git_diff
+    assert parse("@@ -40,9 +50,3 @@ packaging==19.1 \\") == (40, 50, 9, 3)

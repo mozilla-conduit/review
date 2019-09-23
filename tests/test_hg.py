@@ -106,13 +106,14 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
     m_config.safe_mode = False
     m_parse_config.return_value = {"ui.username": "username", "extensions.evolve": ""}
     hg.set_args(Args())
-    assert ["--config", "extensions.rebase="] == hg._hg
+    assert ["--config", "extensions.rebase=", "--pager", "never"] == hg._hg
     assert hg.use_evolve
     assert not hg.has_shelve
 
     # safe_mode
     safe_mode_options = (
         ["--config", "extensions.rebase="]
+        + ["--pager", "never"]
         + ["--config", "ui.username=username"]
         + ["--config", "extensions.evolve="]
     )
@@ -132,6 +133,7 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
     hg.set_args(Args())
     assert (
         ["--config", "extensions.rebase="]
+        + ["--pager", "never"]
         + ["--config", "experimental.evolution.createmarkers=true"]
         + ["--config", "extensions.strip="]
     ) == hg._hg
@@ -267,6 +269,179 @@ def test_check_node(m_is_node, hg):
     assert "" == str(e.value)
 
 
-def test_no_arc_not_implemented(hg):
-    with pytest.raises(NotImplementedError):
-        hg.get_diff(None)
+@mock.patch("mozphab.Mercurial.hg_out")
+def test_hg_cat(m_hg, hg):
+    cat = m_hg.return_value = b"some text"
+    hg.hg_cat("fn", "node")
+    m_hg.assert_called_once_with(
+        ["cat", "-r", "node", "fn"], expect_binary=True, split=False
+    )
+    assert cat == b"some text"
+
+
+@mock.patch("mozphab.Mercurial.hg_out")
+def test_file_size(m_hg, hg):
+    m_hg.return_value = "123\n"
+    res = hg._file_size("fn", "rev")
+    m_hg.assert_called_once_with(
+        ["files", "-v", "-r", "rev", mock.ANY, "-T", "{size}"], split=False
+    )
+    assert res == 123
+
+
+@mock.patch("mozphab.Mercurial._file_size")
+@mock.patch("mozphab.Mercurial.hg_cat")
+def test_file_meta(m_cat, m_file_size, hg):
+    size = mozphab.MAX_TEXT_SIZE - 1
+    m_file_size.return_value = size
+    m_cat.return_value = b"spam\nham"
+    meta = hg._get_file_meta("fn", "rev")
+    assert meta == dict(
+        binary=False,
+        mime="TEXT",
+        bin_body=b"spam\nham",
+        body="spam\nham",
+        file_size=size,
+    )
+
+
+@mock.patch("mozphab.mimetypes")
+@mock.patch("mozphab.Mercurial._file_size")
+@mock.patch("mozphab.Mercurial.hg_cat")
+def test_file_meta_binary(m_cat, m_file_size, m_mime, hg):
+    m_mime.guess_type.return_value = ["MIMETYPE"]
+    m_cat.return_value = b"spam\nham"
+    size = mozphab.MAX_TEXT_SIZE + 1
+    m_file_size.return_value = size
+    meta = hg._get_file_meta("fn", "rev")
+    assert meta == dict(
+        binary=True,
+        mime="MIMETYPE",
+        bin_body=b"spam\nham",
+        body=b"spam\nham",
+        file_size=size,
+    )
+
+    size = mozphab.MAX_TEXT_SIZE - 1
+    m_file_size.return_value = size
+    m_cat.return_value = b"\0spam\nham"
+    meta = hg._get_file_meta("fn", "rev")
+    assert meta == dict(
+        binary=True,
+        mime="MIMETYPE",
+        bin_body=b"\0spam\nham",
+        body=b"\0spam\nham",
+        file_size=size,
+    )
+
+
+@mock.patch("mozphab.Mercurial._get_file_meta")
+@mock.patch("mozphab.Mercurial._change_set_binary")
+@mock.patch("mozphab.Mercurial._change_create_hunk")
+def test_change_add(m_hunk, m_binary, m_meta, hg):
+    change = None
+    m_meta.return_value = dict(binary=False, body="abc\n", file_size=123)
+    hg._change_add(change, "fn", None, "parent", "node")
+    m_hunk.assert_called_once_with(
+        change, "fn", ["+abc\n"], 123, "parent", "node", 0, 1, 0, 1
+    )
+    m_binary.assert_not_called()
+
+    m_hunk.reset_mock()
+    m_meta.return_value = dict(
+        binary=True, bin_body=b"abc\n", body=b"abc\n", file_size=123, mime="MIME"
+    )
+    hg._change_add(change, "fn", None, "parent", "node")
+    m_hunk.assert_not_called()
+    m_binary.assert_called_once_with(change, "", b"abc\n", "", "MIME")
+
+
+@mock.patch("mozphab.Mercurial._get_file_meta")
+@mock.patch("mozphab.Mercurial._change_set_binary")
+@mock.patch("mozphab.Mercurial._change_create_hunk")
+def test_change_del(m_hunk, m_binary, m_meta, hg):
+    change = None
+    m_meta.return_value = dict(
+        binary=False, bin_body=b"abc\n", body="abc\n", file_size=123
+    )
+    hg._change_del(change, "fn", None, "parent", "node")
+    m_hunk.assert_called_once_with(
+        change, "fn", ["-abc\n"], 123, "parent", "node", 1, 0, 1, 0
+    )
+    m_binary.assert_not_called()
+
+    m_hunk.reset_mock()
+    m_meta.return_value = dict(
+        binary=True, bin_body=b"abc\n", body=b"abc\n", file_size=123, mime="MIME"
+    )
+    hg._change_del(change, "fn", None, "parent", "node")
+    m_hunk.assert_not_called()
+    m_binary.assert_called_once_with(change, b"abc\n", "", "MIME", "")
+
+
+@mock.patch("mozphab.Mercurial._get_file_meta")
+@mock.patch("mozphab.Mercurial._change_set_binary")
+@mock.patch("mozphab.Mercurial._change_create_hunk")
+@mock.patch("mozphab.Mercurial.hg_out")
+def test_change_mod(m_hg, m_hunk, m_binary, m_meta, hg):
+    class Args:
+        def __init__(self, lesscontext=False):
+            self.lesscontext = lesscontext
+
+    change = None
+    text_side_effect = (
+        dict(binary=False, bin_body=b"abc\n", body="abc\n", file_size=4),
+        dict(binary=False, bin_body=b"def\n", body="def\n", file_size=4),
+    )
+    m_meta.side_effect = text_side_effect
+    m_hg.return_value = [
+        "diff --git a/fn b/fn\n",
+        "--- a/B\n",
+        "+++ b/B\n",
+        "@@ -1,1 +1,1 @@\n",
+        "-abc\n",
+        "+def\n",
+    ]
+    hg.args = Args()
+    hg._change_mod(change, "fn", "old_fn", "parent", "node")
+    m_hg.assert_called_once_with(
+        ["diff", "--git", "-U%s" % mozphab.MAX_CONTEXT_SIZE, "-r", "parent", "fn"],
+        split=True,
+        keep_ends=True,
+    )
+    m_hunk.assert_called_once_with(
+        change, "fn", ["-abc\n", "+def\n"], 4, "parent", "node", 1, 1, 1, 1
+    )
+
+    m_hg.reset_mock()
+    m_meta.side_effect = text_side_effect
+    hg.args = Args(lesscontext=True)
+    hg._change_mod(change, "fn", "old_fn", "parent", "node")
+    m_hg.assert_called_once_with(
+        ["diff", "--git", "-U100", "-r", "parent", "fn"], split=True, keep_ends=True
+    )
+
+    m_hunk.reset_mock()
+    m_meta.side_effect = (
+        dict(binary=True, bin_body=b"abc\n", body=b"abc\n", file_size=4, mime="MIME"),
+        dict(binary=False, bin_body=b"def\n", body="def\n", file_size=4, mime="TEXT"),
+    )
+    hg._change_mod(change, "fn", "old_fn", "parent", "node")
+    m_binary.assert_called_once_with(change, b"abc\n", b"def\n", "MIME", "TEXT")
+
+
+def test_set_binary(hg):
+    change = mock.Mock()
+    hg._change_set_binary(change, b"a", b"b", "pdf/", "pdf/")
+    assert change.binary
+    assert change.uploads == [
+        {"type": "old", "value": b"a", "mime": "pdf/", "phid": None},
+        {"type": "new", "value": b"b", "mime": "pdf/", "phid": None},
+    ]
+    assert change.file_type.name == "BINARY"
+
+    hg._change_set_binary(change, b"a", b"b", "image/jpeg", "pdf/")
+    assert change.file_type.name == "IMAGE"
+
+    hg._change_set_binary(change, b"a", b"b", "image/jpeg", "pdf/")
+    assert change.file_type.name == "IMAGE"

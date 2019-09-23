@@ -630,7 +630,6 @@ class Commits(unittest.TestCase):
                 blocker=["Two", "THREE!", "three", "two", "three"],
             ),
         )
-        print(commits)
         assert commits[0]["title"] == "A"
         assert commits[0]["bug-id"] is None
         assert "two!" in lwr(commits[0]["reviewers"]["granted"])

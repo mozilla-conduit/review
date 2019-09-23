@@ -15,21 +15,16 @@ mozphab.SHOW_SPINNER = False
 
 _revision = 100
 
+call_conduit = mock.Mock()
 
-def _check_call_by_line_gen(*args, **kwargs):
-    global _revision
-    yield "Revision URI: http://example.test/D%s" % _revision
-    _revision += 1
-
-
-check_call_by_line = mock.Mock(side_effect=_check_call_by_line_gen)
+check_call_by_line = mozphab.check_call_by_line
 
 
 def _init_repo(hg_repo_path):
     test_file = hg_repo_path / "X"
     test_file.write_text("R0")
     hg_out("commit", "--addremove", "--message", "R0")
-    return dict(test_file=test_file, rev=0, rev_map={"R0": "0"})
+    return dict(test_file=test_file, rev=1, rev_map={"R0": "1"})
 
 
 def _add_commit(repo, parent, name):
@@ -46,14 +41,47 @@ def _checkout(repo, name):
 
 def _submit(repo, start, end, expected):
     mozphab.main(
-        ["submit", "--yes", "--bug", "1", repo["rev_map"][start], repo["rev_map"][end]]
+        [
+            "submit",
+            "--no-arc",
+            "--yes",
+            "--bug",
+            "1",
+            repo["rev_map"][start],
+            repo["rev_map"][end],
+        ]
     )
     log = hg_out("log", "--graph", "--template", r"{desc|firstline}\n")
     assert log.strip() == expected.strip()
 
 
+def _conduit_side_effect(calls=1):
+    side_effect = [
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+    ]
+
+    for i in range(calls):
+        side_effect.extend(
+            [
+                # differential.creatediff
+                dict(dict(phid="PHID-DIFF-{}".format(i), diffid=str(i))),
+                # differential.setdiffproperty
+                dict(),
+                # differential.revision.edit
+                dict(object=dict(id=str(123 + i))),
+            ]
+        )
+
+    return side_effect
+
+
 def test_submit_single_1(in_process, hg_repo_path):
     repo = _init_repo(hg_repo_path)
+
+    call_conduit.side_effect = _conduit_side_effect()
 
     _add_commit(repo, "R0", "A1")
     _add_commit(repo, "A1", "B1")
@@ -70,12 +98,16 @@ o  B1
 o  Bug 1 - A1
 |
 o  R0
+|
+o  init
 """,
     )
 
 
 def test_submit_single_2(in_process, hg_repo_path):
     repo = _init_repo(hg_repo_path)
+
+    call_conduit.side_effect = _conduit_side_effect()
 
     _add_commit(repo, "R0", "A1")
     _add_commit(repo, "A1", "B1")
@@ -92,12 +124,16 @@ def test_submit_single_2(in_process, hg_repo_path):
 o  Bug 1 - A1
 |
 o  R0
+|
+o  init
 """,
     )
 
 
 def test_submit_single_3(in_process, hg_repo_path):
     repo = _init_repo(hg_repo_path)
+
+    call_conduit.side_effect = _conduit_side_effect()
 
     _add_commit(repo, "R0", "A1")
     _add_commit(repo, "A1", "B1")
@@ -117,12 +153,16 @@ o  B1
 o  Bug 1 - A1
 |
 o  R0
+|
+o  init
 """,
     )
 
 
 def test_submit_stack_1(in_process, hg_repo_path):
     repo = _init_repo(hg_repo_path)
+
+    call_conduit.side_effect = _conduit_side_effect(2)
 
     _add_commit(repo, "R0", "A1")
     _add_commit(repo, "A1", "B1")
@@ -137,12 +177,16 @@ o  Bug 1 - B1
 @  Bug 1 - A1
 |
 o  R0
+|
+o  init
 """,
     )
 
 
 def test_submit_stack_2(in_process, hg_repo_path):
     repo = _init_repo(hg_repo_path)
+
+    call_conduit.side_effect = _conduit_side_effect(2)
 
     _add_commit(repo, "R0", "A1")
     _add_commit(repo, "A1", "B1")
@@ -159,12 +203,16 @@ o  Bug 1 - B1
 o  Bug 1 - A1
 |
 o  R0
+|
+o  init
 """,
     )
 
 
 def test_submit_stack_3(in_process, hg_repo_path):
     repo = _init_repo(hg_repo_path)
+
+    call_conduit.side_effect = _conduit_side_effect(2)
 
     _add_commit(repo, "R0", "A1")
     _add_commit(repo, "A1", "B1")
@@ -184,5 +232,7 @@ o  Bug 1 - B1
 o  Bug 1 - A1
 |
 o  R0
+|
+o  init
 """,
     )

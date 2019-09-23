@@ -74,8 +74,6 @@ def test_patch_no_commit(
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
     m_call_conduit.return_value = PATCH_1
-    hg_out("add")
-    hg_out("commit", "--message", "ARCCONFIG")
 
     mozphab.main(["patch", "D1", "--no-commit"])
     assert [".arcconfig", ".hg", "X"] == sorted(os.listdir(str(hg_repo_path)))
@@ -132,7 +130,6 @@ def test_git_patch_with_commit(
     test_file = git_repo_path / "X"
     assert "a\n" == test_file.read_text()
     result = git_out("log", "--all", "--format=[%at] %an <%ae>%n%s %P%n%b")
-    print("xxx", result)
     assert 1 == result.count("[1547806078] user <author@example.com>")
     assert 1 == result.count("title R1")
     assert 1 == result.count("Differential Revision: http://example.test/D1")
@@ -226,8 +223,6 @@ def test_hg_patch_with_commit(
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
     m_call_conduit.return_value = PATCH_1
-    hg_out("add")
-    hg_out("commit", "--message", "ARCCONFIG")
 
     mozphab.main(["patch", "D1", "--apply-to", "here"])
     assert [".arcconfig", ".hg", "X"] == sorted(os.listdir(str(hg_repo_path)))
