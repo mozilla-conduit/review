@@ -394,7 +394,11 @@ def parse_config(config_list, filter_func=None):
             except UnicodeDecodeError:
                 pass
 
-        name, value = line.split("=", 1)
+        try:
+            name, value = line.split("=", 1)
+        except ValueError:
+            continue
+
         name = name.strip()
         value = value.strip()
         if filter_func is None or (callable(filter_func) and filter_func(name, value)):
