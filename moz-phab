@@ -7,11 +7,6 @@
 
 """
 Wrapper around Phabricator's `arc` cli to support submission of a series of commits.
-
-Goals:
-- must only use standard libraries
-- must be a single file for easy deployment
-- should work on python 2.7 and python 3.5+
 """
 
 import argparse
@@ -19,7 +14,6 @@ import base64
 import calendar
 import configparser
 import datetime
-import errno
 import io
 import json
 import logging
@@ -28,8 +22,6 @@ import mimetypes
 import os
 import re
 import signal
-import ssl
-import stat
 import subprocess
 import sys
 import tempfile
@@ -45,6 +37,7 @@ from collections import namedtuple
 from contextlib import contextmanager, suppress
 from distutils.version import LooseVersion
 from glob import glob
+from pkg_resources import get_distribution, parse_version
 from shlex import quote
 from shutil import which
 
@@ -237,6 +230,7 @@ def which_path(path):
         and os.access(path, os.F_OK | os.X_OK)
         and not os.path.isdir(path)
     ):
+        logger.debug("Path found: {}".format(path))
         return path
 
     return which(path)
@@ -3956,42 +3950,6 @@ def submit(repo, args):
 #
 
 
-def get_self_release():
-    """Queries github for the most recent release's tag and timestamp"""
-    releases_api_url = "https://api.github.com/repos/%s/releases/latest" % SELF_REPO
-    logger.debug("fetching %s" % releases_api_url)
-
-    # Grab release json from github's api, using a very short timeout.
-    try:
-        response = urllib.request.urlopen(releases_api_url, timeout=5)
-    except (urllib.error.HTTPError, urllib.error.URLError) as e:
-        raise Error("Failed to check for updates: %s" % e)
-
-    result = response.read().decode("utf-8")
-    try:
-        release = json.loads(result)
-    except ValueError:
-        raise Error("Malformed response from GitHub when checking for updates")
-    logger.debug(release)
-
-    # Grab the published and last-modified timestamps.
-    published_at = parse_zulu_time(release["published_at"])
-    try:
-        m_time = os.path.getmtime(SELF_FILE)
-    except OSError as e:
-        if e.errno != errno.ENOENT:
-            raise
-        m_time = 0
-    logger.debug("published_at: %s" % datetime.datetime.fromtimestamp(published_at))
-    logger.debug("m_time: %s" % datetime.datetime.fromtimestamp(m_time))
-
-    return dict(
-        published_at=published_at,
-        update_required=published_at > m_time,
-        tag=str(release["tag_name"]),
-    )
-
-
 def update_arc():
     """Write the last check and update arc."""
 
@@ -4005,6 +3963,12 @@ def update_arc():
             logger.info("%s updated" % name)
         else:
             logger.info("Update of %s not required" % name)
+
+    if not which_path(GIT_COMMAND[0]):
+        raise Error(
+            "Failed to find 'git' executable, which is required to install "
+            "MozPhab's dependencies."
+        )
 
     try:
         update_repo("libphutil", LIBPHUTIL_PATH)
@@ -4021,10 +3985,33 @@ def update_arc():
         config.write()
 
 
-def check_for_updates():
-    """Log a message if an update is required/available"""
+def get_installed_distribution():
+    return get_distribution("MozPhab")
 
-    # Notify for self updates.
+
+def get_pypi_version():
+    url = "https://pypi.org/pypi/MozPhab/json"
+    output = urllib.request.urlopen(urllib.request.Request(url), timeout=30).read()
+    response = json.loads(output.decode("utf-8"))
+    return response["info"]["version"]
+
+
+def log_current_version(_):
+    dist = get_installed_distribution()
+    logger.info("{} ({})".format(dist.project_name, dist.version))
+
+
+def check_for_updates(with_arc=True):
+    """Log a message if an update is required/available"""
+    # Update arc.
+    if (
+        with_arc
+        and config.arc_last_check >= 0
+        and time.time() - config.arc_last_check > ARC_UPDATE_FREQUENCY * 60 * 60
+    ):
+        update_arc()
+
+    # Update self.
     if (
         config.self_last_check >= 0
         and time.time() - config.self_last_check > SELF_UPDATE_FREQUENCY * 60 * 60
@@ -4032,61 +4019,35 @@ def check_for_updates():
         config.self_last_check = int(time.time())
         config.write()
 
-        try:
-            release = get_self_release()
-        except Error as e:
-            logger.warning(e.message)
-            return
-
-        if release["update_required"]:
-            logger.warning("Version %s of `moz-phab` is now available" % release["tag"])
-            logger.info("Run `moz-phab self-update` to update")
-        else:
-            logger.debug("update check not required")
-
-    # Update arc.
-    if (
-        config.arc_last_check >= 0
-        and time.time() - config.arc_last_check > ARC_UPDATE_FREQUENCY * 60 * 60
-    ):
-        update_arc()
-
-
-def self_update(args):
-    """`self-update` command, updates arc and this script"""
-    if not which_path(GIT_COMMAND[0]):
-        raise Error(
-            "Failed to find 'git' executable, which is required to install "
-            "MozPhab's dependencies."
+        current_version = get_installed_distribution().version
+        pypi_version = get_pypi_version()
+        logger.debug(
+            "Versions - local: {}, PyPI: {}".format(current_version, pypi_version)
         )
 
+        if parse_version(current_version) >= parse_version(pypi_version):
+            logger.debug("update check not required")
+            return
+
+        logger.info("Upgrading to version {}".format(pypi_version))
+        self_upgrade()
+        logger.info("Restarting...")
+        check_call(sys.argv)
+        sys.exit()
+
+
+def self_upgrade():
+    check_call(["pip3", "install", "MozPhab", "--upgrade", "--no-cache-dir"])
+
+
+def self_update(_):
+    """`self-update` command, updates arc and this script"""
     # Update arc.
     if config.arc_last_check >= 0:
         update_arc()
 
-    # Update moz-phab
-    release = get_self_release()
-
-    if not release["update_required"] and not args.force:
-        logger.info("Update of `moz-phab` not required")
-        return
-
-    logger.info("Updating `moz-phab` to v%s" % release["tag"])
-
-    url = "https://raw.githubusercontent.com/%s/%s/moz-phab" % (
-        SELF_REPO,
-        release["tag"],
-    )
-    logger.debug("updating '%s' from %s" % (SELF_FILE, url))
-    try:
-        gh = urllib.request.urlopen(url)
-        with open(SELF_FILE, "wb", encoding="utf-8") as fh:
-            fh.write(gh.read())
-        os.chmod(SELF_FILE, stat.S_IRWXU)
-    except (urllib.error.HTTPError, urllib.error.URLError) as e:
-        raise Error("Failed to download update: %s" % e)
-
-    logger.info("%s updated" % SELF_FILE)
+    # Upgrade self
+    self_upgrade()
 
 
 def apply_patch(diff, cwd):
@@ -4584,7 +4545,7 @@ def parse_args(argv):
         action="store_true",
         help="Run VCS with only necessary extensions.",
     )
-    patch_parser.set_defaults(func=patch, needs_repo=True)
+    patch_parser.set_defaults(func=patch, needs_repo=True, no_arc=True)
 
     # install-certificate
 
@@ -4597,13 +4558,18 @@ def parse_args(argv):
         action="store_true",
         help="Run VCS with only necessary extensions.",
     )
-    cert_parser.set_defaults(func=install_certificate, needs_repo=True)
+    cert_parser.set_defaults(func=install_certificate, needs_repo=True, no_arc=True)
 
     # arc
 
     arc_parser = commands.add_parser("arc", help="Call Arcanist")
     arc_parser.add_argument("commands", nargs=argparse.REMAINDER)
     arc_parser.set_defaults(func=arc_pass, needs_repo=False)
+
+    # version
+
+    ver_parser = commands.add_parser("version", help="Get version number")
+    ver_parser.set_defaults(func=log_current_version, needs_repo=False, no_arc=True)
 
     # if we're called without a command and from within a repository, default to submit.
     if not argv or (
@@ -4630,21 +4596,11 @@ def main(argv):
         if config.no_ansi:
             HAS_ANSI = False
 
-        install_arc_if_required()
-
-        # Ensure ssl certificates are validated (see PEP 476).
-        if hasattr(ssl, "_https_verify_certificates"):
-            # PEP 493: "private" API to configure HTTPS defaults without monkeypatching
-            # noinspection PyProtectedMember
-            ssl._https_verify_certificates()
-        else:
-            logger.warning(
-                "Your version of Python does not validate HTTPS "
-                "certificates.  Please consider upgrading to Python 2.7.9 "
-                "or later."
-            )
-
         args = parse_args(argv)
+
+        with_arc = not hasattr(args, "no_arc") or not args.no_arc
+        if with_arc:
+            install_arc_if_required()
 
         if hasattr(args, "trace") and args.trace:
             DEBUG = True
@@ -4652,7 +4608,7 @@ def main(argv):
             SHOW_SPINNER = False
 
         if args.command != "self-update":
-            check_for_updates()
+            check_for_updates(with_arc=with_arc)
 
         if args.command == "patch" and not args.apply_to:
             args.apply_to = config.apply_patch_to

@@ -5,3 +5,5 @@ reviewc
 *,cover
 venv
 build
+dist
+MANIFEST
