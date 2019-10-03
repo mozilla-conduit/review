@@ -390,7 +390,7 @@ def parse_config(config_list, filter_func=None):
         # On Windows config file is likely to be cp1252 encoded, not UTF-8.
         if IS_WINDOWS:
             try:
-                line = line.decode(encoding="cp1252").encode(encoding="UTF-8")
+                line = line
             except UnicodeDecodeError:
                 pass
 
