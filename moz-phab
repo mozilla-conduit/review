@@ -3715,13 +3715,13 @@ def submit(repo, args):
         augment_commits_from_body(commits)
         update_commits_from_args(commits, args)
 
-        # Check if arc is configured
-        if not repo.check_arc():
-            raise Error("Failed to run %s." % ARC_COMMAND)
-
         # Check if raw Conduit API can be used
         if not conduit.check():
             raise Error("Failed to use Conduit API")
+
+        # Check if arc is configured
+        if not repo.check_arc():
+            raise Error("Failed to run %s." % ARC_COMMAND)
 
     # Validate commit stack is suitable for review.
     show_commit_stack(commits, validate=True, ignore_reviewers=args.wip)
