@@ -4150,6 +4150,7 @@ def self_destroy(args):
 
     os.remove(SELF_FILE)
     logger.info("%s removed" % SELF_FILE)
+    logger.info("You might want to rebuild the executable cache by calling `hash -r`.")
 
 
 def apply_patch(diff, cwd):
