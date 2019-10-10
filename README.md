@@ -39,10 +39,12 @@ always_full_stack = False
 [updater]
 self_last_check = 
 arc_last_check = 
+self_auto_update = True
 ```
 
 - `ui.no_ansi` : never use ANSI colours (default: auto-detected).
-- `vcs.safe_mode` : use only safe VCS settings (default: false). Use `--safe-mode` option to switch it on for a one-time usage.
+- `vcs.safe_mode` : use only safe VCS settings (default: false). Use `--safe-mode` 
+    option to switch it on for a one-time usage.
 - `git.remote`: comma separated string. Default remotes used to find the first
     unpublished commit. Default, empty string, means that a list of remotes will
     be read from `git remote` command.
@@ -66,6 +68,8 @@ arc_last_check =
     an update check was performed for this script.  set to `-1` to disable this check.
 - `updater.arc_last_check` : epoch timestamp (local timezone) indicating the last time
     an update was performed for arc.  set to `-1` to disable this check.
+- `self_auto_update` : when `True` moz-phab will auto-update if a new version is available.
+    If `False` moz-phab will only warn about the new version.
 
 `moz-phab` can also be configured via the following environmental variables:
 - `DEBUG` : enabled debugging output (default: disabled)
