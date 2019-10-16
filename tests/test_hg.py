@@ -5,7 +5,6 @@ import os
 import pytest
 
 from .conftest import create_temp_fn
-from subprocess import CalledProcessError
 
 mozphab = imp.load_source(
     "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
@@ -251,7 +250,7 @@ def test_is_node(m_hg_out, hg):
     assert hg.is_node("aabbcc")
     m_hg_out.assert_called_once_with(["identify", "-q", "-r", "aabbcc"])
 
-    m_hg_out.side_effect = mock.Mock(side_effect=CalledProcessError(None, None))
+    m_hg_out.side_effect = mock.Mock(side_effect=mozphab.CommandError)
     assert not hg.is_node("aaa")
 
 

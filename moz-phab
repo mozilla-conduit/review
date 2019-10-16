@@ -243,7 +243,12 @@ def parse_zulu_time(timestamp):
 def check_call(command, **kwargs):
     # wrapper around subprocess.check_call with debug output
     logger.debug("$ %s" % " ".join(quote(s) for s in command))
-    subprocess.check_call(command, **kwargs)
+    try:
+        subprocess.check_call(command, **kwargs)
+    except subprocess.CalledProcessError as e:
+        raise CommandError(
+            "command '%s' failed to complete successfully" % command[0], e.returncode
+        )
 
 
 def check_call_by_line(command, cwd=None, never_log=False):
@@ -270,7 +275,10 @@ def check_call_by_line(command, cwd=None, never_log=False):
         process.wait()
 
     if process.returncode:
-        raise subprocess.CalledProcessError(process.returncode, command)
+        raise CommandError(
+            "command '%s' failed to complete successfully" % command[0],
+            process.returncode,
+        )
 
 
 def check_output(
@@ -1987,7 +1995,7 @@ class Mercurial(Repository):
     def is_node(self, node):
         try:
             self.hg_out(["identify", "-q", "-r", node])
-        except subprocess.CalledProcessError:
+        except CommandError:
             return False
 
         return True
@@ -3963,7 +3971,7 @@ def update_arc():
     try:
         update_repo("libphutil", LIBPHUTIL_PATH)
         update_repo("arcanist", ARC_PATH)
-    except subprocess.CalledProcessError:
+    except CommandError:
         result = prompt(
             "Would you like to skip arc upgrades in the future?", ["Yes", "No"]
         )
@@ -4282,7 +4290,7 @@ def arc_pass(args):
 
     try:
         check_call(ARC + args.commands)
-    except subprocess.CalledProcessError:
+    except CommandError:
         pass
 
 

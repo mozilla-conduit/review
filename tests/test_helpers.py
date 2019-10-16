@@ -5,7 +5,6 @@ import json
 import mock
 import os
 import pytest
-import subprocess
 import unittest
 
 mozphab = imp.load_source(
@@ -407,7 +406,7 @@ def test_simple_cache():
 
 @mock.patch("subprocess.check_output")
 def test_check_output(m_check_output):
-    m_check_output.side_effect = subprocess.CalledProcessError(cmd="", returncode=1)
+    m_check_output.side_effect = mozphab.CommandError()
     with pytest.raises(mozphab.CommandError):
         mozphab.check_output(["command"])
 
