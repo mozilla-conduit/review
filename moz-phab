@@ -310,7 +310,12 @@ def check_output(
                 if err["matching"] in e.output:
                     logger.error(err["message"])
 
-        logger.debug(e.output)
+        if e.output and not never_log:
+            logger.debug(e.output)
+
+        if e.stderr and not never_log:
+            logger.debug(e.stderr)
+
         raise CommandError(
             "command '%s' failed to complete successfully" % command[0], e.returncode
         )
