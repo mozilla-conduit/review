@@ -428,6 +428,18 @@ def temporary_file(content, encoding="utf-8"):
         os.remove(f.name)
 
 
+@contextmanager
+def temporary_binary_file(content):
+    f = tempfile.NamedTemporaryFile(delete=False, mode="wb+")
+    try:
+        f.write(content)
+        f.flush()
+        f.close()
+        yield f.name
+    finally:
+        os.remove(f.name)
+
+
 # py2 doesn't handle SIGINT with background threads; hook up our own handler
 # to allow background threads to check sig_int.triggered and stop.
 
@@ -2737,7 +2749,9 @@ class Git(Repository):
             logger.info("Created branch %s" % branch_name)
 
     def apply_patch(self, diff, body, author, author_date):
-        with temporary_file(diff) as patch_file:
+        # apply the patch as a binary file to ensure the correct line endings
+        # is used.
+        with temporary_binary_file(diff.encode("utf8")) as patch_file:
             self.git(["apply", "--index", patch_file])
         self.commit(body, author, author_date)
 
@@ -4053,7 +4067,7 @@ def self_update(_):
 
 def apply_patch(diff, cwd):
     """Apply a patch provided in the `diff`."""
-    with temporary_file(diff) as temp_f:
+    with temporary_binary_file(diff.encode("utf8")) as temp_f:
         check_call([GIT_COMMAND[0], "apply", temp_f], cwd=cwd)
 
 

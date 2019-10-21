@@ -375,7 +375,7 @@ def test_before_patch(m_logger, m_prompt, m_git, m_checkout, m_git_out, git):
         git.before_patch("abcdef", "name")
 
 
-@mock.patch("mozphab.temporary_file")
+@mock.patch("mozphab.temporary_binary_file")
 @mock.patch("mozphab.Git.git")
 @mock.patch("mozphab.Git.commit")
 def test_apply_patch(m_commit, m_git, m_temp_fn, git):
@@ -383,7 +383,7 @@ def test_apply_patch(m_commit, m_git, m_temp_fn, git):
     git.apply_patch("diff", "commit message", "user", 1)
     m_git.assert_called_once_with(["apply", "--index", "filename"])
     m_commit.assert_called_with("commit message", "user", 1)
-    m_temp_fn.assert_called_once_with("diff")
+    m_temp_fn.assert_called_once_with(b"diff")
 
 
 @mock.patch("mozphab.Git.git_out")
