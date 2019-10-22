@@ -37,6 +37,7 @@ from collections import namedtuple
 from contextlib import contextmanager, suppress
 from distutils.version import LooseVersion
 from glob import glob
+from pathlib import Path
 from pkg_resources import get_distribution, parse_version
 from shlex import quote
 from shutil import which
@@ -4353,7 +4354,15 @@ def check_for_updates(with_arc=True):
 
 
 def self_upgrade():
-    check_call(["pip3", "install", "MozPhab", "--upgrade", "--no-cache-dir"])
+    """Upgrade ourselves with pip3."""
+
+    # Find the right pip3 - look for a script in the same directory as the
+    # current Python executable, falling back to the system path if that
+    # doesn't exist.
+    pip3 = Path(sys.executable).parent / "pip3"
+    pip3 = str(pip3) if pip3.exists() else "pip3"
+
+    check_call([pip3, "install", "MozPhab", "--upgrade", "--no-cache-dir"])
 
 
 def self_update(_):
