@@ -1119,6 +1119,9 @@ class ConduitAPI:
         if "tree-hash" in commit:
             data[commit["node"]]["tree"] = commit["tree-hash"]
 
+        if self.repo.phab_vcs == "hg":
+            data[commit["node"]]["rev"] = commit["node"]
+
         api_call_args = dict(
             diff_id=diff_id, name="local:commits", data=json.dumps(data)
         )

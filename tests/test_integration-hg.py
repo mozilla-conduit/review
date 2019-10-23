@@ -7,6 +7,7 @@ import mock
 import os
 import shutil
 
+from callee import Contains
 from .conftest import hg_out
 
 mozphab = imp.load_source(
@@ -79,6 +80,13 @@ Differential Revision: http://example.test/D123
         mock.call(
             "diffusion.repository.search",
             dict(limit=1, constraints=dict(callsigns=["TEST"])),
+        )
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call(
+            "differential.setdiffproperty",
+            {"diff_id": "1", "name": "local:commits", "data": Contains('"rev": "')},
         )
         in call_conduit.call_args_list
     )

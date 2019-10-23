@@ -4,6 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import imp
+import json
 import mock
 import os
 import pytest
@@ -334,3 +335,92 @@ def test_save_api_token(m_get_arcrc_path, m_json, m_open, git):
 def test_parse_git_diff():
     parse = mozphab.Diff.parse_git_diff
     assert parse("@@ -40,9 +50,3 @@ packaging==19.1 \\") == (40, 50, 9, 3)
+
+
+@mock.patch("mozphab.conduit.call")
+def test_diff_property(m_call, git, hg):
+    # m_public.side_effect = lambda x: x
+    git.get_public_node = lambda x: x
+    git._vcs = "git"
+    mozphab.conduit.set_repo(git)
+    commit = {
+        "name": "abc-name",
+        "author-name": "Author Name",
+        "author-email": "auth@or.email",
+        "title-preview": "Title Preview",
+        "node": "abc",
+        "parent": "def",
+    }
+    mozphab.conduit.set_diff_property("1", commit, "message")
+    m_call.assert_called_once_with(
+        "differential.setdiffproperty",
+        {
+            "diff_id": "1",
+            "name": "local:commits",
+            "data": json.dumps(
+                {
+                    "abc": {
+                        "author": "Author Name",
+                        "authorEmail": "auth@or.email",
+                        "time": 0,
+                        "summary": "Title Preview",
+                        "message": "message",
+                        "commit": "abc",
+                        "parents": ["def"],
+                    }
+                }
+            ),
+        },
+    )
+
+    m_call.reset_mock()
+    git._vcs = "hg"
+    git._cinnabar_installed = True
+    mozphab.conduit.set_diff_property("1", commit, "message")
+    m_call.assert_called_once_with(
+        "differential.setdiffproperty",
+        {
+            "diff_id": "1",
+            "name": "local:commits",
+            "data": json.dumps(
+                {
+                    "abc": {
+                        "author": "Author Name",
+                        "authorEmail": "auth@or.email",
+                        "time": 0,
+                        "summary": "Title Preview",
+                        "message": "message",
+                        "commit": "abc",
+                        "parents": ["def"],
+                        "rev": "abc",
+                    }
+                }
+            ),
+        },
+    )
+
+    m_call.reset_mock()
+    hg._vcs = "hg"
+    mozphab.conduit.set_repo(hg)
+    mozphab.conduit.set_diff_property("1", commit, "message")
+    m_call.assert_called_once_with(
+        "differential.setdiffproperty",
+        {
+            "diff_id": "1",
+            "name": "local:commits",
+            "data": json.dumps(
+                {
+                    "abc": {
+                        "author": "Author Name",
+                        "authorEmail": "auth@or.email",
+                        "time": 0,
+                        "summary": "Title Preview",
+                        "message": "message",
+                        "commit": "abc",
+                        "parents": ["def"],
+                        "rev": "abc",
+                    }
+                }
+            ),
+        },
+    )

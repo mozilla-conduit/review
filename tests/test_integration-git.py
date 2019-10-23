@@ -8,6 +8,7 @@ import shutil
 import mock
 import pytest
 
+from callee import Contains
 from .conftest import git_out
 
 mozphab = imp.load_source(
@@ -148,6 +149,13 @@ Differential Revision: http://example.test/D123
                 ],
                 "creationMethod": "moz-phab-git",
             },
+        )
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call(
+            "differential.setdiffproperty",
+            {"diff_id": "1", "name": "local:commits", "data": ~Contains('"rev":')},
         )
         in call_conduit.call_args_list
     )
