@@ -4026,6 +4026,9 @@ def submit(repo, args):
     if DEBUG:
         ARC.append("--trace")
 
+    if args.no_arc and IS_WINDOWS:
+        raise Error("--no-arc is temporarily switched off for Windows.")
+
     repo.before_submit()
 
     # Find and preview commits to submits.
