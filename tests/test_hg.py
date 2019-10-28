@@ -412,20 +412,19 @@ def test_change_mod(m_hg, m_hunk, m_binary, m_meta, hg):
         dict(binary=False, bin_body=b"def\n", body="def\n", file_size=4),
     )
     m_meta.side_effect = text_side_effect
-    m_hg.return_value = [
-        "diff --git a/fn b/fn\n",
-        "--- a/B\n",
-        "+++ b/B\n",
-        "@@ -1,1 +1,1 @@\n",
-        "-abc\n",
-        "+def\n",
-    ]
+    m_hg.return_value = b"""\
+diff --git a/fn b/fn
+--- a/B
++++ b/B
+@@ -1,1 +1,1 @@
+-abc
++def
+"""
     hg.args = Args()
     hg._change_mod(change, "fn", "old_fn", "parent", "node")
     m_hg.assert_called_once_with(
         ["diff", "--git", "-U%s" % mozphab.MAX_CONTEXT_SIZE, "-r", "parent", "fn"],
-        split=True,
-        keep_ends=True,
+        expect_binary=True,
     )
     m_hunk.assert_called_once_with(
         change, "fn", ["-abc\n", "+def\n"], 4, "parent", "node", 1, 1, 1, 1
@@ -436,7 +435,7 @@ def test_change_mod(m_hg, m_hunk, m_binary, m_meta, hg):
     hg.args = Args(lesscontext=True)
     hg._change_mod(change, "fn", "old_fn", "parent", "node")
     m_hg.assert_called_once_with(
-        ["diff", "--git", "-U100", "-r", "parent", "fn"], split=True, keep_ends=True
+        ["diff", "--git", "-U100", "-r", "parent", "fn"], expect_binary=True
     )
 
     m_hunk.reset_mock()

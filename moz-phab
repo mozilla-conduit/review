@@ -2442,7 +2442,7 @@ class Mercurial(Repository):
         if meta["binary"]:
             self._change_set_binary(change, "", meta["bin_body"], "", meta["mime"])
         else:
-            lines = meta["body"].splitlines(True)
+            lines = meta["body"].splitlines(keepends=True)
             lines = ["+%s" % l for l in lines]
             self._change_create_hunk(
                 change, fn, lines, meta["file_size"], parent, node, 0, 1, 0, len(lines)
@@ -2489,9 +2489,9 @@ class Mercurial(Repository):
                 start = time.process_time()
                 git_diff = self.hg_out(
                     ["diff", "--git", "-U%s" % context_size, "-r", parent, fn],
-                    split=True,
-                    keep_ends=True,
+                    expect_binary=True,
                 )
+                git_diff = str(git_diff, "utf-8").splitlines(keepends=True)
                 # Remove all info above the header
                 lines = []
                 found_hdr = False
@@ -2559,7 +2559,7 @@ class Mercurial(Repository):
         old_line = " "
         corpus = "".join(lines)
         for line in lines:
-            if line.endswith("No newline at end of file"):
+            if line.endswith("No newline at end of file\n"):
                 if old_line[0] != "+":
                     old_eof_newline = False
                 if old_line[0] != "-":
@@ -3264,17 +3264,25 @@ class Git(Repository):
                 # The file is created.
                 lines = b_body.splitlines(True)
                 lines = ["+%s" % l for l in lines]
+                new_len = len(lines)
+                if not lines[-1].endswith("\n"):
+                    lines[-1] = "{}\n".format(lines[-1])
+                    lines.append("\\ No newline at end of file\n")
+
                 old_off = 0
                 new_off = 1
                 old_len = 0
-                new_len = len(lines)
             elif b_blob is None:
                 # The file is removed.
                 lines = a_body.splitlines(True)
                 lines = ["-%s" % l for l in lines]
+                old_len = len(lines)
+                if not lines[-1].endswith("\n"):
+                    lines[-1] = "{}\n".format(lines[-1])
+                    lines.append("\\ No newline at end of file\n")
+
                 old_off = 1
                 new_off = 0
-                old_len = len(lines)
                 new_len = 0
             else:
                 # There are changes in the file.
@@ -3283,10 +3291,19 @@ class Git(Repository):
                 else:
                     context_size = MAX_CONTEXT_SIZE
 
-                git_diff = self.git_out(
-                    ["diff", "-U%s" % context_size, a_blob, b_blob], split=False
-                )
-                lines = git_diff.splitlines(True)[4:]
+                diff_args = [
+                    "diff",
+                    "--submodule=short",
+                    "--no-ext-diff",
+                    "--no-color",
+                    "--no-textconv",
+                    "-U%s" % context_size,
+                    a_blob,
+                    b_blob,
+                ]
+                git_diff = self.git_out(diff_args, expect_binary=True)
+                git_diff = str(git_diff, "utf-8").splitlines(keepends=True)
+                lines = git_diff[4:]
                 old_off, new_off, old_len, new_len = Diff.parse_git_diff(lines.pop(0))
 
             # Collect some stats about the diff, and generate the corpus we
@@ -3296,7 +3313,7 @@ class Git(Repository):
             old_line = " "
             corpus = "".join(lines)
             for line in lines:
-                if line.endswith("No newline at end of file"):
+                if line.endswith("No newline at end of file\n"):
                     if old_line[0] != "+":
                         old_eof_newline = False
                     if old_line[0] != "-":
@@ -4026,9 +4043,6 @@ def update_revision_reviewers(transactions, commit):
 def submit(repo, args):
     if DEBUG:
         ARC.append("--trace")
-
-    if args.no_arc and IS_WINDOWS:
-        raise Error("--no-arc is temporarily switched off for Windows.")
 
     repo.before_submit()
 

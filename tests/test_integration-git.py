@@ -79,7 +79,7 @@ def test_submit_create(in_process, git_repo_path, init_sha):
         dict(object=dict(id="123")),
     )
     testfile = git_repo_path / "X"
-    testfile.write_text("ą")
+    testfile.write_text("ą\r\nb\nc")
     git_out("add", ".")
     msgfile = git_repo_path / "msg"
     msgfile.write_text("Ą r?alice")
@@ -129,15 +129,17 @@ Differential Revision: http://example.test/D123
                         "oldPath": None,
                         "hunks": [
                             {
-                                "corpus": "+ą",
-                                "addLines": 1,
                                 "oldOffset": 0,
-                                "newOffset": 1,
-                                "newLength": 1,
-                                "delLines": 0,
-                                "isMissingOldNewline": False,
                                 "oldLength": 0,
-                                "isMissingNewNewline": False,
+                                "newOffset": 1,
+                                "newLength": 3,
+                                "addLines": 3,
+                                "delLines": 0,
+                                "corpus": (
+                                    "+ą\r\n+b\n+c\n\\ No newline at end of file\n"
+                                ),
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": True,
                             }
                         ],
                         "oldProperties": {},
@@ -265,6 +267,103 @@ Differential Revision: http://example.test/D123
 
 """
     assert log == expected
+
+
+def test_submit_remove_cr(in_process, git_repo_path, init_sha):
+    call_conduit.side_effect = (
+        # CREATE
+        dict(),
+        [dict(userName="alice", phid="PHID-USER-1")],
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        dict(),
+        dict(object=dict(id="123")),
+        # UPDATE
+        # no need to ping (checked)
+        # no need to check reviewer
+        # no need to search for repository repository data is saved in .hg
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-2", diffid="2")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="124")),
+    )
+    test_a = git_repo_path / "X"
+    test_a.write_text("a\r\nb\n")
+    git_out("add", "X")
+    git_out("commit", "-am", "A r?alice")
+    mozphab.main(["submit", "--no-arc", "--yes", "--bug", "1", init_sha])
+    call_conduit.reset_mock()
+    # removing CR, leaving LF
+    test_a.write_text("a\nb\n")
+    git_out("commit", "-am", "B r?alice")
+    mozphab.main(["submit", "--no-arc", "--yes", "--bug", "1", "HEAD~"])
+
+    assert (
+        mock.call(
+            "differential.creatediff",
+            {
+                "changes": [
+                    {
+                        "metadata": {},
+                        "oldPath": "X",
+                        "currentPath": "X",
+                        "awayPaths": [],
+                        "oldProperties": {},
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "type": 2,
+                        "fileType": 1,
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 2,
+                                "newOffset": 1,
+                                "newLength": 2,
+                                "addLines": 1,
+                                "delLines": 1,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": "-a\r\n+a\n b\n",
+                            }
+                        ],
+                    }
+                ],
+                "sourceMachine": "http://example.test",
+                "sourceControlSystem": "git",
+                "sourceControlPath": "/",
+                "sourceControlBaseRevision": mock.ANY,
+                "creationMethod": "moz-phab-git",
+                "lintStatus": "none",
+                "unitStatus": "none",
+                "repositoryPHID": "PHID-REPO-1",
+                "sourcePath": mock.ANY,
+                "branch": "HEAD",
+            },
+        )
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call(
+            "differential.setdiffproperty",
+            {
+                "diff_id": "2",
+                "name": "local:commits",
+                "data": Contains('"summary": "Bug 1 - B r?alice"')
+                & Contains(
+                    '"message": "'
+                    "Bug 1 - B r?alice\\n\\n"
+                    "Summary:\\n\\n\\n\\n\\n"
+                    "Test Plan:\\n\\n"
+                    "Reviewers: alice\\n\\n"
+                    "Subscribers:\\n\\n"
+                    'Bug #: 1"'
+                ),
+            },
+        )
+        in call_conduit.call_args_list
+    )
 
 
 def test_submit_update_no_message(in_process, git_repo_path, init_sha):

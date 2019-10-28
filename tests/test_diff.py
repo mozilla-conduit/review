@@ -61,7 +61,7 @@ def test_change_file(m_git_out, m_cat_file, m_file_size, git):
     )
     diff = mozphab.Diff()
     m_cat_file.side_effect = (b"a\n", b"a\nb\n")
-    m_git_out.return_value = """\
+    m_git_out.return_value = b"""\
 diff --git a/78981922613b2afb6025042ff6bd878ac1994e85 \
 b/422c2b7ab3b3c668038da977e4e93a5fc623169c
 index 7898192..422c2b7 100644
@@ -78,11 +78,15 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
     m_git_out.assert_called_once_with(
         [
             "diff",
+            "--submodule=short",
+            "--no-ext-diff",
+            "--no-color",
+            "--no-textconv",
             "-U%s" % mozphab.MAX_CONTEXT_SIZE,
             "78981922613b2afb6025042ff6bd878ac1994e85",
             "422c2b7ab3b3c668038da977e4e93a5fc623169c",
         ],
-        split=False,
+        expect_binary=True,
     )
     assert change.hunks[0] == diff.Hunk(
         old_off=1,
@@ -188,7 +192,7 @@ def test_less_context(m_git_out, m_cat_file, m_file_size, git):
     )
     diff = mozphab.Diff()
     m_cat_file.side_effect = (b"a\n", b"a\nb\n")
-    m_git_out.return_value = """\
+    m_git_out.return_value = b"""\
 diff --git a/78981922613b2afb6025042ff6bd878ac1994e85 \
 b/422c2b7ab3b3c668038da977e4e93a5fc623169c
 index 7898192..422c2b7 100644
@@ -204,11 +208,15 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
     m_git_out.assert_called_once_with(
         [
             "diff",
+            "--submodule=short",
+            "--no-ext-diff",
+            "--no-color",
+            "--no-textconv",
             "-U100",
             "78981922613b2afb6025042ff6bd878ac1994e85",
             "422c2b7ab3b3c668038da977e4e93a5fc623169c",
         ],
-        split=False,
+        expect_binary=True,
     )
 
     git.args = Args(less_context=False)
@@ -220,9 +228,13 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
     m_git_out.assert_called_once_with(
         [
             "diff",
+            "--submodule=short",
+            "--no-ext-diff",
+            "--no-color",
+            "--no-textconv",
             "-U100",
             "78981922613b2afb6025042ff6bd878ac1994e85",
             "422c2b7ab3b3c668038da977e4e93a5fc623169c",
         ],
-        split=False,
+        expect_binary=True,
     )
