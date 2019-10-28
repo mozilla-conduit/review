@@ -3,6 +3,7 @@ import imp
 import mock
 import os
 import pytest
+from distutils.version import LooseVersion
 
 from .conftest import create_temp_fn
 
@@ -102,13 +103,28 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
     with pytest.raises(mozphab.Error):
         hg.set_args(Args())
 
-    hg._hg = []
+    # baseline config
+    hg.mercurial_version = LooseVersion("4.5")
     m_config.safe_mode = False
     m_parse_config.return_value = {"ui.username": "username", "extensions.evolve": ""}
+
+    # evolve & shelve
+    hg._hg = []
     hg.set_args(Args())
-    assert ["--config", "extensions.rebase=", "--pager", "never"] == hg._hg
+    assert (
+        ["--config", "extensions.rebase="]
+        + ["--pager", "never"]
+        + ["--config", "rebase.experimental.inmemory=true"]
+    ) == hg._hg
     assert hg.use_evolve
     assert not hg.has_shelve
+
+    # inmemory rebase requires hg 4.5+
+    hg.mercurial_version = LooseVersion("4.0")
+    hg._hg = []
+    hg.set_args(Args())
+    assert (["--config", "extensions.rebase="] + ["--pager", "never"]) == hg._hg
+    hg.mercurial_version = LooseVersion("4.5")
 
     # safe_mode
     safe_mode_options = (
@@ -125,15 +141,16 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
     hg._hg = []
     hg.set_args(Args())
     assert safe_mode_options == hg._hg
+    m_config.safe_mode = False
 
     # no evolve
-    m_config.safe_mode = False
-    hg._hg = []
     m_parse_config.return_value = {"ui.username": "username", "extensions.shelve": ""}
+    hg._hg = []
     hg.set_args(Args())
     assert (
         ["--config", "extensions.rebase="]
         + ["--pager", "never"]
+        + ["--config", "rebase.experimental.inmemory=true"]
         + ["--config", "experimental.evolution.createmarkers=true"]
         + ["--config", "extensions.strip="]
     ) == hg._hg
@@ -141,6 +158,7 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
     assert hg.has_shelve
 
     m_hg_hg_log.side_effect = [("1234567890123",), ("0987654321098",)]
+    hg._hg = []
     hg.set_args(Args())
     assert "123456789012::098765432109" == hg.revset
 

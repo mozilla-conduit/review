@@ -1763,11 +1763,12 @@ class Mercurial(Repository):
         )
         if not m:
             raise Error("Failed to determine Mercurial version.")
-        if LooseVersion(m.group(1)) < MINIMUM_MERCURIAL_VERSION:
+        self.mercurial_version = LooseVersion(m.group(1))
+        if self.mercurial_version < MINIMUM_MERCURIAL_VERSION:
             raise Error(
                 "You are currently running Mercurial %s.  "
                 "Mercurial %s or newer is required."
-                % (m.group(1), MINIMUM_MERCURIAL_VERSION)
+                % (self.mercurial_version, MINIMUM_MERCURIAL_VERSION)
             )
 
     @classmethod
@@ -1907,6 +1908,7 @@ class Mercurial(Repository):
             ),
         )
 
+        safe_mode = self.args.safe_mode or config.safe_mode
         safe_options = []
         options = []
 
@@ -1922,6 +1924,10 @@ class Mercurial(Repository):
             # Mercurial should never paginate the response.
             + ["--pager", "never"]
         )
+
+        # Perform rebases in-memory to improve performance (requires v4.5+).
+        if not safe_mode and self.mercurial_version >= LooseVersion("4.5"):
+            options.extend(["--config", "rebase.experimental.inmemory=true"])
 
         # Enable evolve if the user's currently using it.  evolve makes amending
         # commits with children trivial (amongst other things).
@@ -1950,7 +1956,7 @@ class Mercurial(Repository):
         self.has_shelve = self._get_extension("shelve", hg_config) is not None
 
         # Disable the user's hgrc file, to ensure we run without rogue extensions.
-        if self.args.safe_mode or config.safe_mode:
+        if safe_mode:
             os.environ["HGRCPATH"] = ""
             options.extend(safe_options)
 
