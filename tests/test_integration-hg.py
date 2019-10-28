@@ -162,7 +162,7 @@ Differential Revision: http://example.test/D123
                         "newProperties": {},
                         "commitHash": mock.ANY,
                         "metadata": {},
-                        "oldProperties": {"unix:filemode": "644"},
+                        "oldProperties": {"unix:filemode": "100644"},
                     },
                     {
                         "currentPath": "C to modify",
@@ -209,7 +209,7 @@ Differential Revision: http://example.test/D123
                         ],
                         "commitHash": mock.ANY,
                         "awayPaths": [],
-                        "newProperties": {"unix:filemode": "644"},
+                        "newProperties": {"unix:filemode": "100644"},
                         "oldPath": None,
                         "oldProperties": {},
                         "fileType": 1,

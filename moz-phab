@@ -2290,11 +2290,8 @@ class Mercurial(Repository):
             commits, validate_reviewers=validate_reviewers
         )
 
-    def get_diff(self, commit):
-        """Create a Diff object containing all changes for this commit."""
-        commit["parent"] = self._get_parent(commit["node"])
-
-        # Determine file modes
+    def _get_file_modes(self, commit):
+        """Get modes of the modified files."""
         old_modes = self.hg_out(
             ["manifest", "-T", "{mode} {path}\n", "-r", commit["parent"]]
         )
@@ -2304,12 +2301,27 @@ class Mercurial(Repository):
         file_modes = {}
         for s_info in old_modes:
             info = s_info.split(None, 1)
-            file_modes[info[1]] = dict(old_mode=info[0])
+            old_mode = info[0]
+            if len(old_mode) == 3:
+                # Windows responds with a 3-digit number
+                old_mode = "100{}".format(old_mode)
+            file_modes[info[1]] = dict(old_mode=old_mode)
 
         for s_info in new_modes:
             info = s_info.split(None, 1)
+            new_mode = info[0]
+            if len(new_mode) == 3:
+                # Windows responds with a 3-digit number
+                new_mode = "100{}".format(new_mode)
             file_modes.setdefault(info[1], dict())
-            file_modes[info[1]]["new_mode"] = info[0]
+            file_modes[info[1]]["new_mode"] = new_mode
+
+        return file_modes
+
+    def get_diff(self, commit):
+        """Create a Diff object containing all changes for this commit."""
+        commit["parent"] = self._get_parent(commit["node"])
+        file_modes = self._get_file_modes(commit)
 
         # Get changed files.
         file_divider = "--%s--" % uuid.uuid4().hex

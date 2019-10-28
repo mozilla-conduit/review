@@ -463,3 +463,23 @@ def test_set_binary(hg):
 
     hg._change_set_binary(change, b"a", b"b", "image/jpeg", "pdf/")
     assert change.file_type.name == "IMAGE"
+
+
+@mock.patch("mozphab.Mercurial.hg_out")
+def test_get_file_modes(m_hg, hg):
+    m_hg.side_effect = (["100644 file name"], ["100644 file name"])
+    assert hg._get_file_modes(dict(node="aaa", parent="bbb")) == {
+        "file name": dict(old_mode="100644", new_mode="100644")
+    }
+    m_hg.side_effect = (["100644 file name"], ["100655 file name"])
+    assert hg._get_file_modes(dict(node="aaa", parent="bbb")) == {
+        "file name": dict(old_mode="100644", new_mode="100655")
+    }
+    m_hg.side_effect = (["644 file name"], ["655 file name"])
+    assert hg._get_file_modes(dict(node="aaa", parent="bbb")) == {
+        "file name": dict(old_mode="100644", new_mode="100655")
+    }
+    m_hg.side_effect = ([], ["655 file name"])
+    assert hg._get_file_modes(dict(node="aaa", parent="bbb")) == {
+        "file name": dict(new_mode="100655")
+    }
