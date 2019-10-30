@@ -35,7 +35,7 @@ args_query_testdata = [
     [dict(a="A", B="b"), [("B", "b"), ("a", "A")]],
     [dict(a=1), [("a", "1")]],
     [dict(arr=["a", 1, 2]), [("arr[0]", "a"), ("arr[1]", "1"), ("arr[2]", "2")]],
-    [dict(a=dict(b=[1])), [("a[b][0]", "1")]],
+    [dict(a=dict(b=[1]), b=dict(), c=list()), [("a[b][0]", "1"), ("b[]",), ("c[]",)]],
 ]
 
 
@@ -76,6 +76,14 @@ def test_call(m_token, m_urlopen, m_Request):
     m_Request.assert_called_with(
         "http://api_url/method", data=b"api.token=token&call=%C4%87wik%C5%82a"
     )
+
+    m_Request.reset_mock()
+    m_urlopen.reset_mock()
+    assert mozphab.conduit.call("method", dict(empty_dict={}, empty_list=[])) == "x"
+    m_Request.assert_called_once_with(
+        "http://api_url/method", data=b"api.token=token&empty_dict[]=&empty_list[]="
+    )
+    m_urlopen.assert_called_once()
 
     response.read.return_value = b'{"error_info": "x", "error_code": 1}'
 
