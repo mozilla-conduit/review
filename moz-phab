@@ -1104,7 +1104,7 @@ class ConduitAPI:
             unitStatus="none",
             repositoryPHID=self.repo.phid,
             sourcePath=self.repo.path,
-            branch="HEAD",
+            branch="HEAD" if self.repo.phab_vcs == "git" else "default",
         )
         return self.call("differential.creatediff", api_call_args)
 

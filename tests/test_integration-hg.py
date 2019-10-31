@@ -102,7 +102,7 @@ Differential Revision: http://example.test/D123
                 "sourceMachine": "http://example.test",
                 "sourceControlBaseRevision": mock.ANY,
                 "repositoryPHID": "PHID-REPO-1",
-                "branch": "HEAD",
+                "branch": "default",
                 "changes": [
                     {
                         "currentPath": "A renamed",
