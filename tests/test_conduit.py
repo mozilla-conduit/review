@@ -47,6 +47,7 @@ def test_json_args_to_query_params(args, params):
 @mock.patch("mozphab.read_json_field")
 def test_load_api_token(m_read):
     m_read.return_value = False
+    mozphab.conduit.set_repo(Repo())
     with pytest.raises(mozphab.ConduitAPIError):
         mozphab.conduit.load_api_token()
 
@@ -291,7 +292,8 @@ def test_get_related_phids(m_call):
 @mock.patch("builtins.open")
 @mock.patch("mozphab.json")
 @mock.patch("mozphab.get_arcrc_path")
-def test_save_api_token(m_get_arcrc_path, m_json, m_open, git):
+@mock.patch("os.chmod")
+def test_save_api_token(m_chmod, m_get_arcrc_path, m_json, m_open, git):
     save_api_token = mozphab.conduit.save_api_token
 
     @contextmanager
@@ -305,13 +307,16 @@ def test_save_api_token(m_get_arcrc_path, m_json, m_open, git):
     with pytest.raises(PermissionError):
         save_api_token("abc")
 
+    m_chmod.reset_mock()
     m_open.side_effect = (FileNotFoundError, with_open())
     save_api_token("abc")
+    m_chmod.assert_called_once_with(".arcrc", 0o600)
 
     m_json.dump.assert_called_once_with(
         {"hosts": {git.api_url: {"token": "abc"}}}, mock.ANY, sort_keys=True, indent=2
     )
 
+    m_chmod.reset_mock()
     m_json.reset_mock()
     m_open.side_effect = None
     m_json.load.return_value = {"existing_key": "existing_value"}
@@ -322,6 +327,7 @@ def test_save_api_token(m_get_arcrc_path, m_json, m_open, git):
         sort_keys=True,
         indent=2,
     )
+    m_chmod.assert_not_called()
 
     m_json.reset_mock()
     m_json.load.return_value = {

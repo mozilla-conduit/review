@@ -25,6 +25,7 @@ import re
 import signal
 import site
 import subprocess
+import stat
 import sys
 import tempfile
 import threading
@@ -709,11 +710,13 @@ class ConduitAPI:
 
     def save_api_token(self, token):
         filename = get_arcrc_path()
+        created = False
         try:
             with open(filename, "r", encoding="utf-8") as f:
                 rc = json.load(f)
         except FileNotFoundError:
             rc = {}
+            created = True
 
         rc.setdefault("hosts", {})
         rc["hosts"].setdefault(self.repo.api_url, {})
@@ -721,6 +724,9 @@ class ConduitAPI:
 
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(rc, f, sort_keys=True, indent=2)
+
+        if created:
+            os.chmod(filename, 0o600)
 
     def call(self, api_method, api_call_args):
         """Call Conduit API and return the JSON API call result.
@@ -1435,9 +1441,20 @@ def repo_from_args(args):
 
 
 def get_arcrc_path():
+    """Return a path to the user's Arcanist configuration file."""
+    if "arcrc" in cache:
+        return cache.get("arcrc")
+
     if IS_WINDOWS:
-        return os.path.join(os.getenv("APPDATA", ""), ".arcrc")
-    return os.path.expanduser("~/.arcrc")
+        arcrc = os.path.join(os.getenv("APPDATA", ""), ".arcrc")
+    else:
+        arcrc = os.path.expanduser("~/.arcrc")
+        if os.path.isfile(arcrc) and stat.S_IMODE(os.stat(arcrc).st_mode) != 0o600:
+            logger.debug("Changed file permissions on the {} file.".format(arcrc))
+            os.chmod(arcrc, 0o600)
+
+    cache.set("arcrc", arcrc)
+    return arcrc
 
 
 class Repository(object):
