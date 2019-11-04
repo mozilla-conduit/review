@@ -4376,7 +4376,7 @@ def check_for_updates(with_arc=True):
             logger.info("Upgrading to version {}".format(pypi_version))
             self_upgrade()
             logger.info("Restarting...")
-            check_call(sys.argv)
+            check_call([sys.executable] + sys.argv)
             sys.exit()
 
         logger.warning("Version {} of `moz-phab` is now available".format(pypi_version))
