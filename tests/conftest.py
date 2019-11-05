@@ -202,7 +202,11 @@ def in_process(monkeypatch, safe_environ, request):
     arc_call_conduit = getattr(
         request.module, "arc_call_conduit", mozphab.arc_call_conduit
     )
-    monkeypatch.setattr(mozphab, "arc_ping", arc_ping)
+
+    # Allow to define the arc_ping function in the testing module
+    arc_ping_mock = getattr(request.module, "arc_ping", arc_ping)
+
+    monkeypatch.setattr(mozphab, "arc_ping", arc_ping_mock)
     monkeypatch.setattr(mozphab, "arc_out", arc_out)
     monkeypatch.setattr(mozphab, "check_call_by_line", check_call_by_line)
     monkeypatch.setattr(mozphab, "arc_call_conduit", arc_call_conduit)

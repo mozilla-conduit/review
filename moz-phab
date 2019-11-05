@@ -4088,7 +4088,7 @@ def submit(repo, args):
             raise Error("Failed to use Conduit API")
 
         # Check if arc is configured
-        if not repo.check_arc():
+        if not args.no_arc and not repo.check_arc():
             raise Error("Failed to run %s." % ARC_COMMAND)
 
     # Validate commit stack is suitable for review.

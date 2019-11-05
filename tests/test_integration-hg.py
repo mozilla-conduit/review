@@ -15,6 +15,9 @@ mozphab = imp.load_source(
 )
 mozphab.SHOW_SPINNER = False
 
+# Fail if arc ping is called
+arc_ping = mock.Mock()
+arc_ping.return_value = False
 
 call_conduit = mock.Mock()
 call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
