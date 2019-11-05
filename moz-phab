@@ -23,6 +23,7 @@ import operator
 import os
 import re
 import signal
+import site
 import subprocess
 import sys
 import tempfile
@@ -4382,15 +4383,29 @@ def check_for_updates(with_arc=True):
 
 
 def self_upgrade():
-    """Upgrade ourselves with pip3."""
+    """Upgrade ourselves with pip."""
 
-    # Find the right pip3 - look for a script in the same directory as the
-    # current Python executable, falling back to the system path if that
-    # doesn't exist.
-    pip3 = Path(sys.executable).parent / "pip3"
-    pip3 = str(pip3) if pip3.exists() else "pip3"
+    # Run pip using the current python executable to accommodate for virtualenvs
+    command = (
+        [sys.executable]
+        + ["-m", "pip"]
+        + ["install", "MozPhab"]
+        + ["--upgrade"]
+        + ["--no-cache-dir"]
+        + ["--disable-pip-version-check"]
+    )
 
-    check_call([pip3, "install", "MozPhab", "--upgrade", "--no-cache-dir"])
+    # If moz-phab was installed with --user, we need to pass it to pip
+    try:
+        self_file = Path(__file__).resolve()
+        user_file = Path(site.getuserbase()).resolve() / "bin" / self_file.name
+        if self_file == user_file:
+            command.append("--user")
+    except AttributeError:
+        # virtualenvs don't have site.getuserbase()
+        pass
+
+    check_call(command)
 
 
 def self_update(_):
