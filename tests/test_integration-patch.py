@@ -73,7 +73,11 @@ def test_patch_no_commit(
     m_get_revs.return_value = [REV_1]
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
-    m_call_conduit.return_value = PATCH_1
+    m_call_conduit.side_effect = [
+        dict(),
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        PATCH_1,
+    ]
 
     mozphab.main(["patch", "D1", "--no-commit"])
     assert [".arcconfig", ".hg", "X"] == sorted(os.listdir(str(hg_repo_path)))
@@ -83,7 +87,7 @@ def test_patch_no_commit(
     assert "@  changeset:   0:" in result
     test_file.unlink()
 
-    m_call_conduit.return_value = BIN_PATCH
+    m_call_conduit.side_effect = [BIN_PATCH]
     mozphab.main(["patch", "D1", "--no-commit"])
     assert [".arcconfig", ".hg", "sample.bin"] == sorted(os.listdir(str(hg_repo_path)))
     test_file = hg_repo_path / "sample.bin"
@@ -123,7 +127,11 @@ def test_git_patch_with_commit(
     m_get_revs.return_value = [REV_1]
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": diff_1}
-    m_call_conduit.return_value = PATCH_1
+    m_call_conduit.side_effect = [
+        dict(),
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        PATCH_1,
+    ]
 
     mozphab.main(["patch", "D1", "--apply-to", "here"])
     assert [".arcconfig", ".git", "X"] == sorted(os.listdir(str(git_repo_path)))
@@ -137,6 +145,7 @@ def test_git_patch_with_commit(
     assert "* D1" in result
 
     time.sleep(1)  # to ensure the patch is applied with a different timestamp
+    m_call_conduit.side_effect = [PATCH_1]
     mozphab.main(["patch", "D1"])
     assert [".arcconfig", ".git", "X"] == sorted(os.listdir(str(git_repo_path)))
     test_file = git_repo_path / "X"
@@ -152,7 +161,7 @@ def test_git_patch_with_commit(
     time.sleep(1)
     m_get_revs.return_value = [REV_BIN]
     m_get_diffs.return_value = {"PHID-DIFF-3": diff_1}
-    m_call_conduit.return_value = BIN_PATCH
+    m_call_conduit.side_effect = [BIN_PATCH]
     mozphab.main(["patch", "D3"])
     assert [".arcconfig", ".git", "sample.bin"] == sorted(
         os.listdir(str(git_repo_path))
@@ -222,7 +231,11 @@ def test_hg_patch_with_commit(
     m_get_revs.return_value = [REV_1]
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
-    m_call_conduit.return_value = PATCH_1
+    m_call_conduit.side_effect = [
+        dict(),
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        PATCH_1,
+    ]
 
     mozphab.main(["patch", "D1", "--apply-to", "here"])
     assert [".arcconfig", ".hg", "X"] == sorted(os.listdir(str(hg_repo_path)))
@@ -236,7 +249,7 @@ def test_hg_patch_with_commit(
     assert "|  summary:     title R1" in result
     assert "o  changeset:   0:" in result
 
-    m_call_conduit.return_value = BIN_PATCH
+    m_call_conduit.side_effect = [BIN_PATCH, 67]
     mozphab.main(["patch", "D1"])
     assert [".arcconfig", ".hg", "sample.bin"] == sorted(os.listdir(str(hg_repo_path)))
     result = hg_out("log", "-G")

@@ -18,7 +18,6 @@ mozphab.SHOW_SPINNER = False
 
 
 arc_call_conduit = mock.Mock()
-arc_call_conduit.return_value = [{"userName": "alice", "phid": "PHID-USER-1"}]
 
 call_conduit = mock.Mock()
 
@@ -45,7 +44,11 @@ def init_sha(in_process, git_repo_path):
 
 
 def test_submit_create_arc(in_process, git_repo_path, init_sha):
-    call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
+    call_conduit.side_effect = (
+        dict(),
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
+    )
     testfile = git_repo_path / "X"
     testfile.write_text("a")
     git_out("add", ".")
@@ -68,9 +71,10 @@ def test_submit_create(in_process, git_repo_path, init_sha):
     call_conduit.side_effect = (
         # ping
         dict(),
-        [dict(userName="alice", phid="PHID-USER-1")],
         # diffusion.repository.search
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # user search
+        [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
         # differential.setdiffproperty
@@ -164,7 +168,11 @@ Differential Revision: http://example.test/D123
 
 
 def test_submit_create_binary_arc(in_process, git_repo_path, init_sha, data_file):
-    call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
+    call_conduit.side_effect = (
+        dict(),
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
+    )
     shutil.copyfile(str(data_file), str(git_repo_path / "img.png"))
     git_out("add", ".")
     git_out("commit", "--message", "IMG")
@@ -183,10 +191,10 @@ def test_submit_create_binary(in_process, git_repo_path, init_sha, data_file):
     call_conduit.side_effect = (
         # ping
         dict(),
-        # file upload
-        dict(),
         # diffusion.repository.search
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # file upload
+        dict(),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
         # differential.setdiffproperty
@@ -214,6 +222,8 @@ def test_submit_update(in_process, git_repo_path, init_sha):
     call_conduit.side_effect = (
         # ping
         dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         dict(
             data=[
                 {
@@ -230,8 +240,6 @@ def test_submit_update(in_process, git_repo_path, init_sha):
         ),
         # whoami
         dict(phid="PHID-USER-1"),
-        # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
         # differential.setdiffproperty
@@ -273,8 +281,8 @@ def test_submit_remove_cr(in_process, git_repo_path, init_sha):
     call_conduit.side_effect = (
         # CREATE
         dict(),
-        [dict(userName="alice", phid="PHID-USER-1")],
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        [dict(userName="alice", phid="PHID-USER-1")],
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
         dict(),
         dict(object=dict(id="123")),
@@ -371,6 +379,8 @@ def test_submit_update_no_message(in_process, git_repo_path, init_sha):
     call_conduit.side_effect = (
         # ping
         dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         dict(
             data=[
                 {
@@ -386,8 +396,6 @@ def test_submit_update_no_message(in_process, git_repo_path, init_sha):
             ]
         ),
         dict(phid="PHID-USER-1"),
-        # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
         # differential.setdiffproperty
@@ -422,7 +430,11 @@ Differential Revision: http://example.test/D123
 
 def test_submit_different_author(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
-    call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
+    call_conduit.side_effect = (
+        dict(),
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
+    )
     testfile = git_repo_path / "X"
     testfile.write_text("a")
     git_out("add", ".")
@@ -459,7 +471,11 @@ Tue, 22 Jan 2019 13:42:48 +0000+++foo+++foo@bar.com
 
 def test_submit_utf8_author(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
-    call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
+    call_conduit.side_effect = (
+        dict(),
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
+    )
     testfile = git_repo_path / "X"
     testfile.write_text("a")
     git_out("add", ".")
@@ -484,6 +500,7 @@ def test_submit_update_arc(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         {},  # ping
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         {  # differential.revision.search
             "data": [
                 {
@@ -537,6 +554,7 @@ def test_submit_update_bug_id(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         dict(),
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         {
             "data": [
                 {
@@ -588,6 +606,7 @@ def test_submit_update_revision_not_found(in_process, git_repo_path, init_sha):
     call_conduit.side_effect = (
         # ping
         dict(),
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # response for searching D123 and D124
         dict(
             data=[

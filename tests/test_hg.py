@@ -485,3 +485,19 @@ def test_get_file_modes(m_hg, hg):
     assert hg._get_file_modes(dict(node="aaa", parent="bbb")) == {
         "file name": dict(new_mode="100655")
     }
+
+
+def test_check_vcs(hg):
+    class Args:
+        def __init__(self, force_vcs=False):
+            self.force_vcs = force_vcs
+
+    hg.args = Args()
+    assert hg.check_vcs()
+
+    hg._vcs = "git"
+    with pytest.raises(mozphab.Error):
+        hg.check_vcs()
+
+    hg.args = Args(force_vcs=True)
+    assert hg.check_vcs()

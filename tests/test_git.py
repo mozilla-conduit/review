@@ -279,27 +279,31 @@ def test_commit(m_git, git):
     assert m_git.called_once()
 
 
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.Git._hg_to_git")
 @mock.patch("mozphab.Git.is_node")
-def test_check_node(m_git_is_node, m_git_out, git):
+@mock.patch("mozphab.Git.phab_vcs")
+def test_check_node(m_phab_vcs, m_git_is_node, m_hg2git, git):
     node = "aabbcc"
+    mozphab.conduit.set_repo(git)
     assert node == git.check_node(node)
 
+    git._vcs = "hg"
+    git._cinnabar_installed = False
     m_git_is_node.return_value = False
     with pytest.raises(mozphab.NotFoundError) as e:
         git.check_node(node)
     assert "Cinnabar extension not enabled" in str(e.value)
 
-    git.extensions = ["cinnabar"]
-    m_git_out.return_value = "0" * 40
+    git._cinnabar_installed = True
+    m_hg2git.return_value = "0" * 40
     with pytest.raises(mozphab.NotFoundError) as e:
         git.check_node(node)
     assert "Mercurial SHA1 not found" in str(e.value)
 
-    m_git_out.return_value = "git_aabbcc"
+    m_hg2git.return_value = "git_aabbcc"
     with pytest.raises(mozphab.NotFoundError) as e:
         git.check_node(node)
-    assert "Mercurial SHA1 detected" in str(e.value)
+    assert "Mercurial SHA1 detected, but commit not found" in str(e.value)
 
     m_git_is_node.side_effect = (False, True)
     assert "git_aabbcc" == git.check_node(node)
@@ -399,7 +403,7 @@ def test_is_node(m_git_out, git):
 
 
 @mock.patch("mozphab.Git.git_out")
-def test_is_cinnabar(m_git_out, git):
+def test_is_cinnabar_installed(m_git_out, git):
     m_git_out.return_value = ["reset", "cinnabar"]
     assert git.is_cinnabar_installed
     m_git_out.assert_called_once_with(["--list-cmds=main,others"])
@@ -424,3 +428,23 @@ def test_unicode_in_windows_env(m_git_out, git, monkeypatch):
             GIT_AUTHOR_NAME="ćwikła", GIT_AUTHOR_EMAIL="ćwikła", GIT_AUTHOR_DATE="date"
         ),
     )
+
+
+def test_check_vcs(git):
+    class Args:
+        def __init__(self, force_vcs=False):
+            self.force_vcs = force_vcs
+
+    git.args = Args()
+    assert git.check_vcs()
+
+    git._cinnabar_installed = True
+    git._vcs = "hg"
+    assert git.check_vcs()
+
+    git._cinnabar_installed = False
+    with pytest.raises(mozphab.Error):
+        git.check_vcs()
+
+    git.args = Args(force_vcs=True)
+    assert git.check_vcs()

@@ -30,9 +30,9 @@ def test_submit_create(in_process, hg_repo_path):
     call_conduit.side_effect = (
         # ping
         dict(),
-        [dict(userName="alice", phid="PHID-USER-1")],
         # diffusion.repository.search
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
         # differential.setdiffproperty
@@ -230,10 +230,10 @@ def test_submit_create_binary(in_process, hg_repo_path, data_file):
     call_conduit.side_effect = (
         # ping
         dict(),
-        # file upload
-        dict(),
         # diffusion.repository.search
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        # file upload
+        dict(),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
         # differential.setdiffproperty
@@ -260,8 +260,8 @@ def test_submit_remove_cr(in_process, hg_repo_path):
     call_conduit.side_effect = (
         # CREATE
         dict(),
-        [dict(userName="alice", phid="PHID-USER-1")],
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        [dict(userName="alice", phid="PHID-USER-1")],
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
         dict(),
         dict(object=dict(id="123")),

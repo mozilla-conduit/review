@@ -65,7 +65,9 @@ def git(
     m_which.return_value = True
     m_os_path.isfile.return_value = False
     m_git_get_current_head.return_value = "branch"
-    return mozphab.Git("x")
+    git = mozphab.Git("x")
+    git._vcs = "git"
+    return git
 
 
 @pytest.fixture
@@ -96,6 +98,7 @@ def hg(
     hg = mozphab.Mercurial("x")
     hg.use_evolve = True
     hg.has_mq = False
+    hg._vcs = "hg"
     return hg
 
 

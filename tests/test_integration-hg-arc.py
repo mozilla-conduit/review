@@ -18,13 +18,17 @@ arc_call_conduit = mock.Mock()
 arc_call_conduit.return_value = [{"userName": "alice", "phid": "PHID-USER-1"}]
 
 call_conduit = mock.Mock()
-call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
 
 check_call_by_line = mock.Mock()
 check_call_by_line.return_value = ["Revision URI: http://example.test/D123"]
 
 
 def test_submit_create(in_process, hg_repo_path):
+    call_conduit.side_effect = (
+        dict(),
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
+    )
     testfile = hg_repo_path / "X"
     testfile.write_text("a")
     hg_out("add")
@@ -45,7 +49,11 @@ Differential Revision: http://example.test/D123
 
 def test_submit_create_with_user_bookmark(in_process, hg_repo_path):
     call_conduit.reset_mock()
-    call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
+    call_conduit.side_effect = (
+        dict(),
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
+    )
 
     testfile = hg_repo_path / "X"
     testfile.write_text("a")
@@ -73,6 +81,7 @@ def test_submit_update(in_process, hg_repo_path):
     arc_call_conduit.reset_mock()
     call_conduit.side_effect = (
         {},
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
         {
             "data": [
                 {
@@ -131,7 +140,7 @@ Bug 1 - A
 Differential Revision: http://example.test/D123
 """
     assert log == expected
-    assert call_conduit.call_count == 3
+    assert call_conduit.call_count == 4
     arc_call_conduit.assert_not_called()
     check_call_by_line.assert_called_once()  # update
 
@@ -140,6 +149,7 @@ def test_submit_update_reviewers_not_updated(in_process, hg_repo_path):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         {},
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
         {
             "data": [
                 {
@@ -187,6 +197,7 @@ def test_submit_update_no_new_reviewers(in_process, hg_repo_path):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         {},
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
         {
             "data": [
                 {
@@ -242,6 +253,7 @@ def test_submit_update_bug_id(in_process, hg_repo_path):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         {},
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
         {
             "data": [
                 {
@@ -289,4 +301,4 @@ Differential Revision: http://example.test/D123
         },
         mock.ANY,
     )
-    assert call_conduit.call_count == 4
+    assert call_conduit.call_count == 5
