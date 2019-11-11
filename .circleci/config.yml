@@ -21,16 +21,8 @@ jobs:
             # configure git
             git config --global user.email "moz-phab-tests@example.com"
             git config --global user.name "moz-phab tests"
-            # linting tools
-            sudo pip install flake8 black
             # install test dependencies
             sudo pip install -r dev-requirements.txt
-
-      - run:
-          name: linting
-          command: |
-            black --check moz-phab *.py **/*.py
-            flake8 --max-line-length=88 --ignore=E203,W503 --disable-noqa moz-phab *.py **/*.py
 
       - run:
           name: run tests
