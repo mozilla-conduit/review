@@ -450,6 +450,17 @@ def temporary_binary_file(content):
         os.remove(f.name)
 
 
+def short_node(text):
+    """Return a shortened version of a node name."""
+    if len(text) == 40:
+        try:
+            int(text, 16)
+            return text[:12]
+        except ValueError:
+            pass
+    return text
+
+
 # py2 doesn't handle SIGINT with background threads; hook up our own handler
 # to allow background threads to check sig_int.triggered and stop.
 
@@ -1898,7 +1909,7 @@ class Mercurial(Repository):
         if not rev:
             rev = self.hg_log(node, select="rev", split=False)
         commit["node"] = node
-        commit["name"] = "%s:%s" % (rev, node[:12])
+        commit["name"] = "%s:%s" % (rev, short_node(node))
 
     def _get_successor(self, node):
         """Get the successor of the commit represented by its node.
@@ -2019,7 +2030,7 @@ class Mercurial(Repository):
             except IndexError:
                 raise Error("Failed to end of commit range: %s" % self.args.end_rev)
 
-            self.revset = "%s::%s" % (start[:12], end[:12])
+            self.revset = "%s::%s" % (short_node(start), short_node(end))
 
     def commit_stack(self):
         # Grab all the info we need about the commits, using randomness as a delimiter.
@@ -2055,7 +2066,7 @@ class Mercurial(Repository):
 
             commits.append(
                 {
-                    "name": "%s:%s" % (rev, node[:12]),
+                    "name": "%s:%s" % (rev, short_node(node)),
                     "node": node,
                     "public-node": node,
                     "orig-node": node,
@@ -2073,7 +2084,9 @@ class Mercurial(Repository):
             nodes.append(node)
 
         if branching_children:
-            will_be_deleted = [c[:12] for c in branching_children if c not in nodes]
+            will_be_deleted = [
+                short_node(c) for c in branching_children if c not in nodes
+            ]
             msg = "following commits will be DELETED:\n%s" % will_be_deleted
             if not self.args.force_delete:
                 raise Error(
@@ -2117,10 +2130,10 @@ class Mercurial(Repository):
         """
         # Checkout sha
         if node:
-            with wait_message("Checking out %s.." % node[:12]):
+            with wait_message("Checking out %s.." % short_node(node)):
                 self.checkout(node)
             if not self.args.raw:
-                logger.info("Checked out %s" % node[:12])
+                logger.info("Checked out %s" % short_node(node))
 
         if name and config.create_bookmark and not self.args.no_bookmark:
             bookmarks = self.hg_out(["bookmarks", "-T", "{bookmark}\n"])
@@ -2284,7 +2297,7 @@ class Mercurial(Repository):
         if ancestor not in [c["node"] for c in commits]:
             raise Error(
                 "Non-linear commit stack (common ancestor %s missing from stack)"
-                % ancestor[:12]
+                % short_node(ancestor)
             )
 
         # Merge base needs to have a public parent.
@@ -2295,7 +2308,8 @@ class Mercurial(Repository):
             (phase, node) = parent.split(" ", 1)
             if phase != "public":
                 logger.warning(
-                    "%s is based off non-public commit %s" % (ancestor[:12], node[:12])
+                    "%s is based off non-public commit %s"
+                    % (short_node(ancestor), short_node(node))
                 )
 
         # Can't submit merge requests.
@@ -2756,7 +2770,7 @@ class Git(Repository):
     def refresh_commit_stack(self, commits):
         """Update revset and names of the commits."""
         for commit in commits:
-            commit["name"] = commit["node"][:12]
+            commit["name"] = short_node(commit["node"])
         self.revset = (commits[0]["node"], commits[-1]["node"])
 
         super().refresh_commit_stack(commits)
@@ -2980,21 +2994,21 @@ class Git(Repository):
             elif not self._is_child(first_node, node, rev_list):
                 raise Error(
                     "Commit %s is not a child of %s, unable to continue"
-                    % (node[:12], first_node[:12])
+                    % (short_node(node), short_node(first_node))
                 )
 
             # Check if commit has multiple parents, if so - raise an Error
             # We may push the merging commit if it's the first one
             parents = parents.split(" ")
-            if node[:12] != first_node[:12] and len(parents) > 1:
+            if node != first_node and len(parents) > 1:
                 raise Error(
                     "Multiple parents found for commit %s, unable to continue"
-                    % node[:12]
+                    % short_node(node)
                 )
 
             commits.append(
                 {
-                    "name": node[:12],
+                    "name": short_node(node),
                     "node": node,
                     "orig-node": node,
                     "title": desc[0],
@@ -3095,9 +3109,9 @@ class Git(Repository):
 
         # Checkout sha
         if node:
-            with wait_message("Checking out %s.." % node[:12]):
+            with wait_message("Checking out %s.." % short_node(node)):
                 self.checkout(node)
-            logger.info("Checked out %s" % node[:12])
+            logger.info("Checked out %s" % short_node(node))
 
         if name and not self.args.no_branch:
             branches = self.git_out(["branch", "--list", "%s*" % name])
@@ -4642,10 +4656,10 @@ def patch(repo, args):
 
         if args.apply_to != "here":
             try:
-                with wait_message("Checking %s.." % base_node[:12]):
+                with wait_message("Checking %s.." % short_node(base_node)):
                     base_node = repo.check_node(base_node)
             except NotFoundError as e:
-                msg = "Unknown revision: %s" % base_node[:12]
+                msg = "Unknown revision: %s" % short_node(base_node)
                 if str(e):
                     msg += "\n%s" % str(e)
 

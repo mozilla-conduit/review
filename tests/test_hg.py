@@ -157,7 +157,7 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
     assert not hg.use_evolve
     assert hg.has_shelve
 
-    m_hg_hg_log.side_effect = [("1234567890123",), ("0987654321098",)]
+    m_hg_hg_log.side_effect = [("123456789012",), ("098765432109",)]
     hg._hg = []
     hg.set_args(Args())
     assert "123456789012::098765432109" == hg.revset
