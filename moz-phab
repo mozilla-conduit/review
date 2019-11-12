@@ -2129,7 +2129,9 @@ class Mercurial(Repository):
         if author_date:
             commands.extend(["-d", author_date])
 
-        with temporary_file(diff) as patch_file, temporary_file(body) as body_file:
+        with temporary_binary_file(diff.encode("utf8")) as patch_file, temporary_file(
+            body
+        ) as body_file:
             self.hg(["import", patch_file, "--quiet", "-l", body_file] + commands)
 
     def _amend_commit_body(self, node, body):
