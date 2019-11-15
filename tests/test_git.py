@@ -404,17 +404,23 @@ def test_is_node(m_git_out, git):
 
 @mock.patch("mozphab.Git.git_out")
 def test_is_cinnabar_installed(m_git_out, git):
-    m_git_out.return_value = ["reset", "cinnabar"]
+    # cinnabar installed
+    m_git_out.return_value = ["External commands", "   cinnabar", "   revise"]
     assert git.is_cinnabar_installed
-    m_git_out.assert_called_once_with(["--list-cmds=main,others"])
+    m_git_out.assert_called_once_with(["help", "--all"])
 
-    m_git_out.return_value = ["reset"]
-    assert git.is_cinnabar_installed
-    m_git_out.assert_called_once_with(["--list-cmds=main,others"])
+    # cached request (primed by 'cinnabar installed' test)
     m_git_out.reset_mock()
+    m_git_out.return_value = ["External commands", "   cinnabar", "   revise"]
+    assert git.is_cinnabar_installed
+    m_git_out.assert_not_called()
+
+    # cinnabar not installed
+    m_git_out.reset_mock()
+    m_git_out.return_value = ["External commands", "   revise"]
     git._cinnabar_installed = None
     assert not git.is_cinnabar_installed
-    m_git_out.assert_called_once_with(["--list-cmds=main,others"])
+    m_git_out.assert_called_once_with(["help", "--all"])
 
 
 @mock.patch("mozphab.Git.git_out")

@@ -2664,9 +2664,12 @@ class Git(Repository):
     def is_cinnabar_installed(self):
         """Check if Cinnabar extension is callable."""
         if self._cinnabar_installed is None:
-            self._cinnabar_installed = "cinnabar" in self.git_out(
-                ["--list-cmds=main,others"]
-            )
+            for line in self.git_out(["help", "--all"]):
+                if re.search(r"^\s+cinnabar\b", line):
+                    self._cinnabar_installed = True
+                    break
+            else:
+                self._cinnabar_installed = False
 
         return self._cinnabar_installed
 
