@@ -37,24 +37,21 @@ def commit(bug_id=None, reviewers=None, body="", name="", title="", rev_id=None)
 
 # noinspection PyPep8Naming,PyBroadException
 class Commits(unittest.TestCase):
-    def _assertNoError(self, callableObj, *args):
+    def _assertNoError(self, callableObj, *args, **kwargs):
         try:
-            callableObj(*args)
-        except mozphab.Error:
-            info = sys.exc_info()
-            self.fail("%s raised" % repr(info[0]))
+            callableObj(*args, **kwargs)
+        except mozphab.Error as e:
+            self.fail("%s raised" % e)
 
-    def _assertError(self, callableObj, *args, **kwargs):
+    def _assertError(self, callableObj, expected, *args, **kwargs):
         try:
-            callableObj(*args)
-        except mozphab.Error:
-            info = sys.exc_info()
-            if "expected" in kwargs and kwargs["expected"] not in repr(info[1]):
-                self.fail("%s not raised" % kwargs["expected"])
+            callableObj(*args, **kwargs)
+        except mozphab.Error as e:
+            if expected != str(e).strip():
+                self.fail("%s not raised" % expected)
             return
-        except Exception:
-            info = sys.exc_info()
-            self.fail("%s raised" % repr(info[0]))
+        except Exception as e:
+            self.fail("%s raised" % e)
         self.fail("%s failed to raise Error" % callableObj)
 
     @mock.patch("mozphab.check_for_invalid_reviewers")
@@ -78,13 +75,25 @@ class Commits(unittest.TestCase):
         self._assertNoError(check, [commit("1", None)])
         self._assertNoError(check, [commit("1", (["r"], [])), commit("1", None)])
 
-        self._assertError(check, [commit(None, (["r"], []))])
-        self._assertError(check, [commit("", (["r"], []))])
+        self._assertError(check, "- missing bug-id", [commit(None, (["r"], []))])
+        self._assertNoError(check, [commit(None, (["r"], []))], require_bug=False)
+        self._assertError(check, "- missing bug-id", [commit("", (["r"], []))])
         self._assertError(
-            check, [commit("1", (["r"], []), body="Summary: blah\nReviewers: r")]
+            check,
+            "- missing bug-id",
+            [commit("1", (["r"], [])), commit("", (["r"], []))],
+        )
+        self._assertNoError(
+            check,
+            [commit("1", (["r"], [])), commit("", (["r"], []))],
+            require_bug=False,
         )
 
-        self._assertError(check, [commit("1", (["r"], [])), commit("", (["r"], []))])
+        self._assertError(
+            check,
+            "- contains arc fields",
+            [commit("1", (["r"], []), body="Summary: blah\nReviewers: r")],
+        )
 
         m_whoami.return_value = dict(phid="PHID-1")
         m_get_revs.return_value = [dict(fields=dict(authorPHID="PHID-1"))]
@@ -114,6 +123,7 @@ class Commits(unittest.TestCase):
 
         self._assertError(
             repo.check_commits_for_submit,
+            "- gonzo is not a valid reviewer's name",
             (
                 # Build a stack with an invalid reviewer in the middle.
                 [
@@ -126,6 +136,7 @@ class Commits(unittest.TestCase):
 
         self._assertError(
             repo.check_commits_for_submit,
+            "- goober is not available until string",
             (
                 # Build a stack with an unavailable reviewer in the middle.
                 [
@@ -494,6 +505,7 @@ class Commits(unittest.TestCase):
                 {
                     "name": "aaa000",
                     "title-preview": "A",
+                    "bug-id": 1,
                     "bug-id-orig": None,
                     "reviewers": {"granted": [], "request": []},
                 }

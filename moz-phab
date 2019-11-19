@@ -1587,7 +1587,9 @@ class Repository(object):
     def apply_patch(self, diff, body, author, author_date):
         """Apply the patch and commit the changes."""
 
-    def check_commits_for_submit(self, commits, validate_reviewers=True):
+    def check_commits_for_submit(
+        self, commits, *, validate_reviewers=True, require_bug=True
+    ):
         """Validate the list of commits (from commit_stack) are ok to submit"""
         errors = []
         warnings = []
@@ -1624,11 +1626,9 @@ class Repository(object):
         for commit in commits:
             commit_errors = []
             commit_warnings = []
-            # TODO allow NOBUG in commit message (not in arg)
-            # TODO be more relaxed if we're updating an existing rev?
-            if not commit["bug-id"]:
-                commit_errors.append("missing bug-id")
 
+            if require_bug and not commit["bug-id"]:
+                commit_errors.append("missing bug-id")
             if has_arc_rejections(commit["body"]):
                 commit_errors.append("contains arc fields")
 
@@ -2291,7 +2291,9 @@ class Mercurial(Repository):
             + ["--dest", dest_commit["node"]]
         )
 
-    def check_commits_for_submit(self, commits, validate_reviewers=True):
+    def check_commits_for_submit(
+        self, commits, validate_reviewers=True, require_bug=True
+    ):
         # 'Greatest Common Ancestor'/'Merge Base' should be included in the revset.
         ancestor = self.hg_log("ancestor(%s)" % self.revset, split=False)
         if ancestor not in [c["node"] for c in commits]:
@@ -3678,6 +3680,9 @@ def show_commit_stack(
                     "   the owner."
                 )
 
+            if not commit["bug-id"]:
+                logger.warning("!! Missing Bug ID")
+
             if commit["bug-id-orig"] and commit["bug-id"] != commit["bug-id-orig"]:
                 logger.warning(
                     "!! Bug ID changed from %s to %s"
@@ -4130,7 +4135,9 @@ def submit(repo, args):
     show_commit_stack(commits, validate=True, ignore_reviewers=args.wip)
     try:
         with wait_message("Checking commits.."):
-            repo.check_commits_for_submit(commits, validate_reviewers=not args.wip)
+            repo.check_commits_for_submit(
+                commits, validate_reviewers=not args.wip, require_bug=not args.no_bug,
+            )
     except Error as e:
         if not args.force:
             raise Error("Unable to submit commits:\n\n%s" % e)
@@ -4834,6 +4841,11 @@ def parse_args(argv):
     )
     submit_parser.add_argument(
         "--bug", "-b", help="Set Bug ID for all commits (default: from commit)"
+    )
+    submit_parser.add_argument(
+        "--no-bug",
+        action="store_true",
+        help="Continue if a bug number is not provided.",
     )
     submit_parser.add_argument(
         "--reviewer",
