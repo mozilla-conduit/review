@@ -287,7 +287,7 @@ def test_check_node(m_phab_vcs, m_git_is_node, m_hg2git, git):
     mozphab.conduit.set_repo(git)
     assert node == git.check_node(node)
 
-    git._vcs = "hg"
+    git._phab_vcs = "hg"
     git._cinnabar_installed = False
     m_git_is_node.return_value = False
     with pytest.raises(mozphab.NotFoundError) as e:
@@ -445,7 +445,7 @@ def test_check_vcs(git):
     assert git.check_vcs()
 
     git._cinnabar_installed = True
-    git._vcs = "hg"
+    git._phab_vcs = "hg"
     assert git.check_vcs()
 
     git._cinnabar_installed = False

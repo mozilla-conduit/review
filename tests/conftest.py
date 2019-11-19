@@ -66,7 +66,7 @@ def git(
     m_os_path.isfile.return_value = False
     m_git_get_current_head.return_value = "branch"
     git = mozphab.Git("x")
-    git._vcs = "git"
+    git._phab_vcs = "git"
     return git
 
 
@@ -98,7 +98,7 @@ def hg(
     hg = mozphab.Mercurial("x")
     hg.use_evolve = True
     hg.has_mq = False
-    hg._vcs = "hg"
+    hg._phab_vcs = "hg"
     return hg
 
 

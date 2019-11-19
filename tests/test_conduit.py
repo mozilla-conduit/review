@@ -355,7 +355,7 @@ def test_parse_git_diff():
 def test_diff_property(m_call, git, hg):
     # m_public.side_effect = lambda x: x
     git.get_public_node = lambda x: x
-    git._vcs = "git"
+    git._phab_vcs = "git"
     mozphab.conduit.set_repo(git)
     commit = {
         "name": "abc-name",
@@ -388,7 +388,7 @@ def test_diff_property(m_call, git, hg):
     )
 
     m_call.reset_mock()
-    git._vcs = "hg"
+    git._phab_vcs = "hg"
     git._cinnabar_installed = True
     mozphab.conduit.set_diff_property("1", commit, "message")
     m_call.assert_called_once_with(
@@ -414,7 +414,7 @@ def test_diff_property(m_call, git, hg):
     )
 
     m_call.reset_mock()
-    hg._vcs = "hg"
+    hg._phab_vcs = "hg"
     mozphab.conduit.set_repo(hg)
     mozphab.conduit.set_diff_property("1", commit, "message")
     m_call.assert_called_once_with(

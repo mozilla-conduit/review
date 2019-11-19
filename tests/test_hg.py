@@ -495,7 +495,7 @@ def test_check_vcs(hg):
     hg.args = Args()
     assert hg.check_vcs()
 
-    hg._vcs = "git"
+    hg._phab_vcs = "git"
     with pytest.raises(mozphab.Error):
         hg.check_vcs()
 
