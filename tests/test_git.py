@@ -4,6 +4,7 @@ import imp
 import mock
 import os
 import pytest
+from pathlib import Path
 
 from .conftest import create_temp_fn
 
@@ -402,9 +403,14 @@ def test_is_node(m_git_out, git):
     assert not git.is_node("aaa")
 
 
+@mock.patch("mozphab.which")
 @mock.patch("mozphab.Git.git_out")
-def test_is_cinnabar_installed(m_git_out, git):
-    # cinnabar installed
+def test_is_cinnabar_installed(m_git_out, m_which, git, tmp_path):
+    def _without_str(calls):
+        # Debuggers call __str__ on mocked functions, strip them
+        return [c for c in calls if c[0] != "__str__"]
+
+    # cinnabar installed as visible external command
     m_git_out.return_value = ["External commands", "   cinnabar", "   revise"]
     assert git.is_cinnabar_installed
     m_git_out.assert_called_once_with(["help", "--all"])
@@ -415,12 +421,54 @@ def test_is_cinnabar_installed(m_git_out, git):
     assert git.is_cinnabar_installed
     m_git_out.assert_not_called()
 
+    # create a fake cinnabar in exec-path for git to find
+    cinnabar = Path(tmp_path) / "git-cinnabar"
+    cinnabar.write_text("")
+    cinnabar.chmod(0o755)
+
+    # cinnabar installed in exec-path
+    m_git_out.reset_mock()
+    m_git_out.side_effect = [
+        ["External commands", "   revise"],  # git help --all
+        tmp_path,  # git --exec-path
+    ]
+    git._cinnabar_installed = None
+    assert git.is_cinnabar_installed
+    assert _without_str(m_git_out.mock_calls) == [
+        mock.call(["help", "--all"]),
+        mock.call(["--exec-path"], split=False),
+    ]
+
+    # remove cinnabar from exec-path so we fall back to looking on the path
+    cinnabar.unlink()
+
+    # cinnabar installed somewhere on path
+    m_git_out.reset_mock()
+    m_git_out.side_effect = [
+        ["External commands", "   revise"],  # git help --all
+        tmp_path,  # git --exec-path
+    ]
+    m_which.return_value = str(cinnabar)
+    git._cinnabar_installed = None
+    assert git.is_cinnabar_installed
+    assert _without_str(m_git_out.mock_calls) == [
+        mock.call(["help", "--all"]),
+        mock.call(["--exec-path"], split=False),
+    ]
+
     # cinnabar not installed
     m_git_out.reset_mock()
-    m_git_out.return_value = ["External commands", "   revise"]
+    m_git_out.side_effect = [
+        ["External commands", "   revise"],  # git help --all
+        tmp_path,  # git --exec-path
+    ]
+    m_which.return_value = None
     git._cinnabar_installed = None
     assert not git.is_cinnabar_installed
-    m_git_out.assert_called_once_with(["help", "--all"])
+    assert _without_str(m_git_out.mock_calls) == [
+        mock.call(["help", "--all"]),
+        mock.call(["--exec-path"], split=False),
+    ]
 
 
 @mock.patch("mozphab.Git.git_out")

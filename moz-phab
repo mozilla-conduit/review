@@ -2667,12 +2667,25 @@ class Git(Repository):
     def is_cinnabar_installed(self):
         """Check if Cinnabar extension is callable."""
         if self._cinnabar_installed is None:
+            # Unfortunately we cannot use --list-cmds as it requires git v2.18+
+
+            # Normally cinnabar will be listed in the 'External commands' section.
             for line in self.git_out(["help", "--all"]):
                 if re.search(r"^\s+cinnabar\b", line):
                     self._cinnabar_installed = True
                     break
-            else:
-                self._cinnabar_installed = False
+
+            # Cinnabar might be installed in git's exec-path, which won't be
+            # included in the `git help --all` output, nor is it necessarily
+            # on the path.
+            if not self._cinnabar_installed:
+                exec_path = Path(self.git_out(["--exec-path"], split=False))
+                if (exec_path / "git-cinnabar").exists():
+                    self._cinnabar_installed = True
+
+            # Finally check on the system path.
+            if not self._cinnabar_installed:
+                self._cinnabar_installed = which("git-cinnabar") is not None
 
         return self._cinnabar_installed
 
