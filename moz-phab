@@ -43,6 +43,7 @@ from pathlib import Path
 from pkg_resources import get_distribution, parse_version
 from shlex import quote
 from shutil import which
+from http.client import HTTPConnection, HTTPSConnection
 
 # Known Issues
 # - reordering, folding, etc commits doesn't result in the stack being updated
@@ -61,6 +62,7 @@ from shutil import which
 # Environment Vars
 
 DEBUG = bool(os.getenv("DEBUG"))
+HTTP_ALLOWED = bool(os.getenv("HTTP_ALLOWED"))
 IS_WINDOWS = sys.platform == "win32"
 HAS_ANSI = (
     not IS_WINDOWS
@@ -655,46 +657,6 @@ class Config(object):
 #
 
 
-def json_args_to_query_params(args):
-    """Convert JSON arguments for Conduit API to query parameters.
-
-    Args:
-        args: JSON arguments.
-
-    Returns:
-        A list that contains query parameters as key-value pair tuple.
-
-        The order of items in the list is important.
-        An array `names = ['foo', 'bar']` is converted to
-        `[('names[0]', 'foo'), ('names[1]', 'bar')` and it should be sent as
-        `names[0]=foo&names[1]=bar`.
-        If it's sent as `names[1]=foo&names[0]=bar`, it means an object
-        `names = { 1: 'foo', 0: 'bar' }`.
-    """
-    params = []
-
-    def convert(path, v):
-        if type(v) == list:
-            if len(v) > 0:
-                for (index, elem) in enumerate(v):
-                    convert("{}[{}]".format(path, index), elem)
-            else:
-                params.append(("{}[]".format(path),))
-        elif type(v) == dict:
-            if v:
-                for (k, val) in v.items():
-                    convert("{}[{}]".format(path, k), val)
-            else:
-                params.append(("{}[]".format(path),))
-        else:
-            params.append((path, str(v)))
-
-    for key in sorted(args.keys()):
-        convert(key, args[key])
-
-    return params
-
-
 class ConduitAPI:
     def __init__(self):
         self.repo = None
@@ -752,30 +714,35 @@ class ConduitAPI:
         Raises:
             ConduitAPIError if the API threw an error back at us.
         """
-        url = urllib.parse.urljoin(self.repo.api_url, api_method)
-        logger.debug("%s %s" % (url, api_call_args))
+        url = urllib.parse.urlparse(urllib.parse.urljoin(self.repo.api_url, api_method))
+        logger.debug("%s %s" % (url.geturl(), api_call_args))
 
-        # Manually concatenate query parameters because Conduit doesn't accept
-        # URL encoded parameter names.
         api_call_args = api_call_args.copy()
-        api_call_args["api.token"] = self.load_api_token()
-        api_call_params = json_args_to_query_params(api_call_args)
-        data_arr = []
-        for p in api_call_params:
-            data_arr.append(
-                "{}={}".format(p[0], urllib.parse.quote(p[1].encode(encoding="utf-8")))
-                if len(p) == 2
-                else "{}=".format(p[0])
+        api_call_args["__conduit__"] = {"token": self.load_api_token()}
+        body = urllib.parse.urlencode(
+            {
+                "params": json.dumps(api_call_args),
+                "output": "json",
+                "__conduit__": True,
+            }
+        )
+        # Send the POST request
+        if url.scheme == "https":
+            conn = HTTPSConnection(url.netloc)
+        elif HTTP_ALLOWED:
+            # Allow for an HTTP connection in suite.
+            conn = HTTPConnection(url.netloc)
+        else:
+            raise CommandError("Only https connections are allowed.")
+
+        conn.request("POST", url.geturl(), body=body)
+
+        # Read the response as JSON
+        response = json.load(conn.getresponse())
+        if response["error_code"]:
+            raise ConduitAPIError(
+                response.get("error_info", "Error %s" % response["error_code"])
             )
-        data = "&".join(data_arr).encode(encoding="utf-8")
-
-        output = urllib.request.urlopen(
-            urllib.request.Request(url, data=data), timeout=30
-        ).read()
-        response = json.loads(output.decode("utf-8"))
-
-        if response["error_code"] and response["error_info"]:
-            raise ConduitAPIError(response["error_info"])
 
         return response["result"]
 
