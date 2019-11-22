@@ -1,14 +1,21 @@
-# Wrapper around Phabricator's `arc` cli to support submission of a series of commits.
+# Phabricator CLI from Mozilla to support submission of a series of commits.
 
 ## Installation
 
-`moz-phab` can be installed with `pip install MozPhab`.
+`moz-phab` can be installed with `pip3 install MozPhab`.
 
 For detailed installation instructions please see:
 
 - [Windows Install Instructions](https://moz-conduit.readthedocs.io/en/latest/mozphab-windows.html)
 - [Linux Install Instructions](https://moz-conduit.readthedocs.io/en/latest/mozphab-linux.html)
 - [macOS Install Instructions](https://moz-conduit.readthedocs.io/en/latest/mozphab-macos.html)
+
+`moz-phab` will periodically check for updates and seamlessly install the latest release
+when available. To force update `moz-phab`, run `moz-phab self-update`.
+
+### Changelog
+
+https://wiki.mozilla.org/MozPhab#Changelog
 
 ## Configuration
 
@@ -37,13 +44,13 @@ create_bookmark = True
 always_full_stack = False
 
 [updater]
-self_last_check = 
-arc_last_check = 
+self_last_check = 0
+arc_last_check = 0
 self_auto_update = True
 ```
 
 - `ui.no_ansi` : never use ANSI colours (default: auto-detected).
-- `vcs.safe_mode` : use only safe VCS settings (default: false). Use `--safe-mode` 
+- `vcs.safe_mode` : use only safe VCS settings (default: false). Use `--safe-mode`
     option to switch it on for a one-time usage.
 - `git.remote`: comma separated string. Default remotes used to find the first
     unpublished commit. Default, empty string, means that a list of remotes will
@@ -126,12 +133,9 @@ abandoned manually.  See
 planned fixes.  Also note that "fix-up" commits are not yet supported;
 see [bug 1481542](https://bugzilla.mozilla.org/show_bug.cgi?id=1481542).
 
-`moz-phab` will periodically check for updates and display a notice
-when a new version is available.  To update `moz-phab`, run `moz-phab
-self-update`.
-
-Note that if you do not have Python in your path, you will need to run
-`<path to python>/python <path to moz-phab>/moz-phab` instead of `moz-phab`.
+MozPhab is not using Arcanist to submit commits to the Phabricator.
+If you wish to do so add the `--arc` switch. File a bug if you needed to use it because
+MozPhab failed to submit with default settings.
 
 ### Downloading a patch from the Phabricator
 
@@ -139,7 +143,7 @@ Note that if you do not have Python in your path, you will need to run
 invocation is
 
 ```
-  $ moz-phab patch rev_id
+  $ moz-phab patch revision_id
 ```
 
 To patch a stack ending with the revision `D123` run `moz-phab patch D123`.
@@ -173,7 +177,19 @@ This behavior can be modified with few options:
 
 - `--skip-dependencies` : patch only one revision, ignore dependencies.
 
+### Reorganizing the stack
+
+`moz-phab reorg [start_rev] [end_rev]` allows you to reorganize the stack in Phabricator.
+
+If you've changed the local stack by adding, removing or moving the commits around,
+you need to change the parent/child relation of the revisions in Phabricator.
+
+`moz-phab reorg` command will compare the stack, display what will be changed and 
+ask for permission before taking any action.
+
 ### Running arc commands
+
+* **Note** You will need to have PHP installed to run `arc` commands.*
 
 `moz-phab arc` allows running Arcanist commands indirectly:
 
@@ -181,7 +197,7 @@ This behavior can be modified with few options:
 $ moz-phab arc ARG [ARG ...]
 ```
 
-`arc land --preview` will become `moz-phab arc land --preview`.
+`arc feature` will become `moz-phab arc feature`.
 
 ## Reporting Issues
 
@@ -192,16 +208,22 @@ File bugs in Bugzilla under
 
 ## Development
 
-We have strict requirements for moz-phab development:
-
-- must only use standard libraries
-- must be a single file for easy deployment
+To install your code call `pip3 install -e .` from MozPhab project directory (`review`
+by default). Your code will be executed by calling `moz-phab`.
 
 Tests can be executed with `pytest`.
-Integration tests require to have access to `git`, `hg` with `evolve` extension
-and `patch` commands.
+Integration tests require to have access to `git`, `hg` with `evolve` extension.
 
 All python code must be formatted with [black](https://github.com/ambv/black)
 using the default settings.
 
 Pull Requests are not accepted here; please submit changes with Phabricator.
+
+Consider using [suite](https://github.com/mozilla-conduit/suite) to use MozPhab with 
+Phabricator installed on your local machine.
+
+You can order the suite to use your local code by calling:
+
+```
+$ docker-compose -f docker-compose.yml -f docker-compose.review.yml run local-dev`
+````
