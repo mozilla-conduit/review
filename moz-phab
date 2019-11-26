@@ -979,7 +979,8 @@ class ConduitAPI:
         if has_commit_reviewers and not wip:
             update_revision_reviewers(transactions, commit)
 
-        transactions.append(dict(type="bugzilla.bug-id", value=commit["bug-id"]))
+        if commit["bug-id"]:
+            transactions.append(dict(type="bugzilla.bug-id", value=commit["bug-id"]))
         return self.edit_revision(
             transactions=transactions, diff_phid=diff_phid, wip=wip
         )
