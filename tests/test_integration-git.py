@@ -167,6 +167,40 @@ Differential Revision: http://example.test/D123
     )
 
 
+def test_submit_create_no_bug(in_process, git_repo_path, init_sha):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # user search
+        [dict(userName="alice", phid="PHID-USER-1")],
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    testfile = git_repo_path / "X"
+    testfile.write_text("a\n")
+    git_out("add", ".")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text("A r?alice")
+    git_out("commit", "--file", "msg")
+
+    mozphab.main(["submit", "--no-arc", "--yes", "--no-bug", init_sha])
+
+    log = git_out("log", "--format=%s%n%n%b", "-1")
+    expected = """
+A r?alice
+
+Differential Revision: http://example.test/D123
+"""
+    assert log.strip() == expected.strip()
+
+
 def test_submit_create_binary_arc(in_process, git_repo_path, init_sha, data_file):
     call_conduit.side_effect = (
         dict(),

@@ -226,6 +226,36 @@ Differential Revision: http://example.test/D123
     )
 
 
+def test_submit_create_no_bug(in_process, hg_repo_path):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        [dict(userName="alice", phid="PHID-USER-1")],
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    test_a = hg_repo_path / "x"
+    test_a.write_text("a")
+    hg_out("add")
+    hg_out("commit", "--message", "A r?alice")
+    mozphab.main(["submit", "--no-arc", "--yes", "--no-bug", "."])
+
+    log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
+    expected = """
+A r?alice
+
+Differential Revision: http://example.test/D123
+"""
+    assert log.strip() == expected.strip()
+
+
 def test_submit_create_binary(in_process, hg_repo_path, data_file):
     call_conduit.side_effect = (
         # ping

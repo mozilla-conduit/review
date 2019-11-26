@@ -2308,7 +2308,9 @@ class Mercurial(Repository):
                 err.append("You can enable the shelve extension via `hg config --edit`")
             raise Error("\n".join(err))
 
-        super().check_commits_for_submit(commits, validate_reviewers=validate_reviewers)
+        super().check_commits_for_submit(
+            commits, validate_reviewers=validate_reviewers, require_bug=require_bug
+        )
 
     def _get_file_modes(self, commit):
         """Get modes of the modified files."""
