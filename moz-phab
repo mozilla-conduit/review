@@ -1011,9 +1011,12 @@ class ConduitAPI:
                 update_revision_reviewers(transactions, commit)
 
         # Update bug id if different
-        revision = conduit.get_revisions(ids=[int(commit["rev-id"])])[0]
-        if revision["fields"]["bugzilla.bug-id"] != commit["bug-id"]:
-            transactions.append(dict(type="bugzilla.bug-id", value=commit["bug-id"]))
+        if commit["bug-id"]:
+            revision = conduit.get_revisions(ids=[int(commit["rev-id"])])[0]
+            if revision["fields"]["bugzilla.bug-id"] != commit["bug-id"]:
+                transactions.append(
+                    dict(type="bugzilla.bug-id", value=commit["bug-id"])
+                )
 
         return self.edit_revision(
             transactions=transactions,
