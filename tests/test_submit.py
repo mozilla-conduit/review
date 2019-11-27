@@ -802,6 +802,15 @@ class TestUpdateCommitSummary(unittest.TestCase):
             mozphab.parse_api_error(api_response),
         )
 
+    def test_update_revision_no_bug_id(self):
+        # Phabricator stores patches with no bug as having an empty string as the bug ID.
+        # We should not explicitly update the bug-id if our bug id is "None".
+        transactions = []
+        mozphab.update_revision_bug_id(
+            transactions, {"bug-id": None}, {"fields": {"bugzilla.bug-id": ""}}
+        )
+        self.assertEqual([], transactions)
+
 
 if __name__ == "__main__":
     unittest.main()

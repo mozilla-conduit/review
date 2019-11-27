@@ -4044,7 +4044,7 @@ def update_revision_description(transactions, commit, revision):
 def update_revision_bug_id(transactions, commit, revision):
     # Appends differential.revision.edit transaction(s) to `transactions` if
     # updating the commit bug-id is required.
-    if commit["bug-id"] != revision["fields"]["bugzilla.bug-id"]:
+    if commit["bug-id"] and commit["bug-id"] != revision["fields"]["bugzilla.bug-id"]:
         transactions.append(dict(type="bugzilla.bug-id", value=commit["bug-id"]))
 
 
