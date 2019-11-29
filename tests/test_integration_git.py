@@ -33,15 +33,6 @@ check_call_by_line.side_effect = by_line_mock
 initial_sha = None
 
 
-def get_sha():
-    return git_out("log", "--format=%H", "-1").rstrip("\n")
-
-
-@pytest.fixture
-def init_sha(in_process, git_repo_path):
-    return get_sha()
-
-
 def test_submit_create_arc(in_process, git_repo_path, init_sha):
     call_conduit.side_effect = (
         dict(),

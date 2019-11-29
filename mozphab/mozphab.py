@@ -6,7 +6,7 @@
 # coding=utf-8
 
 """
-Wrapper around Phabricator's `arc` cli to support submission of a series of commits.
+CLI to support submission of a series of commits to Phabricator. .
 """
 
 import argparse
@@ -53,13 +53,10 @@ from .exceptions import (
     NotFoundError,
 )
 
+from .reorganise import stack_transactions, walk_llist
+
+
 # Known Issues
-# - reordering, folding, etc commits doesn't result in the stack being updated
-#   correctly on phabricator, or may outright fail due to dependency loops.
-#   to address this we'll need to query phabricator's api directly and clear
-#   dependencies prior to calling arc. we'd probably also have to
-#   abandon revisions that are no longer part of the stack.  unfortunately
-#   phabricator's api currently doesn't expose calls to do this.
 # - commits with a description already modified by arc (ie. the follow the arc commit
 #   description template with 'test plan', subscribers, etc) are not handled by this
 #   script.  commits in this format should be detected and result in the commit being
@@ -759,6 +756,44 @@ class ConduitAPI:
 
         return False
 
+    def ids_to_phids(self, rev_ids):
+        """Convert revision ids to PHIDs.
+
+        Parameters:
+            rev_ids (list): A list of revision ids
+
+        Returns:
+            A list of PHIDs.
+        """
+        return [r["phid"] for r in self.get_revisions(ids=rev_ids)]
+
+    def id_to_phid(self, rev_id):
+        """Convert revision id to PHID."""
+        phids = self.ids_to_phids([rev_id])
+        if phids:
+            return phids[0]
+
+        raise NotFoundError("revision {} not found".format(rev_id))
+
+    def phids_to_ids(self, phids):
+        """Convert revision PHIDs to ids.
+
+        Parameteres:
+            phids (list): A list of PHIDs
+
+        Returns:
+            A list of ids.
+        """
+        return ["D{}".format(r["id"]) for r in self.get_revisions(phids=phids)]
+
+    def phid_to_id(self, phid):
+        """Convert revision PHID to id."""
+        ids = self.phids_to_ids([phid])
+        if ids:
+            return ids[0]
+
+        raise NotFoundError("revision {} not found".format(phid))
+
     def get_revisions(self, ids=None, phids=None):
         """Get revisions info from Phabricator.
 
@@ -884,6 +919,44 @@ class ConduitAPI:
             for r in revisions
             if r["fields"]["status"]["value"] != "abandoned"
         ]
+
+    def get_stack(self, rev_ids):
+        """Returns a dict of PHIDs."""
+        phids = set()
+        if not rev_ids:
+            return {}
+        revisions = self.get_revisions(ids=rev_ids)
+        new_phids = set([rev["phid"] for rev in revisions])
+        stack = {}
+
+        while new_phids:
+            phids.update(new_phids)
+
+            edges = self.call(
+                "edge.search",
+                dict(
+                    sourcePHIDs=list(new_phids),
+                    types=["revision.parent", "revision.child"],
+                    limit=10000,
+                ),
+            )["data"]
+
+            new_phids = set()
+            for edge in edges:
+                new_phids.add(edge["sourcePHID"])
+                new_phids.add(edge["destinationPHID"])
+
+                if edge["edgeType"] == "revision.child":
+                    assert edge["sourcePHID"] not in stack
+                    stack[edge["sourcePHID"]] = edge["destinationPHID"]
+
+            new_phids = new_phids - phids
+
+        for child in list(stack.values()):
+            # set the last child (not a parent)
+            stack.setdefault(child)
+
+        return stack
 
     def get_users(self, usernames):
         """Get users using the user.query API.
@@ -4734,6 +4807,113 @@ def arc_pass(args):
 
 
 #
+# Reorganise
+#
+
+
+def reorganise(repo, args):
+    with wait_message("Checking connection to Phabricator."):
+        # Check if raw Conduit API can be used
+        if not conduit.check():
+            raise Error("Failed to use Conduit API")
+
+    # Find and preview commits to submits.
+    with wait_message("Looking for commits.."):
+        commits = repo.commit_stack()
+
+    if not commits:
+        raise Error("Failed to find any commits to reorganise.")
+
+    with wait_message("Loading commits.."):
+        augment_commits_from_body(commits)
+
+    localstack_ids = [c["rev-id"] for c in commits]
+    if None in localstack_ids:
+        names = [c["name"] for c in commits if c["rev-id"] is None]
+        plural = len(names) > 1
+        raise Error(
+            "Found new commit{plural} in the local stack: {names}.\n"
+            "Please submit {them} first.".format(
+                plural="s" if plural else "",
+                them="them" if plural else "it",
+                names=", ".join(names),
+            )
+        )
+
+    logger.warning(
+        "Reorganisation based on {} commit{}:".format(
+            len(commits), "" if len(commits) == 1 else "s",
+        )
+    )
+
+    # Get PhabricatorStack
+    # Errors will be raised later in the `walk_llist` method
+    with wait_message("Detecting the remote stack..."):
+        phabstack = conduit.get_stack(localstack_ids)
+
+    # Preload the phabricator stack
+    with wait_message("Preloading Phabricator stack revisions..."):
+        conduit.get_revisions(phids=list(phabstack.keys()))
+
+    if phabstack:
+        try:
+            phabstack_phids = walk_llist(phabstack)
+        except Error as e:
+            logger.error(
+                "Remote stack is not linear.\n"
+                "Detected stack:\n{}".format(
+                    " <- ".join(conduit.phids_to_ids(list(phabstack.keys())))
+                )
+            )
+            raise
+    else:
+        phabstack_phids = []
+
+    localstack_phids = conduit.ids_to_phids(localstack_ids)
+    try:
+        transactions = stack_transactions(phabstack_phids, localstack_phids)
+    except Error:
+        logger.error("Unable to prepare stack transactions.")
+        raise
+
+    if not transactions:
+        raise Error("Reorganisation is not needed.")
+
+    logger.warning("Stack will be reorganised:")
+    for phid, rev_transactions in transactions.items():
+        node_id = conduit.phid_to_id(phid)
+        if "abandon" in [t["type"] for t in rev_transactions]:
+            logger.info(" * {} will be abandoned".format(node_id))
+        else:
+            for t in rev_transactions:
+                if t["type"] == "children.set":
+                    logger.info(
+                        " * {child} will depend on {parent}".format(
+                            child=conduit.phid_to_id(t["value"][0]), parent=node_id,
+                        )
+                    )
+                if t["type"] == "children.remove":
+                    logger.info(
+                        " * {child} will no longer depend on {parent}".format(
+                            child=conduit.phid_to_id(t["value"][0]), parent=node_id,
+                        )
+                    )
+
+    if args.yes:
+        pass
+    else:
+        res = prompt("Perform reorganisation", ["Yes", "No"])
+        if res == "No":
+            sys.exit(1)
+
+    with wait_message("Applying transactions..."):
+        for phid, rev_transactions in transactions.items():
+            conduit.edit_revision(rev_id=phid, transactions=transactions[phid])
+
+    logger.info("Stack has been reorganised.")
+
+
+#
 # Main
 #
 
@@ -4996,6 +5176,44 @@ def parse_args(argv):
         help="EXPERIMENTAL: Override VCS compatibility check.",
     )
     patch_parser.set_defaults(func=patch, needs_repo=True, no_arc=True)
+
+    # reorganise
+
+    reorg_parser = commands.add_parser(
+        "reorg", help="Reorganise commits in Phabricator"
+    )
+    reorg_parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Reorganise without confirmation (default: False)",
+    )
+    reorg_parser.add_argument(
+        "--safe-mode",
+        dest="safe_mode",
+        action="store_true",
+        help="Run VCS with only necessary extensions.",
+    )
+    reorg_parser.add_argument(
+        "--upstream",
+        "--remote",
+        "-u",
+        action="append",
+        help='Set upstream branch to detect the starting commit. (default: "")',
+    )
+    reorg_parser.add_argument(
+        "start_rev",
+        nargs="?",
+        default="(auto)",
+        help="Start revision of range to reorganise (default: detected)",
+    )
+    reorg_parser.add_argument(
+        "end_rev",
+        nargs="?",
+        default=".",
+        help="End revision of range to reorganise (default: current commit)",
+    )
+    reorg_parser.set_defaults(func=reorganise, needs_repo=True, no_arc=True)
 
     # install-certificate
 
