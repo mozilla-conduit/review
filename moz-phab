@@ -1046,7 +1046,7 @@ class ConduitAPI:
                 )
 
         if force_wip or wip and not set_wip_later:
-            trans.append(dict(type="plan-changes", value="true"))
+            trans.append(dict(type="plan-changes", value=True))
 
         api_call_args = dict(transactions=trans)
 
