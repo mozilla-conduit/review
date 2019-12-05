@@ -118,6 +118,7 @@ def test_git_patch_with_commit(
     m_get_diffs,
     m_get_revs,
     in_process,
+    fresh_git_config,
     git_repo_path,
 ):
     m_get_successor_phids.return_value = []
