@@ -127,13 +127,17 @@ def hg_repo_path(monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def fresh_git_config(tmp_path):
+def fresh_global_config(tmp_path):
     """Overrides global ~/.gitconfig by creating a tiny one in the temp repo and setting it as the $HOME"""
     original_env = os.environ.copy()
     env = os.environ
     env["HOME"] = str(tmp_path)
     with open("{}/.gitconfig".format(tmp_path), "w") as f:
-        f.write("[user]\n" "\tname = Developer\n" "\temail = developer@mozilla.com\n")
+        f.write("[user]\n\tname = Developer\n\temail = developer@mozilla.com\n")
+    with open("{}/.hgrc".format(tmp_path), "w") as f:
+        f.write(
+            "[ui]\nusername = Developer <developer@mozilla.com>\n[extensions]\nevolve =\n"
+        )
     yield
     os.environ.clear()
     os.environ.update(original_env)
@@ -148,7 +152,7 @@ def git_out(*args):
 
 
 @pytest.fixture
-def git_repo_path(monkeypatch, tmp_path, fresh_git_config):
+def git_repo_path(monkeypatch, tmp_path):
     """Build a usable Git repository. Return the pathlib.Path to the repo."""
     phabricator_uri = "http://example.test"
     repo_path = tmp_path / "repo"
