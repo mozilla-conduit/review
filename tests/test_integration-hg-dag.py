@@ -41,15 +41,7 @@ def _checkout(repo, name):
 
 def _submit(repo, start, end, expected):
     mozphab.main(
-        [
-            "submit",
-            "--no-arc",
-            "--yes",
-            "--bug",
-            "1",
-            repo["rev_map"][start],
-            repo["rev_map"][end],
-        ]
+        ["submit", "--yes", "--bug", "1", repo["rev_map"][start], repo["rev_map"][end],]
     )
     log = hg_out("log", "--graph", "--template", r"{desc|firstline}\n")
     assert log.strip() == expected.strip()
