@@ -159,6 +159,69 @@ class Commits(unittest.TestCase):
             ),
         )
 
+    @mock.patch("mozphab.conduit.get_revisions")
+    @mock.patch("mozphab.check_for_invalid_reviewers")
+    def test_validate_duplicate_revision(self, check_reviewers, get_revisions):
+        check_reviewers.return_value = []
+        get_revisions.return_value = [True]
+
+        repo = mozphab.Repository("", "", "dummy")
+
+        self._assertNoError(
+            repo.check_commits_for_submit,
+            (
+                [
+                    commit("1", (["r"], []), name="a"),
+                    commit("2", (["r"], []), name="b"),
+                    commit("3", (["r"], []), name="c"),
+                ]
+            ),
+        )
+
+        self._assertNoError(
+            repo.check_commits_for_submit,
+            (
+                [
+                    commit("1", (["r"], []), rev_id="1", name="a"),
+                    commit("2", (["r"], []), rev_id="2", name="b"),
+                    commit("3", (["r"], []), rev_id="3", name="c"),
+                ]
+            ),
+        )
+
+        self._assertError(
+            repo.check_commits_for_submit,
+            "Phabricator revisions should be unique, but the following commits refer to the same one (D1):\n"
+            "* a\n"
+            "* c",
+            (
+                [
+                    commit("1", (["r"], []), rev_id="1", name="a"),
+                    commit("2", (["r"], []), rev_id="2", name="b"),
+                    commit("3", (["r"], []), rev_id="1", name="c"),
+                ]
+            ),
+        )
+
+        self._assertError(
+            repo.check_commits_for_submit,
+            "Phabricator revisions should be unique, but the following commits refer to the same one (D1):\n"
+            "* a\n"
+            "* c"
+            "\n\n\n"
+            "Phabricator revisions should be unique, but the following commits refer to the same one (D2):\n"
+            "* b\n"
+            "* d",
+            (
+                [
+                    commit("1", (["r"], []), rev_id="1", name="a"),
+                    commit("2", (["r"], []), rev_id="2", name="b"),
+                    commit("3", (["r"], []), rev_id="1", name="c"),
+                    commit("4", (["r"], []), rev_id="2", name="d"),
+                ]
+            ),
+        )
+
     def test_commit_preview(self):
         build = mozphab.build_commit_title
 

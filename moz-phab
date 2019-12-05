@@ -1571,8 +1571,25 @@ class Repository(object):
         all_reviewers = {}
         reviewer_commit_map = {}
         commit_invalid_reviewers = {}
+        rev_ids_to_names = dict()
         for commit in commits:
             commit_invalid_reviewers[commit["node"]] = []
+
+            if not commit["rev-id"]:
+                continue
+            names = rev_ids_to_names.setdefault(commit["rev-id"], [])
+            names.append(commit["name"])
+
+        for rev_id, names in rev_ids_to_names.items():
+            if len(names) < 2:
+                continue
+
+            error_msg = "Phabricator revisions should be unique, but the following commits refer to the same one (D{}):\n".format(
+                rev_id
+            )
+            for name in names:
+                error_msg += "* %s\n" % name
+            errors.append(error_msg)
 
         if validate_reviewers:
             # Flatten and deduplicate reviewer list, keeping track of the
