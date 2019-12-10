@@ -3657,8 +3657,10 @@ def show_commit_stack(
                     revision = revisions[0]
 
                     # Check if target bug ID is the same as in the Phabricator revision
-                    change_bug_id = revision["fields"]["bugzilla.bug-id"] and (
-                        commit["bug-id"] != revision["fields"]["bugzilla.bug-id"]
+                    change_bug_id = (
+                        "bugzilla.bug-id" in revision["fields"]
+                        and revision["fields"]["bugzilla.bug-id"]
+                        and (commit["bug-id"] != revision["fields"]["bugzilla.bug-id"])
                     )
 
                     # Check if comandeering is required
