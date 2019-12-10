@@ -1486,8 +1486,10 @@ class Repository(object):
         else:
             defaults_files.append("/etc/arcconfig")
 
-        phab_url = self._get_setting("phabricator.uri") or read_json_field(
-            defaults_files, ["config", "default"]
+        phab_url = (
+            self._get_setting("phabricator.uri")
+            or self._get_setting("conduit_uri")
+            or read_json_field(defaults_files, ["config", "default"])
         )
 
         if not phab_url:
