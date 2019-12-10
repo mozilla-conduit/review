@@ -9,18 +9,16 @@ import time
 
 from .conftest import hg_out, git_out
 
-mozphab = imp.load_source(
-    "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
-)
+from mozphab import mozphab
 mozphab.SHOW_SPINNER = False
 
 
-@mock.patch("mozphab.ConduitAPI.get_revisions")
-@mock.patch("mozphab.ConduitAPI.get_diffs")
-@mock.patch("mozphab.ConduitAPI.call")
-@mock.patch("mozphab.ConduitAPI.get_successor_phids")
-@mock.patch("mozphab.ConduitAPI.get_ancestor_phids")
-@mock.patch("mozphab.logger")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_revisions")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_diffs")
+@mock.patch("mozphab.mozphab.ConduitAPI.call")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_successor_phids")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_ancestor_phids")
+@mock.patch("mozphab.mozphab.logger")
 def test_patch_raw(
     m_logger,
     m_ancestor_phids,
@@ -53,12 +51,12 @@ def test_patch_raw(
     assert m_logger.info.call_args_list == [mock.call(PATCH_1), mock.call(PATCH_2)]
 
 
-@mock.patch("mozphab.ConduitAPI.get_revisions")
-@mock.patch("mozphab.ConduitAPI.get_diffs")
-@mock.patch("mozphab.ConduitAPI.call")
-@mock.patch("mozphab.ConduitAPI.get_successor_phids")
-@mock.patch("mozphab.ConduitAPI.get_ancestor_phids")
-@mock.patch("mozphab.logger")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_revisions")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_diffs")
+@mock.patch("mozphab.mozphab.ConduitAPI.call")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_successor_phids")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_ancestor_phids")
+@mock.patch("mozphab.mozphab.logger")
 def test_patch_no_commit(
     m_logger,
     m_ancestor_phids,
@@ -104,12 +102,12 @@ def test_patch_no_commit(
     test_file.unlink()
 
 
-@mock.patch("mozphab.ConduitAPI.get_revisions")
-@mock.patch("mozphab.ConduitAPI.get_diffs")
-@mock.patch("mozphab.ConduitAPI.call")
-@mock.patch("mozphab.ConduitAPI.get_successor_phids")
-@mock.patch("mozphab.ConduitAPI.get_ancestor_phids")
-@mock.patch("mozphab.logger")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_revisions")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_diffs")
+@mock.patch("mozphab.mozphab.ConduitAPI.call")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_successor_phids")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_ancestor_phids")
+@mock.patch("mozphab.mozphab.logger")
 def test_git_patch_with_commit(
     m_logger,
     m_ancestor_phids,
@@ -211,12 +209,12 @@ def test_git_patch_with_commit(
     assert line == "\u0105"
 
 
-@mock.patch("mozphab.ConduitAPI.get_revisions")
-@mock.patch("mozphab.ConduitAPI.get_diffs")
-@mock.patch("mozphab.ConduitAPI.call")
-@mock.patch("mozphab.ConduitAPI.get_successor_phids")
-@mock.patch("mozphab.ConduitAPI.get_ancestor_phids")
-@mock.patch("mozphab.logger")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_revisions")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_diffs")
+@mock.patch("mozphab.mozphab.ConduitAPI.call")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_successor_phids")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_ancestor_phids")
+@mock.patch("mozphab.mozphab.logger")
 def test_hg_patch_with_commit(
     m_logger,
     m_ancestor_phids,

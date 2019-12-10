@@ -11,9 +11,7 @@ import pytest
 from callee import Contains
 from .conftest import git_out
 
-mozphab = imp.load_source(
-    "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
-)
+from mozphab import mozphab
 mozphab.SHOW_SPINNER = False
 
 

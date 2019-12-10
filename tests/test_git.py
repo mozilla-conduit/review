@@ -8,13 +8,11 @@ from pathlib import Path
 
 from .conftest import create_temp_fn
 
-mozphab = imp.load_source(
-    "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
-)
+from mozphab import mozphab
 mozphab.SHOW_SPINNER = False
 
 
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_cherry(m_git_git_out, git):
     m_git_git_out.side_effect = (mozphab.CommandError, ["output"])
     assert git._cherry(["cherry"], ["one", "two"]) == ["output"]
@@ -23,9 +21,9 @@ def test_cherry(m_git_git_out, git):
     )
 
 
-@mock.patch("mozphab.Git.git_out")
-@mock.patch("mozphab.Git._cherry")
-@mock.patch("mozphab.config")
+@mock.patch("mozphab.mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git._cherry")
+@mock.patch("mozphab.mozphab.config")
 def test_first_unpublished(m_config, m_git_cherry, m_git_git_out, git):
     class Args:
         def __init__(self, upstream=None, start_rev="(auto)"):
@@ -61,7 +59,7 @@ def test_first_unpublished(m_config, m_git_cherry, m_git_git_out, git):
         first()
 
 
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_branches_to_rebase(m_git_git_out, git):
     git_find = git._find_branches_to_rebase
 
@@ -179,8 +177,8 @@ def test_is_child(git):
     assert not is_child("ccc", "ddd", nodes)
 
 
-@mock.patch("mozphab.Git.git_out")
-@mock.patch("mozphab.config")
+@mock.patch("mozphab.mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.config")
 def test_range(m_config, m_git_git_out, git):
     class Args:
         def __init__(self, start="aaa", end="."):
@@ -194,10 +192,10 @@ def test_range(m_config, m_git_git_out, git):
     assert git.revset == ("aaa", ".")
 
 
-@mock.patch("mozphab.config")
-@mock.patch("mozphab.parse_config")
-@mock.patch("mozphab.Git._get_first_unpublished_node")
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.config")
+@mock.patch("mozphab.mozphab.parse_config")
+@mock.patch("mozphab.mozphab.Git._get_first_unpublished_node")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git):
     class Args:
         def __init__(self, start="(auto)", end=".", safe_mode=False):
@@ -255,7 +253,7 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
     assert "" == git._env["XDG_CONFIG_HOME"]
 
 
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_worktree_clean(m_git_out, git):
     m_git_out.return_value = ""
     assert git.is_worktree_clean()
@@ -270,7 +268,7 @@ def test_worktree_clean(m_git_out, git):
     assert not git.is_worktree_clean()
 
 
-@mock.patch("mozphab.Git.git")
+@mock.patch("mozphab.mozphab.Git.git")
 def test_commit(m_git, git):
     git.commit("some body")
     assert m_git.called_once()
@@ -280,9 +278,9 @@ def test_commit(m_git, git):
     assert m_git.called_once()
 
 
-@mock.patch("mozphab.Git._hg_to_git")
-@mock.patch("mozphab.Git.is_node")
-@mock.patch("mozphab.Git.phab_vcs")
+@mock.patch("mozphab.mozphab.Git._hg_to_git")
+@mock.patch("mozphab.mozphab.Git.is_node")
+@mock.patch("mozphab.mozphab.Git.phab_vcs")
 def test_check_node(m_phab_vcs, m_git_is_node, m_hg2git, git):
     node = "aabbcc"
     mozphab.conduit.set_repo(git)
@@ -310,11 +308,11 @@ def test_check_node(m_phab_vcs, m_git_is_node, m_hg2git, git):
     assert "git_aabbcc" == git.check_node(node)
 
 
-@mock.patch("mozphab.Git.git_out")
-@mock.patch("mozphab.Git.checkout")
-@mock.patch("mozphab.Git.git")
-@mock.patch("mozphab.prompt")
-@mock.patch("mozphab.logger")
+@mock.patch("mozphab.mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git.checkout")
+@mock.patch("mozphab.mozphab.Git.git")
+@mock.patch("mozphab.mozphab.prompt")
+@mock.patch("mozphab.mozphab.logger")
 def test_before_patch(m_logger, m_prompt, m_git, m_checkout, m_git_out, git):
     class Args:
         def __init__(
@@ -380,9 +378,9 @@ def test_before_patch(m_logger, m_prompt, m_git, m_checkout, m_git_out, git):
         git.before_patch("abcdef", "name")
 
 
-@mock.patch("mozphab.temporary_binary_file")
-@mock.patch("mozphab.Git.git")
-@mock.patch("mozphab.Git.commit")
+@mock.patch("mozphab.mozphab.temporary_binary_file")
+@mock.patch("mozphab.mozphab.Git.git")
+@mock.patch("mozphab.mozphab.Git.commit")
 def test_apply_patch(m_commit, m_git, m_temp_fn, git):
     m_temp_fn.return_value = create_temp_fn("filename")
     git.apply_patch("diff", "commit message", "user", 1)
@@ -391,7 +389,7 @@ def test_apply_patch(m_commit, m_git, m_temp_fn, git):
     m_temp_fn.assert_called_once_with(b"diff")
 
 
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_is_node(m_git_out, git):
     m_git_out.return_value = "commit"
     assert git.is_node("aaa")
@@ -403,8 +401,8 @@ def test_is_node(m_git_out, git):
     assert not git.is_node("aaa")
 
 
-@mock.patch("mozphab.which")
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.which")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_is_cinnabar_installed(m_git_out, m_which, git, tmp_path):
     def _without_str(calls):
         # Debuggers call __str__ on mocked functions, strip them
@@ -471,7 +469,7 @@ def test_is_cinnabar_installed(m_git_out, m_which, git, tmp_path):
     ]
 
 
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_unicode_in_windows_env(m_git_out, git, monkeypatch):
     monkeypatch.setattr(mozphab, "IS_WINDOWS", True)
     git._commit_tree("parent", "tree_hash", "message", "ćwikła", "ćwikła", "date")

@@ -8,9 +8,7 @@ import os
 
 from .conftest import hg_out
 
-mozphab = imp.load_source(
-    "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
-)
+from mozphab import mozphab
 mozphab.SHOW_SPINNER = False
 
 

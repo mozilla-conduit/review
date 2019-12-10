@@ -11,9 +11,7 @@ import sys
 
 from pathlib import Path
 
-mozphab = imp.load_source(
-    "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
-)
+from mozphab import mozphab
 
 
 def create_temp_fn(*filenames):
@@ -33,7 +31,7 @@ def reset_cache():
 
 @pytest.fixture()
 def repo_phab_url():
-    with mock.patch("mozphab.Repository._phab_url") as xmock:
+    with mock.patch("mozphab.mozphab.Repository._phab_url") as xmock:
         xmock.return_value = "http://phab.test"
         yield xmock
 
@@ -44,12 +42,12 @@ def data_file():
 
 
 @pytest.fixture
-@mock.patch("mozphab.Git.git_out")
-@mock.patch("mozphab.Git._get_current_head")
-@mock.patch("mozphab.Config")
-@mock.patch("mozphab.os.path")
-@mock.patch("mozphab.which")
-@mock.patch("mozphab.read_json_field")
+@mock.patch("mozphab.mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git._get_current_head")
+@mock.patch("mozphab.mozphab.Config")
+@mock.patch("mozphab.mozphab.os.path")
+@mock.patch("mozphab.mozphab.which")
+@mock.patch("mozphab.mozphab.read_json_field")
 def git(
     m_read_json_field,
     m_which,
@@ -71,11 +69,11 @@ def git(
 
 
 @pytest.fixture
-@mock.patch("mozphab.Mercurial.hg_out")
-@mock.patch("mozphab.Config")
-@mock.patch("mozphab.os.path")
-@mock.patch("mozphab.which")
-@mock.patch("mozphab.read_json_field")
+@mock.patch("mozphab.mozphab.Mercurial.hg_out")
+@mock.patch("mozphab.mozphab.Config")
+@mock.patch("mozphab.mozphab.os.path")
+@mock.patch("mozphab.mozphab.which")
+@mock.patch("mozphab.mozphab.read_json_field")
 def hg(
     m_read_json_field,
     m_which,

@@ -6,9 +6,7 @@ import argparse
 
 import pytest
 
-mozphab = imp.load_source(
-    "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
-)
+from mozphab import mozphab
 mozphab.SHOW_SPINNER = False
 
 
@@ -59,7 +57,7 @@ def test_prepare_body():
     )
 
 
-@mock.patch("mozphab.check_call")
+@mock.patch("mozphab.mozphab.check_call")
 def test_apply_patch(m_check_call):
     mozphab.apply_patch("diff", "x")
     m_check_call.assert_called_once()
@@ -75,21 +73,21 @@ def test_base_ref():
     assert mozphab.get_base_ref(diff) == "sha1"
 
 
-@mock.patch("mozphab.ConduitAPI.call")
-@mock.patch("mozphab.Git.is_worktree_clean")
-@mock.patch("mozphab.config")
-@mock.patch("mozphab.ConduitAPI.check")
-@mock.patch("mozphab.ConduitAPI.get_revisions")
-@mock.patch("mozphab.ConduitAPI.get_ancestor_phids")
-@mock.patch("mozphab.ConduitAPI.get_successor_phids")
-@mock.patch("mozphab.ConduitAPI.get_diffs")
-@mock.patch("mozphab.get_base_ref")
-@mock.patch("mozphab.Git.before_patch")
-@mock.patch("mozphab.apply_patch")
-@mock.patch("mozphab.prepare_body")
-@mock.patch("mozphab.Git.apply_patch")
-@mock.patch("mozphab.Git.check_node")
-@mock.patch("mozphab.logger")
+@mock.patch("mozphab.mozphab.ConduitAPI.call")
+@mock.patch("mozphab.mozphab.Git.is_worktree_clean")
+@mock.patch("mozphab.mozphab.config")
+@mock.patch("mozphab.mozphab.ConduitAPI.check")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_revisions")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_ancestor_phids")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_successor_phids")
+@mock.patch("mozphab.mozphab.ConduitAPI.get_diffs")
+@mock.patch("mozphab.mozphab.get_base_ref")
+@mock.patch("mozphab.mozphab.Git.before_patch")
+@mock.patch("mozphab.mozphab.apply_patch")
+@mock.patch("mozphab.mozphab.prepare_body")
+@mock.patch("mozphab.mozphab.Git.apply_patch")
+@mock.patch("mozphab.mozphab.Git.check_node")
+@mock.patch("mozphab.mozphab.logger")
 def test_patch(
     m_logger,
     m_git_check_node,

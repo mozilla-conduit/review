@@ -10,9 +10,7 @@ import uuid
 from callee import Contains
 
 
-mozphab = imp.load_source(
-    "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
-)
+from mozphab import mozphab
 mozphab.SHOW_SPINNER = False
 
 
@@ -54,9 +52,9 @@ class Commits(unittest.TestCase):
             self.fail("%s raised" % e)
         self.fail("%s failed to raise Error" % callableObj)
 
-    @mock.patch("mozphab.check_for_invalid_reviewers")
-    @mock.patch("mozphab.ConduitAPI.get_revisions")
-    @mock.patch("mozphab.ConduitAPI.whoami")
+    @mock.patch("mozphab.mozphab.check_for_invalid_reviewers")
+    @mock.patch("mozphab.mozphab.ConduitAPI.get_revisions")
+    @mock.patch("mozphab.mozphab.ConduitAPI.whoami")
     def test_commit_validation(self, m_whoami, m_get_revs, check_reviewers):
         check_reviewers.return_value = []
         repo = mozphab.Repository("", "", "dummy")
@@ -101,7 +99,7 @@ class Commits(unittest.TestCase):
         m_whoami.return_value = dict(phid="PHID-2")
         self._assertNoError(check, [commit(bug_id=1, rev_id=1)])
 
-    @mock.patch("mozphab.check_for_invalid_reviewers")
+    @mock.patch("mozphab.mozphab.check_for_invalid_reviewers")
     def test_invalid_reviewers_fails_the_stack_validation_check(self, check_reviewers):
         class Args:
             def __init__(self):
@@ -159,8 +157,8 @@ class Commits(unittest.TestCase):
             ),
         )
 
-    @mock.patch("mozphab.conduit.get_revisions")
-    @mock.patch("mozphab.check_for_invalid_reviewers")
+    @mock.patch("mozphab.mozphab.conduit.get_revisions")
+    @mock.patch("mozphab.mozphab.check_for_invalid_reviewers")
     def test_validate_duplicate_revision(self, check_reviewers, get_revisions):
         check_reviewers.return_value = []
         get_revisions.return_value = [True]
@@ -252,7 +250,7 @@ class Commits(unittest.TestCase):
             build(commit("1", None, title="Bug 1 - helper_bug2.html")),
         )
 
-    @mock.patch("mozphab.build_commit_title")
+    @mock.patch("mozphab.mozphab.build_commit_title")
     def test_update_commit_title_previews(self, m_build_commit_title):
         m_build_commit_title.side_effect = lambda x: x["title"] + " preview"
         commits = [dict(title="a"), dict(title="b")]
@@ -490,9 +488,9 @@ class Commits(unittest.TestCase):
         # r?one,two
         self.assertEqual("r?one", replace("r?one,two", reviewers_dict([["one"], []])))
 
-    @mock.patch("mozphab.ConduitAPI.get_revisions")
-    @mock.patch("mozphab.ConduitAPI.whoami")
-    @mock.patch("mozphab.logger")
+    @mock.patch("mozphab.mozphab.ConduitAPI.get_revisions")
+    @mock.patch("mozphab.mozphab.ConduitAPI.whoami")
+    @mock.patch("mozphab.mozphab.logger")
     def test_show_commit_stack(self, mock_logger, m_whoami, m_get_revisions):
         class Repository:
             phab_url = "http://phab"
@@ -642,7 +640,7 @@ class Commits(unittest.TestCase):
         )
         mock_logger.warning.assert_called_once_with(Contains("Commandeer"))
 
-    @mock.patch("mozphab.update_commit_title_previews")
+    @mock.patch("mozphab.mozphab.update_commit_title_previews")
     def test_update_commits_from_args(self, m_update_title):
         def lwr(revs):
             return [r.lower() for r in revs]
@@ -664,7 +662,7 @@ class Commits(unittest.TestCase):
         # No change if noreviewer  args provided
         commits = copy.deepcopy(_commits)
         commits[1]["reviewers"]["granted"].append("two")
-        with mock.patch("mozphab.config") as m_config:
+        with mock.patch("mozphab.mozphab.config") as m_config:
             m_config.always_blocking = False
             update(commits, Args())
             self.assertEqual(
@@ -740,7 +738,7 @@ class Commits(unittest.TestCase):
         # Forcing blocking reviewers
         commits = copy.deepcopy(_commits)
         commits[1]["reviewers"]["granted"].append("two")
-        with mock.patch("mozphab.config") as m_config:
+        with mock.patch("mozphab.mozphab.config") as m_config:
             m_config.always_blocking = True
             update(commits, Args())
             self.assertEqual(
@@ -793,7 +791,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
 
         self.assertListEqual(t, expected)
 
-    @mock.patch("mozphab.ConduitAPI.get_users")
+    @mock.patch("mozphab.mozphab.ConduitAPI.get_users")
     def test_update_revision_reviewers(self, m_get_users):
         # From https://phabricator.services.mozilla.com/api/differential.revision.edit
         #

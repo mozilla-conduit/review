@@ -8,9 +8,7 @@ import imp
 import mock
 import os
 
-mozphab = imp.load_source(
-    "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
-)
+from mozphab import mozphab
 
 mozphab.SHOW_SPINNER = False
 
@@ -20,9 +18,9 @@ class Args:
         self.lesscontext = less_context
 
 
-@mock.patch("mozphab.Git._file_size")
-@mock.patch("mozphab.Git._cat_file")
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git._file_size")
+@mock.patch("mozphab.mozphab.Git._cat_file")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_create(m_git_out, m_cat_file, m_file_size, git):
     raw = (
         "000000 100644 0000000000000000000000000000000000000000 "
@@ -51,9 +49,9 @@ def test_create(m_git_out, m_cat_file, m_file_size, git):
     assert change.cur_mode == "100644"
 
 
-@mock.patch("mozphab.Git._file_size")
-@mock.patch("mozphab.Git._cat_file")
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git._file_size")
+@mock.patch("mozphab.mozphab.Git._cat_file")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_change_file(m_git_out, m_cat_file, m_file_size, git):
     raw = (
         "100644 100644 78981922613b2afb6025042ff6bd878ac1994e85 "
@@ -105,9 +103,9 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
     assert change.old_path == "a"
 
 
-@mock.patch("mozphab.Git._file_size")
-@mock.patch("mozphab.Git._cat_file")
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git._file_size")
+@mock.patch("mozphab.mozphab.Git._cat_file")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_delete_file(m_git_out, m_cat_file, m_file_size, git):
     raw = (
         "100644 000000 61780798228d17af2d34fce4cfbdf35556832472 "
@@ -134,9 +132,9 @@ def test_delete_file(m_git_out, m_cat_file, m_file_size, git):
     )
 
 
-@mock.patch("mozphab.Git._file_size")
-@mock.patch("mozphab.Git._cat_file")
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git._file_size")
+@mock.patch("mozphab.mozphab.Git._cat_file")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_recognize_binary(m_git_out, m_cat_file, m_file_size, git):
     raw = (
         "000000 100644 0000000000000000000000000000000000000000 "
@@ -158,9 +156,9 @@ def test_recognize_binary(m_git_out, m_cat_file, m_file_size, git):
     assert not change.hunks
 
 
-@mock.patch("mozphab.Git._file_size")
-@mock.patch("mozphab.Git._cat_file")
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git._file_size")
+@mock.patch("mozphab.mozphab.Git._cat_file")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_recognize_long_text_as_binary(m_git_out, m_cat_file, m_file_size, git):
     raw = (
         "000000 100644 0000000000000000000000000000000000000000 "
@@ -182,9 +180,9 @@ def test_recognize_long_text_as_binary(m_git_out, m_cat_file, m_file_size, git):
     assert not change.hunks
 
 
-@mock.patch("mozphab.Git._file_size")
-@mock.patch("mozphab.Git._cat_file")
-@mock.patch("mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Git._file_size")
+@mock.patch("mozphab.mozphab.Git._cat_file")
+@mock.patch("mozphab.mozphab.Git.git_out")
 def test_less_context(m_git_out, m_cat_file, m_file_size, git):
     raw = (
         "100644 100644 78981922613b2afb6025042ff6bd878ac1994e85 "

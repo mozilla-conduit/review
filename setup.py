@@ -5,7 +5,12 @@ setup(
     version="0.1.66",
     author="Mozilla",
     author_email="conduit-team@mozilla.com",
-    scripts=["moz-phab"],
+    packages=["mozphab"],
+    entry_points={
+        'console_scripts': [
+            'moz-phab = mozphab.mozphab:run'
+        ]
+    },
     url="https://github.com/mozilla-conduit/review",
     license="Mozilla Public License 2.0",
     description="Phabricator review submission/management tool.",

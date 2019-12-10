@@ -2,9 +2,8 @@ import imp
 import os
 import unittest
 
-mozphab = imp.load_source(
-    "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
-)
+from mozphab import mozphab
+
 mozphab.SHOW_SPINNER = False
 
 

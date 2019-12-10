@@ -8,15 +8,12 @@ import pytest
 import subprocess
 import unittest
 
-mozphab = imp.load_source(
-    "mozphab", os.path.join(os.path.dirname(__file__), os.path.pardir, "moz-phab")
-)
-mozphab.SHOW_SPINNER = False
+from mozphab import mozphab
 
 
 class Helpers(unittest.TestCase):
     @mock.patch("builtins.open")
-    @mock.patch("mozphab.json")
+    @mock.patch("mozphab.mozphab.json")
     def test_read_json_field(self, m_json, m_open):
         m_open.side_effect = FileNotFoundError
         self.assertEqual(None, mozphab.read_json_field(["nofile"], ["not existing"]))
@@ -54,7 +51,7 @@ class Helpers(unittest.TestCase):
         )
 
     @mock.patch.object(builtins, "input")
-    @mock.patch("mozphab.sys")
+    @mock.patch("mozphab.mozphab.sys")
     def test_prompt(self, m_sys, m_input):
         input_response = None
 
@@ -86,7 +83,7 @@ class Helpers(unittest.TestCase):
         input_response = "abc"
         self.assertEqual("abc", mozphab.prompt(""))
 
-    @mock.patch("mozphab.probe_repo")
+    @mock.patch("mozphab.mozphab.probe_repo")
     def test_repo_from_args(self, m_probe):
         # TODO test walking the path
         repo = None
@@ -194,10 +191,10 @@ class Helpers(unittest.TestCase):
             ),
         )
 
-    @mock.patch("mozphab.os.access")
-    @mock.patch("mozphab.os.path")
-    @mock.patch("mozphab.os.environ")
-    @mock.patch("mozphab.which")
+    @mock.patch("mozphab.mozphab.os.access")
+    @mock.patch("mozphab.mozphab.os.path")
+    @mock.patch("mozphab.mozphab.os.environ")
+    @mock.patch("mozphab.mozphab.which")
     def test_which_path(self, m_which, _os_environ, m_os_path, m_os_access):
         m_os_path.exists.side_effect = (True, False)
         m_os_access.return_value = True
@@ -210,7 +207,7 @@ class Helpers(unittest.TestCase):
         m_which.assert_called_once_with(path)
 
 
-@mock.patch("mozphab.ConduitAPI.call")
+@mock.patch("mozphab.mozphab.ConduitAPI.call")
 def test_valid_reviewers_in_phabricator_returns_no_errors(call_conduit):
     # See https://phabricator.services.mozilla.com/api/user.search
     call_conduit.side_effect = (
@@ -231,7 +228,7 @@ def test_valid_reviewers_in_phabricator_returns_no_errors(call_conduit):
     assert [] == mozphab.check_for_invalid_reviewers(reviewers)
 
 
-@mock.patch("mozphab.ConduitAPI.call")
+@mock.patch("mozphab.mozphab.ConduitAPI.call")
 def test_disabled_reviewers(call_conduit):
     reviewers = dict(granted=[], request=["alice", "goober"])
     call_conduit.side_effect = (
@@ -247,7 +244,7 @@ def test_disabled_reviewers(call_conduit):
     assert expected_errors == mozphab.check_for_invalid_reviewers(reviewers)
 
 
-@mock.patch("mozphab.ConduitAPI.call")
+@mock.patch("mozphab.mozphab.ConduitAPI.call")
 def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
     ts = 1543622400
     ts_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
@@ -291,7 +288,7 @@ def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
     assert expected_errors == errors
 
 
-@mock.patch("mozphab.ConduitAPI.call")
+@mock.patch("mozphab.mozphab.ConduitAPI.call")
 def test_reviewer_case_sensitivity(call_conduit):
     reviewers = dict(granted=[], request=["Alice", "#uSeR-gRoUp"])
     call_conduit.side_effect = (
@@ -306,7 +303,7 @@ def test_reviewer_case_sensitivity(call_conduit):
     assert [] == mozphab.check_for_invalid_reviewers(reviewers)
 
 
-@mock.patch("mozphab.arc_out")
+@mock.patch("mozphab.mozphab.arc_out")
 def test_api_call_with_no_errors_returns_api_response_json(arc_out):
     # fmt: off
     arc_out.return_value = json.dumps(
@@ -330,7 +327,7 @@ def test_api_call_with_no_errors_returns_api_response_json(arc_out):
     )
 
 
-@mock.patch("mozphab.arc_out")
+@mock.patch("mozphab.mozphab.arc_out")
 def test_api_call_with_error_raises_exception(arc_out):
     arc_out.return_value = json.dumps(
         {
@@ -345,13 +342,13 @@ def test_api_call_with_error_raises_exception(arc_out):
         assert err.message == "**sad trombone**"
 
 
-@mock.patch("mozphab.arc_out")
+@mock.patch("mozphab.mozphab.arc_out")
 def test_arc_ping_with_invalid_certificate_returns_false(arc_out):
     arc_out.side_effect = mozphab.CommandError
     assert not mozphab.arc_ping("")
 
 
-@mock.patch("mozphab.check_call")
+@mock.patch("mozphab.mozphab.check_call")
 @mock.patch("os.path.exists")
 @mock.patch("os.makedirs")
 def test_install(_makedirs, m_exists, m_check_call):
@@ -370,7 +367,7 @@ def test_get_users_no_users():
     assert [] == conduit.get_users([])
 
 
-@mock.patch("mozphab.ConduitAPI.call")
+@mock.patch("mozphab.mozphab.ConduitAPI.call")
 def test_get_users_with_user(m_conduit):
     conduit = mozphab.conduit
 
@@ -406,7 +403,7 @@ def test_simple_cache():
 
 
 @mock.patch("subprocess.check_output")
-@mock.patch("mozphab.logger")
+@mock.patch("mozphab.mozphab.logger")
 def test_check_output(m_logger, m_check_output):
     m_check_output.side_effect = subprocess.CalledProcessError(
         cmd=["some", "cmd"], returncode=2, output="output msg", stderr="stderr msg"
@@ -430,7 +427,7 @@ def test_check_output(m_logger, m_check_output):
 
 
 @mock.patch.object(builtins, "input")
-@mock.patch("mozphab.sys")
+@mock.patch("mozphab.mozphab.sys")
 def test_prompt(m_sys, m_input):
     input_response = None
 
@@ -470,8 +467,8 @@ def test_fail_find_repo():
     assert mozphab.find_repo_root(path) is None
 
 
-@mock.patch("mozphab.Mercurial")
-@mock.patch("mozphab.Git")
+@mock.patch("mozphab.mozphab.Mercurial")
+@mock.patch("mozphab.mozphab.Git")
 def test_probe_repo(m_git, m_hg):
     m_hg.return_value = "HG"
 
@@ -485,7 +482,7 @@ def test_probe_repo(m_git, m_hg):
     assert mozphab.probe_repo("path") is None
 
 
-@mock.patch("mozphab.probe_repo")
+@mock.patch("mozphab.mozphab.probe_repo")
 def test_repo_from_args(m_probe):
     # TODO test walking the path
     repo = None
