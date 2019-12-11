@@ -11,6 +11,7 @@ from callee import Contains
 
 
 from mozphab import mozphab
+
 mozphab.SHOW_SPINNER = False
 
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from .conftest import create_temp_fn
 
 from mozphab import mozphab
+
 mozphab.SHOW_SPINNER = False
 
 

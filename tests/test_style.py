@@ -9,8 +9,8 @@ ROOT = Path(__file__).resolve().parent.parent
 PY_FILES = sorted(
     [
         str(f)
-        for f in [ROOT / "moz-phab"]
-        + list(ROOT.glob("*.py"))
+        for f in list(ROOT.glob("*.py"))
+        + list((ROOT / "mozphab").glob("*.py"))
         + list((ROOT / "tests").glob("*.py"))
     ]
 )

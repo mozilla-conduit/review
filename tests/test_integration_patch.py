@@ -10,6 +10,7 @@ import time
 from .conftest import hg_out, git_out
 
 from mozphab import mozphab
+
 mozphab.SHOW_SPINNER = False
 
 

@@ -6,11 +6,7 @@ setup(
     author="Mozilla",
     author_email="conduit-team@mozilla.com",
     packages=["mozphab"],
-    entry_points={
-        'console_scripts': [
-            'moz-phab = mozphab.mozphab:run'
-        ]
-    },
+    entry_points={"console_scripts": ["moz-phab = mozphab.mozphab:run"]},
     url="https://github.com/mozilla-conduit/review",
     license="Mozilla Public License 2.0",
     description="Phabricator review submission/management tool.",

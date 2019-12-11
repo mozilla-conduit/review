@@ -9,6 +9,7 @@ import os
 from .conftest import hg_out
 
 from mozphab import mozphab
+
 mozphab.SHOW_SPINNER = False
 
 

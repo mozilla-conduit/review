@@ -12,6 +12,7 @@ from callee import Contains
 from .conftest import git_out
 
 from mozphab import mozphab
+
 mozphab.SHOW_SPINNER = False
 
 

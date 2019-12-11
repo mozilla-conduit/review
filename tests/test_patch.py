@@ -7,6 +7,7 @@ import argparse
 import pytest
 
 from mozphab import mozphab
+
 mozphab.SHOW_SPINNER = False
 
 

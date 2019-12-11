@@ -11,6 +11,7 @@ from callee import Contains
 from .conftest import hg_out
 
 from mozphab import mozphab
+
 mozphab.SHOW_SPINNER = False
 
 # Fail if arc ping is called

@@ -8,6 +8,7 @@ from distutils.version import LooseVersion
 from .conftest import create_temp_fn
 
 from mozphab import mozphab
+
 mozphab.SHOW_SPINNER = False
 
 
