@@ -7,7 +7,7 @@ from distutils.version import LooseVersion
 
 from .conftest import create_temp_fn
 
-from mozphab import mozphab
+from mozphab import exceptions, mozphab
 
 mozphab.SHOW_SPINNER = False
 
@@ -21,7 +21,7 @@ def test_get_successor(m_hg_hg_out, hg):
     assert ["1", "abcde"] == hg._get_successor("x")
 
     m_hg_hg_out.return_value = ["a", "b"]
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         hg._get_successor("x")
 
 
@@ -99,7 +99,7 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
             self.end_rev = end
             self.safe_mode = safe_mode
 
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         hg.set_args(Args())
 
     # baseline config
@@ -162,7 +162,7 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
     assert "123456789012::098765432109" == hg.revset
 
     m_hg_hg_log.side_effect = IndexError
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         hg.set_args(Args())
 
 
@@ -272,7 +272,7 @@ def test_is_node(m_hg_out, hg):
     assert hg.is_node("aabbcc")
     m_hg_out.assert_called_once_with(["identify", "-q", "-r", "aabbcc"])
 
-    m_hg_out.side_effect = mock.Mock(side_effect=mozphab.CommandError)
+    m_hg_out.side_effect = mock.Mock(side_effect=exceptions.CommandError)
     assert not hg.is_node("aaa")
 
 
@@ -283,7 +283,7 @@ def test_check_node(m_is_node, hg):
     assert node == hg.check_node(node)
 
     m_is_node.return_value = False
-    with pytest.raises(mozphab.NotFoundError) as e:
+    with pytest.raises(exceptions.NotFoundError) as e:
         hg.check_node(node)
 
     assert "" == str(e.value)
@@ -495,7 +495,7 @@ def test_check_vcs(hg):
     assert hg.check_vcs()
 
     hg._phab_vcs = "git"
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         hg.check_vcs()
 
     hg.args = Args(force_vcs=True)

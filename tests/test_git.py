@@ -8,14 +8,14 @@ from pathlib import Path
 
 from .conftest import create_temp_fn
 
-from mozphab import mozphab
+from mozphab import exceptions, mozphab
 
 mozphab.SHOW_SPINNER = False
 
 
 @mock.patch("mozphab.mozphab.Git.git_out")
 def test_cherry(m_git_git_out, git):
-    m_git_git_out.side_effect = (mozphab.CommandError, ["output"])
+    m_git_git_out.side_effect = (exceptions.CommandError, ["output"])
     assert git._cherry(["cherry"], ["one", "two"]) == ["output"]
     m_git_git_out.assert_has_calls(
         [mock.call(["cherry", "one"]), mock.call(["cherry", "two"])]
@@ -39,7 +39,7 @@ def test_first_unpublished(m_config, m_git_cherry, m_git_git_out, git):
     assert "sha2" == first()
     m_git_cherry.assert_called_with(["cherry", "--abbrev=12"], ["a", "b"])
     assert first() is None
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         first()
 
     m_git_cherry.side_effect = ([],)
@@ -56,7 +56,7 @@ def test_first_unpublished(m_config, m_git_cherry, m_git_git_out, git):
 
     m_git_cherry.side_effect = (["+ %s" % i for i in range(101)],)
     m_git_git_out.side_effect = (["origin"],)
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         first()
 
 
@@ -204,7 +204,7 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
             self.end_rev = end
             self.safe_mode = safe_mode
 
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         git.set_args(Args())
 
     git._git = []
@@ -290,18 +290,18 @@ def test_check_node(m_phab_vcs, m_git_is_node, m_hg2git, git):
     git._phab_vcs = "hg"
     git._cinnabar_installed = False
     m_git_is_node.return_value = False
-    with pytest.raises(mozphab.NotFoundError) as e:
+    with pytest.raises(exceptions.NotFoundError) as e:
         git.check_node(node)
     assert "Cinnabar extension not enabled" in str(e.value)
 
     git._cinnabar_installed = True
     m_hg2git.return_value = "0" * 40
-    with pytest.raises(mozphab.NotFoundError) as e:
+    with pytest.raises(exceptions.NotFoundError) as e:
         git.check_node(node)
     assert "Mercurial SHA1 not found" in str(e.value)
 
     m_hg2git.return_value = "git_aabbcc"
-    with pytest.raises(mozphab.NotFoundError) as e:
+    with pytest.raises(exceptions.NotFoundError) as e:
         git.check_node(node)
     assert "Mercurial SHA1 detected, but commit not found" in str(e.value)
 
@@ -398,7 +398,7 @@ def test_is_node(m_git_out, git):
     m_git_out.return_value = "something else"
     assert not git.is_node("aaa")
 
-    m_git_out.side_effect = mozphab.CommandError
+    m_git_out.side_effect = exceptions.CommandError
     assert not git.is_node("aaa")
 
 
@@ -496,7 +496,7 @@ def test_check_vcs(git):
     assert git.check_vcs()
 
     git._cinnabar_installed = False
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         git.check_vcs()
 
     git.args = Args(force_vcs=True)

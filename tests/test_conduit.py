@@ -11,7 +11,7 @@ import pytest
 from contextlib import contextmanager
 from frozendict import frozendict
 
-from mozphab import mozphab
+from mozphab import exceptions, mozphab
 
 
 class Repo:
@@ -32,7 +32,7 @@ def test_set_args_from_repo():
 def test_load_api_token(m_read):
     m_read.return_value = False
     mozphab.conduit.set_repo(Repo())
-    with pytest.raises(mozphab.ConduitAPIError):
+    with pytest.raises(exceptions.ConduitAPIError):
         mozphab.conduit.load_api_token()
 
     m_read.return_value = "x"
@@ -85,7 +85,7 @@ def test_call(m_token, m_Connect):
 
     conn.getresponse.return_value = StringIO('{"error_info": "x", "error_code": 1}')
 
-    with pytest.raises(mozphab.ConduitAPIError):
+    with pytest.raises(exceptions.ConduitAPIError):
         mozphab.conduit.call("method", dict(call="args"))
 
 
@@ -94,10 +94,10 @@ def test_ping(m_call):
     m_call.return_value = {}
     assert mozphab.conduit.ping()
 
-    m_call.side_effect = mozphab.ConduitAPIError
+    m_call.side_effect = exceptions.ConduitAPIError
     assert not mozphab.conduit.ping()
 
-    m_call.side_effect = mozphab.CommandError
+    m_call.side_effect = exceptions.CommandError
     assert not mozphab.conduit.ping()
 
 

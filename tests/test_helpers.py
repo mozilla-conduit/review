@@ -8,7 +8,7 @@ import pytest
 import subprocess
 import unittest
 
-from mozphab import mozphab
+from mozphab import exceptions, mozphab
 
 
 class Helpers(unittest.TestCase):
@@ -97,7 +97,7 @@ class Helpers(unittest.TestCase):
             def __init__(self, path=None):
                 self.path = path
 
-        with self.assertRaises(mozphab.Error):
+        with self.assertRaises(exceptions.Error):
             mozphab.repo_from_args(Args(path="some path"))
 
         repo = mock.MagicMock()
@@ -337,14 +337,14 @@ def test_api_call_with_error_raises_exception(arc_out):
         }
     )
 
-    with pytest.raises(mozphab.ConduitAPIError) as err:
+    with pytest.raises(exceptions.ConduitAPIError) as err:
         mozphab.arc_call_conduit("my.method", {}, "")
         assert err.message == "**sad trombone**"
 
 
 @mock.patch("mozphab.mozphab.arc_out")
 def test_arc_ping_with_invalid_certificate_returns_false(arc_out):
-    arc_out.side_effect = mozphab.CommandError
+    arc_out.side_effect = exceptions.CommandError
     assert not mozphab.arc_ping("")
 
 
@@ -408,7 +408,7 @@ def test_check_output(m_logger, m_check_output):
     m_check_output.side_effect = subprocess.CalledProcessError(
         cmd=["some", "cmd"], returncode=2, output="output msg", stderr="stderr msg"
     )
-    with pytest.raises(mozphab.CommandError) as e:
+    with pytest.raises(exceptions.CommandError) as e:
         mozphab.check_output(["command"])
 
     assert e.value.status == 2
@@ -496,7 +496,7 @@ def test_repo_from_args(m_probe):
         def __init__(self, path=None):
             self.path = path
 
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         mozphab.repo_from_args(Args(path="some path"))
 
     repo = mock.MagicMock()

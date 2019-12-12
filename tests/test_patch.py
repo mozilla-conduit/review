@@ -6,7 +6,7 @@ import argparse
 
 import pytest
 
-from mozphab import mozphab
+from mozphab import exceptions, mozphab
 
 mozphab.SHOW_SPINNER = False
 
@@ -111,7 +111,7 @@ def test_patch(
 
     m_git_check_conduit.return_value = False
     m_config.arc_command = "arc"
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         mozphab.patch(git, None)
 
     class Args:
@@ -138,12 +138,12 @@ def test_patch(
     git.args = Args()
     m_git_check_conduit.return_value = True
     m_git_is_worktree_clean.return_value = False
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         mozphab.patch(git, git.args)
 
     m_git_is_worktree_clean.return_value = True
     m_get_revisions.return_value = []
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         mozphab.patch(git, git.args)
 
     m_config.always_full_stack = False
@@ -217,7 +217,7 @@ def test_patch(
     )
 
     m_get_base_ref.return_value = None
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         mozphab.patch(git, git.args)
 
     m_get_base_ref.return_value = "sha111"
@@ -286,7 +286,7 @@ def test_patch(
     }
     m_call_conduit.side_effect = ("raw",)
     git.args = Args()
-    with pytest.raises(mozphab.Error):
+    with pytest.raises(exceptions.Error):
         mozphab.patch(git, git.args)
 
     m_git_apply_patch.reset_mock()
@@ -314,9 +314,9 @@ def test_patch(
 
     # node not found
     m_get_revisions.side_effect = None
-    m_git_check_node.side_effect = mozphab.NotFoundError
+    m_git_check_node.side_effect = exceptions.NotFoundError
     git.args = Args(apply_to=node)
-    with pytest.raises(mozphab.Error) as e:
+    with pytest.raises(exceptions.Error) as e:
         mozphab.patch(git, git.args)
         assert "Unknown revision: %s\nERROR" % node in e.msg
 

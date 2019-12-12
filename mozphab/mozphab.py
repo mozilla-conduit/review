@@ -45,6 +45,14 @@ from shlex import quote
 from shutil import which
 from http.client import HTTPConnection, HTTPSConnection
 
+from .exceptions import (
+    CommandError,
+    ConduitAPIError,
+    Error,
+    NonLinearException,
+    NotFoundError,
+)
+
 # Known Issues
 # - reordering, folding, etc commits doesn't result in the stack being updated
 #   correctly on phabricator, or may outright fail due to dependency loops.
@@ -529,30 +537,6 @@ def wait_message(message):
         if sig_int.triggered:
             print("Cancelled")
             sys.exit(3)
-
-
-class Error(Exception):
-    """Errors thrown explictly by this script; won't generate a stack trace."""
-
-
-class NotFoundError(Exception):
-    """Errors raised when node is not found."""
-
-
-class NonLinearException(Exception):
-    """Errors raised when multiple children or parents found."""
-
-
-class CommandError(Exception):
-    status = None
-
-    def __init__(self, msg="", status=1):
-        self.status = status
-        super().__init__(msg)
-
-
-class ConduitAPIError(Error):
-    """Raised when the Phabricator Conduit API returns an error response."""
 
 
 #

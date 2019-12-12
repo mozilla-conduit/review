@@ -9,8 +9,7 @@ import uuid
 
 from callee import Contains
 
-
-from mozphab import mozphab
+from mozphab import exceptions, mozphab
 
 mozphab.SHOW_SPINNER = False
 
@@ -39,13 +38,13 @@ class Commits(unittest.TestCase):
     def _assertNoError(self, callableObj, *args, **kwargs):
         try:
             callableObj(*args, **kwargs)
-        except mozphab.Error as e:
+        except exceptions.Error as e:
             self.fail("%s raised" % e)
 
     def _assertError(self, callableObj, expected, *args, **kwargs):
         try:
             callableObj(*args, **kwargs)
-        except mozphab.Error as e:
+        except exceptions.Error as e:
             if expected != str(e).strip():
                 self.fail("%s not raised" % expected)
             return

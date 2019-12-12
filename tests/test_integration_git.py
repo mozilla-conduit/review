@@ -11,7 +11,7 @@ import pytest
 from callee import Contains
 from .conftest import git_out
 
-from mozphab import mozphab
+from mozphab import exceptions, mozphab
 
 mozphab.SHOW_SPINNER = False
 
@@ -684,7 +684,7 @@ Differential Revision: http://example.test/D124
     )
     git_out("commit", "--all", "--file", "./msg")
 
-    with pytest.raises(mozphab.Error) as excinfo:
+    with pytest.raises(exceptions.Error) as excinfo:
         mozphab.main(
             ["submit", "--yes"]
             + ["--bug", "1"]
