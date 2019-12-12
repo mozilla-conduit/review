@@ -683,3 +683,54 @@ Differential Revision: http://example.test/D124
             + [init_sha]
         )
     assert "query result for revision D124" in str(excinfo.value)
+
+
+def test_empty_file(in_process, git_repo_path, init_sha):
+    # Add an empty file
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    testfile = git_repo_path / "X"
+    testfile.touch()
+    git_out("add", ".")
+    git_out("commit", "--message", "A")
+
+    mozphab.main(["submit", "--yes", "--bug", "1", init_sha])
+
+    log = git_out("log", "--format=%s%n%n%b", "-1")
+    expected = """
+Bug 1 - A
+
+Differential Revision: http://example.test/D123
+"""
+    assert log.strip() == expected.strip()
+
+    # Rempve an empty file
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-2", diffid="2")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="124")),
+    )
+    testfile.unlink()
+    git_out("commit", "-a", "--message", "B")
+    mozphab.main(["submit", "--yes", "--bug", "1", "HEAD~"])
+    log = git_out("log", "--format=%s%n%n%b", "-1")
+    expected = """
+Bug 1 - B
+
+Differential Revision: http://example.test/D124
+"""
+    assert log.strip() == expected.strip()

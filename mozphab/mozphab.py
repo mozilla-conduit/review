@@ -3377,7 +3377,7 @@ class Git(Repository):
                 lines = b_body.splitlines(True)
                 lines = ["+%s" % l for l in lines]
                 new_len = len(lines)
-                if not lines[-1].endswith("\n"):
+                if lines and not lines[-1].endswith("\n"):
                     lines[-1] = "{}\n".format(lines[-1])
                     lines.append("\\ No newline at end of file\n")
 
@@ -3389,7 +3389,7 @@ class Git(Repository):
                 lines = a_body.splitlines(True)
                 lines = ["-%s" % l for l in lines]
                 old_len = len(lines)
-                if not lines[-1].endswith("\n"):
+                if lines and not lines[-1].endswith("\n"):
                     lines[-1] = "{}\n".format(lines[-1])
                     lines.append("\\ No newline at end of file\n")
 
