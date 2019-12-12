@@ -515,7 +515,7 @@ class Commits(unittest.TestCase):
         mozphab.show_commit_stack(
             [{"name": "aaa000", "title-preview": "A"}], validate=False
         )
-        mock_logger.info.assert_called_with("(New) aaa000 A")
+        mock_logger.info.assert_called_with("%s %s %s", "(New)", "aaa000", "A")
         self.assertFalse(
             mock_logger.warning.called, "logger.warning() shouldn't be called"
         )
@@ -525,7 +525,7 @@ class Commits(unittest.TestCase):
             [{"name": "aaa000", "title-preview": "A", "rev-id": "12", "bug-id": "1"}],
             validate=False,
         )
-        mock_logger.info.assert_called_with("(D12) aaa000 A")
+        mock_logger.info.assert_called_with("%s %s %s", "(D12)", "aaa000", "A")
         self.assertFalse(
             mock_logger.warning.called, "logger.warning() shouldn't be called"
         )
@@ -540,7 +540,10 @@ class Commits(unittest.TestCase):
         )
         self.assertEqual(2, mock_logger.info.call_count)
         self.assertEqual(
-            [mock.call("(New) bbb000 B"), mock.call("(New) aaa000 A")],
+            [
+                mock.call("%s %s %s", "(New)", "bbb000", "B"),
+                mock.call("%s %s %s", "(New)", "aaa000", "A"),
+            ],
             mock_logger.info.call_args_list,
         )
         mock_logger.reset_mock()
@@ -557,8 +560,8 @@ class Commits(unittest.TestCase):
             ],
             validate=True,
         )
-        mock_logger.info.assert_called_with("(New) aaa000 A")
-        mock_logger.warning.assert_called_with("!! Bug ID changed from 2 to 1")
+        mock_logger.info.assert_called_with("%s %s %s", "(New)", "aaa000", "A")
+        mock_logger.warning.assert_called_with("!! Bug ID changed from %s to %s", 2, 1)
         mock_logger.reset_mock()
 
         mozphab.show_commit_stack(
@@ -581,7 +584,7 @@ class Commits(unittest.TestCase):
             validate=False,
             show_rev_urls=True,
         )
-        mock_logger.warning.assert_called_with("-> http://phab/D123")
+        mock_logger.warning.assert_called_with("-> %s/D%s", "http://phab", "123")
 
         m_get_revisions.reset_mock()
         m_get_revisions.return_value = [
@@ -619,7 +622,7 @@ class Commits(unittest.TestCase):
             validate=True,
         )
         assert mock_logger.warning.call_args_list[1] == mock.call(
-            "!! Bug ID in Phabricator revision will be changed from 1 to 2"
+            "!! Bug ID in Phabricator revision will be changed from %s to %s", "1", "2"
         )
         assert m_get_revisions.call_count == 3
         mock_logger.reset_mock()

@@ -240,7 +240,7 @@ def which_path(path):
         and os.access(path, os.F_OK | os.X_OK)
         and not os.path.isdir(path)
     ):
-        logger.debug("Path found: {}".format(path))
+        logger.debug("Path found: %s", path)
         return path
 
     return which(path)
@@ -253,7 +253,7 @@ def parse_zulu_time(timestamp):
 
 def check_call(command, **kwargs):
     # wrapper around subprocess.check_call with debug output
-    logger.debug("$ %s" % " ".join(quote(s) for s in command))
+    logger.debug("$ %s", " ".join(quote(s) for s in command))
     try:
         subprocess.check_call(command, **kwargs)
     except subprocess.CalledProcessError as e:
@@ -264,7 +264,7 @@ def check_call(command, **kwargs):
 
 def check_call_by_line(command, cwd=None, never_log=False):
     # similar to check_call, yields for line-by-line processing
-    logger.debug("$ %s" % " ".join(quote(s) for s in command))
+    logger.debug("$ %s", " ".join(quote(s) for s in command))
 
     # Connecting the STDIN to the PIPE will make arc throw an exception on reading
     # user input
@@ -279,7 +279,7 @@ def check_call_by_line(command, cwd=None, never_log=False):
         for line in iter(process.stdout.readline, ""):
             line = line.rstrip()
             if not never_log:
-                logger.debug("> %s" % line)
+                logger.debug("> %s", line)
             yield line
     finally:
         process.stdout.close()
@@ -306,7 +306,7 @@ def check_output(
     expect_binary=False,
 ):
     # wrapper around subprocess.check_output with debug output and splitting
-    logger.debug("$ %s" % " ".join(quote(s) for s in command))
+    logger.debug("$ %s", " ".join(quote(s) for s in command))
     kwargs = dict(cwd=cwd, stdin=stdin, stderr=stderr)
     if not expect_binary:
         kwargs["universal_newlines"] = True
@@ -333,7 +333,7 @@ def check_output(
         )
 
     if expect_binary:
-        logger.debug("%s bytes of data received" % len(output))
+        logger.debug("%s bytes of data received", len(output))
         return output
 
     if strip:
@@ -610,7 +610,7 @@ class Config(object):
 
     def write(self):
         if os.path.exists(self._filename):
-            logger.debug("updating %s" % self._filename)
+            logger.debug("updating %s", self._filename)
             self._set("submit", "auto_submit", self.auto_submit)
             self._set("patch", "always_full_stack", self.always_full_stack)
             self._set("updater", "self_last_check", self.self_last_check)
@@ -618,7 +618,7 @@ class Config(object):
             self._set("updater", "self_auto_update", self.self_auto_update)
 
         else:
-            logger.debug("creating %s" % self._filename)
+            logger.debug("creating %s", self._filename)
             self._set("ui", "no_ansi", self.no_ansi)
             self._set("vcs", "safe_mode", self.safe_mode)
             self._set("git", "remote", ", ".join(self.git_remote))
@@ -696,7 +696,7 @@ class ConduitAPI:
             ConduitAPIError if the API threw an error back at us.
         """
         url = urllib.parse.urlparse(urllib.parse.urljoin(self.repo.api_url, api_method))
-        logger.debug("%s %s" % (url.geturl(), api_call_args))
+        logger.debug("%s %s", url.geturl(), api_call_args)
 
         api_call_args = api_call_args.copy()
         api_call_args["__conduit__"] = {"token": self.load_api_token()}
@@ -1489,7 +1489,7 @@ def get_arcrc_path():
     else:
         arcrc = os.path.expanduser("~/.arcrc")
         if os.path.isfile(arcrc) and stat.S_IMODE(os.stat(arcrc).st_mode) != 0o600:
-            logger.debug("Changed file permissions on the {} file.".format(arcrc))
+            logger.debug("Changed file permissions on the %s file.", arcrc)
             os.chmod(arcrc, 0o600)
 
     cache.set("arcrc", arcrc)
@@ -1828,7 +1828,7 @@ class Mercurial(Repository):
         dot_path = os.path.join(path, ".hg")
         if not os.path.isdir(dot_path):
             raise ValueError("%s: not a hg repository" % path)
-        logger.debug("found hg repo in %s" % path)
+        logger.debug("found hg repo in %s", path)
 
         super().__init__(path, dot_path)
         self.vcs = "hg"
@@ -2143,7 +2143,7 @@ class Mercurial(Repository):
                     "If you continue with `--force-delete` the %s" % msg
                 )
             else:
-                logger.warning("`--force-delete` used. The %s" % msg)
+                logger.warning("`--force-delete` used. The %s", msg)
 
         return commits
 
@@ -2181,7 +2181,7 @@ class Mercurial(Repository):
             with wait_message("Checking out %s.." % short_node(node)):
                 self.checkout(node)
             if not self.args.raw:
-                logger.info("Checked out %s" % short_node(node))
+                logger.info("Checked out %s", short_node(node))
 
         if name and config.create_bookmark and not self.args.no_bookmark:
             bookmarks = self.hg_out(["bookmarks", "-T", "{bookmark}\n"])
@@ -2193,7 +2193,7 @@ class Mercurial(Repository):
 
             self.hg(["bookmark", bookmark_name])
             if not self.args.raw:
-                logger.info("Bookmark set to %s" % bookmark_name)
+                logger.info("Bookmark set to %s", bookmark_name)
 
     def apply_patch(self, diff, body, author, author_date):
         commands = []
@@ -2243,7 +2243,7 @@ class Mercurial(Repository):
             ["log", "-T", "{desc}", "-r", commit["node"]], split=False
         )
         if current_body == updated_body:
-            logger.debug("not amending commit %s, unchanged" % commit["name"])
+            logger.debug("not amending commit %s, unchanged", commit["name"])
             return False
 
         # Find our position in the stack.
@@ -2358,8 +2358,9 @@ class Mercurial(Repository):
             (phase, node) = parent.split(" ", 1)
             if phase != "public":
                 logger.warning(
-                    "%s is based off non-public commit %s"
-                    % (short_node(ancestor), short_node(node))
+                    "%s is based off non-public commit %s",
+                    short_node(ancestor),
+                    short_node(node),
                 )
 
         # Can't submit merge requests.
@@ -2600,9 +2601,9 @@ class Mercurial(Repository):
 
                 if file_size > MAX_CONTEXT_SIZE / 2:
                     logger.debug(
-                        "Splitting the diff (size: {size}) took {delta}s".format(
-                            size=file_size, delta=time.process_time() - start
-                        )
+                        "Splitting the diff (size: %s) took %ss",
+                        file_size,
+                        time.process_time() - start,
                     )
 
                 old_off, new_off, old_len, new_len = Diff.parse_git_diff(lines.pop(0))
@@ -2689,7 +2690,7 @@ class Git(Repository):
         if not os.path.exists(dot_path):
             raise ValueError("%s: not a git repository" % path)
 
-        logger.debug("found git repo in %s" % path)
+        logger.debug("found git repo in %s", path)
 
         self._git = GIT_COMMAND[:]
         if not which_path(self._git[0]):
@@ -2849,7 +2850,7 @@ class Git(Repository):
             return self.git_out(command)
 
         for remote in remotes:
-            logger.info('Determining the commit range using upstream "%s"' % remote)
+            logger.info('Determining the commit range using upstream "%s"', remote)
 
             try:
                 response = self.git_out(command + [remote])
@@ -2867,9 +2868,7 @@ class Git(Repository):
         elif not remotes:
             remotes = self.git_out(["remote"])
             if len(remotes) > 1:
-                logger.warning(
-                    "!! Found multiple upstreams (%s)." % (", ".join(remotes))
-                )
+                logger.warning("!! Found multiple upstreams (%s).", ", ".join(remotes))
 
         unpublished = self._cherry(cherry, remotes)
         if unpublished is None:
@@ -2897,8 +2896,8 @@ class Git(Repository):
                 return line.split("+ ")[1]
             else:
                 logger.warning(
-                    "!! Diff from commit %s found in upstream - omitting."
-                    % line.split("- ")[1]
+                    "!! Diff from commit %s found in upstream - omitting.",
+                    line.split("- ")[1],
                 )
 
     def set_args(self, args):
@@ -3179,7 +3178,7 @@ class Git(Repository):
         if node:
             with wait_message("Checking out %s.." % short_node(node)):
                 self.checkout(node)
-            logger.info("Checked out %s" % short_node(node))
+            logger.info("Checked out %s", short_node(node))
 
         if name and not self.args.no_branch:
             branches = self.git_out(["branch", "--list", "%s*" % name])
@@ -3191,7 +3190,7 @@ class Git(Repository):
                 branch_name = "%s_%s" % (name, i)
 
             self.git(["checkout", "-q", "-b", branch_name])
-            logger.info("Created branch %s" % branch_name)
+            logger.info("Created branch %s", branch_name)
 
     def apply_patch(self, diff, body, author, author_date):
         # apply the patch as a binary file to ensure the correct line endings
@@ -3255,7 +3254,7 @@ class Git(Repository):
             ["show", "-s", "--format=%s%n%b", commit["node"]], split=False
         )
         if current_body == updated_body:
-            logger.debug("not amending commit %s, unchanged" % commit["name"])
+            logger.debug("not amending commit %s, unchanged", commit["name"])
             return
 
         # Create a new commit with the updated body.
@@ -3596,7 +3595,7 @@ def augment_commits_from_body(commits):
         bug_ids = parse_bugs(commit["title"])
         if bug_ids:
             if len(bug_ids) > 1:
-                logger.warning("Multiple bug-IDs found, using %s" % bug_ids[0])
+                logger.warning("Multiple bug-IDs found, using %s", bug_ids[0])
             commit["bug-id"] = bug_ids[0]
         else:
             commit["bug-id"] = None
@@ -3729,12 +3728,13 @@ def show_commit_stack(
         else:
             action = action_template % "New"
 
-        logger.info("%s %s %s" % (action, commit["name"], commit["title-preview"]))
+        logger.info("%s %s %s", action, commit["name"], commit["title-preview"])
         if validate:
             if change_bug_id:
                 logger.warning(
-                    "!! Bug ID in Phabricator revision will be changed from %s to %s"
-                    % (revision["fields"]["bugzilla.bug-id"], commit["bug-id"])
+                    "!! Bug ID in Phabricator revision will be changed from %s to %s",
+                    revision["fields"]["bugzilla.bug-id"],
+                    commit["bug-id"],
                 )
 
             if not is_author:
@@ -3750,8 +3750,9 @@ def show_commit_stack(
 
             if commit["bug-id-orig"] and commit["bug-id"] != commit["bug-id-orig"]:
                 logger.warning(
-                    "!! Bug ID changed from %s to %s"
-                    % (commit["bug-id-orig"], commit["bug-id"])
+                    "!! Bug ID changed from %s to %s",
+                    commit["bug-id-orig"],
+                    commit["bug-id"],
                 )
 
             if (
@@ -3761,7 +3762,7 @@ def show_commit_stack(
                 logger.warning("!! Missing reviewers")
 
         if show_rev_urls and commit["rev-id"]:
-            logger.warning("-> %s/D%s" % (conduit.repo.phab_url, commit["rev-id"]))
+            logger.warning("-> %s/D%s", conduit.repo.phab_url, commit["rev-id"])
 
 
 def check_for_invalid_reviewers(reviewers):
@@ -3965,7 +3966,8 @@ def install_certificate(repo, args):
     The response is saved in the ~/.arcrc file."""
     logger.info(
         "LOGIN TO PHABRICATOR\nOpen this page in your browser and login "
-        "to Phabricator if necessary:\n\n%s/conduit/login/\n" % conduit.repo.phab_url
+        "to Phabricator if necessary:\n\n%s/conduit/login/\n",
+        conduit.repo.phab_url,
     )
     token = prompt("Paste API Token from that page: ")
     conduit.save_api_token(token)
@@ -4182,12 +4184,10 @@ def submit(repo, args):
     if not commits:
         raise Error("Failed to find any commits to submit")
     logger.warning(
-        "Submitting %s commit%s %s:"
-        % (
-            len(commits),
-            "" if len(commits) == 1 else "s",
-            "as Work In Progress" if args.wip else "for review",
-        )
+        "Submitting %s commit%s %s:",
+        len(commits),
+        "" if len(commits) == 1 else "s",
+        "as Work In Progress" if args.wip else "for review",
     )
 
     with wait_message("Loading commits.."):
@@ -4206,19 +4206,20 @@ def submit(repo, args):
     except Error as e:
         if not args.force:
             raise Error("Unable to submit commits:\n\n%s" % e)
-        logger.error("Ignoring issues found with commits:\n\n%s" % e)
+        logger.error("Ignoring issues found with commits:\n\n%s", e)
 
     # Show a warning if there are untracked files.
     if config.warn_untracked:
         untracked = repo.untracked()
         if untracked:
             logger.warning(
-                "Warning: found %s untracked file%s (will not be submitted):"
-                % (len(untracked), "" if len(untracked) == 1 else "s")
+                "Warning: found %s untracked file%s (will not be submitted):",
+                len(untracked),
+                "" if len(untracked) == 1 else "s",
             )
             if len(untracked) <= 5:
                 for filename in untracked:
-                    logger.info("  %s" % filename)
+                    logger.info("  %s", filename)
 
     # Show a warning if -m is used and there are new commits.
     if args.message and any([c for c in commits if not c["rev-id"]]):
@@ -4232,7 +4233,7 @@ def submit(repo, args):
         pass
     elif config.auto_submit and not args.interactive:
         logger.info(
-            "Automatically submitting (as per submit.auto_submit in %s)" % config.name
+            "Automatically submitting (as per submit.auto_submit in %s)", config.name
         )
     else:
         res = prompt(
@@ -4273,11 +4274,11 @@ def submit(repo, args):
 
         # Let the user know something's happening.
         if is_update:
-            logger.info("\nUpdating revision D%s:" % commit["rev-id"])
+            logger.info("\nUpdating revision D%s:", commit["rev-id"])
         else:
             logger.info("\nCreating new revision:")
 
-        logger.info("%s %s" % (commit["name"], commit["title-preview"]))
+        logger.info("%s %s", commit["name"], commit["title-preview"])
         repo.checkout(commit["node"])
 
         # WIP submissions shouldn't set reviewers on phabricator.
@@ -4435,15 +4436,15 @@ def update_arc():
     """Write the last check and update arc."""
 
     def update_repo(name, path):
-        logger.info("Updating %s..." % name)
+        logger.info("Updating %s...", name)
         rev = check_output(GIT_COMMAND + ["rev-parse", "HEAD"], split=False, cwd=path)
         check_call(GIT_COMMAND + ["pull", "--quiet"], cwd=path)
         if rev != check_output(
             GIT_COMMAND + ["rev-parse", "HEAD"], split=False, cwd=path
         ):
-            logger.info("%s updated" % name)
+            logger.info("%s updated", name)
         else:
-            logger.info("Update of %s not required" % name)
+            logger.info("Update of %s not required", name)
 
     if not which_path(GIT_COMMAND[0]):
         raise Error(
@@ -4479,7 +4480,7 @@ def get_pypi_version():
 
 def log_current_version(_):
     dist = get_installed_distribution()
-    logger.info("{} ({})".format(dist.project_name, dist.version))
+    logger.info("%s (%s)", dist.project_name, dist.version)
 
 
 def check_for_updates(with_arc=True):
@@ -4511,13 +4512,13 @@ def check_for_updates(with_arc=True):
             return
 
         if config.self_auto_update:
-            logger.info("Upgrading to version {}".format(pypi_version))
+            logger.info("Upgrading to version %s", pypi_version)
             self_upgrade()
             logger.info("Restarting...")
             check_call([sys.executable] + sys.argv)
             sys.exit()
 
-        logger.warning("Version {} of `moz-phab` is now available".format(pypi_version))
+        logger.warning("Version %s of `moz-phab` is now available", pypi_version)
 
 
 def self_upgrade():
@@ -4671,7 +4672,8 @@ def patch(repo, args):
                 if non_linear and not args.yes:
                     logger.warning(
                         "Revision D%s has a non-linear successor graph.\n"
-                        "Unable to apply the full stack." % args.revision_id
+                        "Unable to apply the full stack.",
+                        args.revision_id,
                     )
                     res = prompt("Continue with only part of the stack?", ["Yes", "No"])
                     if res == "No":
@@ -4699,8 +4701,8 @@ def patch(repo, args):
 
     if not args.raw:
         logger.info(
-            "Patching revision%s: %s"
-            % ("s" if len(revs) > 1 else "", " ".join(["D%s" % r["id"] for r in revs]))
+            "Patching revision%s: %s",
+            ("s" if len(revs) > 1 else "", " ".join(["D%s" % r["id"] for r in revs])),
         )
 
     # Pull diffs
@@ -4790,10 +4792,10 @@ def patch(repo, args):
                 raise Error("Patch failed to apply")
 
         if not args.raw and rev["id"] != revs[-1]["id"]:
-            logger.info("D%s applied" % rev["id"])
+            logger.info("D%s applied", rev["id"])
 
     if not args.raw:
-        logger.warning("D%s applied" % rev_id)
+        logger.warning("D%s applied", rev_id)
 
 
 def arc_pass(args):
@@ -5304,7 +5306,7 @@ def main(argv):
         sys.exit(1)
     except Exception as e:
         logger.error(
-            traceback.format_exc() if DEBUG else "%s: %s" % (e.__class__.__name__, e)
+            traceback.format_exc() if DEBUG else "%s: %s", e.__class__.__name__, e
         )
         sys.exit(1)
 
