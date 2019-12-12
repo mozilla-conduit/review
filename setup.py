@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="MozPhab",
-    version="0.1.66",
+    version="0.1.67",
     author="Mozilla",
     author_email="conduit-team@mozilla.com",
     packages=["mozphab"],
