@@ -3739,8 +3739,8 @@ def show_commit_stack(
 
             if not is_author:
                 logger.warning(
-                    "!! You don't own this revision.  Normally, you should only\n"
-                    '   update revisions you   own.  You can "Commandeer" this\n'
+                    "!! You don't own this revision. Normally, you should only\n"
+                    '   update revisions you own. You can "Commandeer" this\n'
                     "   revision from the web interface if you want to become\n"
                     "   the owner."
                 )
