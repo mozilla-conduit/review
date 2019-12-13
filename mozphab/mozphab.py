@@ -3894,7 +3894,7 @@ def arc_call_conduit(api_method, api_call_args, cwd):
             )
 
     # We expect arc output to be a JSON. However, in DEBUG mode, a `--trace` is used and
-    # the reponse becomes a multiline string with some messages in plain text.
+    # the response becomes a multiline string with some messages in plain text.
     output = "\n".join([line for line in output.splitlines() if line.startswith("{")])
     maybe_error = parse_api_error(output)
     if maybe_error:
@@ -4005,7 +4005,7 @@ def remove_duplicates(reviewers):
 
     Returns: list of unique reviewers.
 
-    Duplicates with excalamation mark are prefered.
+    Duplicates with excalamation mark are preferred.
     """
     unique = []
     nicks = []
@@ -4601,7 +4601,7 @@ def patch(repo, args):
     args.raw is True - only print out the diffs (--force doesn't change anything)
 
     Raises:
-    * Error if uncommited changes are present in the working tree
+    * Error if uncommitted changes are present in the working tree
     * Error if Phabricator revision is not found
     * Error if `--apply-to base` and no base commit found in the first diff
     * Error if base commit not found in repository
@@ -4617,13 +4617,13 @@ def patch(repo, args):
         with wait_message("Checking VCS"):
             repo.check_vcs()
 
-        # Look for any uncommited changes
+        # Look for any uncommitted changes
         with wait_message("Checking repository.."):
             clean = repo.is_worktree_clean()
 
         if not clean:
             raise Error(
-                "Uncommited changes present. Please %s them or commit before patching."
+                "Uncommitted changes present. Please %s them or commit before patching."
                 % ("shelve" if isinstance(repo, Mercurial) else "stash")
             )
 
@@ -5061,7 +5061,7 @@ def parse_args(argv):
     submit_parser.add_argument(
         "--no-stack",
         action="store_true",
-        help="Submit multiple commits, but do not mark them as dependant",
+        help="Submit multiple commits, but do not mark them as dependent",
     )
     submit_parser.add_argument(
         "--upstream",

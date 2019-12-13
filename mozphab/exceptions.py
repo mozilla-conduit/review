@@ -5,7 +5,7 @@
 
 
 class Error(Exception):
-    """Errors thrown explictly by this script; won't generate a stack trace."""
+    """Errors thrown explicitly by this script; won't generate a stack trace."""
 
 
 class NotFoundError(Exception):
