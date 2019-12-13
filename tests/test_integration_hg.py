@@ -64,7 +64,7 @@ def test_submit_create(in_process, hg_repo_path):
     msgfile = hg_repo_path / "msg"
     msgfile.write_text("Ą r?alice")
     hg_out("commit", "-l", "msg")
-    mozphab.main(["submit", "--yes", "--bug", "1", "."])
+    mozphab.main(["submit", "--no-arc", "--yes", "--bug", "1", "."])
 
     log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
     expected = """
@@ -244,7 +244,7 @@ def test_submit_create_no_bug(in_process, hg_repo_path):
     test_a.write_text("a")
     hg_out("add")
     hg_out("commit", "--message", "A r?alice")
-    mozphab.main(["submit", "--yes", "--no-bug", "."])
+    mozphab.main(["submit", "--no-arc", "--yes", "--no-bug", "."])
 
     log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
     expected = """
@@ -274,7 +274,7 @@ def test_submit_create_binary(in_process, hg_repo_path, data_file):
     hg_out("add")
     hg_out("commit", "-m", "IMG")
 
-    mozphab.main(["submit", "--yes", "--bug", "1", "."])
+    mozphab.main(["submit", "--no-arc", "--yes", "--bug", "1", "."])
 
     log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
     expected = """
@@ -309,12 +309,12 @@ def test_submit_remove_cr(in_process, hg_repo_path):
     test_a.write_text("a\r\nb\n")
     hg_out("add")
     hg_out("commit", "--message", "A r?alice")
-    mozphab.main(["submit", "--yes", "--bug", "1", "."])
+    mozphab.main(["submit", "--no-arc", "--yes", "--bug", "1", "."])
     call_conduit.reset_mock()
     # removing CR, leaving LF
     test_a.write_text("a\nb\n")
     hg_out("commit", "--message", "B r?alice")
-    mozphab.main(["submit", "--yes", "--bug", "1", "."])
+    mozphab.main(["submit", "--no-arc", "--yes", "--bug", "1", "."])
 
     assert (
         mock.call(

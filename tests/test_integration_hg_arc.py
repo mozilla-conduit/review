@@ -33,7 +33,7 @@ def test_submit_create(in_process, hg_repo_path):
     hg_out("add")
     hg_out("commit", "--message", "A r?alice")
 
-    mozphab.main(["submit", "--arc", "--yes", "--bug", "1", "."])
+    mozphab.main(["submit", "--yes", "--bug", "1", "."])
 
     log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
     expected = """
@@ -62,7 +62,7 @@ def test_submit_create_with_user_bookmark(in_process, hg_repo_path):
     user_bookmark_name = "user bookmark"
     hg_out("bookmark", user_bookmark_name)
 
-    mozphab.main(["submit", "--arc", "--yes", "--bug", "1", "."])
+    mozphab.main(["submit", "--yes", "--bug", "1", "."])
 
     log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
     expected = """
@@ -130,7 +130,7 @@ Differential Revision: http://example.test/D123
 """,
     )
 
-    mozphab.main(["submit", "--arc", "--yes", "--bug", "1", "."])
+    mozphab.main(["submit", "--yes", "--bug", "1", "."])
 
     log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
     expected = """\
@@ -186,7 +186,7 @@ Differential Revision: http://example.test/D123
 """,
     )
 
-    mozphab.main(["submit", "--arc", "--yes", "--bug", "1", "-r", "alice", "."])
+    mozphab.main(["submit", "--yes", "--bug", "1", "-r", "alice", "."])
 
     arc_call_conduit.assert_not_called()
     check_call_by_line.assert_called_once()
@@ -233,7 +233,7 @@ Differential Revision: http://example.test/D123
 """,
     )
 
-    mozphab.main(["submit", "--arc", "--yes", "--bug", "1", "-r", "alice", "."])
+    mozphab.main(["submit", "--yes", "--bug", "1", "-r", "alice", "."])
     arc_call_conduit.assert_called_with(
         "differential.revision.edit",
         {
@@ -290,7 +290,7 @@ Differential Revision: http://example.test/D123
 """,
     )
 
-    mozphab.main(["submit", "--arc", "--yes", "--bug", "2", "-r", "alice"])
+    mozphab.main(["submit", "--yes", "--bug", "2", "-r", "alice"])
 
     arc_call_conduit.assert_called_once_with(
         "differential.revision.edit",
