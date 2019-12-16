@@ -51,12 +51,15 @@ def test_submit_create(in_process, hg_repo_path):
     test_b.write_text("remove me")
     test_c = hg_repo_path / "C to modify"
     test_c.write_text("modify me")
+    test_d = hg_repo_path / "D to copy"
+    test_d.write_text("copy me")
     hg_out("add")
     hg_out("commit", "-m", "first")
     subdir = hg_repo_path / "subdir"
     subdir.mkdir()
-    test_d = hg_repo_path / "subdir" / "D add"
-    test_d.write_text("added")
+    hg_out("copy", "D to copy", "D copied")
+    test_e = hg_repo_path / "subdir" / "E add"
+    test_e.write_text("added")
     test_a.rename(hg_repo_path / "A renamed")
     test_b.unlink()
     test_c.write_text("modified")
@@ -194,7 +197,43 @@ Differential Revision: http://example.test/D123
                         "oldProperties": {},
                     },
                     {
-                        "currentPath": "subdir/D add",
+                        "metadata": {},
+                        "oldPath": "D to copy",
+                        "currentPath": "D copied",
+                        "awayPaths": [],
+                        "oldProperties": {},
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "type": 7,  # COPY HERE
+                        "fileType": 1,
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 1,
+                                "newOffset": 1,
+                                "newLength": 1,
+                                "addLines": 0,
+                                "delLines": 0,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": " copy me",
+                            }
+                        ],
+                    },
+                    {
+                        "metadata": {},
+                        "oldPath": None,
+                        "currentPath": "D to copy",
+                        "awayPaths": ["D copied"],
+                        "oldProperties": {},
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "type": 5,  # COPY AWAY
+                        "fileType": 1,
+                        "hunks": [],
+                    },
+                    {
+                        "currentPath": "subdir/E add",
                         "type": 1,  # ADD
                         "hunks": [
                             {
