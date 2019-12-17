@@ -2450,21 +2450,25 @@ class Mercurial(Repository):
         changes = []
 
         fn_renames = []
+        fn_renamed = []  # collection of `old_fn`.
         # fn_renames_str is returning "new filename (old filename)"
         for fn in fn_renames_str:
             m = re.match(r"(?P<filename>[^(]+) \((?P<old_filename>[^)]+)\)", fn)
             if m:
                 old_fn = m.group("old_filename")
-                is_move = old_fn in fn_dels
+                new_fn = m.group("filename")
+                # A file can be mved only once.
+                is_move = old_fn in fn_dels and old_fn not in fn_renamed
                 changes.append(
                     dict(
-                        fn=m.group("filename"),
+                        fn=new_fn,
                         old_fn=old_fn,
                         kind="R" if is_move else "C",
                         func=self._change_mod,
                     )
                 )
-                fn_renames.append((m.group("filename"), old_fn))
+                fn_renames.append((new_fn, old_fn))
+                fn_renamed.append(old_fn)
 
         # remove renames from adds and dels
         fn_adds = [fn for fn in fn_adds if fn and fn not in [c[0] for c in fn_renames]]
