@@ -5081,10 +5081,7 @@ def parse_args(argv):
         help='Set upstream branch to detect the starting commit. (default: "")',
     )
     submit_parser.add_argument(
-        "--no-arc",
-        dest="no_arc",
-        action="store_true",
-        help="Submits without Arcanist.",
+        "--arc", dest="no_arc", action="store_false", help="Submits with Arcanist.",
     )
     submit_parser.add_argument(
         "--force-vcs",

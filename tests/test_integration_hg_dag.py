@@ -42,7 +42,6 @@ def _submit(repo, start, end, expected, wip=False):
     mozphab.main(
         [
             "submit",
-            "--no-arc",
             "--yes",
             *(["--wip"] if wip else []),
             "--bug",
