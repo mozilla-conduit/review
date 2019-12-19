@@ -23,6 +23,7 @@ jobs:
             git config --global user.name "moz-phab tests"
             # install test dependencies
             sudo pip install -r dev-requirements.txt
+            sudo pip install -e .
 
       - run:
           name: run tests

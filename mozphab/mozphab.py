@@ -4479,6 +4479,11 @@ def get_installed_distribution():
     return get_distribution("MozPhab")
 
 
+def get_name_and_version():
+    dist = get_installed_distribution()
+    return "{} ({})".format(dist.project_name, dist.version)
+
+
 def get_pypi_version():
     url = "https://pypi.org/pypi/MozPhab/json"
     output = urllib.request.urlopen(urllib.request.Request(url), timeout=30).read()
@@ -4487,8 +4492,7 @@ def get_pypi_version():
 
 
 def log_current_version(_):
-    dist = get_installed_distribution()
-    logger.info("%s (%s)", dist.project_name, dist.version)
+    logger.info(get_name_and_version())
 
 
 def check_for_updates(with_arc=True):
@@ -5279,6 +5283,8 @@ def main(argv):
         init_logging()
         config = Config()
         os.environ["MOZPHAB"] = "1"
+
+        logger.debug(get_name_and_version())
 
         if config.no_ansi:
             HAS_ANSI = False
