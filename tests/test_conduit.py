@@ -44,9 +44,9 @@ def test_load_api_token(m_read):
 def test_call(m_token, m_Connect):
     conn = mock.Mock()
     m_Connect.return_value = conn
-    from io import StringIO
+    from io import BytesIO
 
-    conn.getresponse.return_value = StringIO('{"result": "x", "error_code": false}')
+    conn.getresponse.return_value = BytesIO(b'{"result": "x", "error_code": false}')
     m_token.return_value = "token"
     mozphab.conduit.set_repo(Repo())
 
@@ -61,7 +61,7 @@ def test_call(m_token, m_Connect):
         "&__conduit__=True",
     )
 
-    conn.getresponse.return_value = StringIO('{"result": "x", "error_code": false}')
+    conn.getresponse.return_value = BytesIO(b'{"result": "x", "error_code": false}')
     assert mozphab.conduit.call("method", dict(call="ćwikła")) == "x"
     conn.request.assert_called_with(
         "POST",
@@ -73,7 +73,7 @@ def test_call(m_token, m_Connect):
 
     m_Connect.reset_mock()
     conn.reset_mock()
-    conn.getresponse.return_value = StringIO('{"result": "x", "error_code": false}')
+    conn.getresponse.return_value = BytesIO(b'{"result": "x", "error_code": false}')
     assert mozphab.conduit.call("method", dict(empty_dict={}, empty_list=[])) == "x"
     conn.request.assert_called_once_with(
         "POST",
@@ -83,7 +83,7 @@ def test_call(m_token, m_Connect):
         "&output=json&__conduit__=True",
     )
 
-    conn.getresponse.return_value = StringIO('{"error_info": "x", "error_code": 1}')
+    conn.getresponse.return_value = BytesIO(b'{"error_info": "x", "error_code": 1}')
 
     with pytest.raises(exceptions.ConduitAPIError):
         mozphab.conduit.call("method", dict(call="args"))
