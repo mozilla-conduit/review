@@ -5119,6 +5119,10 @@ def parse_args(argv):
     update_parser.add_argument(
         "--force", "-f", action="store_true", help="Force update even if not necessary"
     )
+
+    # We suppress exception stack traces unless --trace is provided
+    update_parser.add_argument("--trace", action="store_true", help=argparse.SUPPRESS)
+
     update_parser.set_defaults(func=self_update, needs_repo=False)
 
     # patch
@@ -5186,6 +5190,8 @@ def parse_args(argv):
         action="store_true",
         help="EXPERIMENTAL: Override VCS compatibility check.",
     )
+    # We suppress exception stack traces unless --trace is provided
+    patch_parser.add_argument("--trace", action="store_true", help=argparse.SUPPRESS)
     patch_parser.set_defaults(func=patch, needs_repo=True, no_arc=True)
 
     # reorganise
@@ -5224,6 +5230,7 @@ def parse_args(argv):
         default=".",
         help="End revision of range to reorganise (default: current commit)",
     )
+    reorg_parser.add_argument("--trace", action="store_true", help=argparse.SUPPRESS)
     reorg_parser.set_defaults(func=reorganise, needs_repo=True, no_arc=True)
 
     # install-certificate
@@ -5237,6 +5244,7 @@ def parse_args(argv):
         action="store_true",
         help="Run VCS with only necessary extensions.",
     )
+    cert_parser.add_argument("--trace", action="store_true", help=argparse.SUPPRESS)
     cert_parser.set_defaults(func=install_certificate, needs_repo=True, no_arc=True)
 
     # arc
@@ -5311,9 +5319,11 @@ def main(argv):
         logger.error(e)
         sys.exit(1)
     except Exception as e:
-        logger.error(
-            traceback.format_exc() if DEBUG else "%s: %s", e.__class__.__name__, e
-        )
+        if DEBUG:
+            logger.error(traceback.format_exc())
+        else:
+            logger.error("%s: %s", e.__class__.__name__, e)
+            logger.error("Run moz-phab again with '--trace' to show the stack trace")
         sys.exit(1)
 
 
