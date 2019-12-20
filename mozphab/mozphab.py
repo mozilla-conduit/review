@@ -4710,7 +4710,8 @@ def patch(repo, args):
     if not args.raw:
         logger.info(
             "Patching revision%s: %s",
-            ("s" if len(revs) > 1 else "", " ".join(["D%s" % r["id"] for r in revs])),
+            "s" if len(revs) > 1 else "",
+            " ".join(["D%s" % r["id"] for r in revs]),
         )
 
     # Pull diffs
