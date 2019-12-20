@@ -719,7 +719,7 @@ class ConduitAPI:
         conn.request("POST", url.geturl(), body=body)
 
         # Read the response as JSON
-        response = json.load(conn.getresponse())
+        response = json.loads(conn.getresponse().read().decode('utf-8'))
         if response["error_code"]:
             raise ConduitAPIError(
                 response.get("error_info", "Error %s" % response["error_code"])
