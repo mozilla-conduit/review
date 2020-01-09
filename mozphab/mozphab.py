@@ -35,6 +35,7 @@ import urllib.request
 import urllib.error
 import urllib.parse
 import uuid
+import __main__ as script_module
 from collections import namedtuple
 from contextlib import contextmanager, suppress
 from distutils.version import LooseVersion
@@ -4548,9 +4549,9 @@ def self_upgrade():
 
     # If moz-phab was installed with --user, we need to pass it to pip
     try:
-        self_file = Path(__file__).resolve()
-        user_file = Path(site.getuserbase()).resolve() / "bin" / self_file.name
-        if self_file == user_file:
+        script_file = Path(script_module.__file__).resolve()
+        user_file = Path(site.getuserbase()).resolve() / "bin" / "moz-phab"
+        if script_file == user_file:
             command.append("--user")
     except AttributeError:
         # virtualenvs don't have site.getuserbase()
