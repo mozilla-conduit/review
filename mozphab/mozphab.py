@@ -738,7 +738,8 @@ class ConduitAPI:
         except ConduitAPIError as err:
             logger.error(err)
             return False
-        except CommandError:
+        except CommandError as err:
+            logger.error(err)
             return False
         return True
 
