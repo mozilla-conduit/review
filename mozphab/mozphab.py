@@ -23,7 +23,6 @@ import operator
 import os
 import re
 import signal
-import site
 import subprocess
 import stat
 import sys
@@ -38,6 +37,7 @@ import uuid
 import __main__ as script_module
 from collections import namedtuple
 from contextlib import contextmanager, suppress
+from distutils.dist import Distribution
 from distutils.version import LooseVersion
 from glob import glob
 from pathlib import Path
@@ -4556,14 +4556,19 @@ def self_upgrade():
     )
 
     # If moz-phab was installed with --user, we need to pass it to pip
-    try:
-        script_file = Path(script_module.__file__).resolve()
-        user_file = Path(site.getuserbase()).resolve() / "bin" / "moz-phab"
-        if script_file == user_file:
-            command.append("--user")
-    except AttributeError:
-        # virtualenvs don't have site.getuserbase()
-        pass
+    # Create "install" distutils command with --user to find the scripts_path
+    d = Distribution()
+    d.parse_config_files()
+    i = d.get_command_obj("install", create=True)
+    # Forcing the environment detected by Distribution to the --user one
+    i.user = True
+    i.prefix = i.exec_prefix = i.home = i.install_base = i.install_platbase = None
+    i.finalize_options()
+    # Checking if the moz-phab script is installed in user's scripts directory
+    script_dir = Path(script_module.__file__).resolve().parent
+    user_dir = Path(i.install_scripts).resolve()
+    if script_dir == user_dir:
+        command.append("--user")
 
     check_call(command)
 
