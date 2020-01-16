@@ -6,7 +6,7 @@ import os
 import mock
 import pytest
 
-from .conftest import git_out
+from .conftest import git_out, hg_out
 
 from mozphab import exceptions, mozphab
 
@@ -75,10 +75,14 @@ Differential Revision: http://example.test/D2
 
 def test_new_separate_revisions_to_stack(in_process, git_repo_path, init_sha):
     call_conduit.side_effect = (
-        dict(),  # ping
+        # ping
+        dict(),
+        # searc revisions
         dict(data=[dict(phid="PHID-1", id=1), dict(phid="PHID-2", id=2)]),
-        dict(data=[]),  # edge.search
-        dict(data=[dict(phid="PHID-1", id=1)]),  #  differential.edit_revision
+        # edge search
+        dict(data=[]),
+        # differential.edit_revision
+        dict(data=[dict(phid="PHID-1", id=1)]),
     )
 
     f = git_repo_path / "X"
@@ -114,6 +118,189 @@ Differential Revision: http://example.test/D2
         )
         in call_conduit.call_args_list
     )
+
+
+def test_add_revision_existing_stack(in_process, git_repo_path, init_sha):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # search revisions
+        dict(
+            data=[
+                dict(phid="PHID-1", id=1),
+                dict(phid="PHID-2", id=2),
+                dict(phid="PHID-3", id=3),
+            ]
+        ),
+        # edge search
+        dict(
+            data=[
+                dict(
+                    sourcePHID="PHID-1",
+                    destinationPHID="PHID-2",
+                    edgeType="revision.child",
+                )
+            ]
+        ),  # differential.edge.search
+        dict(
+            data=[
+                dict(
+                    sourcePHID="PHID-1",
+                    destinationPHID="PHID-2",
+                    edgeType="revision.parent",
+                )
+            ]
+        ),  # differential.edge.search
+        # differential.edit_revision
+        dict(data=[dict(phid="PHID-1", id=1)]),
+        dict(data=[dict(phid="PHID-3", id=1)]),
+        dict(data=[dict(phid="PHID-3", id=1)]),
+    )
+
+    f = git_repo_path / "X"
+    f.write_text("A")
+    git_out("add", ".")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text(
+        """\
+Bug 1: A r?alice
+
+Differential Revision: http://example.test/D1
+"""
+    )
+    git_out("commit", "--file", "msg")
+    fn = git_repo_path / "Y"
+    fn.write_text("C")
+    git_out("add", ".")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text(
+        """\
+Bug 1: C r?alice
+
+Differential Revision: http://example.test/D3
+"""
+    )
+    git_out("commit", "--file", "msg")
+    f.write_text("B")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text(
+        """\
+Bug 1: B r?alice
+
+Differential Revision: http://example.test/D2
+"""
+    )
+    git_out("commit", "-a", "--file", "msg")
+    mozphab.main(["reorg", "--yes", init_sha])
+    assert (
+        mock.call(
+            "differential.revision.edit",
+            {
+                "objectIdentifier": "PHID-1",
+                "transactions": [{"type": "children.set", "value": ["PHID-3"]}],
+            },
+        )
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call(
+            "differential.revision.edit",
+            {
+                "objectIdentifier": "PHID-3",
+                "transactions": [{"type": "children.set", "value": ["PHID-2"]}],
+            },
+        )
+        in call_conduit.call_args_list
+    )
+
+
+def test_add_revision_existing_stack_hg(in_process, hg_repo_path):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # search revisions
+        dict(
+            data=[
+                dict(phid="PHID-1", id=1),
+                dict(phid="PHID-2", id=2),
+                dict(phid="PHID-3", id=3),
+            ]
+        ),
+        # edge search
+        dict(
+            data=[
+                dict(
+                    sourcePHID="PHID-1",
+                    destinationPHID="PHID-2",
+                    edgeType="revision.child",
+                ),
+                dict(
+                    sourcePHID="PHID-1",
+                    destinationPHID="PHID-3",
+                    edgeType="revision.child",
+                ),
+            ]
+        ),  # differential.edge.search
+        dict(
+            data=[
+                dict(
+                    sourcePHID="PHID-1",
+                    destinationPHID="PHID-2",
+                    edgeType="revision.parent",
+                )
+            ]
+        ),  # differential.edge.search
+        dict(
+            data=[
+                dict(
+                    sourcePHID="PHID-1",
+                    destinationPHID="PHID-3",
+                    edgeType="revision.parent",
+                )
+            ]
+        ),  # differential.edge.search
+    )
+
+    f = hg_repo_path / "X"
+    f.write_text("A")
+    hg_out("add")
+    msgfile = hg_repo_path / "msg"
+    msgfile.write_text(
+        """\
+Bug 1: A r?alice
+
+Differential Revision: http://example.test/D1
+"""
+    )
+    hg_out("commit", "-l", "msg")
+    fn = hg_repo_path / "Y"
+    fn.write_text("C")
+    hg_out("add")
+    msgfile = hg_repo_path / "msg"
+    msgfile.write_text(
+        """\
+Bug 1: C r?alice
+
+Differential Revision: http://example.test/D3
+"""
+    )
+    hg_out("commit", "-l", "msg")
+    f.write_text("B")
+    msgfile = hg_repo_path / "msg"
+    msgfile.write_text(
+        """\
+Bug 1: B r?alice
+
+Differential Revision: http://example.test/D2
+"""
+    )
+    hg_out("commit", "-l", "msg")
+    with pytest.raises(exceptions.Error) as e:
+        mozphab.main(["reorg", "--yes", "1", "3"])
+
+    assert (str(e.value)) == "Revision D1 has multiple children."
 
 
 def test_abandon_a_revision(in_process, git_repo_path, init_sha):

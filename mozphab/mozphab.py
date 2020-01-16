@@ -949,7 +949,14 @@ class ConduitAPI:
                 new_phids.add(edge["destinationPHID"])
 
                 if edge["edgeType"] == "revision.child":
-                    assert edge["sourcePHID"] not in stack
+                    if edge["sourcePHID"] in stack:
+                        source_id = next(
+                            r["id"]
+                            for r in revisions
+                            if r["phid"] == edge["sourcePHID"]
+                        )
+                        raise Error("Revision D%s has multiple children." % source_id)
+
                     stack[edge["sourcePHID"]] = edge["destinationPHID"]
 
             new_phids = new_phids - phids
@@ -4866,7 +4873,11 @@ def reorganise(repo, args):
     # Get PhabricatorStack
     # Errors will be raised later in the `walk_llist` method
     with wait_message("Detecting the remote stack..."):
-        phabstack = conduit.get_stack(localstack_ids)
+        try:
+            phabstack = conduit.get_stack(localstack_ids)
+        except Error as e:
+            logger.error("Remote stack is not linear.")
+            raise
 
     # Preload the phabricator stack
     with wait_message("Preloading Phabricator stack revisions..."):
