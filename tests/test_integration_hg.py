@@ -40,6 +40,237 @@ def test_submit_create(in_process, hg_repo_path):
         dict(object=dict(id="123")),
     )
     test_a = hg_repo_path / "A to rename"
+    test_a.write_text("rename me\nsecond line\n")
+    test_b = hg_repo_path / "B to remove"
+    test_b.write_text("remove me\n")
+    test_c = hg_repo_path / "C to modify"
+    test_c.write_text("modify me\n")
+    test_d = hg_repo_path / "D to copy"
+    test_d.write_text("copy me\n")
+    hg_out("add")
+    hg_out("commit", "-m", "first")
+    subdir = hg_repo_path / "subdir"
+    subdir.mkdir()
+    hg_out("copy", "D to copy", "D copied")
+    test_e = hg_repo_path / "subdir" / "E add"
+    test_e.write_text("added\n")
+    test_a.rename(hg_repo_path / "A renamed")
+    test_b.unlink()
+    test_c.write_text("modified\n")
+    hg_out("addremove")
+    msgfile = hg_repo_path / "msg"
+    msgfile.write_text("Ą r?alice")
+    hg_out("commit", "-l", "msg")
+    mozphab.main(["submit", "--yes", "--bug", "1", "."])
+
+    log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
+    expected = """
+Bug 1 - Ą r?alice
+
+Differential Revision: http://example.test/D123
+"""
+    assert log.strip() == expected.strip()
+    assert mock.call("conduit.ping", {}) in call_conduit.call_args_list
+    assert (
+        mock.call("user.query", dict(usernames=["alice"]))
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call(
+            "diffusion.repository.search",
+            dict(limit=1, constraints=dict(callsigns=["TEST"])),
+        )
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call(
+            "differential.setdiffproperty",
+            {"diff_id": "1", "name": "local:commits", "data": Contains('"rev": "')},
+        )
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call(
+            "differential.creatediff",
+            {
+                "sourceControlPath": "/",
+                "sourceControlSystem": "hg",
+                "lintStatus": "none",
+                "sourcePath": mock.ANY,
+                "unitStatus": "none",
+                "sourceMachine": "http://example.test",
+                "sourceControlBaseRevision": mock.ANY,
+                "repositoryPHID": "PHID-REPO-1",
+                "branch": "default",
+                "changes": [
+                    {
+                        "currentPath": "A renamed",
+                        "type": 6,  # MOVE_HERE
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 2,
+                                "newOffset": 1,
+                                "newLength": 2,
+                                "addLines": 0,
+                                "delLines": 0,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": " rename me\n second line\n",
+                            }
+                        ],
+                        "oldProperties": {},
+                        "oldPath": "A to rename",
+                        "commitHash": mock.ANY,
+                        "awayPaths": [],
+                        "metadata": {},
+                        "newProperties": {},
+                        "fileType": 1,
+                    },
+                    {
+                        "currentPath": "A to rename",
+                        "type": 4,  # MOVE_AWAY
+                        "hunks": [],
+                        "oldProperties": {},
+                        "oldPath": None,
+                        "commitHash": mock.ANY,
+                        "awayPaths": ["A renamed"],
+                        "metadata": {},
+                        "newProperties": {},
+                        "fileType": 1,
+                    },
+                    {
+                        "currentPath": "B to remove",
+                        "type": 3,  # DELETE
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 1,
+                                "newOffset": 0,
+                                "newLength": 0,
+                                "addLines": 0,
+                                "delLines": 1,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": "-remove me\n",
+                            }
+                        ],
+                        "awayPaths": [],
+                        "fileType": 1,
+                        "oldPath": "B to remove",
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "metadata": {},
+                        "oldProperties": {"unix:filemode": "100644"},
+                    },
+                    {
+                        "currentPath": "C to modify",
+                        "type": 2,  # CHANGE
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 1,
+                                "newOffset": 1,
+                                "newLength": 1,
+                                "addLines": 1,
+                                "delLines": 1,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": "-modify me\n+modified\n",
+                            }
+                        ],
+                        "commitHash": mock.ANY,
+                        "metadata": {},
+                        "fileType": 1,
+                        "oldPath": "C to modify",
+                        "newProperties": {},
+                        "awayPaths": [],
+                        "oldProperties": {},
+                    },
+                    {
+                        "metadata": {},
+                        "oldPath": "D to copy",
+                        "currentPath": "D copied",
+                        "awayPaths": [],
+                        "oldProperties": {},
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "type": 7,  # COPY HERE
+                        "fileType": 1,
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 1,
+                                "newOffset": 1,
+                                "newLength": 1,
+                                "addLines": 0,
+                                "delLines": 0,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": " copy me\n",
+                            }
+                        ],
+                    },
+                    {
+                        "metadata": {},
+                        "oldPath": None,
+                        "currentPath": "D to copy",
+                        "awayPaths": ["D copied"],
+                        "oldProperties": {},
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "type": 5,  # COPY AWAY
+                        "fileType": 1,
+                        "hunks": [],
+                    },
+                    {
+                        "currentPath": "subdir/E add",
+                        "type": 1,  # ADD
+                        "hunks": [
+                            {
+                                "corpus": "+added\n",
+                                "addLines": 1,
+                                "oldOffset": 0,
+                                "newOffset": 1,
+                                "newLength": 1,
+                                "delLines": 0,
+                                "isMissingOldNewline": False,
+                                "oldLength": 0,
+                                "isMissingNewNewline": False,
+                            }
+                        ],
+                        "commitHash": mock.ANY,
+                        "awayPaths": [],
+                        "newProperties": {"unix:filemode": "100644"},
+                        "oldPath": None,
+                        "oldProperties": {},
+                        "fileType": 1,
+                        "metadata": {},
+                    },
+                ],
+                "creationMethod": "moz-phab-hg",
+            },
+        )
+        in call_conduit.call_args_list
+    )
+
+
+def test_submit_create_no_trailing_newline(in_process, hg_repo_path):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        [dict(userName="alice", phid="PHID-USER-1")],
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    test_a = hg_repo_path / "A to rename"
     test_a.write_text("rename me\nsecond line")
     test_b = hg_repo_path / "B to remove"
     test_b.write_text("remove me")
@@ -145,14 +376,14 @@ Differential Revision: http://example.test/D123
                         "hunks": [
                             {
                                 "oldOffset": 1,
-                                "oldLength": 1,
+                                "oldLength": 2,
                                 "newOffset": 0,
                                 "newLength": 0,
                                 "addLines": 0,
                                 "delLines": 1,
-                                "isMissingOldNewline": False,
+                                "isMissingOldNewline": True,
                                 "isMissingNewNewline": False,
-                                "corpus": "-remove me",
+                                "corpus": "-remove me\n\\ No newline at end of file\n",
                             }
                         ],
                         "awayPaths": [],
@@ -177,8 +408,10 @@ Differential Revision: http://example.test/D123
                                 "isMissingOldNewline": True,
                                 "isMissingNewNewline": True,
                                 "corpus": (
-                                    "-modify me\n\\ No newline at end of file\n"
-                                    "+modified\n\\ No newline at end of file\n"
+                                    "-modify me\n"
+                                    "\\ No newline at end of file\n"
+                                    "+modified\n"
+                                    "\\ No newline at end of file\n"
                                 ),
                             }
                         ],
@@ -231,15 +464,15 @@ Differential Revision: http://example.test/D123
                         "type": 1,  # ADD
                         "hunks": [
                             {
-                                "corpus": "+added",
+                                "corpus": "+added\n\\ No newline at end of file\n",
                                 "addLines": 1,
                                 "oldOffset": 0,
                                 "newOffset": 1,
-                                "newLength": 1,
+                                "newLength": 2,
                                 "delLines": 0,
                                 "isMissingOldNewline": False,
                                 "oldLength": 0,
-                                "isMissingNewNewline": False,
+                                "isMissingNewNewline": True,
                             }
                         ],
                         "commitHash": mock.ANY,

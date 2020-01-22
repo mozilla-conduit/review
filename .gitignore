@@ -1,9 +1,9 @@
-*pyc
-moz-phabc
-reviewc
-.coverage
 *,cover
-venv
+*pyc
+.coverage
+*.egg-info
+MANIFEST
 build
 dist
-MANIFEST
+moz-phabc
+venv

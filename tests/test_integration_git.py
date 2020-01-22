@@ -72,14 +72,12 @@ def test_submit_create(in_process, git_repo_path, init_sha):
         # differential.revision.edit
         dict(object=dict(id="123")),
     )
-    testfile = git_repo_path / "X"
-    testfile.write_text("ą\r\nb\nc")
+    (git_repo_path / "X").write_text("ą\r\nb\nc\n")
+    (git_repo_path / "Y").write_text("no line ending")
     git_out("add", ".")
-    msgfile = git_repo_path / "msg"
-    msgfile.write_text("Ą r?alice")
+    (git_repo_path / "msg").write_text("Ą r?alice")
     git_out("commit", "--file", "msg")
-    testfile = git_repo_path / "untracked"
-    testfile.write_text("a")
+    (git_repo_path / "untracked").write_text("a\n")
 
     mozphab.main(["submit", "--yes", "--bug", "1", init_sha])
 
@@ -129,11 +127,9 @@ Differential Revision: http://example.test/D123
                                 "newLength": 3,
                                 "addLines": 3,
                                 "delLines": 0,
-                                "corpus": (
-                                    "+ą\r\n+b\n+c\n\\ No newline at end of file\n"
-                                ),
+                                "corpus": "+ą\r\n+b\n+c\n",
                                 "isMissingOldNewline": False,
-                                "isMissingNewNewline": True,
+                                "isMissingNewNewline": False,
                             }
                         ],
                         "oldProperties": {},
@@ -141,7 +137,31 @@ Differential Revision: http://example.test/D123
                         "fileType": 1,
                         "type": 1,
                         "metadata": {},
-                    }
+                    },
+                    {
+                        "commitHash": mock.ANY,
+                        "awayPaths": [],
+                        "newProperties": {"unix:filemode": "100644"},
+                        "oldPath": None,
+                        "hunks": [
+                            {
+                                "oldOffset": 0,
+                                "oldLength": 0,
+                                "newOffset": 1,
+                                "newLength": 1,
+                                "addLines": 1,
+                                "delLines": 0,
+                                "corpus": "+no line ending\n\\ No newline at end of file\n",
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": True,
+                            }
+                        ],
+                        "oldProperties": {},
+                        "currentPath": "Y",
+                        "fileType": 1,
+                        "type": 1,
+                        "metadata": {},
+                    },
                 ],
                 "creationMethod": "moz-phab-git",
             },

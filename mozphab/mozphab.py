@@ -2406,10 +2406,11 @@ class Mercurial(Repository):
     def _get_file_modes(self, commit):
         """Get modes of the modified files."""
         old_modes = self.hg_out(
-            ["manifest", "-T", "{mode} {path}\n", "-r", commit["parent"]]
+            ["manifest", "-T", "{mode} {path}\n", "-r", commit["parent"]],
+            never_log=True,
         )
         new_modes = self.hg_out(
-            ["manifest", "-T", "{mode} {path}\n", "-r", commit["node"]]
+            ["manifest", "-T", "{mode} {path}\n", "-r", commit["node"]], never_log=True
         )
         file_modes = {}
         for s_info in old_modes:
@@ -2558,6 +2559,11 @@ class Mercurial(Repository):
         else:
             lines = meta["body"].splitlines(keepends=True)
             lines = ["+%s" % l for l in lines]
+
+            if lines and not lines[-1].endswith("\n"):
+                lines[-1] = "{}\n".format(lines[-1])
+                lines.append("\\ No newline at end of file\n")
+
             self._change_create_hunk(
                 change, fn, lines, meta["file_size"], parent, node, 0, 1, 0, len(lines)
             )
@@ -2568,8 +2574,13 @@ class Mercurial(Repository):
         if meta["binary"]:
             self._change_set_binary(change, meta["bin_body"], "", meta["mime"], "")
         else:
-            lines = meta["body"].splitlines(True)
+            lines = meta["body"].splitlines(keepends=True)
             lines = ["-%s" % l for l in lines]
+
+            if lines and not lines[-1].endswith("\n"):
+                lines[-1] = "{}\n".format(lines[-1])
+                lines.append("\\ No newline at end of file\n")
+
             self._change_create_hunk(
                 change, fn, lines, meta["file_size"], parent, node, 1, 0, len(lines), 0
             )
