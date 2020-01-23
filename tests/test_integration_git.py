@@ -423,6 +423,75 @@ def test_submit_remove_cr(in_process, git_repo_path, init_sha):
     )
 
 
+def test_submit_single_last(in_process, git_repo_path, init_sha):
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    (git_repo_path / "X").write_text("a\n")
+    git_out("add", "X")
+    git_out("commit", "-am", "A")
+    (git_repo_path / "X").write_text("b\n")
+    git_out("commit", "-am", "B")
+
+    mozphab.main(["submit", "--yes", "--bug", "1", "--single"], is_development=True)
+
+    log = git_out("log", "--format=%s%n%n%b", "-2")
+    expected = """\
+Bug 1 - B
+
+Differential Revision: http://example.test/D123
+A
+
+
+"""
+    assert log == expected
+
+
+def test_submit_single_first(in_process, git_repo_path, init_sha, git_sha):
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    (git_repo_path / "X").write_text("a\n")
+    git_out("add", "X")
+    git_out("commit", "-am", "A")
+    sha = git_sha()
+    (git_repo_path / "X").write_text("b\n")
+    git_out("commit", "-am", "B")
+
+    mozphab.main(
+        ["submit", "--yes", "--bug", "1", "--single", sha], is_development=True
+    )
+
+    log = git_out("log", "--format=%s%n%n%b", "-2")
+    expected = """\
+B
+
+
+Bug 1 - A
+
+Differential Revision: http://example.test/D123
+"""
+    assert log == expected
+
+
 def test_submit_update_no_message(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = (

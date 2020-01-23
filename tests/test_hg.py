@@ -94,10 +94,11 @@ def test_finalize_no_evolve(m_hg_rebase, hg):
 @mock.patch("mozphab.mozphab.Mercurial.hg_log")
 def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
     class Args:
-        def __init__(self, start="(auto)", end=".", safe_mode=False):
+        def __init__(self, start="(auto)", end=".", safe_mode=False, single=False):
             self.start_rev = start
             self.end_rev = end
             self.safe_mode = safe_mode
+            self.single = single
 
     with pytest.raises(exceptions.Error):
         hg.set_args(Args())
@@ -164,6 +165,18 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
     m_hg_hg_log.side_effect = IndexError
     with pytest.raises(exceptions.Error):
         hg.set_args(Args())
+
+    m_hg_hg_log.reset_mock()
+    m_hg_hg_log.side_effect = [("123456789012",), ("123456789012",)]
+    hg.set_args(Args(single=True))
+    assert "123456789012" == hg.revset
+    assert m_hg_hg_log.call_args_list == [mock.call(".")]
+
+    m_hg_hg_log.reset_mock()
+    m_hg_hg_log.side_effect = [("123456789012",), ("123456789012",)]
+    hg.set_args(Args(start="start", single=True))
+    assert "123456789012" == hg.revset
+    assert m_hg_hg_log.call_args_list == [mock.call("start")]
 
 
 @mock.patch("mozphab.mozphab.Mercurial._status")

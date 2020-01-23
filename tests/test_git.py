@@ -182,15 +182,16 @@ def test_is_child(git):
 @mock.patch("mozphab.mozphab.config")
 def test_range(m_config, m_git_git_out, git):
     class Args:
-        def __init__(self, start="aaa", end="."):
+        def __init__(self, start="start", end="."):
             self.start_rev = start
             self.end_rev = end
             self.safe_mode = False
+            self.single = False
 
     m_config.safe_mode = False
     m_git_git_out.return_value = ["user.email=email"]
     git.set_args(Args())
-    assert git.revset == ("aaa", ".")
+    assert git.revset == ("start", ".")
 
 
 @mock.patch("mozphab.mozphab.config")
@@ -199,10 +200,17 @@ def test_range(m_config, m_git_git_out, git):
 @mock.patch("mozphab.mozphab.Git.git_out")
 def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git):
     class Args:
-        def __init__(self, start="(auto)", end=".", safe_mode=False):
+        def __init__(
+            self,
+            start=mozphab.DEFAULT_START_REV,
+            end=mozphab.DEFAULT_END_REV,
+            safe_mode=False,
+            single=False,
+        ):
             self.start_rev = start
             self.end_rev = end
             self.safe_mode = safe_mode
+            self.single = single
 
     with pytest.raises(exceptions.Error):
         git.set_args(Args())
@@ -252,6 +260,19 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
     git.set_args(Args())
     assert "" == git._env["HOME"]
     assert "" == git._env["XDG_CONFIG_HOME"]
+
+    m_git_get_first.reset_mock()
+    m_parse_config.return_value = {
+        "user.email": "email",
+        "user.name": "name",
+    }
+    git.set_args(Args(single=True))
+    m_git_get_first.assert_not_called()
+    assert git.revset == ("HEAD^", "HEAD")
+
+    git.set_args(Args(single=True, start="start"))
+    m_git_get_first.assert_not_called()
+    assert git.revset == ("start^", "start")
 
 
 @mock.patch("mozphab.mozphab.Git.git_out")

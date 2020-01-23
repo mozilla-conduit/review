@@ -646,3 +646,72 @@ def test_submit_remove_cr(in_process, hg_repo_path):
         )
         in call_conduit.call_args_list
     )
+
+
+def test_submit_single_first(in_process, hg_repo_path, hg_sha):
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    (hg_repo_path / "X").write_text("a\n")
+    hg_out("add", "X")
+    hg_out("commit", "-m", "A")
+    sha = hg_sha()
+    (hg_repo_path / "X").write_text("b\n")
+    hg_out("commit", "-m", "B")
+
+    mozphab.main(
+        ["submit", "--yes", "--bug", "1", "--single", sha], is_development=True
+    )
+
+    log = hg_out("log", "--template", r"{desc}\n---\n", "--limit", "2")
+    expected = """\
+B
+---
+Bug 1 - A
+
+Differential Revision: http://example.test/D123
+---
+"""
+    assert log == expected
+
+
+def test_submit_single_last(in_process, hg_repo_path):
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    (hg_repo_path / "X").write_text("a\n")
+    hg_out("add", "X")
+    hg_out("commit", "-m", "A")
+    (hg_repo_path / "X").write_text("b\n")
+    hg_out("commit", "-m", "B")
+
+    mozphab.main(["submit", "--yes", "--bug", "1", "--single"], is_development=True)
+
+    log = hg_out("log", "--template", r"{desc}\n---\n", "--limit", "2")
+    expected = """\
+Bug 1 - B
+
+Differential Revision: http://example.test/D123
+---
+A
+---
+"""
+    assert log == expected

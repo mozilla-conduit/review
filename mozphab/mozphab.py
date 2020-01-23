@@ -93,6 +93,9 @@ GUIDE_URL = (
     "https://moz-conduit.readthedocs.io/en/latest/phabricator-user.html#quick-start"
 )
 
+DEFAULT_START_REV = "(auto)"
+DEFAULT_END_REV = "."
+
 GIT_COMMAND = ["git.exe" if IS_WINDOWS else "git"]
 HOME_DIR = os.path.expanduser("~")
 
@@ -1579,6 +1582,9 @@ class Repository(object):
         """Update the history after node changed."""
 
     def set_args(self, args):
+        if hasattr(args, "single") and args.single and args.end_rev != DEFAULT_END_REV:
+            raise Error("Option --single can be used with only one identifier.")
+
         self.args = args
 
     def untracked(self):
@@ -2073,26 +2079,37 @@ class Mercurial(Repository):
         self._hg.extend(options)
 
         if hasattr(self.args, "start_rev"):
+            is_single = hasattr(self.args, "single") and self.args.single
             # Set the default start revision.
-            if self.args.start_rev == "(auto)":
-                start = "ancestors(.) and not public() and not obsolete()"
+            if self.args.start_rev == DEFAULT_START_REV:
+                if is_single:
+                    start_rev = self.args.end_rev
+                else:
+                    start_rev = "ancestors(.) and not public() and not obsolete()"
             else:
-                start = self.args.start_rev
+                start_rev = self.args.start_rev
 
             # Resolve to nodes as that's nicer to read.
             try:
-                start = self.hg_log(start)[0]
+                start = self.hg_log(start_rev)[0]
             except IndexError:
-                if self.args.start_rev == "(auto)":
+                if self.args.start_rev == DEFAULT_START_REV:
                     raise Error("Failed to find draft commits to submit")
                 else:
                     raise Error(
                         "Failed to start of commit range: %s" % self.args.start_rev
                     )
+
+            if is_single:
+                self.revset = start
+                return
+
+            end_rev = self.args.end_rev
+
             try:
-                end = self.hg_log(self.args.end_rev)[0]
+                end = self.hg_log(end_rev)[0]
             except IndexError:
-                raise Error("Failed to end of commit range: %s" % self.args.end_rev)
+                raise Error("Failed to end of commit range: %s" % end_rev)
 
             self.revset = "%s::%s" % (short_node(start), short_node(end))
 
@@ -2965,19 +2982,26 @@ class Git(Repository):
             self._git.extend(safe_options)
 
         if hasattr(self.args, "start_rev"):
-            if self.args.start_rev == "(auto)":
-                start = self._get_first_unpublished_node()
+            is_single = hasattr(self.args, "single") and self.args.single
+            if self.args.start_rev == DEFAULT_START_REV:
+                if is_single:
+                    start_rev = "HEAD"
+                else:
+                    start_rev = self._get_first_unpublished_node()
             else:
-                start = self.args.start_rev
+                start_rev = self.args.start_rev
 
-            if start is None:
+            if start_rev is None:
                 return None
 
             # We want inclusive range of commits if start commit is detected
-            if self.args.start_rev == "(auto)":
-                start = "%s^" % start
+            if self.args.start_rev == DEFAULT_START_REV or is_single:
+                start = "%s^" % start_rev
+            else:
+                start = start_rev
 
-            self.revset = (start, self.args.end_rev)
+            end = start_rev if is_single else self.args.end_rev
+            self.revset = (start, end)
 
     def _git_get_children(self, node):
         """Get commits SHA1 with their children.
@@ -4904,7 +4928,7 @@ def reorganise(repo, args):
         plural = len(names) > 1
         raise Error(
             "Found new commit{plural} in the local stack: {names}.\n"
-            "Please submit {them} first.".format(
+            "Please submit {them} separately and call the `reorg` again.".format(
                 plural="s" if plural else "",
                 them="them" if plural else "it",
                 names=", ".join(names),
@@ -5165,15 +5189,18 @@ def parse_args(argv):
         help="Run VCS with only necessary extensions.",
     )
     submit_parser.add_argument(
+        "--single", "-s", action="store_true", help="Submit a single commit.",
+    )
+    submit_parser.add_argument(
         "start_rev",
         nargs="?",
-        default="(auto)",
+        default=DEFAULT_START_REV,
         help="Start revision of range to submit (default: detected)",
     )
     submit_parser.add_argument(
         "end_rev",
         nargs="?",
-        default=".",
+        default=DEFAULT_END_REV,
         help="End revision of range to submit (default: current commit)",
     )
 

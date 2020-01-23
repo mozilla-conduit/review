@@ -24,13 +24,25 @@ def create_temp_fn(*filenames):
     return m_temp_fn
 
 
-def get_sha():
-    return git_out("log", "--format=%H", "-1").rstrip("\n")
+@pytest.fixture
+def hg_sha():
+    def ret():
+        return hg_out("id", "-i").rstrip("\n")
+
+    return ret
 
 
 @pytest.fixture
-def init_sha(in_process, git_repo_path):
-    return get_sha()
+def git_sha():
+    def ret():
+        return git_out("log", "--format=%H", "-1").rstrip("\n")
+
+    return ret
+
+
+@pytest.fixture
+def init_sha(in_process, git_repo_path, git_sha):
+    return git_sha()
 
 
 @pytest.fixture(autouse=True)

@@ -760,6 +760,22 @@ class Commits(unittest.TestCase):
                 ],
             )
 
+    def test_single_fails_with_end_rev(self):
+        # --single is working with one SHA1 provided only
+        repo = mozphab.Repository("", "", "dummy")
+
+        class Args:
+            def __init__(self, end_rev=mozphab.DEFAULT_END_REV):
+                self.single = True
+                self.end_rev = end_rev
+
+        self._assertNoError(repo.set_args, Args())
+        self._assertError(
+            repo.set_args,
+            "Option --single can be used with only one identifier.",
+            Args("endrev"),
+        )
+
 
 class TestUpdateCommitSummary(unittest.TestCase):
     def test_update_revision_description(self):
