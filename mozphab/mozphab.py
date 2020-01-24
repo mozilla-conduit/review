@@ -5044,7 +5044,12 @@ def parse_args(argv):
     # submit
 
     submit_parser = commands.add_parser(
-        "submit", help="Submit commits(s) to Phabricator"
+        "submit",
+        help="Submit commit(s) to Phabricator.",
+        description=(
+            "MozPhab will change the working directory and amend the commits during "
+            "the submission process."
+        ),
     )
     submit_parser.add_argument(
         "--path", "-p", help="Set path to repository (default: detected)"
