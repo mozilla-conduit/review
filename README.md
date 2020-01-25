@@ -92,7 +92,7 @@ To get information about all available commands run
 All commands involving VCS (like `submit` and `patch`) might be used with a
 `--safe-mode` switch. It will run the VCS command with only chosen set of extensions.
 
-### Submitting commits to the Phabricator
+### Submitting commits to Phabricator
 The simplest invocation is
 
 ```
@@ -133,11 +133,11 @@ abandoned manually.  See
 planned fixes.  Also note that "fix-up" commits are not yet supported;
 see [bug 1481542](https://bugzilla.mozilla.org/show_bug.cgi?id=1481542).
 
-MozPhab is not using Arcanist to submit commits to the Phabricator.
+MozPhab is not using Arcanist to submit commits to Phabricator.
 If you wish to do so add the `--arc` switch. File a bug if you needed to use it because
 MozPhab failed to submit with default settings.
 
-### Downloading a patch from the Phabricator
+### Downloading a patch from Phabricator
 
 `moz-phab patch` allows patching an entire stack of revisions. The simplest
 invocation is
@@ -147,7 +147,7 @@ invocation is
 ```
 
 To patch a stack ending with the revision `D123` run `moz-phab patch D123`.
-Diffs will be downloaded from the Phabricator and applied using the underlying
+Diffs will be downloaded from Phabricator and applied using the underlying
 VCS (`import` for Mercurial or `apply` for Git). A commit for each revision will
 be created in a new bookmark (Mercurial) or branch (Git).
 
@@ -186,6 +186,23 @@ you need to change the parent/child relation of the revisions in Phabricator.
 
 `moz-phab reorg` command will compare the stack, display what will be changed and 
 ask for permission before taking any action.
+
+### Associating a commit to an existing phabricator revision
+
+`moz-phab` tracks which revision is associated with a commit using a line in the
+commit message. If you want to work on an existing revision from a different
+machine or environment, we recommend you [apply the existing revision from
+Phabricator using `moz-phab patch`](#downloading-a-patch-from-phabricator).
+
+If that isn't an option for whatever reason, you can associate a new commit to
+the same revision by adding a line similar to the following to the extended
+commit message:
+
+```
+Differential Revision: https://phabricator.services.mozilla.com/D[revision]
+```
+
+replacing `[revision]` with the identifier of your revision.
 
 ### Running arc commands
 
