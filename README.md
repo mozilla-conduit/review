@@ -234,10 +234,20 @@ Integration tests require to have access to `git`, `hg` with `evolve` extension.
 All python code must be formatted with [black](https://github.com/ambv/black)
 using the default settings.
 
-Pull Requests are not accepted here; please submit changes with Phabricator.
+### Submitting patches
 
-Consider using [suite](https://github.com/mozilla-conduit/suite) to use MozPhab with 
-Phabricator installed on your local machine.
+Pull Requests are not accepted here; please submit changes to Phabricator using `moz-phab`.
+
+1. Follow the [setup](https://moz-conduit.readthedocs.io/en/latest/phabricator-user.html#setting-up-mozphab)
+2. Once your patch is written and committed locally, run `moz-phab` to send it to Phabricator
+
+### Local environment
+
+By using [suite](https://github.com/mozilla-conduit/suite), you can run a local
+environment with its own instances of Phabricator, BMO, Hg, and other services.
+
+This enables more thorough integration testing of `moz-phab` without affecting
+production data.
 
 You can order the suite to use your local code by calling:
 
