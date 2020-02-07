@@ -47,6 +47,9 @@ always_full_stack = False
 self_last_check = 0
 arc_last_check = 0
 self_auto_update = True
+
+[error_reporting]
+report_to_sentry = True
 ```
 
 - `ui.no_ansi` : never use ANSI colours (default: auto-detected).
@@ -77,6 +80,8 @@ self_auto_update = True
     an update was performed for arc.  set to `-1` to disable this check.
 - `self_auto_update` : when `True` moz-phab will auto-update if a new version is available.
     If `False` moz-phab will only warn about the new version.
+- `error_reporting.report_to_sentry` : when `True` moz-phab will submit exceptions to 
+    Sentry so moz-phab devs can see unreported errors.
 
 `moz-phab` can also be configured via the following environmental variables:
 - `DEBUG` : enabled debugging output (default: disabled)
@@ -226,7 +231,7 @@ File bugs in Bugzilla under
 ## Development
 
 To install your code call `pip3 install -e .` from MozPhab project directory (`review`
-by default). Your code will be executed by calling `moz-phab`.
+by default). Your code will be executed by calling `moz-phab-dev`.
 
 Tests can be executed with `pytest`.
 Integration tests require to have access to `git`, `hg` with `evolve` extension.

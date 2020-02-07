@@ -48,7 +48,8 @@ def _submit(repo, start, end, expected, wip=False):
             "1",
             repo["rev_map"][start],
             repo["rev_map"][end],
-        ]
+        ],
+        is_development=True,
     )
     log = hg_out("log", "--graph", "--template", r"{desc|firstline}\n")
     assert log.strip() == expected.strip()

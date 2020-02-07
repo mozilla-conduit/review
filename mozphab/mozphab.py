@@ -53,9 +53,8 @@ from .exceptions import (
     NonLinearException,
     NotFoundError,
 )
-
 from .reorganise import stack_transactions, walk_llist
-
+from .sentry import init_sentry, report_to_sentry
 
 # Known Issues
 # - commits with a description already modified by arc (ie. the follow the arc commit
@@ -572,6 +571,9 @@ class Config(object):
             self_last_check = 0
             arc_last_check = 0
             self_auto_update = True
+            
+            [error_reporting]
+            report_to_sentry = True
             """
 
         self._config = configparser.ConfigParser()
@@ -598,6 +600,9 @@ class Config(object):
         self.arc_last_check = self._config.getint("updater", "arc_last_check")
         git_remote = self._config.get("git", "remote")
         self.git_remote = git_remote.replace(" ", "").split(",") if git_remote else []
+        self.report_to_sentry = self._config.getboolean(
+            "error_reporting", "report_to_sentry"
+        )
 
         if should_access_file and not os.path.exists(self._filename):
             self.write()
@@ -5329,15 +5334,19 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-def main(argv):
+def main(argv, *, is_development):
     global config, HAS_ANSI, DEBUG, SHOW_SPINNER
     try:
-        if not os.path.exists(MOZBUILD_PATH):
-            os.makedirs(MOZBUILD_PATH)
+        config = Config()
+
+        if not is_development and config.report_to_sentry:
+            init_sentry()
 
         init_logging()
-        config = Config()
         os.environ["MOZPHAB"] = "1"
+
+        if not os.path.exists(MOZBUILD_PATH):
+            os.makedirs(MOZBUILD_PATH)
 
         logger.debug(get_name_and_version())
 
@@ -5385,11 +5394,16 @@ def main(argv):
         else:
             logger.error("%s: %s", e.__class__.__name__, e)
             logger.error("Run moz-phab again with '--trace' to show the stack trace")
+        report_to_sentry(e)
         sys.exit(1)
 
 
 def run():
-    main(sys.argv[1:])
+    main(sys.argv[1:], is_development=False)
+
+
+def run_dev():
+    main(sys.argv[1:], is_development=True)
 
 
 if __name__ == "__main__":

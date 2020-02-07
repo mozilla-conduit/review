@@ -37,7 +37,7 @@ Differential Revision: http://example.test/D1
     )
     git_out("commit", "--file", "msg")
     with pytest.raises(exceptions.Error) as e:
-        mozphab.main(["reorg", "--yes", init_sha])
+        mozphab.main(["reorg", "--yes", init_sha], is_development=True)
 
     assert (str(e.value)) == "Reorganisation is not needed."
 
@@ -68,7 +68,7 @@ Differential Revision: http://example.test/D2
     git_out("commit", "-a", "--file", "msg")
 
     with pytest.raises(exceptions.Error) as e:
-        mozphab.main(["reorg", "--yes", init_sha])
+        mozphab.main(["reorg", "--yes", init_sha], is_development=True)
 
     assert (str(e.value)) == "Reorganisation is not needed."
 
@@ -107,7 +107,7 @@ Differential Revision: http://example.test/D2
 """
     )
     git_out("commit", "-a", "--file", "msg")
-    mozphab.main(["reorg", "--yes", init_sha])
+    mozphab.main(["reorg", "--yes", init_sha], is_development=True)
     assert (
         mock.call(
             "differential.revision.edit",
@@ -192,7 +192,7 @@ Differential Revision: http://example.test/D2
 """
     )
     git_out("commit", "-a", "--file", "msg")
-    mozphab.main(["reorg", "--yes", init_sha])
+    mozphab.main(["reorg", "--yes", init_sha], is_development=True)
     assert (
         mock.call(
             "differential.revision.edit",
@@ -298,7 +298,7 @@ Differential Revision: http://example.test/D2
     )
     hg_out("commit", "-l", "msg")
     with pytest.raises(exceptions.Error) as e:
-        mozphab.main(["reorg", "--yes", "1", "3"])
+        mozphab.main(["reorg", "--yes", "1", "3"], is_development=True)
 
     assert (str(e.value)) == "Revision D1 has multiple children."
 
@@ -343,7 +343,7 @@ Differential Revision: http://example.test/D1
 """
     )
     git_out("commit", "--file", "msg")
-    mozphab.main(["reorg", "--yes", init_sha])
+    mozphab.main(["reorg", "--yes", init_sha], is_development=True)
     # Search for the revision to get its PHID
     assert call_conduit.call_args_list[1] == mock.call(
         "differential.revision.search",
