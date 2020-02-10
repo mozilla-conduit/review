@@ -181,10 +181,7 @@ def test_patch(
     m_prepare_body.return_value = "commit message"
     mozphab.patch(git, git.args)
     m_git_apply_patch.assert_called_once_with(
-        "raw",
-        "commit message",
-        "user <author@example.com>",
-        datetime.datetime.fromtimestamp(1547806078).isoformat(),
+        "raw", "commit message", "user <author@example.com>", 1547806078,
     )
     m_apply_patch.assert_not_called()
     m_get_base_ref.assert_called_once()
@@ -210,10 +207,7 @@ def test_patch(
     }
     mozphab.patch(git, git.args)
     m_git_apply_patch.assert_called_once_with(
-        "raw",
-        "commit message",
-        "user <author@example.com>",
-        datetime.datetime.fromtimestamp(1547806078).isoformat(),
+        "raw", "commit message", "user <author@example.com>", 1547806078,
     )
 
     m_get_base_ref.return_value = None
@@ -259,10 +253,7 @@ def test_patch(
     mozphab.patch(git, git.args)
     m_get_base_ref.assert_not_called()
     m_git_apply_patch.assert_called_once_with(
-        "raw",
-        "commit message",
-        "user <author@example.com>",
-        datetime.datetime.fromtimestamp(1547806078).isoformat(),
+        "raw", "commit message", "user <author@example.com>", 1547806078,
     )
     m_apply_patch.assert_not_called()
 

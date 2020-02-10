@@ -254,17 +254,14 @@ def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
 
 
 @mock.patch("mozphab.mozphab.temporary_binary_file")
-@mock.patch("mozphab.mozphab.temporary_file")
 @mock.patch("mozphab.mozphab.Mercurial.hg")
-def test_apply_patch(m_hg, m_temp_bin_fn, m_temp_fn, hg):
-    m_temp_bin_fn.return_value = create_temp_fn("body_fn")
-    m_temp_fn.return_value = create_temp_fn("diff_fn")
+def test_apply_patch(m_hg, m_temp_bin_fn, hg):
+    m_temp_bin_fn.return_value = create_temp_fn("diff_fn")
     hg.apply_patch("diff", "body", "user", 1)
-    m_hg.assert_called_once_with(
-        ["import", "diff_fn", "--quiet", "-l", "body_fn", "-u", "user", "-d", 1]
+    m_hg.assert_called_once_with(["import", "diff_fn", "--quiet"])
+    m_temp_bin_fn.assert_called_once_with(
+        b"# HG changeset patch\n# User user\n# Date 1 0\nbody\ndiff"
     )
-    m_temp_bin_fn.assert_called_once()
-    m_temp_fn.assert_called_once()
 
 
 @mock.patch("mozphab.mozphab.Mercurial.hg_out")

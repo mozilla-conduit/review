@@ -2207,17 +2207,17 @@ class Mercurial(Repository):
                 logger.info("Bookmark set to %s", bookmark_name)
 
     def apply_patch(self, diff, body, author, author_date):
-        commands = []
+        changeset = ["# HG changeset patch"]
         if author:
-            commands.extend(["-u", author])
+            changeset.append("# User {}".format(author))
 
         if author_date:
-            commands.extend(["-d", author_date])
+            changeset.append("# Date {} 0".format(author_date))
 
-        with temporary_binary_file(diff.encode("utf8")) as patch_file, temporary_file(
-            body
-        ) as body_file:
-            self.hg(["import", patch_file, "--quiet", "-l", body_file] + commands)
+        changeset.extend([body, diff])
+        changeset_str = "\n".join(changeset)
+        with temporary_binary_file(changeset_str.encode("utf8")) as changeset_file:
+            self.hg(["import", changeset_file, "--quiet"])
 
     def _amend_commit_body(self, node, body):
         with temporary_file(body) as body_file:
@@ -3171,7 +3171,7 @@ class Git(Repository):
             commands.append('--author="%s"' % author)
 
         if author_date:
-            commands.append('--date="%s"' % author_date)
+            commands.append('--date="format:raw:%s 0"' % author_date)
 
         with temporary_file(body) as temp_f:
             commands += ["-F", temp_f]
@@ -3225,6 +3225,7 @@ class Git(Repository):
         # is used.
         with temporary_binary_file(diff.encode("utf8")) as patch_file:
             self.git(["apply", "--index", patch_file])
+
         self.commit(body, author, author_date)
 
     def _get_current_head(self):
@@ -4842,13 +4843,10 @@ def patch(repo, args):
                 diff_commits[0]["author"]["name"],
                 diff_commits[0]["author"]["email"],
             )
-            author_date = datetime.datetime.fromtimestamp(
-                diff["fields"]["dateCreated"]
-            ).isoformat()
 
             try:
                 with wait_message("Applying D%s.." % rev["id"]):
-                    repo.apply_patch(raw, body, author, author_date)
+                    repo.apply_patch(raw, body, author, diff["fields"]["dateCreated"])
             except subprocess.CalledProcessError:
                 raise Error("Patch failed to apply")
 
