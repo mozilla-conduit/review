@@ -4581,7 +4581,30 @@ def self_upgrade():
     if script_dir == user_dir:
         command.append("--user")
 
-    check_call(command)
+    if IS_WINDOWS:
+        # Windows does not allow to remove the exe file of the running process.
+        # Renaming the `moz-phab.exe` file to allow pip to install a new version.
+        temp_exe = Path(tempfile.gettempdir()) / "moz-phab.exe"
+        try:
+            temp_exe.unlink()
+        except FileNotFoundError:
+            pass
+
+        exe = script_dir / "moz-phab.exe"
+        exe.rename(temp_exe)
+
+        try:
+            check_call(command)
+        except:
+            temp_exe.rename(exe)
+            raise
+
+        if not exe.is_file():
+            # moz-phab.exe is not created - install wasn't needed.
+            temp_exe.rename(exe)
+
+    else:
+        check_call(command)
 
 
 def self_update(_):
