@@ -3966,12 +3966,14 @@ def install_arc_if_required():
     if os.path.exists(ARC_COMMAND) and os.path.exists(LIBPHUTIL_PATH):
         return
 
+    check_git("Git is required to install Arcanist.")
+
     logger.info("Installing arc")
     logger.debug("arc command: %s", ARC_COMMAND)
     logger.debug("libphutil path: %s", LIBPHUTIL_PATH)
 
-    check_call(["git", "clone", "--depth", "1", ARC_URL, ARC_PATH])
-    check_call(["git", "clone", "--depth", "1", LIBPHUTIL_URL, LIBPHUTIL_PATH])
+    check_call(GIT_COMMAND + ["clone", "--depth", "1", ARC_URL, ARC_PATH])
+    check_call(GIT_COMMAND + ["clone", "--depth", "1", LIBPHUTIL_URL, LIBPHUTIL_PATH])
 
 
 def arc_ping(cwd):
@@ -4466,6 +4468,11 @@ def submit(repo, args):
 #
 
 
+def check_git(message=""):
+    if not which_path(GIT_COMMAND[0]):
+        raise Error("Failed to find 'git' executable. {}".format(message))
+
+
 def update_arc():
     """Write the last check and update arc."""
 
@@ -4480,11 +4487,11 @@ def update_arc():
         else:
             logger.info("Update of %s not required", name)
 
-    if not which_path(GIT_COMMAND[0]):
-        raise Error(
-            "Failed to find 'git' executable, which is required to install "
-            "MozPhab's dependencies."
-        )
+    if not os.path.exists(ARC_COMMAND) or not os.path.exists(LIBPHUTIL_PATH):
+        # Nothing to update
+        return
+
+    check_git("Git is required to install Arcanist.")
 
     try:
         update_repo("libphutil", LIBPHUTIL_PATH)
@@ -4831,11 +4838,9 @@ def patch(repo, args):
             raw = conduit.call("differential.getrawdiff", {"diffID": diff["id"]})
 
         if args.no_commit:
-            if repo.vcs == "hg" and not which_path(GIT_COMMAND[0]):
-                raise Error(
-                    "Failed to find 'git' executable.\n"
-                    "Git is required to apply patches."
-                )
+            if repo.vcs == "hg":
+                check_git("Git is required to apply patches.")
+
             with wait_message("Applying D%s.." % rev["id"]):
                 apply_patch(raw, repo.path)
 
@@ -5180,14 +5185,10 @@ def parse_args(argv):
     # self-update
 
     update_parser = commands.add_parser("self-update", help="Update review script")
-    update_parser.add_argument(
-        "--force", "-f", action="store_true", help="Force update even if not necessary"
-    )
-
     # We suppress exception stack traces unless --trace is provided
     update_parser.add_argument("--trace", action="store_true", help=argparse.SUPPRESS)
 
-    update_parser.set_defaults(func=self_update, needs_repo=False)
+    update_parser.set_defaults(func=self_update, needs_repo=False, no_arc=True)
 
     # patch
 

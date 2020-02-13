@@ -348,10 +348,11 @@ def test_arc_ping_with_invalid_certificate_returns_false(arc_out):
     assert not mozphab.arc_ping("")
 
 
+@mock.patch("mozphab.mozphab.check_git")
 @mock.patch("mozphab.mozphab.check_call")
 @mock.patch("os.path.exists")
 @mock.patch("os.makedirs")
-def test_install(_makedirs, m_exists, m_check_call):
+def test_install(_makedirs, m_exists, m_check_call, _):
     install = mozphab.install_arc_if_required
     m_exists.return_value = True
     install()
