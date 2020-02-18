@@ -3997,7 +3997,10 @@ def install_arc_if_required():
     logger.debug("libphutil path: %s", LIBPHUTIL_PATH)
 
     check_call(GIT_COMMAND + ["clone", "--depth", "1", ARC_URL, ARC_PATH])
-    check_call(GIT_COMMAND + ["clone", "--depth", "1", LIBPHUTIL_URL, LIBPHUTIL_PATH])
+    check_call(
+        GIT_COMMAND
+        + ["clone", "--depth", "1", "--branch", "stable", LIBPHUTIL_URL, LIBPHUTIL_PATH]
+    )
 
 
 def arc_ping(cwd):
