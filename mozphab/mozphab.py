@@ -5373,11 +5373,10 @@ def main(argv, *, is_development):
         if not is_development and config.report_to_sentry:
             init_sentry()
 
+        os.makedirs(MOZBUILD_PATH, exist_ok=True)
+
         init_logging()
         os.environ["MOZPHAB"] = "1"
-
-        if not os.path.exists(MOZBUILD_PATH):
-            os.makedirs(MOZBUILD_PATH)
 
         logger.debug(get_name_and_version())
 
