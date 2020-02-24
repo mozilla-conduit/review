@@ -5080,6 +5080,7 @@ def parse_args(argv):
 
     submit_parser = commands.add_parser(
         "submit",
+        aliases=["upload"],
         help="Submit commit(s) to Phabricator.",
         description=(
             "MozPhab will change the working directory and amend the commits during "
