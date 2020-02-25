@@ -5068,13 +5068,16 @@ def init_logging():
 
 
 def parse_args(argv):
-    parser = argparse.ArgumentParser()
+    main_parser = argparse.ArgumentParser(add_help=False)
+    main_parser.add_argument("--version", action="store_true", help=argparse.SUPPRESS)
+    parser = argparse.ArgumentParser(parents=[main_parser])
+
     commands = parser.add_subparsers(
         dest="command",
         metavar="COMMAND",
         description="For full command description: moz-phab COMMAND -h",
+        required=True,
     )
-    commands.required = True
 
     # submit
 
@@ -5354,6 +5357,12 @@ def parse_args(argv):
     ver_parser = commands.add_parser("version", help="Get version number")
     ver_parser.set_defaults(func=log_current_version, needs_repo=False, no_arc=True)
 
+    # help command
+
+    help_parser = commands.add_parser("help")
+    help_parser.add_argument("command", nargs=argparse.OPTIONAL)
+    help_parser.set_defaults(print_help=True)
+
     # if we're called without a command and from within a repository, default to submit.
     if not argv or (
         not (set(argv) & {"-h", "--help"})
@@ -5363,7 +5372,23 @@ def parse_args(argv):
         logger.debug("defaulting to `submit`")
         argv.insert(0, "submit")
 
-    return parser.parse_args(argv)
+    main_args, unknown = main_parser.parse_known_args(argv)
+
+    # map --version to the 'version' command
+    if main_args.version:
+        unknown = ["version"]
+
+    args = parser.parse_args(unknown)
+
+    # handle the help command here as printing help needs access to the parser
+    if hasattr(args, "print_help"):
+        help_argv = ["--help"]
+        if args.command:
+            help_argv.insert(0, args.command)
+        # parse_args calls parser.exit() when passed --help
+        parser.parse_args(help_argv)
+
+    return args
 
 
 def main(argv, *, is_development):
