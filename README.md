@@ -32,6 +32,10 @@ safe_mode = False
 
 [git]
 remote =
+command_path =
+
+[hg]
+command_path =
 
 [submit]
 auto_submit = False
@@ -58,6 +62,8 @@ report_to_sentry = True
 - `git.remote`: comma separated string. Default remotes used to find the first
     unpublished commit. Default, empty string, means that a list of remotes will
     be read from `git remote` command.
+- `git.command_path`: command path to Git binary.
+- `hg.command_path`: command path to Mercurial binary.
 - `submit.auto_submit` : when true the confirmation prompt will be skipped
     (default: false).
 - `submit.always_blocking` : when true reviewers in commit descriptions will be marked
@@ -85,7 +91,6 @@ report_to_sentry = True
 
 `moz-phab` can also be configured via the following environmental variables:
 - `DEBUG` : enabled debugging output (default: disabled)
-- `UPDATE_FILE` : when self-updating write to this file instead of \_\_file\_\_
 
 ## Execution
 

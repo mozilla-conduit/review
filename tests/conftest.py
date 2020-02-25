@@ -63,7 +63,15 @@ def data_file():
 
 
 @pytest.fixture
-@mock.patch("mozphab.mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.Config")
+def git_command(m_config):
+    mozphab.config = m_config()
+    mozphab.config.git_command = ["git"]
+    return mozphab.config
+
+
+@pytest.fixture
+@mock.patch("mozphab.mozphab.GitCommand.output")
 @mock.patch("mozphab.mozphab.Git._get_current_head")
 @mock.patch("mozphab.mozphab.Config")
 @mock.patch("mozphab.mozphab.os.path")
@@ -77,6 +85,7 @@ def git(
     m_git_get_current_head,
     m_git_git_out,
     repo_phab_url,
+    git_command,
 ):
     m_read_json_field.return_value = "TEST"
     m_os_path.join = os.path.join
@@ -114,6 +123,8 @@ def hg(
         "Mercurial Distributed SCM (version 4.7.1)",
         ["ui.username=username", "extensions.evolve="],
     ]
+    mozphab.config = m_config()
+    mozphab.config.hg_command = ["hg"]
     hg = mozphab.Mercurial("x")
     hg.use_evolve = True
     hg.has_mq = False

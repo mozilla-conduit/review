@@ -215,12 +215,12 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
     with pytest.raises(exceptions.Error):
         git.set_args(Args())
 
-    git._git = []
+    git.git.command = ["git"]
     m_config.safe_mode = False
     m_parse_config.return_value = {"user.email": "email"}
     m_git_get_first.return_value = "aaa"
     git.set_args(Args())
-    assert [] == git._git
+    assert ["git"] == git.git.command
     m_git_get_first.assert_called_once()
     assert git.revset == ("aaa^", ".")
 
@@ -230,21 +230,22 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
         "cinnabar.helper": "string",
     }
     git.set_args(Args())
-    assert [] == git._git
-    assert ["cinnabar"] == git.extensions
+    assert ["git"] == git.git.command
+    assert ["cinnabar"] == git.git.extensions
 
     safe_options = (
-        ["-c", "user.email=email"]
+        ["git"]
+        + ["-c", "user.email=email"]
         + ["-c", "user.name=name"]
         + ["-c", "cinnabar.helper=string"]
     )
     git.set_args(Args(safe_mode=True))
-    assert safe_options == git._git
+    assert safe_options == git.git.command
 
-    git._git = []
+    git.git.command = ["git"]
     m_config.safe_mode = True
     git.set_args(Args())
-    assert safe_options == git._git
+    assert safe_options == git.git.command
 
     m_config.safe_mode = False
     m_git_get_first.reset_mock()
@@ -253,13 +254,13 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
     assert git.revset == ("bbb", "ccc")
 
     git.set_args(Args(safe_mode=True))
-    assert "" == git._env["HOME"]
-    assert "" == git._env["XDG_CONFIG_HOME"]
+    assert "" == git.git._env["HOME"]
+    assert "" == git.git._env["XDG_CONFIG_HOME"]
 
     m_config.safe_mode = True
     git.set_args(Args())
-    assert "" == git._env["HOME"]
-    assert "" == git._env["XDG_CONFIG_HOME"]
+    assert "" == git.git._env["HOME"]
+    assert "" == git.git._env["XDG_CONFIG_HOME"]
 
     m_git_get_first.reset_mock()
     m_parse_config.return_value = {
@@ -290,7 +291,7 @@ def test_worktree_clean(m_git_out, git):
     assert not git.is_worktree_clean()
 
 
-@mock.patch("mozphab.mozphab.Git.git")
+@mock.patch("mozphab.mozphab.Git.git_call")
 def test_commit(m_git, git):
     git.commit("some body")
     assert m_git.called_once()
@@ -309,13 +310,13 @@ def test_check_node(m_phab_vcs, m_git_is_node, m_hg2git, git):
     assert node == git.check_node(node)
 
     git._phab_vcs = "hg"
-    git._cinnabar_installed = False
+    git.git._cinnabar_installed = False
     m_git_is_node.return_value = False
     with pytest.raises(exceptions.NotFoundError) as e:
         git.check_node(node)
     assert "Cinnabar extension not enabled" in str(e.value)
 
-    git._cinnabar_installed = True
+    git.git._cinnabar_installed = True
     m_hg2git.return_value = "0" * 40
     with pytest.raises(exceptions.NotFoundError) as e:
         git.check_node(node)
@@ -332,7 +333,7 @@ def test_check_node(m_phab_vcs, m_git_is_node, m_hg2git, git):
 
 @mock.patch("mozphab.mozphab.Git.git_out")
 @mock.patch("mozphab.mozphab.Git.checkout")
-@mock.patch("mozphab.mozphab.Git.git")
+@mock.patch("mozphab.mozphab.Git.git_call")
 @mock.patch("mozphab.mozphab.prompt")
 @mock.patch("mozphab.mozphab.logger")
 def test_before_patch(m_logger, m_prompt, m_git, m_checkout, m_git_out, git):
@@ -401,7 +402,7 @@ def test_before_patch(m_logger, m_prompt, m_git, m_checkout, m_git_out, git):
 
 
 @mock.patch("mozphab.mozphab.temporary_binary_file")
-@mock.patch("mozphab.mozphab.Git.git")
+@mock.patch("mozphab.mozphab.Git.git_call")
 @mock.patch("mozphab.mozphab.Git.commit")
 def test_apply_patch(m_commit, m_git, m_temp_fn, git):
     m_temp_fn.return_value = create_temp_fn("filename")
@@ -424,7 +425,7 @@ def test_is_node(m_git_out, git):
 
 
 @mock.patch("mozphab.mozphab.which")
-@mock.patch("mozphab.mozphab.Git.git_out")
+@mock.patch("mozphab.mozphab.GitCommand.output")
 def test_is_cinnabar_installed(m_git_out, m_which, git, tmp_path):
     def _without_str(calls):
         # Debuggers call __str__ on mocked functions, strip them
@@ -452,7 +453,7 @@ def test_is_cinnabar_installed(m_git_out, m_which, git, tmp_path):
         ["External commands", "   revise"],  # git help --all
         tmp_path,  # git --exec-path
     ]
-    git._cinnabar_installed = None
+    git.git._cinnabar_installed = None
     assert git.is_cinnabar_installed
     assert _without_str(m_git_out.mock_calls) == [
         mock.call(["help", "--all"]),
@@ -469,7 +470,7 @@ def test_is_cinnabar_installed(m_git_out, m_which, git, tmp_path):
         tmp_path,  # git --exec-path
     ]
     m_which.return_value = str(cinnabar)
-    git._cinnabar_installed = None
+    git.git._cinnabar_installed = None
     assert git.is_cinnabar_installed
     assert _without_str(m_git_out.mock_calls) == [
         mock.call(["help", "--all"]),
@@ -483,7 +484,7 @@ def test_is_cinnabar_installed(m_git_out, m_which, git, tmp_path):
         tmp_path,  # git --exec-path
     ]
     m_which.return_value = None
-    git._cinnabar_installed = None
+    git.git._cinnabar_installed = None
     assert not git.is_cinnabar_installed
     assert _without_str(m_git_out.mock_calls) == [
         mock.call(["help", "--all"]),
@@ -507,18 +508,21 @@ def test_unicode_in_windows_env(m_git_out, git, monkeypatch):
 def test_check_vcs(git):
     class Args:
         def __init__(self, force_vcs=False):
+            self.safe_mode = False
             self.force_vcs = force_vcs
 
-    git.args = Args()
+    args = Args()
+    git.set_args(args)
     assert git.check_vcs()
 
-    git._cinnabar_installed = True
+    git.git._cinnabar_installed = True
     git._phab_vcs = "hg"
     assert git.check_vcs()
 
-    git._cinnabar_installed = False
+    git.git._cinnabar_installed = False
     with pytest.raises(exceptions.Error):
         git.check_vcs()
 
-    git.args = Args(force_vcs=True)
+    args = Args(force_vcs=True)
+    git.set_args(args)
     assert git.check_vcs()
