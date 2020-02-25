@@ -8,12 +8,12 @@ import pytest
 import subprocess
 import unittest
 
-from mozphab import exceptions, mozphab
+from mozphab import exceptions, helpers, mozphab, simplecache
 
 
 class Helpers(unittest.TestCase):
     @mock.patch("builtins.open")
-    @mock.patch("mozphab.mozphab.json")
+    @mock.patch("mozphab.helpers.json")
     def test_read_json_field(self, m_json, m_open):
         m_open.side_effect = FileNotFoundError
         self.assertEqual(None, mozphab.read_json_field(["nofile"], ["not existing"]))
@@ -191,19 +191,18 @@ class Helpers(unittest.TestCase):
             ),
         )
 
-    @mock.patch("mozphab.mozphab.os.access")
-    @mock.patch("mozphab.mozphab.os.path")
-    @mock.patch("mozphab.mozphab.os.environ")
-    @mock.patch("mozphab.mozphab.which")
-    def test_which_path(self, m_which, _os_environ, m_os_path, m_os_access):
+    @mock.patch("mozphab.helpers.os.access")
+    @mock.patch("mozphab.helpers.os.path")
+    @mock.patch("mozphab.helpers.which")
+    def test_which_path(self, m_which, m_os_path, m_os_access):
         m_os_path.exists.side_effect = (True, False)
         m_os_access.return_value = True
         m_os_path.isdir.return_value = False
 
         path = "x"
-        self.assertEqual(path, mozphab.which_path(path))
+        self.assertEqual(path, helpers.which_path(path))
         m_which.assert_not_called()
-        mozphab.which_path(path)
+        helpers.which_path(path)
         m_which.assert_called_once_with(path)
 
 
@@ -348,8 +347,8 @@ def test_arc_ping_with_invalid_certificate_returns_false(arc_out):
     assert not mozphab.arc_ping("")
 
 
-@mock.patch("mozphab.mozphab.which_path")
-@mock.patch("mozphab.mozphab.check_call")
+@mock.patch("mozphab.gitcommand.which_path")
+@mock.patch("mozphab.gitcommand.check_call")
 @mock.patch("os.path.exists")
 @mock.patch("os.makedirs")
 def test_install(_makedirs, m_exists, m_check_call, _which_path, git_command):
@@ -388,7 +387,7 @@ def test_get_users_with_user(m_conduit):
 
 
 def test_simple_cache():
-    cache = mozphab.SimpleCache()
+    cache = simplecache.SimpleCache()
     assert cache.get("nothing") is None
 
     cache.set("something", 123)
@@ -404,7 +403,7 @@ def test_simple_cache():
 
 
 @mock.patch("subprocess.check_output")
-@mock.patch("mozphab.mozphab.logger")
+@mock.patch("mozphab.subprocess_wrapper.logger")
 def test_check_output(m_logger, m_check_output):
     m_check_output.side_effect = subprocess.CalledProcessError(
         cmd=["some", "cmd"], returncode=2, output="output msg", stderr="stderr msg"

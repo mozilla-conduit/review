@@ -75,7 +75,7 @@ def git_command(m_config):
 @mock.patch("mozphab.mozphab.Git._get_current_head")
 @mock.patch("mozphab.mozphab.Config")
 @mock.patch("mozphab.mozphab.os.path")
-@mock.patch("mozphab.mozphab.which")
+@mock.patch("mozphab.helpers.which")
 @mock.patch("mozphab.mozphab.read_json_field")
 def git(
     m_read_json_field,
@@ -102,7 +102,7 @@ def git(
 @mock.patch("mozphab.mozphab.Mercurial.hg_out")
 @mock.patch("mozphab.mozphab.Config")
 @mock.patch("mozphab.mozphab.os.path")
-@mock.patch("mozphab.mozphab.which")
+@mock.patch("mozphab.helpers.which")
 @mock.patch("mozphab.mozphab.read_json_field")
 def hg(
     m_read_json_field,

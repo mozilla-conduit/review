@@ -195,7 +195,7 @@ def test_range(m_config, m_git_git_out, git):
 
 
 @mock.patch("mozphab.mozphab.config")
-@mock.patch("mozphab.mozphab.parse_config")
+@mock.patch("mozphab.gitcommand.parse_config")
 @mock.patch("mozphab.mozphab.Git._get_first_unpublished_node")
 @mock.patch("mozphab.mozphab.Git.git_out")
 def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git):
@@ -216,7 +216,7 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
         git.set_args(Args())
 
     git.git.command = ["git"]
-    m_config.safe_mode = False
+    git.git.safe_mode = False
     m_parse_config.return_value = {"user.email": "email"}
     m_git_get_first.return_value = "aaa"
     git.set_args(Args())
@@ -243,7 +243,7 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
     assert safe_options == git.git.command
 
     git.git.command = ["git"]
-    m_config.safe_mode = True
+    git.git.safe_mode = True
     git.set_args(Args())
     assert safe_options == git.git.command
 
@@ -424,8 +424,8 @@ def test_is_node(m_git_out, git):
     assert not git.is_node("aaa")
 
 
-@mock.patch("mozphab.mozphab.which")
-@mock.patch("mozphab.mozphab.GitCommand.output")
+@mock.patch("mozphab.gitcommand.which")
+@mock.patch("mozphab.gitcommand.GitCommand.output")
 def test_is_cinnabar_installed(m_git_out, m_which, git, tmp_path):
     def _without_str(calls):
         # Debuggers call __str__ on mocked functions, strip them

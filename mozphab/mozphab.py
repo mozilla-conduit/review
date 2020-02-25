@@ -17,7 +17,6 @@ import datetime
 import io
 import json
 import logging
-import logging.handlers
 import mimetypes
 import operator
 import os
@@ -39,7 +38,6 @@ from collections import namedtuple
 from contextlib import contextmanager, suppress
 from distutils.dist import Distribution
 from distutils.version import LooseVersion
-from glob import glob
 from pathlib import Path
 from pkg_resources import get_distribution, parse_version
 from shlex import quote
@@ -53,6 +51,17 @@ from .exceptions import (
     NonLinearException,
     NotFoundError,
 )
+from .gitcommand import GitCommand
+from .helpers import (
+    parse_config,
+    read_json_field,
+    which_path,
+    temporary_file,
+    temporary_binary_file,
+)
+from .logger import init_logging, logger
+from .simplecache import cache
+from .subprocess_wrapper import check_call, check_call_by_line, check_output
 from .reorganise import stack_transactions, walk_llist
 from .sentry import init_sentry, report_to_sentry
 
@@ -104,9 +113,6 @@ MOZBUILD_PATH = os.path.join(
     os.environ.get("MOZBUILD_STATE_PATH", os.path.join(HOME_DIR, ".mozbuild")),
     "moz-phab",
 )
-LOG_FILE = os.path.join(MOZBUILD_PATH, "moz-phab.log")
-LOG_MAX_SIZE = 1024 * 1024 * 50
-LOG_BACKUPS = 5
 
 # Arcanist
 LIBPHUTIL_PATH = os.path.join(MOZBUILD_PATH, "libphutil")
@@ -203,170 +209,6 @@ NULL_SHA1 = "0" * 40
 #
 
 
-class SimpleCache:
-    """Simple key/value store with all lowercase keys."""
-
-    def __init__(self):
-        self._cache = dict()
-
-    def __contains__(self, key):
-        return key.lower() in self._cache
-
-    def get(self, key):
-        return self._cache.get(key.lower())
-
-    def set(self, key, value):
-        self._cache[key.lower()] = value
-
-    def delete(self, key):
-        if key in self:
-            del self._cache[key.lower()]
-
-    def reset(self):
-        self._cache = dict()
-
-
-cache = SimpleCache()
-
-
-def which_path(path):
-    """Check if an executable is provided. Fall back to which if not.
-
-    Args:
-        path: (str) filename or path to check for an executable command
-
-    Returns:
-        The full path of a command or None.
-    """
-    if (
-        os.path.exists(path)
-        and os.access(path, os.F_OK | os.X_OK)
-        and not os.path.isdir(path)
-    ):
-        logger.debug("Path found: %s", path)
-        return path
-
-    return which(path)
-
-
-def parse_zulu_time(timestamp):
-    """Parse YYYY-MM-DDTHH:mm:SSZ date string, return as epoch seconds in local tz."""
-    return calendar.timegm(time.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ"))
-
-
-def check_call(command, **kwargs):
-    # wrapper around subprocess.check_call with debug output
-    logger.debug("$ %s", " ".join(quote(s) for s in command))
-    try:
-        subprocess.check_call(command, **kwargs)
-    except subprocess.CalledProcessError as e:
-        raise CommandError(
-            "command '%s' failed to complete successfully" % command[0], e.returncode
-        )
-
-
-def check_call_by_line(command, cwd=None, never_log=False):
-    # similar to check_call, yields for line-by-line processing
-    logger.debug("$ %s", " ".join(quote(s) for s in command))
-
-    # Connecting the STDIN to the PIPE will make arc throw an exception on reading
-    # user input
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stdin=subprocess.PIPE,
-        cwd=cwd,
-        universal_newlines=True,
-    )
-    try:
-        for line in iter(process.stdout.readline, ""):
-            line = line.rstrip()
-            if not never_log:
-                logger.debug("> %s", line)
-            yield line
-    finally:
-        process.stdout.close()
-        process.wait()
-
-    if process.returncode:
-        raise CommandError(
-            "command '%s' failed to complete successfully" % command[0],
-            process.returncode,
-        )
-
-
-def check_output(
-    command,
-    cwd=None,
-    split=True,
-    keep_ends=False,
-    strip=True,
-    never_log=False,
-    stdin=None,
-    stderr=None,
-    env=None,
-    search_error=None,
-    expect_binary=False,
-):
-    # wrapper around subprocess.check_output with debug output and splitting
-    logger.debug("$ %s", " ".join(quote(s) for s in command))
-    kwargs = dict(cwd=cwd, stdin=stdin, stderr=stderr)
-    if not expect_binary:
-        kwargs["universal_newlines"] = True
-
-    if env:
-        kwargs["env"] = env
-
-    try:
-        output = subprocess.check_output(command, **kwargs)
-    except subprocess.CalledProcessError as e:
-        if search_error:
-            for err in search_error:
-                if err["matching"] in e.output:
-                    logger.error(err["message"])
-
-        if e.output and not never_log:
-            logger.debug(e.output)
-
-        if e.stderr and not never_log:
-            logger.debug(e.stderr)
-
-        raise CommandError(
-            "command '%s' failed to complete successfully" % command[0], e.returncode
-        )
-
-    if expect_binary:
-        logger.debug("%s bytes of data received", len(output))
-        return output
-
-    if strip:
-        output = output.rstrip()
-    if output and not never_log:
-        logger.debug(output)
-    return output.splitlines(keep_ends) if split else output
-
-
-def read_json_field(files, field_path):
-    """Parses json files in turn returning value as per field_path, or None."""
-    for filename in files:
-        try:
-            with open(filename, encoding="utf-8") as f:
-                rc = json.load(f)
-                for field_name in field_path:
-                    if field_name not in rc:
-                        rc = None
-                        break
-                    rc = rc[field_name]
-                if not rc:
-                    continue
-                return rc
-        except FileNotFoundError:
-            continue
-        except ValueError:
-            continue
-    return None
-
-
 def prompt(question, options=None):
     if HAS_ANSI:
         question = "\033[33m%s\033[0m" % question
@@ -395,69 +237,12 @@ def prompt(question, options=None):
             return options_map[res]
 
 
-def parse_config(config_list, filter_func=None):
-    """Parses list with "name=value" strings.
-
-    Args:
-        config_list: A list of "name=value" strings
-        filter_func: A function taking the parsing config name and value for each line.
-            If the function returns True the config value will be included in the final
-            dict.
-
-    Returns: A dict containing parsed data.
-    """
-    result = dict()
-    for line in config_list:
-        # On Windows config file is likely to be cp1252 encoded, not UTF-8.
-        if IS_WINDOWS:
-            try:
-                line = line
-            except UnicodeDecodeError:
-                pass
-
-        try:
-            name, value = line.split("=", 1)
-        except ValueError:
-            continue
-
-        name = name.strip()
-        value = value.strip()
-        if filter_func is None or (callable(filter_func) and filter_func(name, value)):
-            result[name] = value
-
-    return result
-
-
 def normalise_reviewer(reviewer, strip_group=True):
     """This provide a canonical form of the reviewer for comparison."""
     reviewer = reviewer.rstrip("!").lower()
     if strip_group:
         reviewer = reviewer.lstrip("#")
     return reviewer
-
-
-@contextmanager
-def temporary_file(content, encoding="utf-8"):
-    f = tempfile.NamedTemporaryFile(delete=False, mode="w+", encoding=encoding)
-    try:
-        f.write(content)
-        f.flush()
-        f.close()
-        yield f.name
-    finally:
-        os.remove(f.name)
-
-
-@contextmanager
-def temporary_binary_file(content):
-    f = tempfile.NamedTemporaryFile(delete=False, mode="wb+")
-    try:
-        f.write(content)
-        f.flush()
-        f.close()
-        yield f.name
-    finally:
-        os.remove(f.name)
 
 
 def short_node(text):
@@ -2745,85 +2530,6 @@ class Mercurial(Repository):
 #
 
 
-class GitCommand:
-    def __init__(self):
-        """Check if Git is available, set initial values."""
-        self.command = config.git_command.copy()
-        if not which_path(self.command[0]):
-            raise Error("Failed to find Git executable ({})".format(self.command[0]))
-
-        # `self._env` is a dict representing environment used in all git commands.
-        self._env = os.environ.copy()
-
-        self.extensions = []
-        self._cinnabar_installed = None
-
-    def call(self, git_args, **kwargs):
-        check_call(self.command + git_args, env=self._env, **kwargs)
-
-    def output(self, git_args, extra_env=None, **kwargs):
-        env = dict(self._env)
-        if extra_env:
-            env.update(extra_env)
-
-        return check_output(self.command + git_args, env=env, **kwargs)
-
-    def set_args(self, args):
-        """Read and set the configuration."""
-        git_config = parse_config(self.output(["config", "--list"], never_log=True))
-
-        safe_options = []
-
-        # Need to use the correct username.
-        if "user.email" not in git_config:
-            raise Error("user.email is not configured in your gitconfig")
-
-        safe_options.extend(["-c", "user.email=%s" % git_config["user.email"]])
-
-        if "user.name" in git_config:
-            safe_options.extend(["-c", "user.name=%s" % git_config["user.name"]])
-
-        if "cinnabar.helper" in git_config:
-            self.extensions.append("cinnabar")
-            safe_options.extend(
-                ["-c", "cinnabar.helper=%s" % git_config["cinnabar.helper"]]
-            )
-
-        if args.safe_mode or config.safe_mode:
-            # Ignore the user's Git config
-            # To make Git not read the `~/.gitconfig` we need to temporarily change the
-            # `$HOME` variable.
-            self._env["HOME"] = ""
-            self._env["XDG_CONFIG_HOME"] = ""
-            self.command.extend(safe_options)
-
-    @property
-    def is_cinnabar_installed(self):
-        """Check if Cinnabar extension is callable."""
-        if self._cinnabar_installed is None:
-            # Unfortunately we cannot use --list-cmds as it requires git v2.18+
-
-            # Normally cinnabar will be listed in the 'External commands' section.
-            for line in self.output(["help", "--all"]):
-                if re.search(r"^\s+cinnabar\b", line):
-                    self._cinnabar_installed = True
-                    break
-
-            # Cinnabar might be installed in git's exec-path, which won't be
-            # included in the `git help --all` output, nor is it necessarily
-            # on the path.
-            if not self._cinnabar_installed:
-                exec_path = Path(self.output(["--exec-path"], split=False))
-                if (exec_path / "git-cinnabar").exists():
-                    self._cinnabar_installed = True
-
-            # Finally check on the system path.
-            if not self._cinnabar_installed:
-                self._cinnabar_installed = which("git-cinnabar") is not None
-
-        return self._cinnabar_installed
-
-
 class Git(Repository):
     def __init__(self, path):
         dot_path = os.path.join(path, ".git")
@@ -2832,7 +2538,7 @@ class Git(Repository):
 
         logger.debug("found git repo in %s", path)
 
-        self.git = GitCommand()
+        self.git = GitCommand(config)
 
         if os.path.isfile(dot_path):
             # We're working from a worktree. Let's find the dot_path directory.
@@ -4024,7 +3730,7 @@ def install_arc_if_required():
         return
 
     try:
-        git = GitCommand()
+        git = GitCommand(config)
     except Error:
         logger.error("Git is required to install Arcanist.")
         raise
@@ -4553,7 +4259,7 @@ def update_arc():
         return
 
     try:
-        git = GitCommand()
+        git = GitCommand(config)
     except Error:
         logger.error("Git is required to install Arcanist")
         raise
@@ -5058,53 +4764,6 @@ def reorganise(repo, args):
 #
 
 
-class ColourFormatter(logging.Formatter):
-    def __init__(self):
-        if DEBUG:
-            fmt = "%(levelname)-8s %(asctime)-13s %(message)s"
-        else:
-            fmt = "%(message)s"
-        super().__init__(fmt)
-        self.log_colours = {"WARNING": 34, "ERROR": 31}  # blue, red
-
-    def format(self, record):
-        result = super().format(record)
-        if HAS_ANSI and record.levelname in self.log_colours:
-            result = "\033[%sm%s\033[0m" % (self.log_colours[record.levelname], result)
-        return result
-
-
-def init_logging():
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    stdout_handler.setFormatter(ColourFormatter())
-    stdout_handler.setLevel(logging.DEBUG if DEBUG else logging.INFO)
-    logger.addHandler(stdout_handler)
-
-    file_handler = logging.handlers.RotatingFileHandler(
-        filename=LOG_FILE, maxBytes=LOG_MAX_SIZE, backupCount=LOG_BACKUPS
-    )
-    file_handler.setFormatter(
-        logging.Formatter("%(asctime)-13s %(levelname)-8s %(message)s")
-    )
-    file_handler.setLevel(logging.DEBUG)
-    logger.addHandler(file_handler)
-
-    logger.setLevel(logging.DEBUG)
-
-    # clean up old date-based logs
-    now = time.time()
-    for filename in sorted(glob("%s/*.log.*" % os.path.dirname(LOG_FILE))):
-        m = re.search(r"\.(\d\d\d\d)-(\d\d)-(\d\d)$", filename)
-        if not m:
-            continue
-        file_time = calendar.timegm(
-            (int(m.group(1)), int(m.group(2)), int(m.group(3)), 0, 0, 0)
-        )
-        if (now - file_time) / (60 * 60 * 24) > 8:
-            logger.debug("deleting old log file: %s" % os.path.basename(filename))
-            os.unlink(filename)
-
-
 def parse_args(argv):
     main_parser = argparse.ArgumentParser(add_help=False)
     main_parser.add_argument("--version", action="store_true", help=argparse.SUPPRESS)
@@ -5439,7 +5098,7 @@ def main(argv, *, is_development):
 
         os.makedirs(MOZBUILD_PATH, exist_ok=True)
 
-        init_logging()
+        init_logging(MOZBUILD_PATH, DEBUG, HAS_ANSI)
         os.environ["MOZPHAB"] = "1"
 
         logger.debug(get_name_and_version())
