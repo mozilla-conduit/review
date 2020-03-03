@@ -5114,8 +5114,8 @@ def parse_args(argv):
         dest="command",
         metavar="COMMAND",
         description="For full command description: moz-phab COMMAND -h",
-        required=True,
     )
+    commands.required = True
 
     # submit
 
