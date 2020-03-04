@@ -4237,11 +4237,6 @@ def submit(repo, args):
 #
 
 
-def check_git(message=""):
-    if not which_path(GIT_COMMAND[0]):
-        raise Error("Failed to find 'git' executable. {}".format(message))
-
-
 def update_arc():
     """Write the last check and update arc."""
 
@@ -4403,8 +4398,14 @@ def self_update(_):
 
 def apply_patch(diff, cwd):
     """Apply a patch provided in the `diff`."""
+    try:
+        git = GitCommand(config)
+    except Error:
+        logger.error("Git is required to apply patches.")
+        raise
+
     with temporary_binary_file(diff.encode("utf8")) as temp_f:
-        check_call([config.git_command[0], "apply", temp_f], cwd=cwd)
+        git.call(["apply", temp_f], cwd=cwd)
 
 
 def get_base_ref(diff):
@@ -4609,9 +4610,6 @@ def patch(repo, args):
             raw = conduit.call("differential.getrawdiff", {"diffID": diff["id"]})
 
         if args.no_commit:
-            if repo.vcs == "hg":
-                check_git("Git is required to apply patches.")
-
             with wait_message("Applying D%s.." % rev["id"]):
                 apply_patch(raw, repo.path)
 
