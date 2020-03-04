@@ -11,7 +11,7 @@ import sys
 
 from pathlib import Path
 
-from mozphab import mozphab
+from mozphab import environment, mozphab
 
 
 def create_temp_fn(*filenames):
@@ -63,9 +63,7 @@ def data_file():
 
 
 @pytest.fixture
-@mock.patch("mozphab.mozphab.Config")
-def git_command(m_config):
-    mozphab.config = m_config()
+def git_command():
     mozphab.config.git_command = ["git"]
     return mozphab.config
 
@@ -73,7 +71,6 @@ def git_command(m_config):
 @pytest.fixture
 @mock.patch("mozphab.mozphab.GitCommand.output")
 @mock.patch("mozphab.mozphab.Git._get_current_head")
-@mock.patch("mozphab.mozphab.Config")
 @mock.patch("mozphab.mozphab.os.path")
 @mock.patch("mozphab.helpers.which")
 @mock.patch("mozphab.mozphab.read_json_field")
@@ -81,7 +78,6 @@ def git(
     m_read_json_field,
     m_which,
     m_os_path,
-    m_config,
     m_git_get_current_head,
     m_git_git_out,
     repo_phab_url,
@@ -100,22 +96,14 @@ def git(
 
 @pytest.fixture
 @mock.patch("mozphab.mozphab.Mercurial.hg_out")
-@mock.patch("mozphab.mozphab.Config")
 @mock.patch("mozphab.mozphab.os.path")
 @mock.patch("mozphab.helpers.which")
 @mock.patch("mozphab.mozphab.read_json_field")
 def hg(
-    m_read_json_field,
-    m_which,
-    m_os_path,
-    m_config,
-    m_hg_hg_out,
-    safe_environ,
-    repo_phab_url,
+    m_read_json_field, m_which, m_os_path, m_hg_hg_out, safe_environ, repo_phab_url,
 ):
     m_read_json_field.return_value = "TEST"
     m_os_path.join = os.path.join
-    m_config.safe_mode = False
     m_os_path.exists.return_value = True
     m_which.return_value = True
     m_os_path.isfile.return_value = False
@@ -123,7 +111,6 @@ def hg(
         "Mercurial Distributed SCM (version 4.7.1)",
         ["ui.username=username", "extensions.evolve="],
     ]
-    mozphab.config = m_config()
     mozphab.config.hg_command = ["hg"]
     hg = mozphab.Mercurial("x")
     hg.use_evolve = True
@@ -158,7 +145,10 @@ def hg_repo_path(monkeypatch, tmp_path):
 
 @pytest.fixture
 def fresh_global_config(tmp_path):
-    """Overrides global ~/.gitconfig by creating a tiny one in the temp repo and setting it as the $HOME"""
+    """Overrides global ~/.gitconfig.
+
+    Creates a tiny gitconfig file in the temp repo and sets it as the $HOME
+    """
     original_env = os.environ.copy()
     env = os.environ
     env["HOME"] = str(tmp_path)
@@ -166,7 +156,8 @@ def fresh_global_config(tmp_path):
         f.write("[user]\n\tname = Developer\n\temail = developer@mozilla.com\n")
     with open("{}/.hgrc".format(tmp_path), "w") as f:
         f.write(
-            "[ui]\nusername = Developer <developer@mozilla.com>\n[extensions]\nevolve =\n"
+            "[ui]\nusername = Developer <developer@mozilla.com>\n"
+            "[extensions]\nevolve =\n"
         )
     yield
     os.environ.clear()
@@ -209,9 +200,9 @@ def in_process(monkeypatch, safe_environ, request):
     """Set up an environment to run moz-phab within the current process."""
     # Make sure other tests didn't leak and mess up the module-level
     # global variables :/
-    monkeypatch.setattr(mozphab, "IS_WINDOWS", False)
-    monkeypatch.setattr(mozphab, "DEBUG", True)
-    monkeypatch.setattr(mozphab, "HAS_ANSI", False)
+    monkeypatch.setattr(environment, "IS_WINDOWS", False)
+    monkeypatch.setattr(environment, "DEBUG", True)
+    monkeypatch.setattr(environment, "HAS_ANSI", False)
     # Constructing the Mercurial() object modifies os.environ for all tests.
     # Disable update checking.  It modifies the program on disk which we do /not/ want
     # to do during a test run.

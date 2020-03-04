@@ -9,7 +9,7 @@ import uuid
 
 from callee import Contains
 
-from mozphab import exceptions, mozphab
+from mozphab import environment, exceptions, mozphab
 
 mozphab.SHOW_SPINNER = False
 
@@ -765,7 +765,7 @@ class Commits(unittest.TestCase):
         repo = mozphab.Repository("", "", "dummy")
 
         class Args:
-            def __init__(self, end_rev=mozphab.DEFAULT_END_REV):
+            def __init__(self, end_rev=environment.DEFAULT_END_REV):
                 self.single = True
                 self.end_rev = end_rev
 

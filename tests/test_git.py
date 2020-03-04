@@ -8,9 +8,9 @@ from pathlib import Path
 
 from .conftest import create_temp_fn
 
-from mozphab import exceptions, mozphab
+from mozphab import environment, exceptions, mozphab
 
-mozphab.SHOW_SPINNER = False
+environment.SHOW_SPINNER = False
 
 
 @mock.patch("mozphab.mozphab.Git.git_out")
@@ -202,8 +202,8 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
     class Args:
         def __init__(
             self,
-            start=mozphab.DEFAULT_START_REV,
-            end=mozphab.DEFAULT_END_REV,
+            start=environment.DEFAULT_START_REV,
+            end=environment.DEFAULT_END_REV,
             safe_mode=False,
             single=False,
         ):
@@ -494,7 +494,7 @@ def test_is_cinnabar_installed(m_git_out, m_which, git, tmp_path):
 
 @mock.patch("mozphab.mozphab.Git.git_out")
 def test_unicode_in_windows_env(m_git_out, git, monkeypatch):
-    monkeypatch.setattr(mozphab, "IS_WINDOWS", True)
+    monkeypatch.setattr(environment, "IS_WINDOWS", True)
     git._commit_tree("parent", "tree_hash", "message", "ćwikła", "ćwikła", "date")
     m_git_out.assert_called_once_with(
         ["commit-tree", "-p", "parent", "-F", mock.ANY, "tree_hash"],

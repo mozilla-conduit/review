@@ -5,7 +5,7 @@ from mozphab import mozphab
 
 
 @mock.patch("mozphab.mozphab.parse_args")
-@mock.patch("mozphab.mozphab.Config")
+@mock.patch("mozphab.config.Config")
 @mock.patch("mozphab.mozphab.init_sentry")
 @mock.patch("mozphab.mozphab.check_for_updates")
 def test_sentry_not_enabled_if_development(
@@ -24,7 +24,7 @@ def test_sentry_not_enabled_if_development(
 
 
 @mock.patch("mozphab.mozphab.parse_args")
-@mock.patch("mozphab.mozphab.Config")
+@mock.patch("mozphab.config.Config")
 @mock.patch("mozphab.mozphab.init_sentry")
 @mock.patch("mozphab.mozphab.check_for_updates")
 def test_sentry_not_enabled_if_config_disabled(
@@ -43,7 +43,7 @@ def test_sentry_not_enabled_if_config_disabled(
 
 
 @mock.patch("mozphab.mozphab.parse_args")
-@mock.patch("mozphab.mozphab.Config")
+@mock.patch("mozphab.config.Config")
 @mock.patch("mozphab.mozphab.init_sentry")
 @mock.patch("mozphab.mozphab.check_for_updates")
 def test_sentry_enabled(_, mock_init_sentry, mock_config_class, mock_parse_args):

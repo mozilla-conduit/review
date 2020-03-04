@@ -11,22 +11,17 @@ CLI to support submission of a series of commits to Phabricator. .
 
 import argparse
 import base64
-import calendar
-import configparser
 import datetime
-import io
 import json
 import logging
 import mimetypes
 import operator
 import os
 import re
-import signal
 import subprocess
 import stat
 import sys
 import tempfile
-import threading
 import time
 import traceback
 import urllib.request
@@ -34,16 +29,18 @@ import urllib.error
 import urllib.parse
 import uuid
 import __main__ as script_module
+
 from collections import namedtuple
-from contextlib import contextmanager, suppress
+from contextlib import suppress
 from distutils.dist import Distribution
 from distutils.version import LooseVersion
+from http.client import HTTPConnection, HTTPSConnection
 from pathlib import Path
 from pkg_resources import get_distribution, parse_version
-from shlex import quote
-from shutil import which
-from http.client import HTTPConnection, HTTPSConnection
 
+from mozphab import environment
+
+from .config import config
 from .exceptions import (
     CommandError,
     ConduitAPIError,
@@ -61,6 +58,7 @@ from .helpers import (
 )
 from .logger import init_logging, logger
 from .simplecache import cache
+from .spinner import wait_message
 from .subprocess_wrapper import check_call, check_call_by_line, check_output
 from .reorganise import stack_transactions, walk_llist
 from .sentry import init_sentry, report_to_sentry
@@ -73,51 +71,15 @@ from .sentry import init_sentry, report_to_sentry
 #   from the arc template and reformat to the standard mozilla format.
 
 
-# Environment Vars
-
-DEBUG = bool(os.getenv("DEBUG"))
-HTTP_ALLOWED = bool(os.getenv("HTTP_ALLOWED"))
-IS_WINDOWS = sys.platform == "win32"
-HAS_ANSI = (
-    not IS_WINDOWS
-    and not os.getenv("NO_ANSI")
-    and (
-        (hasattr(sys.stdout, "isatty") and sys.stdout.isatty())
-        or os.getenv("TERM", "") == "ANSI"
-        or os.getenv("PYCHARM_HOSTED", "") == "1"
-    )
-)
-# Switched off temporarily due to https://bugzilla.mozilla.org/show_bug.cgi?id=1565502
-SHOW_SPINNER = False
-
 # Constants and Globals
-
-logger = logging.getLogger("moz-phab")
-config = None
 conduit = None
 
-# Where to direct people when `arc` isn't installed.
-GUIDE_URL = (
-    "https://moz-conduit.readthedocs.io/en/latest/phabricator-user.html#quick-start"
-)
-
-DEFAULT_START_REV = "(auto)"
-DEFAULT_END_REV = "."
-
-GIT_COMMAND = ["git.exe" if IS_WINDOWS else "git"]
-HG_COMMAND = ["hg.exe" if IS_WINDOWS else "hg"]
-HOME_DIR = os.path.expanduser("~")
-
-# ~/.mozbuild/moz-phab
-MOZBUILD_PATH = os.path.join(
-    os.environ.get("MOZBUILD_STATE_PATH", os.path.join(HOME_DIR, ".mozbuild")),
-    "moz-phab",
-)
-
 # Arcanist
-LIBPHUTIL_PATH = os.path.join(MOZBUILD_PATH, "libphutil")
-ARC_PATH = os.path.join(MOZBUILD_PATH, "arcanist")
-ARC_COMMAND = os.path.join(ARC_PATH, "bin", "arc.bat" if IS_WINDOWS else "arc")
+LIBPHUTIL_PATH = os.path.join(environment.MOZBUILD_PATH, "libphutil")
+ARC_PATH = os.path.join(environment.MOZBUILD_PATH, "arcanist")
+ARC_COMMAND = os.path.join(
+    ARC_PATH, "bin", "arc.bat" if environment.IS_WINDOWS else "arc"
+)
 ARC = [ARC_COMMAND]
 INSTALL_CERT_MSG = (
     "You don't have credentials needed to access Phabricator.\n"
@@ -132,7 +94,6 @@ LIBPHUTIL_URL = "https://github.com/phacility/libphutil.git"
 ARC_URL = "https://github.com/mozilla-conduit/arcanist.git"
 
 # Auto-update
-SELF_REPO = "mozilla-conduit/review"
 SELF_UPDATE_FREQUENCY = 24 * 3  # hours
 ARC_UPDATE_FREQUENCY = 24 * 7  # hours
 
@@ -210,7 +171,7 @@ NULL_SHA1 = "0" * 40
 
 
 def prompt(question, options=None):
-    if HAS_ANSI:
+    if environment.HAS_ANSI:
         question = "\033[33m%s\033[0m" % question
     prompt_str = question
     if options:
@@ -254,187 +215,6 @@ def short_node(text):
         except ValueError:
             pass
     return text
-
-
-# py2 doesn't handle SIGINT with background threads; hook up our own handler
-# to allow background threads to check sig_int.triggered and stop.
-
-
-class SigIntHandler(object):
-    def __init__(self):
-        self.triggered = False
-
-    # noinspection PyUnusedLocal
-    def signal_handler(self, sig, frame):
-        self.triggered = True
-        raise KeyboardInterrupt()
-
-
-sig_int = SigIntHandler()
-signal.signal(signal.SIGINT, sig_int.signal_handler)
-
-
-class Spinner(threading.Thread):
-    def __init__(self, message):
-        super().__init__()
-        self.message = message
-        self.daemon = True
-        self.running = False
-
-    def run(self):
-        self.running = True
-
-        if not HAS_ANSI:
-            sys.stdout.write("%s  " % self.message)
-
-        spinner = ["-", "\\", "|", "/"]
-        spin = 0
-        try:
-            while self.running:
-                if HAS_ANSI:
-                    sys.stdout.write("%s %s\r" % (self.message, spinner[spin]))
-                else:
-                    sys.stdout.write(chr(8) + spinner[spin])
-                sys.stdout.flush()
-                spin = (spin + 1) % len(spinner)
-                time.sleep(0.2)
-        finally:
-            if HAS_ANSI:
-                sys.stdout.write("\r\033[K")
-            else:
-                sys.stdout.write(chr(8) + " \n")
-            sys.stdout.flush()
-
-
-@contextmanager
-def wait_message(message):
-    if not SHOW_SPINNER:
-        yield
-        return
-
-    spinner = Spinner(message)
-    spinner.start()
-    try:
-        yield
-    finally:
-        spinner.running = False
-        spinner.join()
-        if sig_int.triggered:
-            print("Cancelled")
-            sys.exit(3)
-
-
-#
-# Configuration
-#
-
-
-class Config(object):
-    def __init__(self, should_access_file=True):
-        self._filename = os.path.join(HOME_DIR, ".moz-phab-config")
-        self.name = "~/.moz-phab-config"  # human-readable name
-
-        # Default values.
-        defaults = """
-            [ui]
-            no_ansi = False
-
-            [vcs]
-            safe_mode = False
-
-            [git]
-            remote =
-            command_path =
-
-            [hg]
-            command_path = 
-
-            [submit]
-            auto_submit = False
-            always_blocking = False
-            warn_untracked = True
-
-            [patch]
-            apply_to = base
-            create_bookmark = True
-            always_full_stack = False
-
-            [updater]
-            self_last_check = 0
-            arc_last_check = 0
-            self_auto_update = True
-            
-            [error_reporting]
-            report_to_sentry = True
-            """
-
-        self._config = configparser.ConfigParser()
-        self._config.read_file(
-            io.StringIO("\n".join([l.strip() for l in defaults.splitlines()]))
-        )
-
-        if self._config.has_section("arc"):
-            self._config.remove_section("arc")
-
-        if should_access_file:
-            self._config.read([self._filename])
-
-        self.no_ansi = self._config.getboolean("ui", "no_ansi")
-        self.safe_mode = self._config.getboolean("vcs", "safe_mode")
-        self.auto_submit = self._config.getboolean("submit", "auto_submit")
-        self.always_blocking = self._config.getboolean("submit", "always_blocking")
-        self.warn_untracked = self._config.getboolean("submit", "warn_untracked")
-        self.apply_patch_to = self._config.get("patch", "apply_to")
-        self.create_bookmark = self._config.getboolean("patch", "create_bookmark")
-        self.always_full_stack = self._config.getboolean("patch", "always_full_stack")
-        self.self_last_check = self._config.getint("updater", "self_last_check")
-        self.self_auto_update = self._config.getboolean("updater", "self_auto_update")
-        self.arc_last_check = self._config.getint("updater", "arc_last_check")
-        git_remote = self._config.get("git", "remote")
-        self.git_remote = git_remote.replace(" ", "").split(",") if git_remote else []
-        self.report_to_sentry = self._config.getboolean(
-            "error_reporting", "report_to_sentry"
-        )
-        self._git_command = self._config.get("git", "command_path")
-        self.git_command = [self._git_command] if self._git_command else GIT_COMMAND
-        self._hg_command = self._config.get("hg", "command_path")
-        self.hg_command = [self._hg_command] if self._hg_command else HG_COMMAND
-
-        if should_access_file and not os.path.exists(self._filename):
-            self.write()
-
-        self.arc = None
-
-    def _set(self, section, option, value):
-        if not self._config.has_section(section):
-            self._config.add_section(section)
-        self._config.set(section, option, str(value))
-
-    def write(self):
-        if os.path.exists(self._filename):
-            logger.debug("updating %s", self._filename)
-            self._set("submit", "auto_submit", self.auto_submit)
-            self._set("patch", "always_full_stack", self.always_full_stack)
-            self._set("updater", "self_last_check", self.self_last_check)
-            self._set("updater", "arc_last_check", self.arc_last_check)
-            self._set("updater", "self_auto_update", self.self_auto_update)
-
-        else:
-            logger.debug("creating %s", self._filename)
-            self._set("ui", "no_ansi", self.no_ansi)
-            self._set("vcs", "safe_mode", self.safe_mode)
-            self._set("git", "remote", ", ".join(self.git_remote))
-            self._set("git", "command_path", ", ".join(self._git_command))
-            self._set("hg", "command_path", ", ".join(self.hg_command))
-            self._set("submit", "auto_submit", self.auto_submit)
-            self._set("submit", "always_blocking", self.always_blocking)
-            self._set("submit", "warn_untracked", self.warn_untracked)
-            self._set("patch", "apply_to", self.apply_patch_to)
-            self._set("patch", "create_bookmark", self.create_bookmark)
-            self._set("patch", "always_full_stack", self.always_full_stack)
-
-        with open(self._filename, "w", encoding="utf-8") as f:
-            self._config.write(f)
 
 
 #
@@ -514,7 +294,7 @@ class ConduitAPI:
         # Send the POST request
         if url.scheme == "https":
             conn = HTTPSConnection(url.netloc)
-        elif HTTP_ALLOWED:
+        elif environment.HTTP_ALLOWED:
             # Allow for an HTTP connection in suite.
             conn = HTTPConnection(url.netloc)
         else:
@@ -1298,7 +1078,7 @@ def get_arcrc_path():
     if "arcrc" in cache:
         return cache.get("arcrc")
 
-    if IS_WINDOWS:
+    if environment.IS_WINDOWS:
         arcrc = os.path.join(os.getenv("APPDATA", ""), ".arcrc")
     else:
         arcrc = os.path.expanduser("~/.arcrc")
@@ -1348,7 +1128,7 @@ class Repository(object):
         # FIXME: This should also check {.hg|.git}/arc/config, which is where
         # `arc set-config --local` writes to.  See bug 1497786.
         defaults_files = [get_arcrc_path()]
-        if IS_WINDOWS:
+        if environment.IS_WINDOWS:
             defaults_files.append(
                 os.path.join(
                     os.getenv("ProgramData", ""), "Phabricator", "Arcanist", "config"
@@ -1377,7 +1157,11 @@ class Repository(object):
         """Update the history after node changed."""
 
     def set_args(self, args):
-        if hasattr(args, "single") and args.single and args.end_rev != DEFAULT_END_REV:
+        if (
+            hasattr(args, "single")
+            and args.single
+            and args.end_rev != environment.DEFAULT_END_REV
+        ):
             raise Error("Option --single can be used with only one identifier.")
 
         self.args = args
@@ -1877,7 +1661,7 @@ class Mercurial(Repository):
         if hasattr(self.args, "start_rev"):
             is_single = hasattr(self.args, "single") and self.args.single
             # Set the default start revision.
-            if self.args.start_rev == DEFAULT_START_REV:
+            if self.args.start_rev == environment.DEFAULT_START_REV:
                 if is_single:
                     start_rev = self.args.end_rev
                 else:
@@ -1889,7 +1673,7 @@ class Mercurial(Repository):
             try:
                 start = self.hg_log(start_rev)[0]
             except IndexError:
-                if self.args.start_rev == DEFAULT_START_REV:
+                if self.args.start_rev == environment.DEFAULT_START_REV:
                     raise Error("Failed to find draft commits to submit")
                 else:
                     raise Error(
@@ -2732,7 +2516,7 @@ class Git(Repository):
         self.git.set_args(args)
         if hasattr(self.args, "start_rev"):
             is_single = hasattr(self.args, "single") and self.args.single
-            if self.args.start_rev == DEFAULT_START_REV:
+            if self.args.start_rev == environment.DEFAULT_START_REV:
                 if is_single:
                     start_rev = "HEAD"
                 else:
@@ -2744,7 +2528,7 @@ class Git(Repository):
                 return None
 
             # We want inclusive range of commits if start commit is detected
-            if self.args.start_rev == DEFAULT_START_REV or is_single:
+            if self.args.start_rev == environment.DEFAULT_START_REV or is_single:
                 start = "%s^" % start_rev
             else:
                 start = start_rev
@@ -3976,7 +3760,7 @@ def update_revision_reviewers(transactions, commit):
 
 
 def submit(repo, args):
-    if DEBUG:
+    if environment.DEBUG:
         ARC.append("--trace")
 
     with wait_message("Checking connection to Phabricator."):
@@ -4370,7 +4154,7 @@ def self_upgrade():
     if script_dir == user_dir:
         command.append("--user")
 
-    if IS_WINDOWS:
+    if environment.IS_WINDOWS:
         # Windows does not allow to remove the exe file of the running process.
         # Renaming the `moz-phab.exe` file to allow pip to install a new version.
         temp_exe = script_dir / "moz-phab-temp.exe"
@@ -4647,7 +4431,7 @@ def patch(repo, args):
 
 
 def arc_pass(args):
-    if DEBUG:
+    if environment.DEBUG:
         ARC.append("--trace")
 
     try:
@@ -4906,13 +4690,13 @@ def parse_args(argv):
     submit_parser.add_argument(
         "start_rev",
         nargs="?",
-        default=DEFAULT_START_REV,
+        default=environment.DEFAULT_START_REV,
         help="Start revision of range to submit (default: detected)",
     )
     submit_parser.add_argument(
         "end_rev",
         nargs="?",
-        default=DEFAULT_END_REV,
+        default=environment.DEFAULT_END_REV,
         help="End revision of range to submit (default: current commit)",
     )
 
@@ -5097,22 +4881,19 @@ def parse_args(argv):
 
 
 def main(argv, *, is_development):
-    global config, HAS_ANSI, DEBUG, SHOW_SPINNER
     try:
-        config = Config()
-
         if not is_development and config.report_to_sentry:
             init_sentry()
 
-        os.makedirs(MOZBUILD_PATH, exist_ok=True)
+        os.makedirs(environment.MOZBUILD_PATH, exist_ok=True)
 
-        init_logging(MOZBUILD_PATH, DEBUG, HAS_ANSI)
+        init_logging()
         os.environ["MOZPHAB"] = "1"
 
         logger.debug(get_name_and_version())
 
         if config.no_ansi:
-            HAS_ANSI = False
+            environment.HAS_ANSI = False
 
         args = parse_args(argv)
 
@@ -5121,9 +4902,10 @@ def main(argv, *, is_development):
             install_arc_if_required()
 
         if hasattr(args, "trace") and args.trace:
-            DEBUG = True
-        if DEBUG:
-            SHOW_SPINNER = False
+            environment.DEBUG = True
+
+        if environment.DEBUG:
+            environment.SHOW_SPINNER = False
 
         if args.command != "self-update":
             check_for_updates(with_arc=with_arc)
@@ -5150,7 +4932,7 @@ def main(argv, *, is_development):
         logger.error(e)
         sys.exit(1)
     except Exception as e:
-        if DEBUG:
+        if environment.DEBUG:
             logger.error(traceback.format_exc())
         else:
             logger.error("%s: %s", e.__class__.__name__, e)

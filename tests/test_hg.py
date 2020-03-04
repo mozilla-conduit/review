@@ -88,11 +88,10 @@ def test_finalize_no_evolve(m_hg_rebase, hg):
     assert m_hg_rebase.not_called()
 
 
-@mock.patch("mozphab.mozphab.config")
 @mock.patch("mozphab.mozphab.parse_config")
 @mock.patch("mozphab.mozphab.Mercurial.hg_out")
 @mock.patch("mozphab.mozphab.Mercurial.hg_log")
-def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
+def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
     class Args:
         def __init__(self, start="(auto)", end=".", safe_mode=False, single=False):
             self.start_rev = start
@@ -100,6 +99,7 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, m_config, hg):
             self.safe_mode = safe_mode
             self.single = single
 
+    m_config = mozphab.config
     with pytest.raises(exceptions.Error):
         hg.set_args(Args())
 

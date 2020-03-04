@@ -13,6 +13,8 @@ import time
 
 from glob import glob
 
+from mozphab import environment
+
 logger = logging.getLogger("moz-phab")
 
 
@@ -37,18 +39,14 @@ class ColourFormatter(logging.Formatter):
         return result
 
 
-def init_logging(mozbuild_path, debug, has_ansi):
-    """Initialize logging.
-
-    Args:
-        mozbuild_path: (str) path of the mozbuild directory where the logs are placed
-        debug: (bool) is MozPhab in debug mode?
-        has_ansi: (bool) is MozPhab running in ANSI terminal?
-    """
-    log_file = os.path.join(mozbuild_path, "moz-phab.log")
+def init_logging():
+    """Initialize logging."""
+    log_file = os.path.join(environment.MOZBUILD_PATH, "moz-phab.log")
     stdout_handler = logging.StreamHandler(sys.stdout)
-    stdout_handler.setFormatter(ColourFormatter(debug, has_ansi))
-    stdout_handler.setLevel(logging.DEBUG if debug else logging.INFO)
+    stdout_handler.setFormatter(
+        ColourFormatter(environment.DEBUG, environment.HAS_ANSI)
+    )
+    stdout_handler.setLevel(logging.DEBUG if environment.DEBUG else logging.INFO)
     logger.addHandler(stdout_handler)
 
     file_handler = logging.handlers.RotatingFileHandler(

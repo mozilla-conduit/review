@@ -61,7 +61,6 @@ def test_prepare_body():
 @mock.patch("mozphab.gitcommand.which_path")
 @mock.patch("mozphab.gitcommand.check_call")
 def test_apply_patch(m_check_call, _):
-    mozphab.config = mock.Mock()
     mozphab.config.git_command = ["git"]
     mozphab.apply_patch("diff", "x")
     m_check_call.assert_called_once()
