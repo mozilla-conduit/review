@@ -2587,12 +2587,22 @@ class Git(Repository):
 
         return public_node
 
+    def is_index_modified(self):
+        """Are there any changes added to the staging area."""
+        return bool(self.git.output(["diff-index", "HEAD"]))
+
     def is_worktree_clean(self):
         return all(
             [l.startswith("?? ") for l in self.git_out(["status", "--porcelain"])]
         )
 
     def before_submit(self):
+        if self.is_index_modified():
+            raise Error(
+                "Uncommitted changes present. "
+                "Please stash them or commit before submitting."
+            )
+
         # Store current branch (fails if HEAD in detached state)
         try:
             self.branch = self._get_current_head()

@@ -179,6 +179,35 @@ Differential Revision: http://example.test/D123
     )
 
 
+def test_submit_create_added_not_commited(in_process, git_repo_path, init_sha):
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # user search
+        [dict(userName="alice", phid="PHID-USER-1")],
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    (git_repo_path / "X").write_text("ą\r\nb\nc\n")
+    (git_repo_path / "Y").write_text("no line ending")
+    git_out("add", ".")
+    (git_repo_path / "msg").write_text("Ą r?alice")
+    git_out("commit", "--file", "msg")
+    (git_repo_path / "untracked").write_text("a\n")
+    git_out("add", "untracked")
+
+    with pytest.raises(exceptions.Error) as excinfo:
+        mozphab.main(["submit", "--yes", "--bug", "1", init_sha], is_development=True)
+
+    assert "Uncommitted changes present." in str(excinfo.value)
+
+
 def test_submit_create_no_bug(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
