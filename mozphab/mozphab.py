@@ -4363,7 +4363,7 @@ def self_upgrade():
     if IS_WINDOWS:
         # Windows does not allow to remove the exe file of the running process.
         # Renaming the `moz-phab.exe` file to allow pip to install a new version.
-        temp_exe = Path(tempfile.gettempdir()) / "moz-phab.exe"
+        temp_exe = script_dir / "moz-phab-temp.exe"
         try:
             temp_exe.unlink()
         except FileNotFoundError:
