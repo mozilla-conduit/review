@@ -8,13 +8,14 @@ import re
 from pathlib import Path
 from shutil import which
 
+from .config import config
 from .exceptions import Error
 from .helpers import parse_config, which_path
 from .subprocess_wrapper import check_call, check_output
 
 
 class GitCommand:
-    def __init__(self, config):
+    def __init__(self):
         """Check if Git is available, set initial values."""
         self.command = config.git_command.copy()
         if not which_path(self.command[0]):

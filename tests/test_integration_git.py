@@ -724,7 +724,10 @@ def test_submit_update_bug_id_arc(in_process, git_repo_path, init_sha):
         dict(phid="PHID-USER-1"),
     )
     arc_call_conduit.reset_mock()
-    arc_call_conduit.side_effect = ({"data": {}},)
+    arc_call_conduit.side_effect = (
+        {},
+        {"data": {}},
+    )
     testfile = git_repo_path / "X"
     testfile.write_text("a")
     git_out("add", ".")
@@ -745,7 +748,7 @@ Differential Revision: http://example.test/D123
         ["submit", "--arc", "--yes", "--bug", "2", init_sha], is_development=True
     )
 
-    arc_call_conduit.assert_called_once_with(
+    arc_call_conduit.assert_called_with(
         "differential.revision.edit",
         {
             "objectIdentifier": "D123",

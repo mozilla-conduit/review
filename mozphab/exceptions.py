@@ -24,7 +24,3 @@ class CommandError(Exception):
     def __init__(self, msg="", status=1):
         self.status = status
         super().__init__(msg)
-
-
-class ConduitAPIError(Error):
-    """Raised when the Phabricator Conduit API returns an error response."""

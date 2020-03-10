@@ -11,7 +11,9 @@ import pytest
 from contextlib import contextmanager
 from frozendict import frozendict
 
-from mozphab import exceptions, mozphab
+from mozphab import diff, exceptions, mozphab, repository, simplecache
+
+from mozphab.conduit import conduit, ConduitAPIError
 
 
 class Repo:
@@ -28,19 +30,19 @@ def test_set_args_from_repo():
     assert mozphab.conduit.repo == repo
 
 
-@mock.patch("mozphab.mozphab.read_json_field")
+@mock.patch("mozphab.conduit.read_json_field")
 def test_load_api_token(m_read):
     m_read.return_value = False
     mozphab.conduit.set_repo(Repo())
-    with pytest.raises(exceptions.ConduitAPIError):
+    with pytest.raises(ConduitAPIError):
         mozphab.conduit.load_api_token()
 
     m_read.return_value = "x"
     assert mozphab.conduit.load_api_token() == "x"
 
 
-@mock.patch("mozphab.mozphab.HTTPSConnection")
-@mock.patch("mozphab.mozphab.ConduitAPI.load_api_token")
+@mock.patch("mozphab.conduit.HTTPSConnection")
+@mock.patch("mozphab.conduit.ConduitAPI.load_api_token")
 def test_call(m_token, m_Connect):
     conn = mock.Mock()
     m_Connect.return_value = conn
@@ -85,25 +87,25 @@ def test_call(m_token, m_Connect):
 
     conn.getresponse.return_value = BytesIO(b'{"error_info": "x", "error_code": 1}')
 
-    with pytest.raises(exceptions.ConduitAPIError):
+    with pytest.raises(ConduitAPIError):
         mozphab.conduit.call("method", dict(call="args"))
 
 
-@mock.patch("mozphab.mozphab.ConduitAPI.call")
+@mock.patch("mozphab.conduit.ConduitAPI.call")
 def test_ping(m_call):
     m_call.return_value = {}
     assert mozphab.conduit.ping()
 
-    m_call.side_effect = exceptions.ConduitAPIError
+    m_call.side_effect = ConduitAPIError
     assert not mozphab.conduit.ping()
 
     m_call.side_effect = exceptions.CommandError
     assert not mozphab.conduit.ping()
 
 
-@mock.patch("mozphab.mozphab.ConduitAPI.call")
-@mock.patch("mozphab.mozphab.ConduitAPI.ping")
-@mock.patch("mozphab.mozphab.os")
+@mock.patch("mozphab.conduit.ConduitAPI.call")
+@mock.patch("mozphab.conduit.ConduitAPI.ping")
+@mock.patch("mozphab.conduit.os")
 @mock.patch("builtins.open")
 def test_check(m_open, m_os, m_ping, m_call):
     check = mozphab.conduit.check
@@ -125,14 +127,14 @@ def test_check(m_open, m_os, m_ping, m_call):
 
 @pytest.fixture
 def get_revs():
-    mozphab.conduit.set_repo(mozphab.Repository("", "", "dummy"))
+    mozphab.conduit.set_repo(repository.Repository("", "", "dummy"))
     return mozphab.conduit.get_revisions
 
 
 @pytest.fixture
 def m_call(request):
-    request.addfinalizer(mozphab.cache.reset)
-    with mock.patch("mozphab.mozphab.ConduitAPI.call") as xmock:
+    request.addfinalizer(simplecache.cache.reset)
+    with mock.patch("mozphab.conduit.ConduitAPI.call") as xmock:
         yield xmock
 
 
@@ -239,7 +241,7 @@ def test_get_revisions_search_by_revids_missing(get_revs, m_call):
     ]
 
 
-@mock.patch("mozphab.mozphab.ConduitAPI.call")
+@mock.patch("mozphab.conduit.ConduitAPI.call")
 def test_get_diffs(m_call):
     conduit = mozphab.conduit
     get_diffs = conduit.get_diffs
@@ -255,7 +257,7 @@ def test_get_diffs(m_call):
     }
 
 
-@mock.patch("mozphab.mozphab.ConduitAPI.call")
+@mock.patch("mozphab.conduit.ConduitAPI.call")
 def test_get_related_phids(m_call):
     get_related_phids = mozphab.conduit.get_related_phids
 
@@ -287,17 +289,17 @@ def test_get_related_phids(m_call):
 
 
 @mock.patch("builtins.open")
-@mock.patch("mozphab.mozphab.json")
-@mock.patch("mozphab.mozphab.get_arcrc_path")
+@mock.patch("mozphab.conduit.json")
+@mock.patch("mozphab.conduit.get_arcrc_path")
 @mock.patch("os.chmod")
 def test_save_api_token(m_chmod, m_get_arcrc_path, m_json, m_open, git):
-    save_api_token = mozphab.conduit.save_api_token
+    save_api_token = conduit.save_api_token
 
     @contextmanager
     def with_open():
         yield None
 
-    mozphab.get_arcrc_path.return_value = ".arcrc"
+    m_get_arcrc_path.return_value = ".arcrc"
     git.api_url = "http://test/api/"
     mozphab.conduit.set_repo(git)
     m_open.side_effect = PermissionError
@@ -344,16 +346,15 @@ def test_save_api_token(m_chmod, m_get_arcrc_path, m_json, m_open, git):
 
 
 def test_parse_git_diff():
-    parse = mozphab.Diff.parse_git_diff
+    parse = diff.Diff.parse_git_diff
     assert parse("@@ -40,9 +50,3 @@ packaging==19.1 \\") == (40, 50, 9, 3)
 
 
-@mock.patch("mozphab.mozphab.conduit.call")
+@mock.patch("mozphab.repository.conduit.call")
 def test_diff_property(m_call, git, hg):
-    # m_public.side_effect = lambda x: x
     git.get_public_node = lambda x: x
     git._phab_vcs = "git"
-    mozphab.conduit.set_repo(git)
+    conduit.set_repo(git)
     commit = {
         "name": "abc-name",
         "author-name": "Author Name",

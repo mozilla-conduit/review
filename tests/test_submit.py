@@ -9,7 +9,8 @@ import uuid
 
 from callee import Contains
 
-from mozphab import environment, exceptions, mozphab
+from mozphab.commands import submit
+from mozphab import environment, exceptions, helpers, mozphab, repository
 
 mozphab.SHOW_SPINNER = False
 
@@ -52,12 +53,12 @@ class Commits(unittest.TestCase):
             self.fail("%s raised" % e)
         self.fail("%s failed to raise Error" % callableObj)
 
-    @mock.patch("mozphab.mozphab.check_for_invalid_reviewers")
-    @mock.patch("mozphab.mozphab.ConduitAPI.get_revisions")
-    @mock.patch("mozphab.mozphab.ConduitAPI.whoami")
+    @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+    @mock.patch("mozphab.conduit.ConduitAPI.whoami")
     def test_commit_validation(self, m_whoami, m_get_revs, check_reviewers):
         check_reviewers.return_value = []
-        repo = mozphab.Repository("", "", "dummy")
+        repo = repository.Repository("", "", "dummy")
         check = repo.check_commits_for_submit
 
         self._assertNoError(check, [])
@@ -99,7 +100,7 @@ class Commits(unittest.TestCase):
         m_whoami.return_value = dict(phid="PHID-2")
         self._assertNoError(check, [commit(bug_id=1, rev_id=1)])
 
-    @mock.patch("mozphab.mozphab.check_for_invalid_reviewers")
+    @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
     def test_invalid_reviewers_fails_the_stack_validation_check(self, check_reviewers):
         class Args:
             def __init__(self):
@@ -116,7 +117,7 @@ class Commits(unittest.TestCase):
                 return []
 
         check_reviewers.side_effect = fail_gonzo
-        repo = mozphab.Repository("", "", "dummy")
+        repo = repository.Repository("", "", "dummy")
         repo.args = Args()
 
         self._assertError(
@@ -158,12 +159,12 @@ class Commits(unittest.TestCase):
         )
 
     @mock.patch("mozphab.mozphab.conduit.get_revisions")
-    @mock.patch("mozphab.mozphab.check_for_invalid_reviewers")
+    @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
     def test_validate_duplicate_revision(self, check_reviewers, get_revisions):
         check_reviewers.return_value = []
         get_revisions.return_value = [True]
 
-        repo = mozphab.Repository("", "", "dummy")
+        repo = repository.Repository("", "", "dummy")
 
         self._assertNoError(
             repo.check_commits_for_submit,
@@ -221,7 +222,7 @@ class Commits(unittest.TestCase):
         )
 
     def test_commit_preview(self):
-        build = mozphab.build_commit_title
+        build = helpers.build_commit_title
 
         self.assertEqual(
             "Bug 1, blah, r=turnip",
@@ -250,11 +251,11 @@ class Commits(unittest.TestCase):
             build(commit("1", None, title="Bug 1 - helper_bug2.html")),
         )
 
-    @mock.patch("mozphab.mozphab.build_commit_title")
+    @mock.patch("mozphab.helpers.build_commit_title")
     def test_update_commit_title_previews(self, m_build_commit_title):
         m_build_commit_title.side_effect = lambda x: x["title"] + " preview"
         commits = [dict(title="a"), dict(title="b")]
-        mozphab.update_commit_title_previews(commits)
+        helpers.update_commit_title_previews(commits)
         self.assertEqual(
             [
                 {"title": "a", "title-preview": "a preview"},
@@ -264,7 +265,7 @@ class Commits(unittest.TestCase):
         )
 
     def test_replace_request_reviewers(self):
-        replace = mozphab.replace_reviewers
+        replace = helpers.replace_reviewers
         self.assertEqual("", replace("", reviewers_dict()))
         self.assertEqual("Title", replace("Title", reviewers_dict()))
         self.assertEqual(
@@ -336,7 +337,7 @@ class Commits(unittest.TestCase):
         )
 
     def test_replace_granted_reviewers(self):
-        replace = mozphab.replace_reviewers
+        replace = helpers.replace_reviewers
         self.assertEqual("r=one", replace("", reviewers_dict([[], ["one"]])))
         self.assertEqual("r=one", replace("r=one", reviewers_dict([[], ["one"]])))
         self.assertEqual("r=one,two", replace("", reviewers_dict([[], ["one", "two"]])))
@@ -402,7 +403,7 @@ class Commits(unittest.TestCase):
         )
 
     def test_replace_mixed_reviewers(self):
-        replace = mozphab.replace_reviewers
+        replace = helpers.replace_reviewers
         self.assertEqual(
             "Title r?one r=two", replace("Title", reviewers_dict([["one"], ["two"]]))
         )
@@ -488,9 +489,9 @@ class Commits(unittest.TestCase):
         # r?one,two
         self.assertEqual("r?one", replace("r?one,two", reviewers_dict([["one"], []])))
 
-    @mock.patch("mozphab.mozphab.ConduitAPI.get_revisions")
-    @mock.patch("mozphab.mozphab.ConduitAPI.whoami")
-    @mock.patch("mozphab.mozphab.logger")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+    @mock.patch("mozphab.conduit.ConduitAPI.whoami")
+    @mock.patch("mozphab.commands.submit.logger")
     def test_show_commit_stack(self, mock_logger, m_whoami, m_get_revisions):
         class Repository:
             phab_url = "http://phab"
@@ -506,13 +507,13 @@ class Commits(unittest.TestCase):
             {"fields": {"bugzilla.bug-id": "1", "authorPHID": "PHID-USER-1"}}
         ]
 
-        mozphab.show_commit_stack([])
+        submit.show_commit_stack([])
         self.assertFalse(mock_logger.info.called, "logger.info() shouldn't be called")
         self.assertFalse(
             mock_logger.warning.called, "logger.warning() shouldn't be called"
         )
 
-        mozphab.show_commit_stack(
+        submit.show_commit_stack(
             [{"name": "aaa000", "title-preview": "A"}], validate=False
         )
         mock_logger.info.assert_called_with("%s %s %s", "(New)", "aaa000", "A")
@@ -521,7 +522,7 @@ class Commits(unittest.TestCase):
         )
         mock_logger.reset_mock()
 
-        mozphab.show_commit_stack(
+        submit.show_commit_stack(
             [{"name": "aaa000", "title-preview": "A", "rev-id": "12", "bug-id": "1"}],
             validate=False,
         )
@@ -531,7 +532,7 @@ class Commits(unittest.TestCase):
         )
         mock_logger.reset_mock()
 
-        mozphab.show_commit_stack(
+        submit.show_commit_stack(
             [
                 {"name": "aaa000", "title-preview": "A"},
                 {"name": "bbb000", "title-preview": "B"},
@@ -548,7 +549,7 @@ class Commits(unittest.TestCase):
         )
         mock_logger.reset_mock()
 
-        mozphab.show_commit_stack(
+        submit.show_commit_stack(
             [
                 {
                     "name": "aaa000",
@@ -564,7 +565,7 @@ class Commits(unittest.TestCase):
         mock_logger.warning.assert_called_with("!! Bug ID changed from %s to %s", 2, 1)
         mock_logger.reset_mock()
 
-        mozphab.show_commit_stack(
+        submit.show_commit_stack(
             [
                 {
                     "name": "aaa000",
@@ -579,7 +580,7 @@ class Commits(unittest.TestCase):
         mock_logger.warning.assert_called_with("!! Missing reviewers")
         mock_logger.reset_mock()
 
-        mozphab.show_commit_stack(
+        submit.show_commit_stack(
             [{"name": "aaa000", "title-preview": "A", "rev-id": "123", "bug-id": "1"}],
             validate=False,
             show_rev_urls=True,
@@ -600,7 +601,7 @@ class Commits(unittest.TestCase):
             },
         ]
         # we're changing bug id in the first revision to 2
-        mozphab.show_commit_stack(
+        submit.show_commit_stack(
             [
                 {
                     "name": "aaa000",
@@ -628,7 +629,7 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
 
         m_whoami.return_value = dict(phid="PHID-USER-2")
-        mozphab.show_commit_stack(
+        submit.show_commit_stack(
             [
                 {
                     "name": "aaa000",
@@ -643,13 +644,13 @@ class Commits(unittest.TestCase):
         )
         mock_logger.warning.assert_called_once_with(Contains("Commandeer"))
 
-    @mock.patch("mozphab.mozphab.update_commit_title_previews")
+    @mock.patch("mozphab.commands.submit.update_commit_title_previews")
     def test_update_commits_from_args(self, m_update_title):
         def lwr(revs):
             return [r.lower() for r in revs]
 
         m_update_title.side_effect = lambda x: x
-        update = mozphab.update_commits_from_args
+        update = submit.update_commits_from_args
 
         class Args:
             def __init__(self, reviewer=None, blocker=None, bug=None):
@@ -665,7 +666,7 @@ class Commits(unittest.TestCase):
         # No change if noreviewer  args provided
         commits = copy.deepcopy(_commits)
         commits[1]["reviewers"]["granted"].append("two")
-        with mock.patch("mozphab.mozphab.config") as m_config:
+        with mock.patch("mozphab.commands.submit.config") as m_config:
             m_config.always_blocking = False
             update(commits, Args())
             self.assertEqual(
@@ -741,7 +742,7 @@ class Commits(unittest.TestCase):
         # Forcing blocking reviewers
         commits = copy.deepcopy(_commits)
         commits[1]["reviewers"]["granted"].append("two")
-        with mock.patch("mozphab.mozphab.config") as m_config:
+        with mock.patch("mozphab.commands.submit.config") as m_config:
             m_config.always_blocking = True
             update(commits, Args())
             self.assertEqual(
@@ -762,7 +763,7 @@ class Commits(unittest.TestCase):
 
     def test_single_fails_with_end_rev(self):
         # --single is working with one SHA1 provided only
-        repo = mozphab.Repository("", "", "dummy")
+        repo = repository.Repository("", "", "dummy")
 
         class Args:
             def __init__(self, end_rev=environment.DEFAULT_END_REV):
@@ -792,7 +793,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
             dict(type="title", value="hi!"),
             dict(type="summary", value="hello!  µ-benchmarks are a thing."),
         ]
-        mozphab.update_revision_description(t, c, r)
+        submit.update_revision_description(t, c, r)
 
         self.assertListEqual(t, expected)
 
@@ -806,11 +807,11 @@ class TestUpdateCommitSummary(unittest.TestCase):
         t = []
 
         expected = []
-        mozphab.update_revision_description(t, c, r)
+        submit.update_revision_description(t, c, r)
 
         self.assertListEqual(t, expected)
 
-    @mock.patch("mozphab.mozphab.ConduitAPI.get_users")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_users")
     def test_update_revision_reviewers(self, m_get_users):
         # From https://phabricator.services.mozilla.com/api/differential.revision.edit
         #
@@ -845,7 +846,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
                 value=["PHID-USER-1", "blocking(PHID-USER-2)", "blocking(PHID-USER-3)"],
             )
         ]
-        mozphab.update_revision_reviewers(t, c)
+        mozphab.conduit.update_revision_reviewers(t, c)
 
         self.assertEqual(
             m_get_users.call_args_list,
@@ -866,7 +867,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
             '"id":56,"phid":"PHID-DREV-ke6jhbdnwd5chtnk2q5w"},'
             '"transactions":[{"phid":"PHID-XACT-DREV-itlxgx7rsjrcnta"}]}} '
         )
-        self.assertEqual(None, mozphab.parse_api_error(api_response))
+        self.assertEqual(None, helpers.parse_api_error(api_response))
 
     def test_parse_api_response_with_errors(self):
         # Error response from running:
@@ -879,14 +880,14 @@ class TestUpdateCommitSummary(unittest.TestCase):
         )
         self.assertEqual(
             'ERR-CONDUIT-CORE: Parameter "transactions" is not a list of transactions.',
-            mozphab.parse_api_error(api_response),
+            helpers.parse_api_error(api_response),
         )
 
     def test_update_revision_no_bug_id(self):
         # Phabricator stores patches with no bug as having an empty string as the bug ID.
         # We should not explicitly update the bug-id if our bug id is "None".
         transactions = []
-        mozphab.update_revision_bug_id(
+        submit.update_revision_bug_id(
             transactions, {"bug-id": None}, {"fields": {"bugzilla.bug-id": ""}}
         )
         self.assertEqual([], transactions)

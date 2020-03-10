@@ -11,6 +11,7 @@ from callee import Contains
 from .conftest import hg_out
 
 from mozphab import mozphab
+from mozphab.subprocess_wrapper import check_call_by_line
 
 mozphab.SHOW_SPINNER = False
 
@@ -20,8 +21,6 @@ arc_ping.return_value = False
 
 call_conduit = mock.Mock()
 call_conduit.side_effect = ({}, [{"userName": "alice", "phid": "PHID-USER-1"}])
-
-check_call_by_line = mozphab.check_call_by_line
 
 
 def test_submit_create(in_process, hg_repo_path):

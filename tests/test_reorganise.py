@@ -11,7 +11,8 @@ import pytest
 from contextlib import contextmanager
 from frozendict import frozendict
 
-from mozphab import exceptions, mozphab, reorganise
+from mozphab import exceptions, mozphab
+from mozphab.commands import reorganise
 
 
 @pytest.mark.parametrize(
@@ -187,14 +188,14 @@ def test_prepare_transactions(phids, transactions):
         ),
     ],
 )
-@mock.patch("mozphab.mozphab.stack_transactions")
-@mock.patch("mozphab.mozphab.ConduitAPI.check")
-@mock.patch("mozphab.mozphab.augment_commits_from_body")
-@mock.patch("mozphab.mozphab.ConduitAPI.get_stack")
-@mock.patch("mozphab.mozphab.ConduitAPI.get_revisions")
-@mock.patch("mozphab.mozphab.ConduitAPI.ids_to_phids")
-@mock.patch("mozphab.mozphab.ConduitAPI.phids_to_ids")
-@mock.patch("mozphab.mozphab.ConduitAPI.edit_revision")
+@mock.patch("mozphab.commands.reorganise.stack_transactions")
+@mock.patch("mozphab.conduit.ConduitAPI.check")
+@mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
+@mock.patch("mozphab.conduit.ConduitAPI.get_stack")
+@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+@mock.patch("mozphab.conduit.ConduitAPI.ids_to_phids")
+@mock.patch("mozphab.conduit.ConduitAPI.phids_to_ids")
+@mock.patch("mozphab.conduit.ConduitAPI.edit_revision")
 def test_reorg_calling_stack_transactions(
     _edit_revision,
     _phid2id,
@@ -217,45 +218,45 @@ def test_reorg_calling_stack_transactions(
     mozphab.conduit.repo.commit_stack = mock.Mock()
     mozphab.conduit.repo.commit_stack.return_value = commits
     m_id2phid.return_value = [c["rev-phid"] for c in commits]
-    mozphab.reorganise(git, Args())
+    reorganise.reorganise(git, Args())
     m_trans.assert_called_once_with(*expected)
 
 
-@mock.patch("mozphab.mozphab.ConduitAPI.check")
+@mock.patch("mozphab.conduit.ConduitAPI.check")
 def test_conduit_broken(m_check):
     m_check.return_value = False
     with pytest.raises(exceptions.Error) as e:
-        mozphab.reorganise(None, None)
+        reorganise.reorganise(None, None)
 
     assert str(e.value) == "Failed to use Conduit API"
 
 
-@mock.patch("mozphab.mozphab.ConduitAPI.check")
-@mock.patch("mozphab.mozphab.augment_commits_from_body")
+@mock.patch("mozphab.conduit.ConduitAPI.check")
+@mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
 def test_commits_invalid(_augment, _check, git):
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()
     mozphab.conduit.repo.commit_stack.return_value = []
     with pytest.raises(exceptions.Error) as e:
-        mozphab.reorganise(git, None)
+        reorganise.reorganise(git, None)
 
     assert str(e.value) == "Failed to find any commits to reorganise."
 
     mozphab.conduit.repo.commit_stack.return_value = [{"rev-id": None, "name": "A"}]
     with pytest.raises(exceptions.Error) as e:
-        mozphab.reorganise(git, None)
+        reorganise.reorganise(git, None)
 
     error = str(e.value)
     assert error.startswith("Found new commit in the local stack: A.")
 
 
-@mock.patch("mozphab.mozphab.ConduitAPI.get_revisions")
-@mock.patch("mozphab.mozphab.ConduitAPI.check")
-@mock.patch("mozphab.mozphab.augment_commits_from_body")
-@mock.patch("mozphab.mozphab.ConduitAPI.get_stack")
-@mock.patch("mozphab.mozphab.ConduitAPI.phids_to_ids")
-@mock.patch("mozphab.mozphab.walk_llist")
-@mock.patch("mozphab.mozphab.logger")
+@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+@mock.patch("mozphab.conduit.ConduitAPI.check")
+@mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
+@mock.patch("mozphab.conduit.ConduitAPI.get_stack")
+@mock.patch("mozphab.conduit.ConduitAPI.phids_to_ids")
+@mock.patch("mozphab.commands.reorganise.walk_llist")
+@mock.patch("mozphab.commands.reorganise.logger")
 def test_remote_stack_invalid(
     m_logger, m_walk, m_ids, m_stack, _augment, _check, _call, git
 ):
@@ -267,7 +268,7 @@ def test_remote_stack_invalid(
     mozphab.conduit.repo.commit_stack.return_value = [{"rev-id": 1, "name": "A"}]
     m_walk.side_effect = exceptions.Error("TEST")
     with pytest.raises(exceptions.Error) as e:
-        mozphab.reorganise(git, None)
+        reorganise.reorganise(git, None)
 
     assert str(e.value) == "TEST"
     m_logger.error.assert_called_once_with(

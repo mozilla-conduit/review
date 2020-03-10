@@ -11,7 +11,20 @@ import sys
 
 from pathlib import Path
 
-from mozphab import environment, mozphab
+from mozphab.commands import submit
+from mozphab.git import Git
+from mozphab.mercurial import Mercurial
+
+from mozphab import (
+    arcanist,
+    conduit,
+    environment,
+    helpers,
+    mozphab,
+    repository,
+    simplecache,
+    updater,
+)
 
 
 def create_temp_fn(*filenames):
@@ -47,12 +60,12 @@ def init_sha(in_process, git_repo_path, git_sha):
 
 @pytest.fixture(autouse=True)
 def reset_cache():
-    mozphab.cache.reset()
+    simplecache.cache.reset()
 
 
 @pytest.fixture()
 def repo_phab_url():
-    with mock.patch("mozphab.mozphab.Repository._phab_url") as xmock:
+    with mock.patch("mozphab.repository.Repository._phab_url") as xmock:
         xmock.return_value = "http://phab.test"
         yield xmock
 
@@ -69,11 +82,11 @@ def git_command():
 
 
 @pytest.fixture
-@mock.patch("mozphab.mozphab.GitCommand.output")
-@mock.patch("mozphab.mozphab.Git._get_current_head")
-@mock.patch("mozphab.mozphab.os.path")
+@mock.patch("mozphab.gitcommand.GitCommand.output")
+@mock.patch("mozphab.git.Git._get_current_head")
+@mock.patch("mozphab.repository.os.path")
 @mock.patch("mozphab.helpers.which")
-@mock.patch("mozphab.mozphab.read_json_field")
+@mock.patch("mozphab.repository.read_json_field")
 def git(
     m_read_json_field,
     m_which,
@@ -89,16 +102,16 @@ def git(
     m_which.return_value = True
     m_os_path.isfile.return_value = False
     m_git_get_current_head.return_value = "branch"
-    git = mozphab.Git("x")
+    git = Git("x")
     git._phab_vcs = "git"
     return git
 
 
 @pytest.fixture
-@mock.patch("mozphab.mozphab.Mercurial.hg_out")
-@mock.patch("mozphab.mozphab.os.path")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out")
+@mock.patch("mozphab.repository.os.path")
 @mock.patch("mozphab.helpers.which")
-@mock.patch("mozphab.mozphab.read_json_field")
+@mock.patch("mozphab.repository.read_json_field")
 def hg(
     m_read_json_field, m_which, m_os_path, m_hg_hg_out, safe_environ, repo_phab_url,
 ):
@@ -112,7 +125,7 @@ def hg(
         ["ui.username=username", "extensions.evolve="],
     ]
     mozphab.config.hg_command = ["hg"]
-    hg = mozphab.Mercurial("x")
+    hg = Mercurial("x")
     hg.use_evolve = True
     hg.has_mq = False
     hg._phab_vcs = "hg"
@@ -206,7 +219,7 @@ def in_process(monkeypatch, safe_environ, request):
     # Constructing the Mercurial() object modifies os.environ for all tests.
     # Disable update checking.  It modifies the program on disk which we do /not/ want
     # to do during a test run.
-    monkeypatch.setattr(mozphab, "check_for_updates", mock.MagicMock())
+    monkeypatch.setattr(updater, "check_for_updates", mock.MagicMock())
 
     # Disable calls to sys.exit() at the end of the script.  Re-raise errors instead
     # to make test debugging easier.
@@ -217,7 +230,7 @@ def in_process(monkeypatch, safe_environ, request):
 
     # Disable uploading a new commit title and summary to Phabricator.  This operation
     # is safe to skip and doing so makes it easier to test other conduit call sites.
-    monkeypatch.setattr(mozphab, "update_revision_description", mock.MagicMock())
+    monkeypatch.setattr(submit, "update_revision_description", mock.MagicMock())
 
     def arc_ping(self, *args):
         return True
@@ -241,16 +254,16 @@ def in_process(monkeypatch, safe_environ, request):
 
     # Allow to define the arccall_conduit function in the testing module
     arc_call_conduit = getattr(
-        request.module, "arc_call_conduit", mozphab.arc_call_conduit
+        request.module, "arc_call_conduit", arcanist.call_conduit
     )
 
     # Allow to define the arc_ping function in the testing module
     arc_ping_mock = getattr(request.module, "arc_ping", arc_ping)
 
-    monkeypatch.setattr(mozphab, "arc_ping", arc_ping_mock)
-    monkeypatch.setattr(mozphab, "arc_out", arc_out)
-    monkeypatch.setattr(mozphab, "check_call_by_line", check_call_by_line)
-    monkeypatch.setattr(mozphab, "arc_call_conduit", arc_call_conduit)
+    monkeypatch.setattr(arcanist, "arc_ping", arc_ping_mock)
+    monkeypatch.setattr(arcanist, "arc_out", arc_out)
+    monkeypatch.setattr(submit, "check_call_by_line", check_call_by_line)
+    monkeypatch.setattr(arcanist, "call_conduit", arc_call_conduit)
 
     def call_conduit_static(self, *args):
         # Return alice as the only valid reviewer name from Phabricator.
@@ -258,7 +271,7 @@ def in_process(monkeypatch, safe_environ, request):
         return [{"userName": "alice"}]
 
     call_conduit = getattr(request.module, "call_conduit", call_conduit_static)
-    monkeypatch.setattr(mozphab.ConduitAPI, "call", call_conduit)
+    monkeypatch.setattr(conduit.ConduitAPI, "call", call_conduit)
 
     def read_json_field_local(self, *args):
         if args[0][0] == "phabricator.uri":
@@ -267,4 +280,4 @@ def in_process(monkeypatch, safe_environ, request):
             return "TEST"
 
     read_json_field = getattr(request.module, "read_json_field", read_json_field_local)
-    monkeypatch.setattr(mozphab, "read_json_field", read_json_field)
+    monkeypatch.setattr(repository, "read_json_field", read_json_field)

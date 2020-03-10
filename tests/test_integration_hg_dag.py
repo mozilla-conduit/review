@@ -8,6 +8,7 @@ import mock
 from .conftest import hg_out
 
 from mozphab import mozphab
+from mozphab.subprocess_wrapper import check_call_by_line
 
 mozphab.SHOW_SPINNER = False
 
@@ -15,8 +16,6 @@ mozphab.SHOW_SPINNER = False
 _revision = 100
 
 call_conduit = mock.Mock()
-
-check_call_by_line = mozphab.check_call_by_line
 
 
 def _init_repo(hg_repo_path):

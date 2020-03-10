@@ -34,3 +34,10 @@ MOZBUILD_PATH = os.path.join(
     os.environ.get("MOZBUILD_STATE_PATH", os.path.join(HOME_DIR, ".mozbuild")),
     "moz-phab",
 )
+INSTALL_CERT_MSG = (
+    "You don't have credentials needed to access Phabricator.\n"
+    "Please run the following command to configure moz-phab:\n\n"
+    "   moz-phab install-certificate\n "
+)
+MAX_TEXT_SIZE = 10 * 1024 * 1024
+MAX_CONTEXT_SIZE = 4 * 1024 * 1024

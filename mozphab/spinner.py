@@ -3,9 +3,11 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import signal
+import sys
 import threading
+import time
 
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from mozphab import environment
 
 # py2 doesn't handle SIGINT with background threads; hook up our own handler

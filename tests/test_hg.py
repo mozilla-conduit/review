@@ -7,12 +7,12 @@ from distutils.version import LooseVersion
 
 from .conftest import create_temp_fn
 
-from mozphab import exceptions, mozphab
+from mozphab import environment, exceptions, mozphab
 
 mozphab.SHOW_SPINNER = False
 
 
-@mock.patch("mozphab.mozphab.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out")
 def test_get_successor(m_hg_hg_out, hg):
     m_hg_hg_out.return_value = []
     assert (None, None) == hg._get_successor("x")
@@ -25,9 +25,9 @@ def test_get_successor(m_hg_hg_out, hg):
         hg._get_successor("x")
 
 
-@mock.patch("mozphab.mozphab.Mercurial._get_successor")
-@mock.patch("mozphab.mozphab.Mercurial.rebase_commit")
-@mock.patch("mozphab.mozphab.Mercurial._get_parent")
+@mock.patch("mozphab.mercurial.Mercurial._get_successor")
+@mock.patch("mozphab.mercurial.Mercurial.rebase_commit")
+@mock.patch("mozphab.mercurial.Mercurial._get_parent")
 def test_finalize(m_get_parent, m_hg_rebase, m_hg_get_successor, hg):
     commits = [
         {"rev": "1", "node": "aaa", "orig-node": "aaa"},
@@ -81,16 +81,16 @@ def test_finalize(m_get_parent, m_hg_rebase, m_hg_get_successor, hg):
     assert m_hg_rebase.call_count == 2
 
 
-@mock.patch("mozphab.mozphab.Mercurial.rebase_commit")
+@mock.patch("mozphab.mercurial.Mercurial.rebase_commit")
 def test_finalize_no_evolve(m_hg_rebase, hg):
     hg.use_evolve = False
     hg.finalize([dict(rev="1", node="aaa"), dict(rev="2", node="bbb")])
     assert m_hg_rebase.not_called()
 
 
-@mock.patch("mozphab.mozphab.parse_config")
-@mock.patch("mozphab.mozphab.Mercurial.hg_out")
-@mock.patch("mozphab.mozphab.Mercurial.hg_log")
+@mock.patch("mozphab.mercurial.parse_config")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial.hg_log")
 def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
     class Args:
         def __init__(self, start="(auto)", end=".", safe_mode=False, single=False):
@@ -179,7 +179,7 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
     assert m_hg_hg_log.call_args_list == [mock.call("start")]
 
 
-@mock.patch("mozphab.mozphab.Mercurial._status")
+@mock.patch("mozphab.mercurial.Mercurial._status")
 def test_clean_worktree(m_status, hg):
     m_status.return_value = {"T": None, "U": None}
     assert hg.is_worktree_clean()
@@ -194,16 +194,16 @@ def test_clean_worktree(m_status, hg):
     assert not hg.is_worktree_clean()
 
 
-@mock.patch("mozphab.mozphab.Mercurial.hg")
+@mock.patch("mozphab.mercurial.Mercurial.hg")
 def test_commit(m_hg, hg):
     hg.commit("some body")
     m_hg.called_once()
 
 
-@mock.patch("mozphab.mozphab.Mercurial.checkout")
-@mock.patch("mozphab.mozphab.Mercurial.hg_out")
-@mock.patch("mozphab.mozphab.Mercurial.hg")
-@mock.patch("mozphab.mozphab.config")
+@mock.patch("mozphab.mercurial.Mercurial.checkout")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial.hg")
+@mock.patch("mozphab.mercurial.config")
 def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
     class Args:
         def __init__(
@@ -266,8 +266,8 @@ def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
     m_hg_out.assert_not_called()
 
 
-@mock.patch("mozphab.mozphab.temporary_binary_file")
-@mock.patch("mozphab.mozphab.Mercurial.hg")
+@mock.patch("mozphab.mercurial.temporary_binary_file")
+@mock.patch("mozphab.mercurial.Mercurial.hg")
 def test_apply_patch(m_hg, m_temp_bin_fn, hg):
     m_temp_bin_fn.return_value = create_temp_fn("diff_fn")
     hg.apply_patch("diff", "body", "user", 1)
@@ -277,7 +277,7 @@ def test_apply_patch(m_hg, m_temp_bin_fn, hg):
     )
 
 
-@mock.patch("mozphab.mozphab.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out")
 def test_is_node(m_hg_out, hg):
     assert hg.is_node("aabbcc")
     m_hg_out.assert_called_once_with(["identify", "-q", "-r", "aabbcc"])
@@ -286,7 +286,7 @@ def test_is_node(m_hg_out, hg):
     assert not hg.is_node("aaa")
 
 
-@mock.patch("mozphab.mozphab.Mercurial.is_node")
+@mock.patch("mozphab.mercurial.Mercurial.is_node")
 def test_check_node(m_is_node, hg):
     node = "aabbcc"
     m_is_node.return_value = True
@@ -299,7 +299,7 @@ def test_check_node(m_is_node, hg):
     assert "" == str(e.value)
 
 
-@mock.patch("mozphab.mozphab.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out")
 def test_hg_cat(m_hg, hg):
     cat = m_hg.return_value = b"some text"
     hg.hg_cat("fn", "node")
@@ -309,7 +309,7 @@ def test_hg_cat(m_hg, hg):
     assert cat == b"some text"
 
 
-@mock.patch("mozphab.mozphab.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out")
 def test_file_size(m_hg, hg):
     m_hg.return_value = "123\n"
     res = hg._file_size("fn", "rev")
@@ -319,10 +319,10 @@ def test_file_size(m_hg, hg):
     assert res == 123
 
 
-@mock.patch("mozphab.mozphab.Mercurial._file_size")
-@mock.patch("mozphab.mozphab.Mercurial.hg_cat")
+@mock.patch("mozphab.mercurial.Mercurial._file_size")
+@mock.patch("mozphab.mercurial.Mercurial.hg_cat")
 def test_file_meta(m_cat, m_file_size, hg):
-    size = mozphab.MAX_TEXT_SIZE - 1
+    size = environment.MAX_TEXT_SIZE - 1
     m_file_size.return_value = size
     m_cat.return_value = b"spam\nham"
     meta = hg._get_file_meta("fn", "rev")
@@ -335,13 +335,13 @@ def test_file_meta(m_cat, m_file_size, hg):
     )
 
 
-@mock.patch("mozphab.mozphab.mimetypes")
-@mock.patch("mozphab.mozphab.Mercurial._file_size")
-@mock.patch("mozphab.mozphab.Mercurial.hg_cat")
+@mock.patch("mozphab.mercurial.mimetypes")
+@mock.patch("mozphab.mercurial.Mercurial._file_size")
+@mock.patch("mozphab.mercurial.Mercurial.hg_cat")
 def test_file_meta_binary(m_cat, m_file_size, m_mime, hg):
     m_mime.guess_type.return_value = ["MIMETYPE"]
     m_cat.return_value = b"spam\nham"
-    size = mozphab.MAX_TEXT_SIZE + 1
+    size = environment.MAX_TEXT_SIZE + 1
     m_file_size.return_value = size
     meta = hg._get_file_meta("fn", "rev")
     assert meta == dict(
@@ -352,7 +352,7 @@ def test_file_meta_binary(m_cat, m_file_size, m_mime, hg):
         file_size=size,
     )
 
-    size = mozphab.MAX_TEXT_SIZE - 1
+    size = environment.MAX_TEXT_SIZE - 1
     m_file_size.return_value = size
     m_cat.return_value = b"\0spam\nham"
     meta = hg._get_file_meta("fn", "rev")
@@ -365,9 +365,9 @@ def test_file_meta_binary(m_cat, m_file_size, m_mime, hg):
     )
 
 
-@mock.patch("mozphab.mozphab.Mercurial._get_file_meta")
-@mock.patch("mozphab.mozphab.Mercurial._change_set_binary")
-@mock.patch("mozphab.mozphab.Mercurial._change_create_hunk")
+@mock.patch("mozphab.mercurial.Mercurial._get_file_meta")
+@mock.patch("mozphab.mercurial.Mercurial._change_set_binary")
+@mock.patch("mozphab.mercurial.Mercurial._change_create_hunk")
 def test_change_add(m_hunk, m_binary, m_meta, hg):
     change = None
     m_meta.return_value = dict(binary=False, body="abc\n", file_size=123)
@@ -386,9 +386,9 @@ def test_change_add(m_hunk, m_binary, m_meta, hg):
     m_binary.assert_called_once_with(change, "", b"abc\n", "", "MIME")
 
 
-@mock.patch("mozphab.mozphab.Mercurial._get_file_meta")
-@mock.patch("mozphab.mozphab.Mercurial._change_set_binary")
-@mock.patch("mozphab.mozphab.Mercurial._change_create_hunk")
+@mock.patch("mozphab.mercurial.Mercurial._get_file_meta")
+@mock.patch("mozphab.mercurial.Mercurial._change_set_binary")
+@mock.patch("mozphab.mercurial.Mercurial._change_create_hunk")
 def test_change_del(m_hunk, m_binary, m_meta, hg):
     change = None
     m_meta.return_value = dict(
@@ -409,10 +409,10 @@ def test_change_del(m_hunk, m_binary, m_meta, hg):
     m_binary.assert_called_once_with(change, b"abc\n", "", "MIME", "")
 
 
-@mock.patch("mozphab.mozphab.Mercurial._get_file_meta")
-@mock.patch("mozphab.mozphab.Mercurial._change_set_binary")
-@mock.patch("mozphab.mozphab.Mercurial._change_create_hunk")
-@mock.patch("mozphab.mozphab.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial._get_file_meta")
+@mock.patch("mozphab.mercurial.Mercurial._change_set_binary")
+@mock.patch("mozphab.mercurial.Mercurial._change_create_hunk")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out")
 def test_change_mod(m_hg, m_hunk, m_binary, m_meta, hg):
     class Args:
         def __init__(self, lesscontext=False):
@@ -435,7 +435,7 @@ diff --git a/fn b/fn
     hg.args = Args()
     hg._change_mod(change, "fn", "old_fn", "parent", "node")
     m_hg.assert_called_once_with(
-        ["diff", "--git", "-U%s" % mozphab.MAX_CONTEXT_SIZE, "-r", "parent", "fn"],
+        ["diff", "--git", "-U%s" % environment.MAX_CONTEXT_SIZE, "-r", "parent", "fn"],
         expect_binary=True,
     )
     m_hunk.assert_called_once_with(
@@ -476,7 +476,7 @@ def test_set_binary(hg):
     assert change.file_type.name == "IMAGE"
 
 
-@mock.patch("mozphab.mozphab.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out")
 def test_get_file_modes(m_hg, hg):
     m_hg.side_effect = (["100644 file name"], ["100644 file name"])
     assert hg._get_file_modes(dict(node="aaa", parent="bbb")) == {

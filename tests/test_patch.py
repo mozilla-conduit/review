@@ -6,13 +6,14 @@ import argparse
 
 import pytest
 
-from mozphab import exceptions, mozphab
+from mozphab.commands import patch
+from mozphab import args, exceptions, helpers, mozphab
 
 mozphab.SHOW_SPINNER = False
 
 
 def test_check_revision_id():
-    check_revision_id = mozphab.check_revision_id
+    check_revision_id = patch.check_revision_id
 
     assert check_revision_id("123") == 123
     assert check_revision_id("D123") == 123
@@ -25,7 +26,7 @@ def test_check_revision_id():
 
 
 def test_strip_depends_on():
-    strip = mozphab.strip_depends_on
+    strip = helpers.strip_depends_on
 
     assert "" == strip("Depends on D123")
     assert "" == strip("\n Depends on D1\n")
@@ -35,7 +36,7 @@ def test_strip_depends_on():
 
 
 def test_prepare_body():
-    prep = mozphab.prepare_body
+    prep = helpers.prepare_body
     assert "\n\nDifferential Revision: http://phabricator.test/D1" == prep(
         "", "", 1, "http://phabricator.test"
     )
@@ -61,36 +62,36 @@ def test_prepare_body():
 @mock.patch("mozphab.gitcommand.which_path")
 @mock.patch("mozphab.gitcommand.check_call")
 def test_apply_patch(m_check_call, _):
-    mozphab.config.git_command = ["git"]
-    mozphab.apply_patch("diff", "x")
+    patch.config.git_command = ["git"]
+    patch.apply_patch("diff", "x")
     m_check_call.assert_called_once()
 
 
 def test_base_ref():
-    assert mozphab.get_base_ref({"fields": {}}) is None
+    assert patch.get_base_ref({"fields": {}}) is None
 
     diff = {"fields": {"refs": [{"identifier": "sha1", "type": "sometype"}]}}
-    assert mozphab.get_base_ref(diff) is None
+    assert patch.get_base_ref(diff) is None
 
     diff = {"fields": {"refs": [{"identifier": "sha1", "type": "base"}]}}
-    assert mozphab.get_base_ref(diff) == "sha1"
+    assert patch.get_base_ref(diff) == "sha1"
 
 
-@mock.patch("mozphab.mozphab.ConduitAPI.call")
-@mock.patch("mozphab.mozphab.Git.is_worktree_clean")
-@mock.patch("mozphab.mozphab.config")
-@mock.patch("mozphab.mozphab.ConduitAPI.check")
-@mock.patch("mozphab.mozphab.ConduitAPI.get_revisions")
-@mock.patch("mozphab.mozphab.ConduitAPI.get_ancestor_phids")
-@mock.patch("mozphab.mozphab.ConduitAPI.get_successor_phids")
-@mock.patch("mozphab.mozphab.ConduitAPI.get_diffs")
-@mock.patch("mozphab.mozphab.get_base_ref")
-@mock.patch("mozphab.mozphab.Git.before_patch")
-@mock.patch("mozphab.mozphab.apply_patch")
-@mock.patch("mozphab.mozphab.prepare_body")
-@mock.patch("mozphab.mozphab.Git.apply_patch")
-@mock.patch("mozphab.mozphab.Git.check_node")
-@mock.patch("mozphab.mozphab.logger")
+@mock.patch("mozphab.conduit.ConduitAPI.call")
+@mock.patch("mozphab.git.Git.is_worktree_clean")
+@mock.patch("mozphab.commands.patch.config")
+@mock.patch("mozphab.conduit.ConduitAPI.check")
+@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+@mock.patch("mozphab.conduit.ConduitAPI.get_ancestor_phids")
+@mock.patch("mozphab.conduit.ConduitAPI.get_successor_phids")
+@mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
+@mock.patch("mozphab.commands.patch.get_base_ref")
+@mock.patch("mozphab.git.Git.before_patch")
+@mock.patch("mozphab.commands.patch.apply_patch")
+@mock.patch("mozphab.commands.patch.prepare_body")
+@mock.patch("mozphab.git.Git.apply_patch")
+@mock.patch("mozphab.git.Git.check_node")
+@mock.patch("mozphab.commands.patch.logger")
 def test_patch(
     m_logger,
     m_git_check_node,
@@ -114,7 +115,7 @@ def test_patch(
     m_git_check_conduit.return_value = False
     m_config.arc_command = "arc"
     with pytest.raises(exceptions.Error):
-        mozphab.patch(git, None)
+        patch.patch(git, None)
 
     class Args:
         def __init__(
@@ -141,12 +142,12 @@ def test_patch(
     m_git_check_conduit.return_value = True
     m_git_is_worktree_clean.return_value = False
     with pytest.raises(exceptions.Error):
-        mozphab.patch(git, git.args)
+        patch.patch(git, git.args)
 
     m_git_is_worktree_clean.return_value = True
     m_get_revisions.return_value = []
     with pytest.raises(exceptions.Error):
-        mozphab.patch(git, git.args)
+        patch.patch(git, git.args)
 
     m_config.always_full_stack = False
     m_get_successor_phids.return_value = []
@@ -181,7 +182,7 @@ def test_patch(
     }
     m_git_check_node.return_value = "sha111"
     m_prepare_body.return_value = "commit message"
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_git_apply_patch.assert_called_once_with(
         "raw", "commit message", "user <author@example.com>", 1547806078,
     )
@@ -207,21 +208,21 @@ def test_patch(
             ),
         }
     }
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_git_apply_patch.assert_called_once_with(
         "raw", "commit message", "user <author@example.com>", 1547806078,
     )
 
     m_get_base_ref.return_value = None
     with pytest.raises(exceptions.Error):
-        mozphab.patch(git, git.args)
+        patch.patch(git, git.args)
 
     m_get_base_ref.return_value = "sha111"
     m_git_apply_patch.reset_mock()
     m_git_before_patch.reset_mock()
     # --raw
     git.args = Args(raw=True)
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_git_before_patch.not_called()
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_not_called()
@@ -230,13 +231,13 @@ def test_patch(
     # skip-dependencies
     git.args = Args(raw=True, skip_dependencies=True)
     m_get_successor_phids.reset_mock()
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_get_successor_phids.assert_not_called()
 
     m_git_before_patch.reset_mock()
     # --no_commit
     git.args = Args(no_commit=True)
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_git_before_patch.assert_called_once()
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_called_once_with("raw", "x")
@@ -245,14 +246,14 @@ def test_patch(
     m_git_before_patch.reset_mock()
     # --no_commit --applyto head
     git.args = Args(no_commit=True, apply_to="head")
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_git_before_patch.not_called()
 
     m_get_base_ref.reset_mock()
     m_apply_patch.reset_mock()
     # --apply_to head
     git.args = Args(apply_to="head")
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_get_base_ref.assert_not_called()
     m_git_apply_patch.assert_called_once_with(
         "raw", "commit message", "user <author@example.com>", 1547806078,
@@ -264,13 +265,13 @@ def test_patch(
     m_git_check_node.return_value = node
     # --applyto NODE
     git.args = Args(apply_to=node)
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_git_before_patch.assert_called_once_with(node, "D1")
 
     m_git_before_patch.reset_mock()
     # --applyto here
     git.args = Args(apply_to="here")
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_git_before_patch.assert_called_once_with(None, "D1")
 
     # ########## no commit info in diffs
@@ -280,19 +281,19 @@ def test_patch(
     m_call_conduit.side_effect = ("raw",)
     git.args = Args()
     with pytest.raises(exceptions.Error):
-        mozphab.patch(git, git.args)
+        patch.patch(git, git.args)
 
     m_git_apply_patch.reset_mock()
     m_apply_patch.reset_mock()
     git.args = Args(no_commit=True)
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_called_once()
 
     m_logger.reset_mock()
     m_call_conduit.side_effect = ("raw",)
     git.args = Args(raw=True)
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_logger.info.assert_called_once_with("raw")
 
     # ########## multiple revisions
@@ -302,7 +303,7 @@ def test_patch(
     m_get_ancestor_phids.return_value = ["PHID-2"]
     m_call_conduit.side_effect = ("raw2", "raw1")
     # --raw 2 revisions in stack
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_logger.info.assert_has_calls((mock.call("raw2"), mock.call("raw1")))
 
     # node not found
@@ -310,7 +311,7 @@ def test_patch(
     m_git_check_node.side_effect = exceptions.NotFoundError
     git.args = Args(apply_to=node)
     with pytest.raises(exceptions.Error) as e:
-        mozphab.patch(git, git.args)
+        patch.patch(git, git.args)
         assert "Unknown revision: %s\nERROR" % node in e.msg
 
     # successors
@@ -321,7 +322,7 @@ def test_patch(
     m_call_conduit.side_effect = ("raw2", "raw1")
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1, "DIFFPHID-2": DIFF_2}
     git.args = Args(revision_id=1, raw=True, yes=True)
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     assert m_get_revisions.call_args_list == [
         mock.call(ids=[1]),
         mock.call(phids=["PHID-2"]),
@@ -330,10 +331,10 @@ def test_patch(
     # multiple successors
     m_get_revisions.reset_mock()
     m_get_revisions.side_effect = ([REV_1], [REV_2])
-    m_get_successor_phids.side_effect = (mozphab.NonLinearException,)
+    m_get_successor_phids.side_effect = (exceptions.NonLinearException,)
     m_call_conduit.side_effect = ("raw",)
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
-    mozphab.patch(git, git.args)
+    patch.patch(git, git.args)
     m_get_revisions.assert_called_once_with(ids=[1])
 
 

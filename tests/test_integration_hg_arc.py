@@ -140,7 +140,7 @@ Differential Revision: http://example.test/D123
 """
     assert log == expected
     assert call_conduit.call_count == 4
-    arc_call_conduit.assert_not_called()
+    arc_call_conduit.assert_called_once_with("conduit.ping", {}, mock.ANY)
     check_call_by_line.assert_called_once()  # update
 
 
@@ -191,7 +191,7 @@ Differential Revision: http://example.test/D123
         is_development=True,
     )
 
-    arc_call_conduit.assert_not_called()
+    arc_call_conduit.assert_called_once_with("conduit.ping", {}, mock.ANY)
     check_call_by_line.assert_called_once()
 
 
@@ -218,7 +218,10 @@ def test_submit_update_no_new_reviewers(in_process, hg_repo_path):
         [{"userName": "alice", "phid": "PHID-USER-1"}],
     )
     arc_call_conduit.reset_mock()
-    arc_call_conduit.side_effect = ({"data": {}},)  # set reviewers response
+    arc_call_conduit.side_effect = (
+        {},
+        {"data": {}},
+    )  # set reviewers response
     check_call_by_line.reset_mock()
     testfile = hg_repo_path / "X"
     testfile.write_text("a")
@@ -279,7 +282,11 @@ def test_submit_update_bug_id(in_process, hg_repo_path):
         [{"userName": "alice", "phid": "PHID-USER-1"}],
     )
     arc_call_conduit.reset_mock()
-    arc_call_conduit.side_effect = ({"data": {}},)  # response from setting the bug id
+    # response from setting the bug id
+    arc_call_conduit.side_effect = (
+        {},
+        {"data": {}},
+    )
     testfile = hg_repo_path / "X"
     testfile.write_text("a")
     hg_out("add")
@@ -300,7 +307,7 @@ Differential Revision: http://example.test/D123
         ["submit", "--arc", "--yes", "--bug", "2", "-r", "alice"], is_development=True
     )
 
-    arc_call_conduit.assert_called_once_with(
+    arc_call_conduit.assert_called_with(
         "differential.revision.edit",
         {
             "objectIdentifier": "D123",

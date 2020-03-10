@@ -2,7 +2,8 @@ import imp
 import os
 import unittest
 
-from mozphab import mozphab
+from mozphab import arcanist, helpers, mozphab
+from mozphab.commands import submit
 
 mozphab.SHOW_SPINNER = False
 
@@ -12,7 +13,7 @@ class CommitParsing(unittest.TestCase):
         self.assertEqual(dict(request=result[0], granted=result[1]), parsed)
 
     def test_bug_id(self):
-        parse = mozphab.parse_bugs
+        parse = helpers.parse_bugs
 
         self.assertEqual(parse("bug 1"), ["1"])
         self.assertEqual(parse("bug 123456"), ["123456"])
@@ -26,7 +27,7 @@ class CommitParsing(unittest.TestCase):
         self.assertEqual(parse("BUG 1 helper_bug2.html"), ["1", "2"])
 
     def test_reviewers(self):
-        parse = mozphab.parse_reviewers
+        parse = helpers.parse_reviewers
 
         # first with r? reviewer request syntax
         self.assertParsed((["romulus"], []), parse("stuff; r?romulus"))
@@ -162,7 +163,7 @@ class CommitParsing(unittest.TestCase):
     def test_morph_blocking_reviewers(self):
         def morph(title):
             commits = [dict(title=title)]
-            mozphab.morph_blocking_reviewers(commits)
+            submit.morph_blocking_reviewers(commits)
             return commits[0]["title"]
 
         self.assertEqual("stuff", morph("stuff"))
@@ -179,7 +180,7 @@ class CommitParsing(unittest.TestCase):
         self.assertEqual("stuff; r=romulus!.", morph("stuff; r!romulus."))
 
     def test_arc_diff_rev(self):
-        parse = mozphab.parse_arc_diff_rev
+        parse = helpers.parse_arc_diff_rev
 
         self.assertEqual("1", parse("Differential Revision: https://example.com/D1"))
         self.assertEqual("22", parse("Differential Revision: https://example.com/D22"))
@@ -198,7 +199,7 @@ class CommitParsing(unittest.TestCase):
         self.assertIsNone(parse("\n  Differential Revision: http://example.com/Q1"))
 
     def test_arc_reject(self):
-        reject = mozphab.has_arc_rejections
+        reject = helpers.has_arc_rejections
 
         self.assertTrue(reject("Summary: blah\nReviewers: blah\n"))
         self.assertTrue(reject("Reviewers: blah\nSummary: blah\n"))
