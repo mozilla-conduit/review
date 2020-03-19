@@ -5,14 +5,13 @@
 import subprocess
 from pathlib import Path
 
+
 ROOT = Path(__file__).resolve().parent.parent
 PY_FILES = sorted(
-    [
-        str(f)
-        for f in list(ROOT.glob("*.py"))
-        + list((ROOT / "mozphab").glob("*.py"))
-        + list((ROOT / "tests").glob("*.py"))
-    ]
+    str(f)
+    for f in list(ROOT.glob("*.py"))
+    + list((ROOT / "mozphab").glob("**/*.py"))
+    + list((ROOT / "tests").glob("**/*.py"))
 )
 
 
@@ -20,7 +19,7 @@ def test_black():
     subprocess.check_call(["black", "--check"] + PY_FILES)
 
 
-def flake8():
+def test_flake8():
     subprocess.check_call(
         ["flake8", "--max-line-length=88", "--ignore=E203,W503", "--disable-noqa"]
         + PY_FILES

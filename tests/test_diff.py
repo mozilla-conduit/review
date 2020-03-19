@@ -4,9 +4,7 @@
 
 # coding=utf-8
 
-import imp
 import mock
-import os
 
 from mozphab import environment, mozphab
 

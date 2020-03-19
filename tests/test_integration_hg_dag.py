@@ -1,14 +1,11 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
-import imp
-import os
 import mock
 
 from .conftest import hg_out
 
 from mozphab import mozphab
-from mozphab.subprocess_wrapper import check_call_by_line
 
 mozphab.SHOW_SPINNER = False
 
@@ -106,7 +103,7 @@ o  init
         for transaction in edit_call.args[1]["transactions"]
         if transaction["type"] == "plan-changes"
     )
-    assert wip_transaction["value"] == True
+    assert wip_transaction["value"]
 
 
 def test_submit_single_1(in_process, hg_repo_path):

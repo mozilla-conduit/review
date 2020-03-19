@@ -1,9 +1,7 @@
 import builtins
 import datetime
-import imp
 import json
 import mock
-import os
 import pytest
 import subprocess
 import unittest

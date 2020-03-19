@@ -1,7 +1,5 @@
 import copy
-import imp
 import mock
-import os
 import pytest
 from distutils.version import LooseVersion
 

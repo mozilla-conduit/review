@@ -1,8 +1,6 @@
 # coding=utf-8
 
-import imp
 import mock
-import os
 import pytest
 from pathlib import Path
 

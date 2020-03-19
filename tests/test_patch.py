@@ -1,13 +1,10 @@
-import datetime
-import imp
 import mock
-import os
 import argparse
 
 import pytest
 
 from mozphab.commands import patch
-from mozphab import args, exceptions, helpers, mozphab
+from mozphab import exceptions, helpers, mozphab
 
 mozphab.SHOW_SPINNER = False
 

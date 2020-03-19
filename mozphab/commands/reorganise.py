@@ -179,7 +179,7 @@ def reorganise(repo, args):
     with wait_message("Detecting the remote stack..."):
         try:
             phabstack = conduit.get_stack(localstack_ids)
-        except Error as e:
+        except Error:
             logger.error("Remote stack is not linear.")
             raise
 
@@ -190,7 +190,7 @@ def reorganise(repo, args):
     if phabstack:
         try:
             phabstack_phids = walk_llist(phabstack)
-        except Error as e:
+        except Error:
             logger.error(
                 "Remote stack is not linear.\n"
                 "Detected stack:\n{}".format(
@@ -240,7 +240,7 @@ def reorganise(repo, args):
 
     with wait_message("Applying transactions..."):
         for phid, rev_transactions in transactions.items():
-            conduit.edit_revision(rev_id=phid, transactions=transactions[phid])
+            conduit.edit_revision(rev_id=phid, transactions=rev_transactions)
 
     logger.info("Stack has been reorganised.")
 

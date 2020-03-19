@@ -1,8 +1,6 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
-import imp
-import os
 import mock
 import pytest
 
@@ -327,8 +325,8 @@ def test_abandon_a_revision(in_process, git_repo_path, init_sha):
             ]
         ),  # differential.edge.search
         dict(data=[dict(phid="PHID-2", id=2)]),  # differential.revision.search
-        dict(data=[dict(phid="PHID-1", id=1)]),  #  differential.edit_revision
-        dict(data=[dict(phid="PHID-2", id=2)]),  #  differential.edit_revision
+        dict(data=[dict(phid="PHID-1", id=1)]),  # differential.edit_revision
+        dict(data=[dict(phid="PHID-2", id=2)]),  # differential.edit_revision
     )
 
     f = git_repo_path / "X"
@@ -376,14 +374,14 @@ Differential Revision: http://example.test/D1
     assert call_conduit.call_args_list[5] == mock.call(
         "differential.revision.edit",
         {
-            "transactions": [{"type": "children.remove", "value": ["PHID-2"]},],
+            "transactions": [{"type": "children.remove", "value": ["PHID-2"]}],
             "objectIdentifier": "PHID-1",
         },
     )
     assert call_conduit.call_args_list[6] == mock.call(
         "differential.revision.edit",
         {
-            "transactions": [{"type": "abandon", "value": True},],
+            "transactions": [{"type": "abandon", "value": True}],
             "objectIdentifier": "PHID-2",
         },
     )

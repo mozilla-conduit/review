@@ -1,9 +1,6 @@
 # coding=utf-8
 import copy
-import imp
 import mock
-import os
-import sys
 import unittest
 import uuid
 
@@ -190,7 +187,8 @@ class Commits(unittest.TestCase):
 
         self._assertError(
             repo.check_commits_for_submit,
-            "Phabricator revisions should be unique, but the following commits refer to the same one (D1):\n"
+            "Phabricator revisions should be unique, "
+            "but the following commits refer to the same one (D1):\n"
             "* a\n"
             "* c",
             (
@@ -204,11 +202,13 @@ class Commits(unittest.TestCase):
 
         self._assertError(
             repo.check_commits_for_submit,
-            "Phabricator revisions should be unique, but the following commits refer to the same one (D1):\n"
+            "Phabricator revisions should be unique, "
+            "but the following commits refer to the same one (D1):\n"
             "* a\n"
             "* c"
             "\n\n\n"
-            "Phabricator revisions should be unique, but the following commits refer to the same one (D2):\n"
+            "Phabricator revisions should be unique, "
+            "but the following commits refer to the same one (D2):\n"
             "* b\n"
             "* d",
             (
@@ -884,8 +884,8 @@ class TestUpdateCommitSummary(unittest.TestCase):
         )
 
     def test_update_revision_no_bug_id(self):
-        # Phabricator stores patches with no bug as having an empty string as the bug ID.
-        # We should not explicitly update the bug-id if our bug id is "None".
+        # Phabricator stores patches with no bug as having an empty string as the
+        # bug ID. We should not explicitly update the bug-id if our bug id is "None".
         transactions = []
         submit.update_revision_bug_id(
             transactions, {"bug-id": None}, {"fields": {"bugzilla.bug-id": ""}}

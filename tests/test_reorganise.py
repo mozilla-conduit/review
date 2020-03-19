@@ -3,13 +3,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import imp
-import json
 import mock
-import os
 import pytest
-from contextlib import contextmanager
-from frozendict import frozendict
 
 from mozphab import exceptions, mozphab
 from mozphab.commands import reorganise

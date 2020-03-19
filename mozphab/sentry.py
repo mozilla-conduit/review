@@ -15,9 +15,10 @@ def init_sentry():
     sentry_logging = LoggingIntegration(
         level=logging.INFO,
         event_level=None,
-        # The default event_level is logging.ERROR, which will report any "logging.error(...)" call to Sentry.
-        # However, we respond to incorrect usage with "logging.error(...)" messages, which we don't want to
-        # report to Sentry.
+        # The default event_level is logging.ERROR, which will report any
+        # "logging.error(...)" call to Sentry.  However, we respond to
+        # incorrect usage with "logging.error(...)" messages, which we don't
+        # want to report to Sentry.
     )
     sentry_sdk.init(
         dsn="https://e8a2a97b86c7472f9308186547aebfa2@sentry.prod.mozaws.net/502",

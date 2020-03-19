@@ -1,8 +1,6 @@
-import imp
-import os
 import unittest
 
-from mozphab import arcanist, helpers, mozphab
+from mozphab import helpers, mozphab
 from mozphab.commands import submit
 
 mozphab.SHOW_SPINNER = False

@@ -29,7 +29,7 @@ class Config(object):
             command_path =
 
             [hg]
-            command_path = 
+            command_path =
 
             [submit]
             auto_submit = False
@@ -45,7 +45,7 @@ class Config(object):
             self_last_check = 0
             arc_last_check = 0
             self_auto_update = True
-            
+
             [error_reporting]
             report_to_sentry = True
             """

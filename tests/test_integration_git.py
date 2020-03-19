@@ -2,8 +2,6 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
-import imp
-import os
 import shutil
 import mock
 import pytest
@@ -153,7 +151,9 @@ Differential Revision: http://example.test/D123
                                 "newLength": 1,
                                 "addLines": 1,
                                 "delLines": 0,
-                                "corpus": "+no line ending\n\\ No newline at end of file\n",
+                                "corpus": (
+                                    "+no line ending\n\\ No newline at end of file\n"
+                                ),
                                 "isMissingOldNewline": False,
                                 "isMissingNewNewline": True,
                             }
