@@ -4,6 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import json
+import subprocess
 import sys
 import time
 import urllib.request
@@ -72,7 +73,9 @@ def check_for_updates(with_arc=True):
             logger.info("Upgrading to version %s", pypi_version)
             self_upgrade()
             logger.info("Restarting...")
-            check_call([sys.executable] + sys.argv)
+            # It's best to ignore errors here as they will be reported by the
+            # new moz-phab process.
+            subprocess.run(sys.argv)
             sys.exit()
 
         logger.warning("Version %s of `moz-phab` is now available", pypi_version)
