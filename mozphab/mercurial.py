@@ -27,6 +27,7 @@ from .logger import logger
 from .repository import Repository
 from .spinner import wait_message
 from .subprocess_wrapper import check_call, check_output
+from .telemetry import telemetry
 
 MINIMUM_MERCURIAL_VERSION = LooseVersion("4.3.3")
 
@@ -66,6 +67,7 @@ class Mercurial(Repository):
         if not m:
             raise Error("Failed to determine Mercurial version.")
         self.mercurial_version = LooseVersion(m.group(1))
+        self.vcs_version = str(self.mercurial_version)
         if self.mercurial_version < MINIMUM_MERCURIAL_VERSION:
             raise Error(
                 "You are currently running Mercurial %s.  "
@@ -825,6 +827,7 @@ class Mercurial(Repository):
     def _change_add(self, change, fn, _, parent, node):
         """Create a change about adding a file to the commit."""
         meta = self._get_file_meta(fn, node)
+        telemetry.metrics.mozphab.submission.files_size.accumulate(meta["file_size"])
         if meta["binary"]:
             self._change_set_binary(change, "", meta["bin_body"], "", meta["mime"])
         else:
@@ -842,6 +845,7 @@ class Mercurial(Repository):
     def _change_del(self, change, fn, _, parent, node):
         """Create a change about deleting a file from the commit."""
         meta = self._get_file_meta(fn, parent)
+        telemetry.metrics.mozphab.submission.files_size.accumulate(meta["file_size"])
         if meta["binary"]:
             self._change_set_binary(change, meta["bin_body"], "", meta["mime"], "")
         else:
@@ -860,6 +864,8 @@ class Mercurial(Repository):
         """Create a change about modified file in the commit."""
         a_meta = self._get_file_meta(old_fn, parent)
         b_meta = self._get_file_meta(fn, node)
+        file_size = max(a_meta["file_size"], b_meta["file_size"])
+        telemetry.metrics.mozphab.submission.files_size.accumulate(file_size)
         if a_meta["binary"] or b_meta["binary"]:
             self._change_set_binary(
                 change,
@@ -869,7 +875,6 @@ class Mercurial(Repository):
                 b_meta["mime"],
             )
         else:
-            file_size = max(a_meta["file_size"], b_meta["file_size"])
             if a_meta["body"] == b_meta["body"]:
                 lines = a_meta["body"].splitlines(True)
                 lines = [" %s" % l for l in lines]

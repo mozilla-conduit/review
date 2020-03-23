@@ -48,6 +48,9 @@ class Config(object):
 
             [error_reporting]
             report_to_sentry = True
+
+            [telemetry]
+            enabled = False
             """
 
         self._config = configparser.ConfigParser()
@@ -77,6 +80,7 @@ class Config(object):
         self.report_to_sentry = self._config.getboolean(
             "error_reporting", "report_to_sentry"
         )
+        self.telemetry_enabled = self._config.getboolean("telemetry", "enabled")
         self._git_command = self._config.get("git", "command_path")
         self.git_command = (
             [self._git_command] if self._git_command else environment.GIT_COMMAND
@@ -104,6 +108,7 @@ class Config(object):
             self._set("updater", "self_last_check", self.self_last_check)
             self._set("updater", "arc_last_check", self.arc_last_check)
             self._set("updater", "self_auto_update", self.self_auto_update)
+            self._set("telemetry", "enabled", self.telemetry_enabled)
 
         else:
             logger.debug("creating %s", self._filename)
@@ -118,6 +123,7 @@ class Config(object):
             self._set("patch", "apply_to", self.apply_patch_to)
             self._set("patch", "create_bookmark", self.create_bookmark)
             self._set("patch", "always_full_stack", self.always_full_stack)
+            self._set("telemetry", "enabled", self.telemetry_enabled)
 
         with open(self._filename, "w", encoding="utf-8") as f:
             self._config.write(f)

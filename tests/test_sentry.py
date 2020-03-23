@@ -46,7 +46,10 @@ def test_sentry_not_enabled_if_config_disabled(
 @mock.patch("mozphab.config.Config")
 @mock.patch("mozphab.mozphab.init_sentry")
 @mock.patch("mozphab.updater.check_for_updates")
-def test_sentry_enabled(_, mock_init_sentry, mock_config_class, mock_parse_args):
+@mock.patch("mozphab.mozphab.telemetry")
+def test_sentry_enabled(
+    _telemetry, _check, mock_init_sentry, mock_config_class, mock_parse_args
+):
     config = MagicMock()
     config.report_to_sentry = True
     mock_config_class.return_value = config

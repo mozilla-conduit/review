@@ -35,6 +35,7 @@ class Repository(object):
         self.phab_url = (phab_url or self._phab_url()).rstrip("/")
         self.api_url = self._api_url()
         self.call_sign = self._get_setting("repository.callsign")
+        self.bmo_url = self._get_setting("bmo_url")
 
     def is_worktree_clean(self):
         """Check if the working tree is clean."""

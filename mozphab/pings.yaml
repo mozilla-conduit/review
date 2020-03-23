@@ -1,0 +1,23 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# This file defines the built-in pings that are recorded by the Glean SDK. They
+# are automatically converted to Kotlin code at build time using the
+# `glean_parser` PyPI package.
+
+---
+$schema: moz://mozilla.org/schemas/glean/pings/1-0-0
+
+usage:
+  description: >
+      This ping is intended to provide a measure of the usage of MozPhab. It's
+      generated after a command is finished.
+  include_client_id: true
+  notification_emails:
+    - mozphab-telemetry@mozilla.com
+    - pzalewa@mozilla.com
+  bugs:
+    - http://bugzilla.mozilla.org/1621025/
+  data_reviews:
+    - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21

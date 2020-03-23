@@ -21,6 +21,7 @@ from mozphab.helpers import (
 from mozphab.logger import logger
 from mozphab.spinner import wait_message
 from mozphab.subprocess_wrapper import check_call_by_line
+from mozphab.telemetry import telemetry
 
 DEFAULT_UPDATE_MESSAGE = "Revision updated."
 
@@ -337,6 +338,7 @@ def submit(repo, args):
     if environment.DEBUG:
         arcanist.ARC.append("--trace")
 
+    telemetry.metrics.mozphab.submission.preparation_time.start()
     with wait_message("Checking connection to Phabricator."):
         # Check if raw Conduit API can be used
         if not conduit.check():
@@ -401,6 +403,8 @@ def submit(repo, args):
             "be result in a comment on new revisions."
         )
 
+    telemetry.metrics.mozphab.submission.preparation_time.stop()
+
     # Confirmation prompt.
     if args.yes:
         pass
@@ -420,6 +424,8 @@ def submit(repo, args):
             config.write()
 
     # Process.
+    telemetry.metrics.mozphab.submission.commits_count.add(len(commits))
+    telemetry.metrics.mozphab.submission.process_time.start()
     previous_commit = None
     # Collect all existing revisions to get reviewers info.
     rev_ids_to_update = [int(c["rev-id"]) for c in commits if c.get("rev-id")]
@@ -482,6 +488,7 @@ def submit(repo, args):
                 diff = repo.get_diff(commit)
 
             if diff:
+                telemetry.metrics.mozphab.submission.files_count.add(len(diff.changes))
                 with wait_message("Uploading binary file(s)..."):
                     diff.upload_files()
 
@@ -594,6 +601,7 @@ def submit(repo, args):
 
     logger.warning("\nCompleted")
     show_commit_stack(commits, validate=False, show_rev_urls=True)
+    telemetry.metrics.mozphab.submission.process_time.stop()
 
 
 def add_parser(parser):

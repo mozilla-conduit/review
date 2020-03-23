@@ -1,0 +1,265 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# This file defines the metrics that are recorded by the Glean SDK. They are
+# automatically converted to Kotlin code at build time using the `glean_parser`
+# PyPI package.
+
+---
+$schema: moz://mozilla.org/schemas/glean/metrics/1-0-0
+
+mozphab.environment:
+  distribution_version:
+    type: string
+    description: >
+        Version number of the Operating System or distribution name and version
+        for Linux.
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+  python_version:
+    type: string
+    description: >
+        Python version
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+mozphab.environment.vcs:
+  name:
+    type: string
+    description: >
+        Name of the underlying version control system
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+  version:
+    type: string
+    description: >
+        Version of the underlying version control system
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+mozphab.user:
+  installation:
+    type: uuid
+    description: >
+        Unique identifier of each MozPhab installation.
+        A user might install the application on multiple machines/profiles.
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+  id:
+    type: uuid
+    description: >
+        Unique identifier of each MozPhab user.
+        The default `client_id` will change if the user would delete the
+        `telemetry-data` directory. The `user.id` metric is created by hashing
+        the email, which will be the same for all MozPhab installations.
+
+        We store the user identification in a file that is updated every week.
+        We want to change the `user.id` metric when the user changes an email.
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+mozphab.usage:
+  command_time:
+    type: timespan
+    description: >
+        Time spent on performing the command
+    time_unit: millisecond
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+  command:
+    type: string
+    description: >
+        Command used to run MozPhab, e.g. `submit` or `patch`.
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+  override_switch:
+    type: boolean
+    description: >
+        True if a --force switch was used to override validation
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+  arcanist:
+    type: boolean
+    description: >
+        True if MozPhab was forced to use Arcanist
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+mozphab.submission:
+  preparation_time:
+    type: timespan
+    description: >
+        Time spent on preparing the commit stack.
+    time_unit: millisecond
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+  process_time:
+    type: timespan
+    description: >
+        Time spent on performing the submission.
+    time_unit: millisecond
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+  commits_count:
+    type: counter
+    description: >
+        A total number of commits in the stack.
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+  files_size:
+    type: memory_distribution
+    memory_unit: byte
+    description: >
+        A distributed size of all files in the submitted stack
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage
+
+  files_count:
+    type: counter
+    description: >
+        A total number of files submitted.
+    lifetime: application
+    notification_emails:
+      - mozphab-telemetry@mozilla.com
+      - pzalewa@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1621025#c21
+    expires: never
+    send_in_pings:
+      - usage

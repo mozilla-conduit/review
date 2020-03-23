@@ -21,6 +21,7 @@ from .helpers import prompt, short_node, temporary_binary_file, temporary_file
 from .logger import logger
 from .repository import Repository
 from .spinner import wait_message
+from .telemetry import telemetry
 
 NULL_SHA1 = "0" * 40
 
@@ -44,6 +45,11 @@ class Git(Repository):
         super().__init__(path, dot_path)
 
         self.vcs = "git"
+        m = re.search(r"\d+\.\d+\.\d+", self.git.output(["--version"], split=False))
+        if not m:
+            raise Error("Failed to determine Git version.")
+
+        self.vcs_version = m.group(0)
         self.revset = None
         self.branch = None
 
@@ -642,6 +648,7 @@ class Git(Repository):
             b_size = self._file_size(b_blob)
 
         file_size = max(a_size, b_size)
+        telemetry.metrics.mozphab.submission.files_size.accumulate(file_size)
 
         # Detect if we're binary, and generate a unified diff
         if b"\0" in a_body or b"\0" in b_body or file_size > environment.MAX_TEXT_SIZE:
