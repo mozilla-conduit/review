@@ -613,30 +613,60 @@ class Mercurial(Repository):
 
     def _get_file_modes(self, commit):
         """Get modes of the modified files."""
-        old_modes = self.hg_out(
-            ["manifest", "-T", "{mode} {path}\n", "-r", commit["parent"]],
-            never_log=True,
-        )
-        new_modes = self.hg_out(
-            ["manifest", "-T", "{mode} {path}\n", "-r", commit["node"]], never_log=True
-        )
-        file_modes = {}
-        for s_info in old_modes:
-            info = s_info.split(None, 1)
-            old_mode = info[0]
-            if len(old_mode) == 3:
-                # Windows responds with a 3-digit number
-                old_mode = "100{}".format(old_mode)
-            file_modes[info[1]] = dict(old_mode=old_mode)
 
-        for s_info in new_modes:
-            info = s_info.split(None, 1)
-            new_mode = info[0]
-            if len(new_mode) == 3:
-                # Windows responds with a 3-digit number
-                new_mode = "100{}".format(new_mode)
-            file_modes.setdefault(info[1], dict())
-            file_modes[info[1]]["new_mode"] = new_mode
+        # build list of modified files
+        # using a -T template here doesn't output all files (eg. source files from
+        # a copy operation are skipped), so we have to parse the default output
+        modified_files = [
+            line[2:]  # strip leading status char and space
+            for line in self.hg_out(["status", "--change", commit["node"], "--copies"])
+        ]
+
+        def _to_mode_dict(mode_list):
+            mode_dict = {}
+            for line in mode_list:
+                flag, mode_path = line.split(":", 1)
+                mode_dict[mode_path] = "100755" if flag == "x" else "100644"
+            return mode_dict
+
+        # get before/after file modes
+        # .arcconfig is added to the file list to try to avoid the situation where
+        # none of the files specified by -I are present in the commit.
+        try:
+            old_modes = _to_mode_dict(
+                self.hg_out(
+                    ["files"]
+                    + ["--rev", commit["parent"]]
+                    + ["-T", "{flags}:{path}\n"]
+                    + ["-I%s" % f for f in modified_files]
+                    + ["-I.arcconfig"]
+                )
+            )
+        except CommandError:
+            # Mercurial will return an error if none of the files on the -I list are
+            # valid for the specified revision.  Treat any error here as an empty
+            # result.
+            old_modes = {}
+
+        new_modes = _to_mode_dict(
+            self.hg_out(
+                ["files"]
+                + ["--rev", commit["node"]]
+                + ["-T", "{flags}:{path}\n"]
+                + ["-I%s" % f for f in modified_files]
+                + ["-I.arcconfig"]
+            )
+        )
+
+        # build response
+        file_modes = {}
+        for path in modified_files:
+            if path in old_modes:
+                file_modes.setdefault(path, {})
+                file_modes[path]["old_mode"] = old_modes[path]
+            if path in new_modes:
+                file_modes.setdefault(path, {})
+                file_modes[path]["new_mode"] = new_modes[path]
 
         return file_modes
 

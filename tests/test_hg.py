@@ -476,22 +476,41 @@ def test_set_binary(hg):
 
 @mock.patch("mozphab.mercurial.Mercurial.hg_out")
 def test_get_file_modes(m_hg, hg):
-    m_hg.side_effect = (["100644 file name"], ["100644 file name"])
-    assert hg._get_file_modes(dict(node="aaa", parent="bbb")) == {
-        "file name": dict(old_mode="100644", new_mode="100644")
-    }
-    m_hg.side_effect = (["100644 file name"], ["100655 file name"])
-    assert hg._get_file_modes(dict(node="aaa", parent="bbb")) == {
-        "file name": dict(old_mode="100644", new_mode="100655")
-    }
-    m_hg.side_effect = (["644 file name"], ["655 file name"])
-    assert hg._get_file_modes(dict(node="aaa", parent="bbb")) == {
-        "file name": dict(old_mode="100644", new_mode="100655")
-    }
-    m_hg.side_effect = ([], ["655 file name"])
-    assert hg._get_file_modes(dict(node="aaa", parent="bbb")) == {
-        "file name": dict(new_mode="100655")
-    }
+    m_hg.side_effect = (
+        ["  file name"],  # status
+        [" :file name"],  # files - parent
+        [" :file name"],  # files - node
+    )
+    actual = hg._get_file_modes(dict(node="aaa", parent="bbb"))
+    expected = {"file name": dict(old_mode="100644", new_mode="100644")}
+    assert actual == expected
+
+    m_hg.side_effect = (
+        ["M file name"],  # status
+        [" :file name"],  # files - parent
+        ["x:file name"],  # files - node
+    )
+    actual = hg._get_file_modes(dict(node="aaa", parent="bbb"))
+    expected = {"file name": dict(old_mode="100644", new_mode="100755")}
+    assert actual == expected
+
+    m_hg.side_effect = (
+        ["A file name"],  # status
+        [],  # files - parent
+        ["x:file name"],  # files - node
+    )
+    actual = hg._get_file_modes(dict(node="aaa", parent="bbb"))
+    expected = {"file name": dict(new_mode="100755")}
+    assert actual == expected
+
+    m_hg.side_effect = (
+        ["R file name"],  # status
+        [" :file name"],  # files - parent
+        [],  # files - node
+    )
+    actual = hg._get_file_modes(dict(node="aaa", parent="bbb"))
+    expected = {"file name": dict(old_mode="100644")}
+    assert actual == expected
 
 
 def test_check_vcs(hg):
