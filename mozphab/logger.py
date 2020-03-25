@@ -50,7 +50,10 @@ def init_logging():
     logger.addHandler(stdout_handler)
 
     file_handler = logging.handlers.RotatingFileHandler(
-        filename=log_file, maxBytes=LOG_MAX_SIZE, backupCount=LOG_BACKUPS
+        filename=log_file,
+        maxBytes=LOG_MAX_SIZE,
+        backupCount=LOG_BACKUPS,
+        encoding="utf8",
     )
     file_handler.setFormatter(
         logging.Formatter("%(asctime)-13s %(levelname)-8s %(message)s")
