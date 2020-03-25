@@ -48,3 +48,25 @@ jobs:
     <<: *test-template
     docker:
       - image: circleci/python:3.7
+
+  test-package:
+    docker:
+      - image: circleci/python:3.7
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - run:
+          name: setup
+          command: |
+            python3 -m venv venv
+            ./venv/bin/pip3 --disable-pip-version-check install .
+      - run:
+          name: tests
+          command: |
+            python3 --version
+            git --version
+      - run:
+          name: run tests
+          command: |
+            ./venv/bin/pip3 --disable-pip-version-check show MozPhab
+            ./venv/bin/moz-phab version
