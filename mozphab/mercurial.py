@@ -84,8 +84,30 @@ class Mercurial(Repository):
             field = prefix % extension
             if field in hg_config:
                 return hg_config.get(field, "")
-
         return None
+
+    @staticmethod
+    def _get_extensions(*, from_config=None, from_args=None):
+        assert from_config or from_args
+
+        extensions = []
+        if from_config:
+            for name in from_config:
+                if name.startswith("extensions."):
+                    extensions.append(re.sub(r"^extensions\.(?:hgext\.)?", "", name))
+
+        else:
+            args = from_args.copy()
+            while len(args) >= 2:
+                arg = args.pop(0)
+                if arg != "--config":
+                    continue
+                arg = args.pop(0)
+                if arg.startswith("extensions."):
+                    name, value = arg.split("=", maxsplit=1)
+                    extensions.append(re.sub(r"^extensions\.(?:hgext\.)?", "", name))
+
+        return sorted(extensions)
 
     def is_worktree_clean(self):
         status = self._status()
@@ -261,6 +283,17 @@ class Mercurial(Repository):
         if safe_mode:
             os.environ["HGRCPATH"] = ""
             options.extend(safe_options)
+
+            logger.debug(
+                "hg extensions (safe mode): %s",
+                ", ".join(self._get_extensions(from_args=options)),
+            )
+
+        else:
+            logger.debug(
+                "hg extensions: %s",
+                ", ".join(self._get_extensions(from_config=hg_config)),
+            )
 
         self._hg.extend(options)
 

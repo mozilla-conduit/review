@@ -3,7 +3,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
 import sys
 
 from collections import OrderedDict
@@ -278,5 +277,4 @@ def add_parser(parser):
         default=".",
         help="End revision of range to reorganise (default: current commit)",
     )
-    reorg_parser.add_argument("--trace", action="store_true", help=argparse.SUPPRESS)
     reorg_parser.set_defaults(func=reorganise, needs_repo=True, no_arc=True)

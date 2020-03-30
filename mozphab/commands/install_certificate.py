@@ -2,8 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
-
 from mozphab.conduit import conduit
 from mozphab.helpers import prompt
 from mozphab.logger import logger
@@ -32,5 +30,4 @@ def add_parser(parser):
         action="store_true",
         help="Run VCS with only necessary extensions.",
     )
-    cert_parser.add_argument("--trace", action="store_true", help=argparse.SUPPRESS)
     cert_parser.set_defaults(func=install_certificate, needs_repo=True, no_arc=True)

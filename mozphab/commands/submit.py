@@ -2,7 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
 import re
 
 from mozphab import arcanist, environment
@@ -716,8 +715,5 @@ def add_parser(parser):
         default=environment.DEFAULT_END_REV,
         help="End revision of range to submit (default: current commit)",
     )
-
-    # arc informs users to pass --trace for more output, so we need to accept it.
-    submit_parser.add_argument("--trace", action="store_true", help=argparse.SUPPRESS)
 
     submit_parser.set_defaults(func=submit, needs_repo=True)

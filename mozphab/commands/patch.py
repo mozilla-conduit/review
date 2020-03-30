@@ -157,6 +157,8 @@ def patch(repo, args):
 
     base_node = None
     if not args.raw:
+        args.apply_to = args.apply_to or config.apply_patch_to
+
         if args.apply_to == "base":
             base_node = get_base_ref(diffs[revs[0]["fields"]["diffPHID"]])
 
@@ -308,6 +310,4 @@ def add_parser(parser):
         action="store_true",
         help="EXPERIMENTAL: Override VCS compatibility check.",
     )
-    # We suppress exception stack traces unless --trace is provided
-    patch_parser.add_argument("--trace", action="store_true", help=argparse.SUPPRESS)
     patch_parser.set_defaults(func=patch, needs_repo=True, no_arc=True)

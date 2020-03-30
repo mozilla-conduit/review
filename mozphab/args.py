@@ -16,6 +16,9 @@ from .logger import logger
 def parse_args(argv):
     main_parser = argparse.ArgumentParser(add_help=False)
     main_parser.add_argument("--version", action="store_true", help=argparse.SUPPRESS)
+    main_parser.add_argument(
+        "--trace", "--debug", action="store_true", help=argparse.SUPPRESS
+    )
     parser = argparse.ArgumentParser(parents=[main_parser])
 
     commands_parser = parser.add_subparsers(
@@ -53,6 +56,10 @@ def parse_args(argv):
         unknown = ["version"]
 
     args = parser.parse_args(unknown)
+
+    # copy across parsed main_args; they are defined in `args`, but not set
+    for name, value in vars(main_args).items():
+        args.__setattr__(name, value)
 
     # handle the help command here as printing help needs access to the parser
     if hasattr(args, "print_help"):
