@@ -339,7 +339,7 @@ class Mercurial(Repository):
             ["log"]
             + [
                 "-T",
-                "{rev}\n{node}\n{date|rfc822date}\n{author|person}\n{author|email}\n"
+                "{rev}\n{node}\n{date|hgdate}\n{author|person}\n{author|email}\n"
                 "{desc}%s" % boundary,
             ]
             + ["-r", self.revset],
@@ -376,7 +376,7 @@ class Mercurial(Repository):
                     "bug-id": None,
                     "reviewers": dict(request=[], granted=[]),
                     "rev-id": None,
-                    "author-date": author_date,
+                    "author-date-epoch": int(author_date.split(" ")[0]),
                     "author-name": author_name,
                     "author-email": author_email,
                 }

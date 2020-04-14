@@ -357,6 +357,7 @@ def test_diff_property(m_call, git, hg):
         "name": "abc-name",
         "author-name": "Author Name",
         "author-email": "auth@or.email",
+        "author-date-epoch": 1234567,
         "title-preview": "Title Preview",
         "node": "abc",
         "parent": "def",
@@ -372,7 +373,7 @@ def test_diff_property(m_call, git, hg):
                     "abc": {
                         "author": "Author Name",
                         "authorEmail": "auth@or.email",
-                        "time": 0,
+                        "time": 1234567,
                         "summary": "Title Preview",
                         "message": "message",
                         "commit": "abc",
@@ -397,7 +398,7 @@ def test_diff_property(m_call, git, hg):
                     "abc": {
                         "author": "Author Name",
                         "authorEmail": "auth@or.email",
-                        "time": 0,
+                        "time": 1234567,
                         "summary": "Title Preview",
                         "message": "message",
                         "commit": "abc",
@@ -423,7 +424,7 @@ def test_diff_property(m_call, git, hg):
                     "abc": {
                         "author": "Author Name",
                         "authorEmail": "auth@or.email",
-                        "time": 0,
+                        "time": 1234567,
                         "summary": "Title Preview",
                         "message": "message",
                         "commit": "abc",

@@ -568,7 +568,7 @@ class ConduitAPI:
             commit["node"]: {
                 "author": commit["author-name"],
                 "authorEmail": commit["author-email"],
-                "time": 0,
+                "time": commit["author-date-epoch"],
                 "summary": commit["title-preview"],
                 "message": message,
                 "commit": conduit.repo.get_public_node(commit["node"]),

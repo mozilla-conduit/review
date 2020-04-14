@@ -9,6 +9,8 @@ import subprocess
 import sys
 import uuid
 
+from datetime import datetime
+
 from mozphab import environment
 
 from .config import config
@@ -372,6 +374,10 @@ class Git(Repository):
                     % short_node(node)
                 )
 
+            # Tue, 14 Apr 2020 12:02:20 +0000
+            commit_epoch = datetime.strptime(
+                author_date, "%a, %d %b %Y %H:%M:%S %z"
+            ).strftime("%s")
             commits.append(
                 {
                     "name": short_node(node),
@@ -386,6 +392,7 @@ class Git(Repository):
                     "parent": parents[0],
                     "tree-hash": tree_hash,
                     "author-date": author_date,
+                    "author-date-epoch": commit_epoch,
                     "author-name": author_name,
                     "author-email": author_email,
                 }
