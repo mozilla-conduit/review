@@ -377,7 +377,7 @@ class Git(Repository):
             # Tue, 14 Apr 2020 12:02:20 +0000
             commit_epoch = datetime.strptime(
                 author_date, "%a, %d %b %Y %H:%M:%S %z"
-            ).strftime("%s")
+            ).timestamp()
             commits.append(
                 {
                     "name": short_node(node),
