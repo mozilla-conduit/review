@@ -711,3 +711,107 @@ A
 ---
 """
     assert log == expected
+
+
+def test_multiple_copy(in_process, hg_repo_path):
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    (hg_repo_path / "X").write_text("a\n")
+    hg_out("add", "X")
+    hg_out("commit", "-m", "A")
+    hg_out("cp", "X", "X_copy_1")
+    hg_out("cp", "X", "X_copy_2")
+    hg_out("commit", "-m", "multiple copy")
+
+    mozphab.main(["submit", "--yes", "--bug", "1", "--single"], is_development=True)
+
+    assert (
+        mock.call(
+            "differential.creatediff",
+            {
+                "changes": [
+                    {
+                        "metadata": {},
+                        "oldPath": None,
+                        "currentPath": "X",
+                        "awayPaths": ["X_copy_1", "X_copy_2"],
+                        "oldProperties": {},
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "type": 5,  # COPY_AWAY
+                        "fileType": 1,
+                        "hunks": [],
+                    },
+                    {
+                        "metadata": {},
+                        "oldPath": "X",
+                        "currentPath": "X_copy_1",
+                        "awayPaths": [],
+                        "oldProperties": {},
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "type": 7,
+                        "fileType": 1,
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 1,
+                                "newOffset": 1,
+                                "newLength": 1,
+                                "addLines": 0,
+                                "delLines": 0,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": " a\n",
+                            }
+                        ],
+                    },
+                    {
+                        "metadata": {},
+                        "oldPath": "X",
+                        "currentPath": "X_copy_2",
+                        "awayPaths": [],
+                        "oldProperties": {},
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "type": 7,
+                        "fileType": 1,
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 1,
+                                "newOffset": 1,
+                                "newLength": 1,
+                                "addLines": 0,
+                                "delLines": 0,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": " a\n",
+                            }
+                        ],
+                    },
+                ],
+                "sourceMachine": "http://example.test",
+                "sourceControlSystem": "hg",
+                "sourceControlPath": "/",
+                "sourceControlBaseRevision": mock.ANY,
+                "creationMethod": "moz-phab-hg",
+                "lintStatus": "none",
+                "unitStatus": "none",
+                "repositoryPHID": "PHID-REPO-1",
+                "sourcePath": mock.ANY,
+                "branch": "default",
+            },
+        )
+        in call_conduit.call_args_list
+    )
