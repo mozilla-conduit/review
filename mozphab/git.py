@@ -780,13 +780,12 @@ class Git(Repository):
         return diff
 
     def check_vcs(self):
-        try:
-            return super().check_vcs()
-        except Error:
-            if not self.is_cinnabar_installed:
-                logger.error(
-                    "Git Cinnabar extension is required to work on this repository."
-                )
-                raise
+        if self.args.force_vcs:
+            return True
+
+        if self.is_cinnabar_required and not self.is_cinnabar_installed:
+            raise Error(
+                "Git Cinnabar extension is required to work on this repository."
+            )
 
         return True
