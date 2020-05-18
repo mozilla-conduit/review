@@ -184,7 +184,7 @@ def patch(repo, args):
 
                 raise Error(msg)
 
-        branch_name = None if args.no_commit else "D%s" % rev_id
+        branch_name = None if args.no_commit else "phab-D%s" % rev_id
         repo.before_patch(base_node, branch_name)
 
     parent = None

@@ -140,7 +140,7 @@ def test_git_patch_with_commit(
     assert 1 == result.count("title R1")
     assert 1 == result.count("Differential Revision: http://example.test/D1")
     result = git_out("branch")
-    assert "* D1" in result
+    assert "* phab-D1" in result
 
     time.sleep(1)  # to ensure the patch is applied with a different timestamp
     m_call_conduit.side_effect = [PATCH_1]
@@ -153,8 +153,8 @@ def test_git_patch_with_commit(
     assert 2 == result.count("title R1")
     assert 2 == result.count("Differential Revision: http://example.test/D1")
     result = git_out("branch")
-    assert "* D1_1" in result
-    assert "  D1" in result
+    assert "* phab-D1_1" in result
+    assert "  phab-D1" in result
 
     time.sleep(1)
     m_get_revs.return_value = [REV_BIN]
@@ -171,9 +171,9 @@ def test_git_patch_with_commit(
     assert 2 == result.count("title R1")
     assert 2 == result.count("Differential Revision: http://example.test/D1")
     result = git_out("branch")
-    assert "* D3" in result
-    assert "  D1_1" in result
-    assert "  D1" in result
+    assert "* phab-D3" in result
+    assert "  phab-D1_1" in result
+    assert "  phab-D1" in result
 
     time.sleep(1)
     m_get_revs.side_effect = ([REV_2], [REV_1])
@@ -192,10 +192,10 @@ def test_git_patch_with_commit(
     assert 1 == result.count("title BIN")
     assert 1 == result.count("Differential Revision: http://example.test/D3")
     result = git_out("branch")
-    assert "* D2" in result
-    assert "  D3" in result
-    assert "  D1_1" in result
-    assert "  D1" in result
+    assert "* phab-D2" in result
+    assert "  phab-D3" in result
+    assert "  phab-D1_1" in result
+    assert "  phab-D1" in result
 
     time.sleep(1)
     m_get_revs.side_effect = ([REV_BIN],)
@@ -241,7 +241,7 @@ def test_hg_patch_with_commit(
     assert "a\n" == test_file.read_text()
     result = hg_out("log", "-G")
     assert "@  changeset:   1:" in result
-    assert "|  bookmark:    D1" in result
+    assert "|  bookmark:    phab-D1" in result
     assert "|  user:        user <author@example.com>" in result
     assert "|  date:        Fri Jan 18" in result
     assert "|  summary:     title R1" in result
@@ -252,10 +252,10 @@ def test_hg_patch_with_commit(
     assert [".arcconfig", ".hg", "sample.bin"] == sorted(os.listdir(str(hg_repo_path)))
     result = hg_out("log", "-G")
     assert "@  changeset:   2" in result
-    assert "|  bookmark:    D1_1" in result
+    assert "|  bookmark:    phab-D1_1" in result
     assert "|  parent:      0" in result
     assert "| o  changeset:   1" in result
-    assert "|/   bookmark:    D1" in result
+    assert "|/   bookmark:    phab-D1" in result
 
     testfile = hg_repo_path / "unknown"
     testfile.write_text("not added to repository")
@@ -271,14 +271,14 @@ def test_hg_patch_with_commit(
     assert "b\n" == test_file.read_text()
     result = hg_out("log", "-G")
     assert "@  changeset:   3:" in result
-    assert "|  bookmark:    D2" in result
+    assert "|  bookmark:    phab-D2" in result
     assert "|  parent:      1" in result
     assert "|  summary:     title R2" in result
     assert "| o  changeset:   2" in result
-    assert "| |  bookmark:    D1_1" in result
+    assert "| |  bookmark:    phab-D1_1" in result
     assert "| |  parent:      0" in result
     assert "o |  changeset:   1" in result
-    assert "|/   bookmark:    D1" in result
+    assert "|/   bookmark:    phab-D1" in result
 
 
 REV_1 = dict(

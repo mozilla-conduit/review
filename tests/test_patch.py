@@ -185,7 +185,7 @@ def test_patch(
     )
     m_apply_patch.assert_not_called()
     m_get_base_ref.assert_called_once()
-    m_git_before_patch.assert_called_once_with("sha111", "D1")
+    m_git_before_patch.assert_called_once_with("sha111", "phab-D1")
 
     m_git_apply_patch.reset_mock()
     m_get_diffs.return_value = {
@@ -263,13 +263,13 @@ def test_patch(
     # --applyto NODE
     git.args = Args(apply_to=node)
     patch.patch(git, git.args)
-    m_git_before_patch.assert_called_once_with(node, "D1")
+    m_git_before_patch.assert_called_once_with(node, "phab-D1")
 
     m_git_before_patch.reset_mock()
     # --applyto here
     git.args = Args(apply_to="here")
     patch.patch(git, git.args)
-    m_git_before_patch.assert_called_once_with(None, "D1")
+    m_git_before_patch.assert_called_once_with(None, "phab-D1")
 
     # ########## no commit info in diffs
     m_get_diffs.return_value = {
