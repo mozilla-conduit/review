@@ -592,12 +592,20 @@ class Commits(unittest.TestCase):
             {
                 "id": "1",
                 "phid": "PHID-1",
-                "fields": {"bugzilla.bug-id": "1", "authorPHID": "PHID-USER-1"},
+                "fields": {
+                    "bugzilla.bug-id": "1",
+                    "authorPHID": "PHID-USER-1",
+                    "status": {"closed": False},
+                },
             },
             {
                 "id": "2",
                 "phid": "PHID-2",
-                "fields": {"bugzilla.bug-id": "1", "authorPHID": "PHID-USER-1"},
+                "fields": {
+                    "bugzilla.bug-id": "1",
+                    "authorPHID": "PHID-USER-1",
+                    "status": {"closed": False},
+                },
             },
         ]
         # we're changing bug id in the first revision to 2

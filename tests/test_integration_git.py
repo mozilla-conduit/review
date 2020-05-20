@@ -306,7 +306,7 @@ def test_submit_update(in_process, git_repo_path, init_sha):
                 {
                     "fields": {
                         "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review"},
+                        "status": {"value": "needs-review", "closed": False},
                         "authorPHID": "PHID-USER-1",
                     },
                     "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
@@ -533,7 +533,7 @@ def test_submit_update_no_message(in_process, git_repo_path, init_sha):
                 {
                     "fields": {
                         "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review"},
+                        "status": {"value": "needs-review", "closed": False},
                         "authorPHID": "PHID-USER-1",
                     },
                     "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
@@ -657,7 +657,7 @@ def test_submit_update_arc(in_process, git_repo_path, init_sha):
                 {
                     "fields": {
                         "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review"},
+                        "status": {"value": "needs-review", "closed": False},
                         "authorPHID": "PHID-USER-1",
                     },
                     "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
@@ -714,7 +714,7 @@ def test_submit_update_bug_id_arc(in_process, git_repo_path, init_sha):
                     "phid": "PHID-REV-1",
                     "fields": {
                         "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review"},
+                        "status": {"value": "needs-review", "closed": False},
                         "authorPHID": "PHID-USER-1",
                     },
                     "attachments": {"reviewers": {"reviewers": []}},
@@ -770,7 +770,7 @@ def test_submit_update_revision_not_found(in_process, git_repo_path, init_sha):
                 {
                     "fields": {
                         "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review"},
+                        "status": {"value": "needs-review", "closed": False},
                     },
                     "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
                     "id": 123,

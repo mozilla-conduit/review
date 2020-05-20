@@ -125,6 +125,7 @@ def show_commit_stack(
                 conduit.get_revisions(ids=ids)
 
     for commit in reversed(commits):
+        closed = False
         change_bug_id = False
         is_author = True
         revision = None
@@ -142,6 +143,9 @@ def show_commit_stack(
                         and revision["fields"]["bugzilla.bug-id"]
                         and (commit["bug-id"] != revision["fields"]["bugzilla.bug-id"])
                     )
+
+                    # Check if revision is closed
+                    closed = revision["fields"]["status"]["closed"]
 
                     # Check if comandeering is required
                     whoami = conduit.whoami()
@@ -167,6 +171,13 @@ def show_commit_stack(
                     '   update revisions you own. You can "Commandeer" this\n'
                     "   revision from the web interface if you want to become\n"
                     "   the owner."
+                )
+
+            if closed:
+                logger.warning(
+                    "!! This revision is closed!\n"
+                    "   It will be reopened if submission proceeds.\n"
+                    "   You can stop now and refine the stack range."
                 )
 
             if not commit["bug-id"]:
