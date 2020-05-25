@@ -8,7 +8,7 @@ if "develop" in sys.argv:
 
 setup(
     name="MozPhab",
-    version="0.1.86",
+    version="0.1.87",
     author="Mozilla",
     author_email="conduit-team@mozilla.com",
     packages=["mozphab", "mozphab/commands"],
