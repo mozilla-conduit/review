@@ -9,7 +9,7 @@ import pytest
 from callee import Contains
 from .conftest import git_out
 
-from mozphab import exceptions, mozphab
+from mozphab import environment, exceptions, mozphab
 
 mozphab.SHOW_SPINNER = False
 
@@ -72,10 +72,10 @@ def test_submit_create(in_process, git_repo_path, init_sha):
         # differential.revision.edit
         dict(object=dict(id="123")),
     )
-    (git_repo_path / "X").write_text("ą\r\nb\nc\n")
+    (git_repo_path / "X").write_text(u"ą\r\nb\nc\n", encoding="utf-8")
     (git_repo_path / "Y").write_text("no line ending")
     git_out("add", ".")
-    (git_repo_path / "msg").write_text("Ą r?alice")
+    (git_repo_path / "msg").write_text(u"Ą r?alice", encoding="utf-8")
     git_out("commit", "--file", "msg")
     (git_repo_path / "untracked").write_text("a\n")
 
@@ -86,6 +86,7 @@ def test_submit_create(in_process, git_repo_path, init_sha):
 Bug 1 - Ą r?alice
 
 Differential Revision: http://example.test/D123
+
 """
     assert log.strip() == expected.strip()
     assert mock.call("conduit.ping", {}) in call_conduit.call_args_list
@@ -194,10 +195,10 @@ def test_submit_create_added_not_commited(in_process, git_repo_path, init_sha):
         # differential.revision.edit
         dict(object=dict(id="123")),
     )
-    (git_repo_path / "X").write_text("ą\r\nb\nc\n")
+    (git_repo_path / "X").write_text("ą\r\nb\nc\n", encoding="utf-8")
     (git_repo_path / "Y").write_text("no line ending")
     git_out("add", ".")
-    (git_repo_path / "msg").write_text("Ą r?alice")
+    (git_repo_path / "msg").write_text("Ą r?alice", encoding="utf-8")
     git_out("commit", "--file", "msg")
     (git_repo_path / "untracked").write_text("a\n")
     git_out("add", "untracked")
@@ -469,7 +470,7 @@ def test_submit_update(in_process, git_repo_path, init_sha):
         dict(object=dict(id="123")),
     )
     testfile = git_repo_path / "X"
-    testfile.write_text("ą")
+    testfile.write_text("ą", encoding="utf-8")
     git_out("add", ".")
     msgfile = git_repo_path / "msg"
     msgfile.write_text(
@@ -477,7 +478,8 @@ def test_submit_update(in_process, git_repo_path, init_sha):
 Bug 1 - Ą
 
 Differential Revision: http://example.test/D123
-"""
+""",
+        encoding="utf-8",
     )
     git_out("commit", "--file", "msg")
 
@@ -500,6 +502,9 @@ Differential Revision: http://example.test/D123
 
 
 def test_submit_remove_cr(in_process, git_repo_path, init_sha):
+    if environment.IS_WINDOWS:
+        pytest.skip("Removing CR will not work on Windows.")
+
     call_conduit.side_effect = (
         # CREATE
         dict(),
@@ -694,16 +699,15 @@ def test_submit_update_no_message(in_process, git_repo_path, init_sha):
         # differential.revision.edit
         dict(object=dict(id="123")),
     )
-    testfile = git_repo_path / "X"
-    testfile.write_text(u"ą")
+    (git_repo_path / "X").write_text(u"ą", encoding="utf-8")
     git_out("add", ".")
-    msgfile = git_repo_path / "msg"
-    msgfile.write_text(
+    (git_repo_path / "msg").write_text(
         u"""\
 Bug 1 - Ą
 
 Differential Revision: http://example.test/D123
-"""
+""",
+        encoding="utf-8",
     )
     git_out("commit", "--file", "msg")
 
@@ -930,7 +934,7 @@ def test_submit_update_revision_not_found(in_process, git_repo_path, init_sha):
         dict(data=[]),
     )
     testfile = git_repo_path / "X"
-    testfile.write_text(u"ą")
+    testfile.write_text(u"ą", encoding="utf-8")
     git_out("add", ".")
     msgfile = git_repo_path / "msg"
     msgfile.write_text(
@@ -938,7 +942,8 @@ def test_submit_update_revision_not_found(in_process, git_repo_path, init_sha):
 Bug 1 - Ą
 
 Differential Revision: http://example.test/D123
-"""
+""",
+        encoding="utf-8",
     )
     git_out("commit", "--file", "msg")
     testfile.write_text(u"missing repo")

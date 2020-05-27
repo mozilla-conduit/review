@@ -29,14 +29,26 @@ class GitCommand:
         self.safe_mode = config.safe_mode
 
     def call(self, git_args, **kwargs):
-        check_call(self.command + git_args, env=self._env, **kwargs)
+        unicode_args = [
+            "-c",
+            "i18n.logOutputEncoding=UTF-8",
+            "-c",
+            "i18n.commitEncoding=UTF-8",
+        ]
+        check_call(self.command + unicode_args + git_args, env=self._env, **kwargs)
 
     def output(self, git_args, extra_env=None, **kwargs):
         env = dict(self._env)
         if extra_env:
             env.update(extra_env)
 
-        return check_output(self.command + git_args, env=env, **kwargs)
+        unicode_args = [
+            "-c",
+            "i18n.logOutputEncoding=UTF-8",
+            "-c",
+            "i18n.commitEncoding=UTF-8",
+        ]
+        return check_output(self.command + unicode_args + git_args, env=env, **kwargs)
 
     def set_args(self, args):
         """Read and set the configuration."""

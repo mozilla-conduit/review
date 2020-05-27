@@ -203,7 +203,7 @@ def test_git_patch_with_commit(
     m_call_conduit.side_effect = (PATCH_UTF8,)
     mozphab.main(["patch", "D4"], is_development=True)
     path = git_repo_path / "X"
-    with path.open() as f:
+    with path.open(encoding="utf-8") as f:
         line = f.readline().rstrip()
 
     assert line == "\u0105"

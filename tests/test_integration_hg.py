@@ -3,12 +3,13 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import mock
+import pytest
 import shutil
 
 from callee import Contains
 from .conftest import hg_out
 
-from mozphab import mozphab
+from mozphab import environment, mozphab
 
 mozphab.SHOW_SPINNER = False
 
@@ -55,7 +56,7 @@ def test_submit_create(in_process, hg_repo_path):
     test_c.write_text("modified\n")
     hg_out("addremove")
     msgfile = hg_repo_path / "msg"
-    msgfile.write_text("Ą r?alice")
+    msgfile.write_text("Ą r?alice", encoding="utf-8")
     hg_out("commit", "-l", "msg")
     mozphab.main(["submit", "--yes", "--bug", "1", "."], is_development=True)
 
@@ -286,7 +287,7 @@ def test_submit_create_no_trailing_newline(in_process, hg_repo_path):
     test_c.write_text("modified")
     hg_out("addremove")
     msgfile = hg_repo_path / "msg"
-    msgfile.write_text("Ą r?alice")
+    msgfile.write_text("Ą r?alice", encoding="utf-8")
     hg_out("commit", "-l", "msg")
     mozphab.main(["submit", "--yes", "--bug", "1", "."], is_development=True)
 
@@ -692,6 +693,9 @@ Differential Revision: http://example.test/D123
 
 
 def test_submit_remove_cr(in_process, hg_repo_path):
+    if environment.IS_WINDOWS:
+        pytest.skip("Removing CR will not work on Windows.")
+
     call_conduit.side_effect = (
         # CREATE
         dict(),

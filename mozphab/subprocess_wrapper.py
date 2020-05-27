@@ -14,6 +14,7 @@ from .logger import logger
 def check_call(command, **kwargs):
     # wrapper around subprocess.check_call with debug output
     logger.debug("$ %s", " ".join(quote(s) for s in command))
+    kwargs["encoding"] = "UTF-8"
     try:
         subprocess.check_call(command, **kwargs)
     except subprocess.CalledProcessError as e:
@@ -70,6 +71,7 @@ def check_output(
     kwargs = dict(cwd=cwd, stdin=stdin, stderr=stderr)
     if not expect_binary:
         kwargs["universal_newlines"] = True
+        kwargs["encoding"] = "UTF-8"
 
     if env:
         kwargs["env"] = env

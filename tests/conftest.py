@@ -136,8 +136,7 @@ def hg(
 
 def hg_out(*args):
     args = ["hg"] + list(args)
-    # TODO: check to `text=True` or `encoding="utf-8"` when Python 3.7 allowed.
-    return subprocess.check_output(args, universal_newlines=True)
+    return subprocess.check_output(args, universal_newlines=True, encoding="utf-8")
 
 
 @pytest.fixture
@@ -181,10 +180,17 @@ def fresh_global_config(tmp_path):
 
 def git_out(*args):
     env = os.environ.copy()
-    args = ["git"] + list(args)
+    args = [
+        "git",
+        "-c",
+        "i18n.logOutputEncoding=UTF-8",
+        "-c",
+        "i18n.commitEncoding=UTF-8",
+    ] + list(args)
     env["DEBUG"] = "1"
-    # TODO: check to `text=True` or `encoding="utf-8"` when Python 3.7 allowed.
-    return subprocess.check_output(args, env=env, universal_newlines=True)
+    return subprocess.check_output(
+        args, env=env, universal_newlines=True, encoding="utf-8"
+    )
 
 
 @pytest.fixture
@@ -215,7 +221,6 @@ def in_process(monkeypatch, safe_environ, request):
     """Set up an environment to run moz-phab within the current process."""
     # Make sure other tests didn't leak and mess up the module-level
     # global variables :/
-    monkeypatch.setattr(environment, "IS_WINDOWS", False)
     monkeypatch.setattr(environment, "DEBUG", True)
     monkeypatch.setattr(environment, "HAS_ANSI", False)
     # Constructing the Mercurial() object modifies os.environ for all tests.
