@@ -334,7 +334,7 @@ class Mercurial(Repository):
 
             self.revset = "%s::%s" % (short_node(start), short_node(end))
 
-    def commit_stack(self):
+    def commit_stack(self, **kwargs):
         # Grab all the info we need about the commits, using randomness as a delimiter.
         boundary = "--%s--\n" % uuid.uuid4().hex
         hg_log = self.hg_out(

@@ -355,7 +355,7 @@ def submit(repo, args):
 
     # Find and preview commits to submits.
     with wait_message("Looking for commits.."):
-        commits = repo.commit_stack()
+        commits = repo.commit_stack(single=args.single)
     if not commits:
         raise Error("Failed to find any commits to submit")
     logger.warning(

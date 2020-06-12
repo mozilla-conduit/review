@@ -524,3 +524,26 @@ def test_check_vcs(git):
     args = Args(force_vcs=True)
     git.set_args(args)
     assert git.check_vcs()
+
+
+@mock.patch("mozphab.git.Git._get_commits_info")
+@mock.patch("mozphab.git.Git._git_get_children")
+@mock.patch("mozphab.git.Git._is_child")
+def test_commit_stack_single(_1, _2, _3, git):
+    git._get_commits_info.return_value = [
+        """\
+Tue, 22 Jan 2019 13:42:48 +0000
+Conduit User
+conduit@mozilla.bugs
+4912923
+b18312ffe929d3482f1d7b1e9716a1885c7a61b8
+aaa000aaa000aaa000aaa000aaa000aaa000aaa0
+title
+
+description
+"""
+    ]
+    git.revset = ["HEAD^", "HEAD"]
+    git.commit_stack(single=True)
+    git._git_get_children.assert_not_called()
+    git._is_child.assert_not_called()

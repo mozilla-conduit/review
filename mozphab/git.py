@@ -337,7 +337,7 @@ class Git(Repository):
 
         return False
 
-    def commit_stack(self):
+    def commit_stack(self, single=False):
         """Collect all the info about commits."""
         if not self.revset:
             # No commits found to submit
@@ -361,15 +361,16 @@ class Git(Repository):
             ) = log_line.split("\n", 6)
             desc = desc.splitlines()
 
-            # Check if the commit is a child of the first one
-            if not rev_list:
-                rev_list = self._git_get_children(node)
-                first_node = node
-            elif not self._is_child(first_node, node, rev_list):
-                raise Error(
-                    "Commit %s is not a child of %s, unable to continue"
-                    % (short_node(node), short_node(first_node))
-                )
+            if not single:
+                # Check if the commit is a child of the first one
+                if rev_list is None:
+                    rev_list = self._git_get_children(node)
+                    first_node = node
+                elif not self._is_child(first_node, node, rev_list):
+                    raise Error(
+                        "Commit %s is not a child of %s, unable to continue"
+                        % (short_node(node), short_node(first_node))
+                    )
 
             # Check if commit has multiple parents, if so - raise an Error
             # We may push the merging commit if it's the first one

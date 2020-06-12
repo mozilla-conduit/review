@@ -99,12 +99,13 @@ class Repository(object):
     def untracked(self):
         """Return a list of untracked files."""
 
-    def commit_stack(self):
+    def commit_stack(self, **kwargs):
         """Return list of commits.
 
         List of dicts with the following keys:
             name          human readable identifier of commit (eg. short sha)
-            node          sha/hash
+            node          SHA1 in stack
+            orig-node     an original SHA1 of the commit
             title         first line of commit description (unaltered)
             body          commit description, excluding first line
             title-preview title with bug-id and reviewer modifications
@@ -112,6 +113,11 @@ class Repository(object):
             bug-id-orig   original bug-id from commit desc
             reviewers     list of reviewers
             rev-id        phabricator revision id
+            parent        SHA1 of the parent commit
+            author-date   string representation of the commit creation time
+            author-date-epoch
+            author-name
+            author-email
         """
 
     def refresh_commit_stack(self, commits):
