@@ -950,6 +950,10 @@ class Mercurial(Repository):
         Collects some stats about the diff, and generates the corpus we
         want to send to the Phabricator.
         """
+        change.file_type = Diff.FileType("TEXT")
+        if not lines:
+            return
+
         old_eof_newline = True
         new_eof_newline = True
         old_line = " "
@@ -975,4 +979,3 @@ class Mercurial(Repository):
                 corpus=corpus,
             )
         ]
-        change.file_type = Diff.FileType("TEXT")

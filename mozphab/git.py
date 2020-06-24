@@ -726,31 +726,32 @@ class Git(Repository):
 
             # Collect some stats about the diff, and generate the corpus we
             # want to send to Phabricator.
-            old_eof_newline = True
-            new_eof_newline = True
-            old_line = " "
-            corpus = "".join(lines)
-            for line in lines:
-                if line.endswith("No newline at end of file\n"):
-                    if old_line[0] != "+":
-                        old_eof_newline = False
-                    if old_line[0] != "-":
-                        new_eof_newline = False
-                old_line = line
+            if lines:
+                old_eof_newline = True
+                new_eof_newline = True
+                old_line = " "
+                corpus = "".join(lines)
+                for line in lines:
+                    if line.endswith("No newline at end of file\n"):
+                        if old_line[0] != "+":
+                            old_eof_newline = False
+                        if old_line[0] != "-":
+                            new_eof_newline = False
+                    old_line = line
 
-            change.hunks = [
-                diff.Hunk(
-                    old_off=old_off,
-                    old_len=old_len,
-                    new_off=new_off,
-                    new_len=new_len,
-                    old_eof_newline=old_eof_newline,
-                    new_eof_newline=new_eof_newline,
-                    added=sum(1 for l in lines if l[0] == "+"),
-                    deleted=sum(1 for l in lines if l[0] == "-"),
-                    corpus=corpus,
-                )
-            ]
+                change.hunks = [
+                    diff.Hunk(
+                        old_off=old_off,
+                        old_len=old_len,
+                        new_off=new_off,
+                        new_len=new_len,
+                        old_eof_newline=old_eof_newline,
+                        new_eof_newline=new_eof_newline,
+                        added=sum(1 for l in lines if l[0] == "+"),
+                        deleted=sum(1 for l in lines if l[0] == "-"),
+                        corpus=corpus,
+                    )
+                ]
             change.file_type = diff.FileType("TEXT")
 
         diff.set_change_kind(change, kind_l[0], a_mode, b_mode, a_path, b_path)

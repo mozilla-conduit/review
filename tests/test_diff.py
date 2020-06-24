@@ -106,6 +106,27 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
 @mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
 @mock.patch("mozphab.git.Git.git_out")
+def test_create_empty(m_git_out, m_cat_file, m_file_size, git):
+    raw = (
+        "000000 100644 0000000000000000000000000000000000000000 "
+        "78981922613b2afb6025042ff6bd878ac1994e85 A\x00a"
+    )
+    diff = Diff()
+    m_cat_file.side_effect = (b"",)
+    m_file_size.return_value = 0
+    git.args = Args()
+
+    change = git._parse_diff_change(raw, diff)
+    assert change.file_type.name == "TEXT"
+    m_git_out.assert_not_called()
+    assert not change.hunks
+    assert change.kind.name == "ADD"
+    assert change.cur_mode == "100644"
+
+
+@mock.patch("mozphab.git.Git._file_size")
+@mock.patch("mozphab.git.Git._cat_file")
+@mock.patch("mozphab.git.Git.git_out")
 def test_delete_file(m_git_out, m_cat_file, m_file_size, git):
     raw = (
         "100644 000000 61780798228d17af2d34fce4cfbdf35556832472 "
