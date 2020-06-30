@@ -10,22 +10,11 @@ import time
 from contextlib import contextmanager
 from mozphab import environment
 
-# py2 doesn't handle SIGINT with background threads; hook up our own handler
-# to allow background threads to check sig_int.triggered and stop.
+def signal_sigint(self, *args):
+    print("\nCancelled")
+    raise KeyboardInterrupt()
 
-
-class SigIntHandler(object):
-    def __init__(self):
-        self.triggered = False
-
-    # noinspection PyUnusedLocal
-    def signal_handler(self, sig, frame):
-        self.triggered = True
-        raise KeyboardInterrupt()
-
-
-sig_int = SigIntHandler()
-signal.signal(signal.SIGINT, sig_int.signal_handler)
+signal.signal(signal.SIGINT, signal_sigint)
 
 
 class Spinner(threading.Thread):
@@ -73,6 +62,3 @@ def wait_message(message):
     finally:
         spinner.running = False
         spinner.join()
-        if sig_int.triggered:
-            print("Cancelled")
-            sys.exit(3)

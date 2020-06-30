@@ -23,8 +23,7 @@ HAS_ANSI = (
 GIT_COMMAND = ["git.exe" if IS_WINDOWS else "git"]
 HG_COMMAND = ["hg.exe" if IS_WINDOWS else "hg"]
 
-# Switched off temporarily due to https://bugzilla.mozilla.org/show_bug.cgi?id=1565502
-SHOW_SPINNER = False
+SHOW_SPINNER = True
 
 DEFAULT_START_REV = "(auto)"
 DEFAULT_END_REV = "."
