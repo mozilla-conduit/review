@@ -10,9 +10,11 @@ import time
 from contextlib import contextmanager
 from mozphab import environment
 
+
 def signal_sigint(self, *args):
     print("\nCancelled")
     raise KeyboardInterrupt()
+
 
 signal.signal(signal.SIGINT, signal_sigint)
 
