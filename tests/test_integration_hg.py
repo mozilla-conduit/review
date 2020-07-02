@@ -601,6 +601,96 @@ Differential Revision: http://example.test/D123
     assert mock.call("file.upload", mock.ANY) not in call_conduit.call_args_list
 
 
+def test_submit_create_binary_chunked(in_process, hg_repo_path, data_file):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        # file.allocate
+        dict(dict(filePHID="PHID-FILE-1", upload=True)),
+        # file.querychunks
+        [
+            dict(byteStart="0", byteEnd="4194304", complete=False),
+            dict(byteStart="4194304", byteEnd="8388608", complete=False),
+            dict(byteStart="8388608", byteEnd="8425160", complete=False),
+        ],
+        # file.uploadchunk
+        dict(),
+        # file.uploadchunk
+        dict(),
+        # file.uploadchunk
+        dict(),
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+    )
+    shutil.copyfile(str(data_file), str(hg_repo_path / "img.png"))
+    hg_out("add")
+    hg_out("commit", "-m", "IMG")
+
+    mozphab.main(["submit", "--yes", "--bug", "1", "."], is_development=True)
+
+    log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
+    expected = """
+Bug 1 - IMG
+
+Differential Revision: http://example.test/D123
+"""
+    assert log.strip() == expected.strip()
+    assert (
+        mock.call(
+            "file.allocate",
+            {"name": "img.png", "contentHash": mock.ANY, "contentLength": 182},
+        )
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call("file.querychunks", {"filePHID": "PHID-FILE-1"})
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call(
+            "file.uploadchunk",
+            {
+                "filePHID": "PHID-FILE-1",
+                "byteStart": 0,
+                "data": mock.ANY,
+                "dataEncoding": "base64",
+            },
+        )
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call(
+            "file.uploadchunk",
+            {
+                "filePHID": "PHID-FILE-1",
+                "byteStart": 4194304,
+                "data": mock.ANY,
+                "dataEncoding": "base64",
+            },
+        )
+        in call_conduit.call_args_list
+    )
+    assert (
+        mock.call(
+            "file.uploadchunk",
+            {
+                "filePHID": "PHID-FILE-1",
+                "byteStart": 8388608,
+                "data": mock.ANY,
+                "dataEncoding": "base64",
+            },
+        )
+        in call_conduit.call_args_list
+    )
+
+
 def test_submit_remove_cr(in_process, hg_repo_path):
     call_conduit.side_effect = (
         # CREATE

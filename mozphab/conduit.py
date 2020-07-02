@@ -607,10 +607,22 @@ class ConduitAPI:
                     "file.upload", dict(data_base64=data_base64.decode(), name=name)
                 )
             else:
-                raise Error(
-                    "Large binary files not currently supported by plain moz-phab, "
-                    "please use submit --arc instead"
-                )
+                chunks = self.call("file.querychunks", dict(filePHID=file_phid))
+                for chunk in chunks:
+                    if chunk["complete"]:
+                        continue
+                    byte_start = int(chunk["byteStart"])
+                    byte_end = int(chunk["byteEnd"])
+                    data_base64 = base64.standard_b64encode(data[byte_start:byte_end])
+                    self.call(
+                        "file.uploadchunk",
+                        dict(
+                            filePHID=file_phid,
+                            byteStart=byte_start,
+                            data=data_base64.decode(),
+                            dataEncoding="base64",
+                        ),
+                    )
 
         return file_phid
 
