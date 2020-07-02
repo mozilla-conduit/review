@@ -203,7 +203,8 @@ class Diff:
     def upload_files(self):
         for change in list(self.changes.values()):
             for upload in change.uploads:
-                upload["phid"] = conduit.file_upload(upload["value"])
+                path = change.cur_path if upload["type"] == "new" else change.old_path
+                upload["phid"] = conduit.file_upload(path, upload["value"])
 
     def submit(self, commit, message):
         files_changed = sorted(

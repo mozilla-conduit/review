@@ -4,6 +4,7 @@
 
 import base64
 import datetime
+import hashlib
 import json
 import os
 import urllib.parse
@@ -586,11 +587,32 @@ class ConduitAPI:
         )
         self.call("differential.setdiffproperty", api_call_args)
 
-    def file_upload(self, data):
+    def file_upload(self, path, data):
         if not data:
             return
-        data_base64 = base64.standard_b64encode(data)
-        return self.call("file.upload", dict(data_base64=data_base64.decode()))
+        name = os.path.basename(path)
+        allocation = self.call(
+            "file.allocate",
+            dict(
+                name=name,
+                contentLength=len(data),
+                contentHash=hashlib.sha256(data).hexdigest(),
+            ),
+        )
+        file_phid = allocation["filePHID"]
+        if allocation["upload"]:
+            if not file_phid:
+                data_base64 = base64.standard_b64encode(data)
+                file_phid = self.call(
+                    "file.upload", dict(data_base64=data_base64.decode(), name=name)
+                )
+            else:
+                raise Error(
+                    "Large binary files not currently supported by plain moz-phab, "
+                    "please use submit --arc instead"
+                )
+
+        return file_phid
 
     def whoami(self):
         if "whoami" in cache:
