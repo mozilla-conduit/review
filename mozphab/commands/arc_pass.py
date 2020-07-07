@@ -22,4 +22,4 @@ def arc_pass(args):
 def add_parser(parser):
     arc_parser = parser.add_parser("arc", help="Call Arcanist")
     arc_parser.add_argument("commands", nargs=argparse.REMAINDER)
-    arc_parser.set_defaults(func=arc_pass, needs_repo=False)
+    arc_parser.set_defaults(func=arc_pass, needs_repo=False, no_arc=False)
