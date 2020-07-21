@@ -52,6 +52,12 @@ def check_for_updates(with_arc=True):
         update_arc()
 
     # Update self.
+    if sys.version_info < (3, 6):
+        logger.warning(
+            "WARNING:\nPython {}.{} will no longer be supported in the next release "
+            "of MozPhab.".format(sys.version_info.major, sys.version_info.minor)
+        )
+
     if (
         config.self_last_check >= 0
         and time.time() - config.self_last_check > SELF_UPDATE_FREQUENCY * 60 * 60
