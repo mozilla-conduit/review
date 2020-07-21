@@ -6,10 +6,10 @@ workflows:
     jobs:
       - test-3.6
       - test-3.7
+      - test-3.8
       - test-package
 
 jobs:
-  # while moz-phab runs under 3.5, black and hg-evolve require 3.6+
   test-3.6: &test-template
     docker:
       - image: circleci/python:3.6
@@ -49,6 +49,10 @@ jobs:
     <<: *test-template
     docker:
       - image: circleci/python:3.7
+  test-3.8:
+    <<: *test-template
+    docker:
+      - image: circleci/python:3.8
 
   test-package:
     docker:

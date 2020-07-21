@@ -18,6 +18,7 @@ from mozphab import environment
 
 from .arcanist import update_arc
 from .config import config
+from .exceptions import Error
 from .logger import logger
 from .subprocess_wrapper import check_call
 
@@ -34,11 +35,11 @@ def get_name_and_version():
     return "{} ({})".format(dist.project_name, dist.version)
 
 
-def get_pypi_version():
+def get_pypi_info():
     url = "https://pypi.org/pypi/MozPhab/json"
     output = urllib.request.urlopen(urllib.request.Request(url), timeout=30).read()
     response = json.loads(output.decode("utf-8"))
-    return response["info"]["version"]
+    return response["info"]
 
 
 def check_for_updates(with_arc=True):
@@ -52,31 +53,43 @@ def check_for_updates(with_arc=True):
         update_arc()
 
     # Update self.
-    if sys.version_info < (3, 6):
-        logger.warning(
-            "WARNING:\nPython {}.{} will no longer be supported in the next release "
-            "of MozPhab.".format(sys.version_info.major, sys.version_info.minor)
-        )
-
     if (
         config.self_last_check >= 0
         and time.time() - config.self_last_check > SELF_UPDATE_FREQUENCY * 60 * 60
     ):
         config.self_last_check = int(time.time())
-        config.write()
-
         current_version = get_installed_distribution().version
-        pypi_version = get_pypi_version()
+        pypi_info = get_pypi_info()
         logger.debug(
-            "Versions - local: {}, PyPI: {}".format(current_version, pypi_version)
+            "Versions - local: {}, PyPI: {}".format(
+                current_version, pypi_info["version"]
+            )
         )
 
-        if parse_version(current_version) >= parse_version(pypi_version):
+        # convert ">=3.6" to (3, 6)
+        try:
+            required_python_version = tuple(
+                [int(i) for i in pypi_info["requires_python"][2:].split(".")]
+            )
+        except ValueError:
+            required_python_version = ()
+
+        if sys.version_info < required_python_version:
+            raise Error(
+                "Unable to upgrade to version {}.\n"
+                "MozPhab requires Python in version >= {}".format(
+                    pypi_info["version"], ".".join(required_python_version)
+                )
+            )
+
+        config.write()
+
+        if parse_version(current_version) >= parse_version(pypi_info["version"]):
             logger.debug("update check not required")
             return
 
         if config.self_auto_update:
-            logger.info("Upgrading to version %s", pypi_version)
+            logger.info("Upgrading to version %s", pypi_info["version"])
             self_upgrade()
             logger.info("Restarting...")
             # It's best to ignore errors here as they will be reported by the
@@ -84,7 +97,9 @@ def check_for_updates(with_arc=True):
             subprocess.run(sys.argv)
             sys.exit()
 
-        logger.warning("Version %s of `moz-phab` is now available", pypi_version)
+        logger.warning(
+            "Version %s of `moz-phab` is now available", pypi_info["version"]
+        )
 
 
 def self_upgrade():

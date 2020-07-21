@@ -18,7 +18,9 @@ setup(
     description="Phabricator review submission/management tool.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    python_requires=">=3.5",
+    # Note: Please change the `updater.py::check_for_updates` method if the format
+    # would be different than >=X.Y
+    python_requires=">=3.6",
     include_package_data=True,
     package_data={"mozphab": ["metrics.yaml", "pings.yaml"]},
     install_requires=[
