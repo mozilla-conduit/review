@@ -202,6 +202,8 @@ mozphab.submission:
     type: timespan
     description: >
         Time spent on performing the submission.
+        This metric will be null if the users decides to discontinue submission
+        process after the preparation step.
     time_unit: millisecond
     lifetime: application
     notification_emails:

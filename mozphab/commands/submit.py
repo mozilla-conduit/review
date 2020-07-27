@@ -407,6 +407,7 @@ def submit(repo, args):
         )
 
     telemetry.metrics.mozphab.submission.preparation_time.stop()
+    telemetry.metrics.mozphab.submission.commits_count.add(len(commits))
 
     # Confirmation prompt.
     if args.yes:
@@ -427,7 +428,6 @@ def submit(repo, args):
             config.write()
 
     # Process.
-    telemetry.metrics.mozphab.submission.commits_count.add(len(commits))
     telemetry.metrics.mozphab.submission.process_time.start()
     previous_commit = None
     # Collect all existing revisions to get reviewers info.
