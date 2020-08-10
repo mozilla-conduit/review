@@ -435,3 +435,80 @@ def test_diff_property(m_call, git, hg):
             ),
         },
     )
+
+
+@mock.patch("mozphab.repository.conduit.call")
+def test_get_projects(m_call):
+    expected_projects = [
+        {
+            "id": 1,
+            "type": "PROJ",
+            "phid": "PHID-PROJ-1",
+            "attachments": {},
+            "fields": {"name": "A", "slug": "a"},
+        },
+        {
+            "id": 2,
+            "type": "PROJ",
+            "phid": "PHID-PROJ-2",
+            "attachments": {},
+            "fields": {"name": "B", "slug": "b"},
+        },
+    ]
+    m_call.side_effect = (
+        {
+            "data": expected_projects,
+            "maps": {},
+            "query": {"queryKey": None},
+            "cursor": {"limit": 100, "after": None, "before": None, "order": None},
+        },
+    )
+    projects = mozphab.conduit.get_projects(["a", "b"])
+    m_call.assert_called_once_with(
+        "project.search", dict(constraints=dict(slugs=["a", "b"]))
+    )
+    assert projects == expected_projects
+
+
+@mock.patch("mozphab.repository.conduit.get_projects")
+def test_get_project_phid(m_get_projects):
+    m_get_projects.side_effect = (
+        [
+            {
+                "id": 99,
+                "type": "PROJ",
+                "phid": "PHID-PROJ-1",
+                "fields": {
+                    "name": "Check-in Needed",
+                    "slug": "check-in_needed",
+                    "subtype": "default",
+                    "milestone": None,
+                    "depth": 0,
+                    "parent": None,
+                    "icon": {"key": "tag", "name": "Tag", "icon": "fa-tags"},
+                    "color": {"key": "blue", "name": "Blue"},
+                    "spacePHID": None,
+                    "dateCreated": 1552593979,
+                    "dateModified": 1558110482,
+                    "policy": {"view": "public", "edit": "admin", "join": "no-one"},
+                    "description": "description",
+                },
+                "attachments": {},
+            }
+        ],
+    )
+    phid = mozphab.conduit.get_project_phid("check-in_needed")
+    m_get_projects.assert_called_once_with(["check-in_needed"])
+    assert phid == "PHID-PROJ-1"
+
+
+@mock.patch("mozphab.repository.conduit.get_project_phid")
+@mock.patch("mozphab.repository.conduit.call")
+def test_check_in_needed(m_call, m_project_phid):
+    m_project_phid.side_effect = ("PHID-PROJ-1",)
+    mozphab.conduit.edit_revision(check_in_needed=True)
+    m_project_phid.assert_called_once_with("check-in_needed")
+    m_call.assert_called_once_with(
+        "differential.revision.edit",
+        dict(transactions=[dict(type="projects.add", value=["PHID-PROJ-1"])]),
+    )

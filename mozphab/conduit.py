@@ -28,6 +28,9 @@ from .logger import logger
 from .simplecache import cache
 
 
+CHECK_IN_NEEDED = "check-in_needed"
+
+
 def normalise_reviewer(reviewer, strip_group=True):
     """This provide a canonical form of the reviewer for comparison."""
     reviewer = reviewer.rstrip("!").lower()
@@ -158,6 +161,18 @@ class ConduitAPI:
             return True
 
         return False
+
+    def get_projects(self, slugs):
+        """Search for tags by hashtags."""
+        response = self.call("project.search", dict(constraints=dict(slugs=slugs)))
+        return response.get("data")
+
+    def get_project_phid(self, slug):
+        projects = self.get_projects([slug])
+        if not projects:
+            return None
+
+        return projects[0]["phid"]
 
     def ids_to_phids(self, rev_ids):
         """Convert revision ids to PHIDs.
@@ -436,7 +451,14 @@ class ConduitAPI:
         return groups
 
     def create_revision(
-        self, commit, title, summary, diff_phid, has_commit_reviewers, wip=False
+        self,
+        commit,
+        title,
+        summary,
+        diff_phid,
+        has_commit_reviewers,
+        wip=False,
+        check_in_needed=False,
     ):
         """Create a new revision in Phabricator."""
         transactions = [
@@ -449,7 +471,10 @@ class ConduitAPI:
         if commit["bug-id"]:
             transactions.append(dict(type="bugzilla.bug-id", value=commit["bug-id"]))
         return self.edit_revision(
-            transactions=transactions, diff_phid=diff_phid, wip=wip
+            transactions=transactions,
+            diff_phid=diff_phid,
+            wip=wip,
+            check_in_needed=check_in_needed,
         )
 
     def update_revision(
@@ -460,6 +485,7 @@ class ConduitAPI:
         diff_phid=None,
         wip=False,
         comment=None,
+        check_in_needed=False,
     ):
         """Update an existing revision in Phabricator."""
         # Update the title and summary
@@ -490,10 +516,17 @@ class ConduitAPI:
             diff_phid=diff_phid,
             rev_id=commit["rev-id"],
             wip=wip,
+            check_in_needed=check_in_needed,
         )
 
     def edit_revision(
-        self, transactions=None, diff_phid=None, rev_id=None, wip=False, force_wip=False
+        self,
+        transactions=None,
+        diff_phid=None,
+        rev_id=None,
+        wip=False,
+        force_wip=False,
+        check_in_needed=False,
     ):
         """Edit (create or update) a revision."""
         trans = list(transactions or [])
@@ -514,6 +547,17 @@ class ConduitAPI:
 
         if force_wip or wip and not set_wip_later:
             trans.append(dict(type="plan-changes", value=True))
+
+        if check_in_needed:
+            logger.info(f"Adding #{CHECK_IN_NEEDED} to revision.")
+            check_in_needed_phid = conduit.get_project_phid(CHECK_IN_NEEDED)
+            if check_in_needed_phid is not None:
+                trans.append(dict(type="projects.add", value=[check_in_needed_phid]))
+            else:
+                logger.error(
+                    f"Could not add #{CHECK_IN_NEEDED} to revision. "
+                    f"Project #{CHECK_IN_NEEDED} doesn't exist."
+                )
 
         api_call_args = dict(transactions=trans)
 

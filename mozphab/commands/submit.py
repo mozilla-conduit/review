@@ -439,7 +439,9 @@ def submit(repo, args):
 
         revisions_to_update = {str(r["id"]): r for r in list_to_update}
 
+    last_node = commits[-1]["orig-node"]
     for commit in commits:
+        check_in_needed = args.check_in_needed and commit["orig-node"] == last_node
         # Only revisions being updated have an ID.  Newly created ones don't.
         is_update = bool(commit["rev-id"])
         revision_to_update = (
@@ -509,6 +511,7 @@ def submit(repo, args):
                         diff_phid=diff_phid,
                         wip=args.wip,
                         comment=args.message,
+                        check_in_needed=check_in_needed,
                     )
             else:
                 with wait_message("Creating a new revision..."):
@@ -519,6 +522,7 @@ def submit(repo, args):
                         diff_phid,
                         has_commit_reviewers,
                         wip=args.wip,
+                        check_in_needed=check_in_needed,
                     )
 
             revision_url = "%s/D%s" % (repo.phab_url, rev["object"]["id"])
@@ -676,6 +680,11 @@ def add_parser(parser):
         "--no-lint",
         action="store_true",
         help="Do not run lint (default: lint changed files if configured)",
+    )
+    submit_parser.add_argument(
+        "--check-in-needed",
+        action="store_true",
+        help="Add a `check-in-needed tag to the top most revision",
     )
     submit_parser.add_argument(
         "--wip",
