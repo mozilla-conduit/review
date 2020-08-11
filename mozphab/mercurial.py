@@ -10,6 +10,7 @@ import uuid
 
 from contextlib import suppress
 from distutils.version import LooseVersion
+from functools import lru_cache
 
 from mozphab import environment
 
@@ -786,9 +787,11 @@ class Mercurial(Repository):
 
         return diff
 
+    @lru_cache(maxsize=None)
     def hg_cat(self, fn, node):
         return self.hg_out(["cat", "-r", node, fn], split=False, expect_binary=True)
 
+    @lru_cache(maxsize=None)
     def _file_size(self, fn, rev):
         """Get the file size of the file."""
         return int(
@@ -798,6 +801,7 @@ class Mercurial(Repository):
             )
         )
 
+    @lru_cache(maxsize=128)
     def _get_file_meta(self, fn, rev):
         """Collect information about the file."""
         binary = False

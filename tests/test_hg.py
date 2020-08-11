@@ -350,6 +350,10 @@ def test_file_meta_binary(m_cat, m_file_size, m_mime, hg):
         file_size=size,
     )
 
+    hg._get_file_meta.cache_clear()
+    hg.hg_cat.cache_clear()
+    hg._file_size.cache_clear()
+
     size = environment.MAX_TEXT_SIZE - 1
     m_file_size.return_value = size
     m_cat.return_value = b"\0spam\nham"
