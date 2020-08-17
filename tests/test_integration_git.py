@@ -72,7 +72,7 @@ def test_submit_create(in_process, git_repo_path, init_sha):
         # differential.revision.edit
         dict(object=dict(id="123")),
     )
-    (git_repo_path / "X").write_text(u"ą\r\nb\nc\n", encoding="utf-8")
+    (git_repo_path / "X").write_text(u"ą\nb\nc\n", encoding="utf-8")
     (git_repo_path / "Y").write_text("no line ending")
     git_out("add", ".")
     (git_repo_path / "msg").write_text(u"Ą r?alice", encoding="utf-8")
@@ -128,7 +128,7 @@ Differential Revision: http://example.test/D123
                                 "newLength": 3,
                                 "addLines": 3,
                                 "delLines": 0,
-                                "corpus": "+ą\r\n+b\n+c\n",
+                                "corpus": "+ą\n+b\n+c\n",
                                 "isMissingOldNewline": False,
                                 "isMissingNewNewline": False,
                             }

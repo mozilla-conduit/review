@@ -7,7 +7,7 @@ import json
 import mock
 import pytest
 from contextlib import contextmanager
-from frozendict import frozendict
+from immutabledict import immutabledict
 
 from mozphab import diff, exceptions, mozphab, repository, simplecache
 
@@ -151,7 +151,7 @@ def test_get_revisions_none_phids_fails(get_revs, m_call):
         get_revs(phids=None)
 
 
-basic_phab_result = frozendict({"data": [dict(id=1, phid="PHID-1")]})
+basic_phab_result = immutabledict({"data": [dict(id=1, phid="PHID-1")]})
 
 
 def test_get_revisions_search_by_revid(get_revs, m_call):
@@ -198,7 +198,7 @@ def test_get_revisions_search_by_phid_with_dups(get_revs, m_call):
     )
 
 
-multiple_phab_result = frozendict(
+multiple_phab_result = immutabledict(
     {
         "data": [
             dict(id=1, phid="PHID-1"),

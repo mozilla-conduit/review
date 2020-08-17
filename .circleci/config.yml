@@ -1,16 +1,20 @@
-version: 2
+version: 2.1
+
+orbs:
+  win: circleci/windows@2.2.0
 
 workflows:
   version: 2
   test:
     jobs:
-      - test-3.6
-      - test-3.7
-      - test-3.8
-      - test-package
+      - test_3_6
+      - test_3_7
+      - test_3_8
+      - test_win
+      - test_package
 
 jobs:
-  test-3.6: &test-template
+  test_3_6: &test_template
     docker:
       - image: circleci/python:3.6
     working_directory: ~/repo
@@ -45,16 +49,45 @@ jobs:
           path: test-reports
       - store_artifacts:
           path: test-reports
-  test-3.7:
-    <<: *test-template
+  test_3_7:
+    <<: *test_template
     docker:
       - image: circleci/python:3.7
-  test-3.8:
-    <<: *test-template
+  test_3_8:
+    <<: *test_template
     docker:
       - image: circleci/python:3.8
 
-  test-package:
+  test_win:
+    executor:
+      name: win/default
+    steps:
+      - checkout
+      - run:
+          name: install dependencies
+          command: |
+            pip install mercurial hg-evolve
+            pip install --disable-pip-version-check --requirement dev-requirements.txt
+            pip install --disable-pip-version-check --editable .
+            git config --global user.email "moz-phab-tests@example.com"
+            git config --global user.name "moz-phab tests"
+      - run:
+          name: versions
+          command: |
+            python --version
+            git --version
+            pip --disable-pip-version-check list --format freeze
+      - run:
+          name: run tests
+          command: |
+            mkdir test-reports
+            pytest --junitxml=test-reports/junit.xml -vv
+      - store_test_results:
+          path: test-reports
+      - store_artifacts:
+          path: test-reports
+
+  test_package:
     docker:
       - image: circleci/python:3.7
     working_directory: ~/repo

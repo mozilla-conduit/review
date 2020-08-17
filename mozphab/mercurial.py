@@ -653,7 +653,7 @@ class Mercurial(Repository):
         # using a -T template here doesn't output all files (eg. source files from
         # a copy operation are skipped), so we have to parse the default output
         modified_files = [
-            line[2:]  # strip leading status char and space
+            line[2:].replace("\\", "/")  # strip leading status char and space
             for line in self.hg_out(["status", "--change", commit["node"], "--copies"])
         ]
 

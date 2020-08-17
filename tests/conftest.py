@@ -1,10 +1,12 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+import io
 import json
 import mock
 import os
 import pytest
+import shutil
 import subprocess
 import sys
 import time
@@ -137,6 +139,27 @@ def hg(
 def hg_out(*args):
     args = ["hg"] + list(args)
     return subprocess.check_output(args, universal_newlines=True, encoding="utf-8")
+
+
+def write_text(filename, content, **kwargs):
+    # Always write LF delimited text
+    with io.open(filename, "w", newline="\n", **kwargs) as f:
+        f.write(content)
+
+
+def find_script_path(name):
+    """Return the fully qualified path to an executable, preferring those installed
+    into the current virtualenv."""
+    bin_path = Path(sys.executable).parent
+    if sys.platform == "win32":
+        name = "%s.exe" % name
+    filename = bin_path / name
+    if filename.exists():
+        return str(filename)
+    # Check system path
+    if shutil.which(name):
+        return name
+    raise Exception("Failed to find script: %s" % filename)
 
 
 @pytest.fixture

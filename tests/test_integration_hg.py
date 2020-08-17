@@ -7,7 +7,7 @@ import pytest
 import shutil
 
 from callee import Contains
-from .conftest import hg_out
+from .conftest import hg_out, write_text
 
 from mozphab import environment, mozphab
 
@@ -36,27 +36,20 @@ def test_submit_create(in_process, hg_repo_path):
         # differential.revision.edit
         dict(object=dict(id="123")),
     )
-    test_a = hg_repo_path / "A to rename"
-    test_a.write_text("rename me\nsecond line\n")
-    test_b = hg_repo_path / "B to remove"
-    test_b.write_text("remove me\n")
-    test_c = hg_repo_path / "C to modify"
-    test_c.write_text("modify me\n")
-    test_d = hg_repo_path / "D to copy"
-    test_d.write_text("copy me\n")
+    write_text(hg_repo_path / "A to rename", "rename me\nsecond line\n")
+    write_text(hg_repo_path / "B to remove", "remove me\n")
+    write_text(hg_repo_path / "C to modify", "modify me\n")
+    write_text(hg_repo_path / "D to copy", "copy me\n")
     hg_out("add")
     hg_out("commit", "-m", "first")
-    subdir = hg_repo_path / "subdir"
-    subdir.mkdir()
+    (hg_repo_path / "subdir").mkdir()
     hg_out("copy", "D to copy", "D copied")
-    test_e = hg_repo_path / "subdir" / "E add"
-    test_e.write_text("added\n")
-    test_a.rename(hg_repo_path / "A renamed")
-    test_b.unlink()
-    test_c.write_text("modified\n")
+    write_text(hg_repo_path / "subdir" / "E add", "added\n")
+    (hg_repo_path / "A to rename").rename(hg_repo_path / "A renamed")
+    (hg_repo_path / "B to remove").unlink()
+    write_text(hg_repo_path / "C to modify", "modified\n")
     hg_out("addremove")
-    msgfile = hg_repo_path / "msg"
-    msgfile.write_text("Ą r?alice", encoding="utf-8")
+    write_text(hg_repo_path / "msg", "Ą r?alice", encoding="utf-8")
     hg_out("commit", "-l", "msg")
     mozphab.main(["submit", "--yes", "--bug", "1", "."], is_development=True)
 
@@ -267,27 +260,20 @@ def test_submit_create_no_trailing_newline(in_process, hg_repo_path):
         # differential.revision.edit
         dict(object=dict(id="123")),
     )
-    test_a = hg_repo_path / "A to rename"
-    test_a.write_text("rename me\nsecond line")
-    test_b = hg_repo_path / "B to remove"
-    test_b.write_text("remove me")
-    test_c = hg_repo_path / "C to modify"
-    test_c.write_text("modify me")
-    test_d = hg_repo_path / "D to copy"
-    test_d.write_text("copy me")
+    write_text(hg_repo_path / "A to rename", "rename me\nsecond line")
+    write_text(hg_repo_path / "B to remove", "remove me")
+    write_text(hg_repo_path / "C to modify", "modify me")
+    write_text(hg_repo_path / "D to copy", "copy me")
     hg_out("add")
     hg_out("commit", "-m", "first")
-    subdir = hg_repo_path / "subdir"
-    subdir.mkdir()
+    (hg_repo_path / "subdir").mkdir()
     hg_out("copy", "D to copy", "D copied")
-    test_e = hg_repo_path / "subdir" / "E add"
-    test_e.write_text("added")
-    test_a.rename(hg_repo_path / "A renamed")
-    test_b.unlink()
-    test_c.write_text("modified")
+    write_text(hg_repo_path / "subdir" / "E add", "added")
+    (hg_repo_path / "A to rename").rename(hg_repo_path / "A renamed")
+    (hg_repo_path / "B to remove").unlink()
+    write_text(hg_repo_path / "C to modify", "modified")
     hg_out("addremove")
-    msgfile = hg_repo_path / "msg"
-    msgfile.write_text("Ą r?alice", encoding="utf-8")
+    write_text(hg_repo_path / "msg", "Ą r?alice", encoding="utf-8")
     hg_out("commit", "-l", "msg")
     mozphab.main(["submit", "--yes", "--bug", "1", "."], is_development=True)
 
@@ -503,8 +489,7 @@ def test_submit_create_no_bug(in_process, hg_repo_path):
         # differential.revision.edit
         dict(object=dict(id="123")),
     )
-    test_a = hg_repo_path / "x"
-    test_a.write_text("a")
+    write_text(hg_repo_path / "x", "a")
     hg_out("add")
     hg_out("commit", "--message", "A r?alice")
     mozphab.main(["submit", "--yes", "--no-bug", "."], is_development=True)
@@ -715,14 +700,13 @@ def test_submit_remove_cr(in_process, hg_repo_path):
         # differential.revision.edit
         dict(object=dict(id="124")),
     )
-    test_a = hg_repo_path / "X"
-    test_a.write_text("a\r\nb\n")
+    (hg_repo_path / "X").write_text("a\r\nb\n")
     hg_out("add")
     hg_out("commit", "--message", "A r?alice")
     mozphab.main(["submit", "--yes", "--bug", "1", "."], is_development=True)
     call_conduit.reset_mock()
     # removing CR, leaving LF
-    test_a.write_text("a\nb\n")
+    (hg_repo_path / "X").write_text("a\nb\n")
     hg_out("commit", "--message", "B r?alice")
     mozphab.main(["submit", "--yes", "--bug", "1", "."], is_development=True)
 
@@ -805,11 +789,11 @@ def test_submit_single_first(in_process, hg_repo_path, hg_sha):
         # differential.revision.edit
         dict(object=dict(id="123")),
     )
-    (hg_repo_path / "X").write_text("a\n")
+    write_text(hg_repo_path / "X", "a\n")
     hg_out("add", "X")
     hg_out("commit", "-m", "A")
     sha = hg_sha()
-    (hg_repo_path / "X").write_text("b\n")
+    write_text(hg_repo_path / "X", "b\n")
     hg_out("commit", "-m", "B")
 
     mozphab.main(
@@ -841,10 +825,10 @@ def test_submit_single_last(in_process, hg_repo_path):
         # differential.revision.edit
         dict(object=dict(id="123")),
     )
-    (hg_repo_path / "X").write_text("a\n")
+    write_text(hg_repo_path / "X", "a\n")
     hg_out("add", "X")
     hg_out("commit", "-m", "A")
-    (hg_repo_path / "X").write_text("b\n")
+    write_text(hg_repo_path / "X", "b\n")
     hg_out("commit", "-m", "B")
 
     mozphab.main(["submit", "--yes", "--bug", "1", "--single"], is_development=True)
@@ -874,7 +858,7 @@ def test_multiple_copy(in_process, hg_repo_path):
         # differential.revision.edit
         dict(object=dict(id="123")),
     )
-    (hg_repo_path / "X").write_text("a\n")
+    write_text(hg_repo_path / "X", "a\n")
     hg_out("add", "X")
     hg_out("commit", "-m", "A")
     hg_out("cp", "X", "X_copy_1")

@@ -216,7 +216,7 @@ replacing `[revision]` with the identifier of your revision.
 
 ### Running arc commands
 
-* **Note** You will need to have PHP installed to run `arc` commands.*
+* **Note** You will need to have PHP installed to run `arc` commands. *
 
 `moz-phab arc` allows running Arcanist commands indirectly:
 
@@ -235,14 +235,34 @@ File bugs in Bugzilla under
 
 ## Development
 
-To install your code call `pip3 install -e .` from MozPhab project directory (`review`
-by default). Your code will be executed by calling `moz-phab-dev`.
-
-Tests can be executed with `pytest`.
-Integration tests require to have access to `git`, `hg` with `evolve` extension.
-
 All python code must be formatted with [black](https://github.com/ambv/black)
 using the default settings.
+
+### MacOS / Linux
+
+1. Ensure you have Python 3, Git, and Mercurial installed
+   - eg. using `homebrew` on macOS, or your Linux distribution's package manager
+   - `python3`, `git`, and `hg` executables must be on the system path
+2. In your clone of this repository run the following commands:
+   - `python3 -m venv venv`
+   - `venv/bin/pip3 install -r dev-requirements.txt`
+   - `venv/bin/pip3 install -e .`
+3. To run moz-phab after making modifications use `venv/bin/moz-phab-dev`
+4. To run tests use `venv/bin/pytest -vv`
+
+### Windows
+
+1. Install Python 3, Git, and Mercurial:
+   - Run `python3` from the command prompt and install from the Windows store.
+   - Install Git and Mercurial with their respective installers from the
+     official websites.
+   - `python3`, `git`, and `hg` executables must be on the system path
+2. In your clone of this repository run the following commands:
+   - `python3 -m venv venv`
+   - `venv\Scripts\pip3 install -r dev-requirements.txt`
+   - `venv\Scripts\pip3 install -e .`
+3. To run moz-phab after making modifications use `venv\Scripts\moz-phab-dev`
+4. To run tests use `venv\Scripts\pytest -vv`
 
 ### Submitting patches
 
