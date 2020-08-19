@@ -9,6 +9,7 @@
 CLI to support submission of a series of commits to Phabricator. .
 """
 
+import logging
 import os
 import sys
 import traceback
@@ -50,6 +51,8 @@ def main(argv, *, is_development):
 
         if args.trace:
             environment.DEBUG = True
+        if environment.DEBUG:
+            environment.SHOW_SPINNER = False
 
         init_logging()
         logger.debug(get_name_and_version())
@@ -57,10 +60,12 @@ def main(argv, *, is_development):
         if not args.no_arc:
             install_arc_if_required()
 
-        if environment.DEBUG:
+        # Ensure that `patch --raw ..` only outputs the patch
+        if args.command == "patch" and getattr(args, "raw", False):
             environment.SHOW_SPINNER = False
+            logger.setLevel(logging.ERROR)
 
-        if args.command != "self-update":
+        elif args.command != "self-update":
             check_for_updates(with_arc=not args.no_arc)
 
         repo = None

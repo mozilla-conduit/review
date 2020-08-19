@@ -155,6 +155,9 @@ class Repository(object):
     def apply_patch(self, diff, body, author, author_date):
         """Apply the patch and commit the changes."""
 
+    def format_patch(self, diff, body, author, author_date):
+        """Format a patch appropriate for importing."""
+
     def check_commits_for_submit(
         self, commits, *, validate_reviewers=True, require_bug=True
     ):

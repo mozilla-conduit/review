@@ -88,9 +88,9 @@ def test_base_ref():
 @mock.patch("mozphab.commands.patch.prepare_body")
 @mock.patch("mozphab.git.Git.apply_patch")
 @mock.patch("mozphab.git.Git.check_node")
-@mock.patch("mozphab.commands.patch.logger")
+@mock.patch("builtins.print")
 def test_patch(
-    m_logger,
+    m_print,
     m_git_check_node,
     m_git_apply_patch,
     m_prepare_body,
@@ -229,7 +229,7 @@ def test_patch(
     m_git_before_patch.not_called()
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_not_called()
-    m_logger.info.assert_called_with("raw")
+    m_print.assert_called_with("raw")
 
     # skip-dependencies
     git.args = Args(raw=True, skip_dependencies=True)
@@ -296,21 +296,21 @@ def test_patch(
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_called_once()
 
-    m_logger.reset_mock()
+    m_print.reset_mock()
     m_call_conduit.side_effect = ("raw",)
     git.args = Args(raw=True)
     patch.patch(git, git.args)
-    m_logger.info.assert_called_once_with("raw")
+    m_print.assert_called_once_with("raw")
 
     # ########## multiple revisions
-    m_logger.reset_mock()
+    m_print.reset_mock()
     m_get_revisions.side_effect = ([REV_1], [REV_2])
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1, "DIFFPHID-2": DIFF_2}
     m_get_ancestor_phids.return_value = ["PHID-2"]
     m_call_conduit.side_effect = ("raw2", "raw1")
     # --raw 2 revisions in stack
     patch.patch(git, git.args)
-    m_logger.info.assert_has_calls((mock.call("raw2"), mock.call("raw1")))
+    m_print.assert_has_calls((mock.call("raw2"), mock.call("raw1")))
 
     # node not found
     m_get_revisions.side_effect = None

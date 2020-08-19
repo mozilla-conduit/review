@@ -135,12 +135,11 @@ def patch(repo, args):
     # Set the target id
     rev_id = revs[-1]["id"]
 
-    if not args.raw:
-        logger.info(
-            "Patching revision%s: %s",
-            "s" if len(revs) > 1 else "",
-            " ".join(["D%s" % r["id"] for r in revs]),
-        )
+    logger.info(
+        "Patching revision%s: %s",
+        "s" if len(revs) > 1 else "",
+        " ".join(["D%s" % r["id"] for r in revs]),
+    )
 
     # Pull diffs
     with wait_message("Downloading patch information.."):
@@ -205,28 +204,36 @@ def patch(repo, args):
         if args.no_commit:
             with wait_message("Applying D%s.." % rev["id"]):
                 apply_patch(raw, repo.path)
-
-        elif args.raw:
-            logger.info(raw)
-
         else:
-            diff_commits = diff["attachments"]["commits"]["commits"]
-            author = "%s <%s>" % (
-                diff_commits[0]["author"]["name"],
-                diff_commits[0]["author"]["email"],
-            )
-
             try:
-                with wait_message("Applying D%s.." % rev["id"]):
-                    repo.apply_patch(raw, body, author, diff["fields"]["dateCreated"])
-            except subprocess.CalledProcessError:
-                raise Error("Patch failed to apply")
+                diff_commits = diff["attachments"]["commits"]["commits"]
+                author = "%s <%s>" % (
+                    diff_commits[0]["author"]["name"],
+                    diff_commits[0]["author"]["email"],
+                )
+            except (IndexError, KeyError):
+                author = None
+            try:
+                date_created = diff["fields"]["dateCreated"]
+            except KeyError:
+                date_created = None
 
-        if not args.raw and rev["id"] != revs[-1]["id"]:
+            if args.raw:
+                # print rather than use logger.info; there's no need for this
+                # to be in our logs.
+                print(repo.format_patch(raw, body, author, date_created))
+
+            else:
+                try:
+                    with wait_message("Applying D%s.." % rev["id"]):
+                        repo.apply_patch(raw, body, author, date_created)
+                except subprocess.CalledProcessError:
+                    raise Error("Patch failed to apply")
+
+        if rev["id"] != revs[-1]["id"]:
             logger.info("D%s applied", rev["id"])
 
-    if not args.raw:
-        logger.warning("D%s applied", rev_id)
+    logger.warning("D%s applied", rev_id)
 
 
 def check_revision_id(value):

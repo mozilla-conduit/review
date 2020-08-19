@@ -173,7 +173,7 @@ def find_script_path(name):
 def hg_repo_path(monkeypatch, tmp_path):
     """Build a usable HG repository. Return the pathlib.Path to the repo."""
     phabricator_uri = "http://example.test"
-    repo_path = tmp_path / "repo"
+    repo_path = tmp_path / "hg-repo"
     repo_path.mkdir()
     monkeypatch.chdir(str(repo_path))
     arcconfig = repo_path / ".arcconfig"
@@ -227,7 +227,7 @@ def git_out(*args):
 def git_repo_path(monkeypatch, tmp_path):
     """Build a usable Git repository. Return the pathlib.Path to the repo."""
     phabricator_uri = "http://example.test"
-    repo_path = tmp_path / "repo"
+    repo_path = tmp_path / "git-repo"
     repo_path.mkdir()
     monkeypatch.chdir(str(repo_path))
     arcconfig = repo_path / ".arcconfig"

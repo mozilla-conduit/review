@@ -450,17 +450,18 @@ class Mercurial(Repository):
                 logger.info("Bookmark set to %s", bookmark_name)
 
     def apply_patch(self, diff, body, author, author_date):
+        changeset_str = self.format_patch(diff, body, author, author_date)
+        with temporary_binary_file(changeset_str.encode("utf8")) as changeset_file:
+            self.hg(["import", changeset_file, "--quiet"])
+
+    def format_patch(self, diff, body, author, author_date):
         changeset = ["# HG changeset patch"]
         if author:
             changeset.append("# User {}".format(author))
-
         if author_date:
             changeset.append("# Date {} 0".format(author_date))
-
         changeset.extend([body, diff])
-        changeset_str = "\n".join(changeset)
-        with temporary_binary_file(changeset_str.encode("utf8")) as changeset_file:
-            self.hg(["import", changeset_file, "--quiet"])
+        return "\n".join(changeset)
 
     def _amend_commit_body(self, node, body):
         with temporary_file(body) as body_file:

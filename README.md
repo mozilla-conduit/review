@@ -172,6 +172,8 @@ This behavior can be modified with few options:
    ancestor instead of applying to the repository. It can be used to patch the
    working directory with an external tool:
    `$ moz-phab patch D123 --raw | patch -p1`.
+   `$ moz-phab patch D123 --raw | hg import`.
+   `$ moz-phab patch D123 --raw | git am`.
 
 - `--no-commit` Use the `git apply` command (also for Mercurial repos) to patch
    the diffs. No commit or branch is created.
