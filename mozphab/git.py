@@ -262,7 +262,12 @@ class Git(Repository):
         Returns: A list of "aaaa bbbb cccc"" strings, where bbbb and cccc are
             SHA1 of direct children of aaaa
         """
-        return self.git_out(["rev-list", "--all", "--children", "--not", "%s^@" % node])
+
+        # Logging is disabled for this command as it can generate a _lot_ of
+        # results, especially on mozilla-central.
+        return self.git_out(
+            ["rev-list", "--all", "--children", "--not", "%s^@" % node], never_log=True
+        )
 
     @staticmethod
     def _get_direct_children(node, rev_list):
