@@ -19,7 +19,7 @@ from mozphab import environment
 from .arcanist import update_arc
 from .config import config
 from .exceptions import Error
-from .logger import logger
+from .logger import logger, stop_logging
 from .subprocess_wrapper import check_call
 
 ARC_UPDATE_FREQUENCY = 24 * 7  # hours
@@ -92,10 +92,15 @@ def check_for_updates(with_arc=True):
             logger.info("Upgrading to version %s", pypi_info["version"])
             self_upgrade()
             logger.info("Restarting...")
+
+            # Explicitly close the log files to avoid issues with processes holding
+            # exclusive logs on the files on Windows.
+            stop_logging()
+
             # It's best to ignore errors here as they will be reported by the
             # new moz-phab process.
-            subprocess.run(sys.argv)
-            sys.exit()
+            p = subprocess.run(sys.argv)
+            sys.exit(p.returncode)
 
         logger.warning(
             "Version %s of `moz-phab` is now available", pypi_info["version"]
