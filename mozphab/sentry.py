@@ -2,11 +2,17 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import errno
 import logging
+import socket
+import ssl
+import urllib.error
 
 import sentry_sdk
 from pkg_resources import get_distribution
 from sentry_sdk.integrations.logging import LoggingIntegration
+
+from .exceptions import CommandError
 
 
 def init_sentry():
@@ -28,4 +34,24 @@ def init_sentry():
 
 
 def report_to_sentry(e):
+    if (
+        # As we don't capture stdout/stderr, failures when running hg/git are not
+        # actionable.  Some cases of CommandError never need reporting (eg. failure
+        # to apply a patch).
+        isinstance(e, CommandError)
+        # SSLCertVerification errors are caused by a misconfigured Python install.
+        or isinstance(e, ssl.SSLCertVerificationError)
+        # Network unreachable
+        or (isinstance(e, OSError) and e.errno == errno.ENETUNREACH)
+        # Network timeout
+        or isinstance(e, TimeoutError)
+        # DNS resolution failures
+        or isinstance(e, socket.gaierror)
+        # urllib throws URLError on SSL verification, network unreachable, etc
+        or isinstance(e, urllib.error.URLError)
+        # Connection resets are transient
+        or isinstance(e, ConnectionResetError)
+    ):
+        return
+
     sentry_sdk.capture_exception(e)
