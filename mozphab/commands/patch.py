@@ -303,11 +303,11 @@ def add_parser(parser):
         "--safe-mode",
         dest="safe_mode",
         action="store_true",
-        help="Run VCS with only necessary extensions.",
+        help="Run VCS with only necessary extensions",
     )
     patch_parser.add_argument(
         "--force-vcs",
         action="store_true",
-        help="EXPERIMENTAL: Override VCS compatibility check.",
+        help="EXPERIMENTAL: Override VCS compatibility check",
     )
     patch_parser.set_defaults(func=patch, needs_repo=True, no_arc=True)

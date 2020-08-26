@@ -23,6 +23,7 @@ from mozphab.spinner import wait_message
 from mozphab.subprocess_wrapper import check_call_by_line
 from mozphab.telemetry import telemetry
 
+# The DEFAULT_UPDATE_MESSAGE is only required when using arc to submit.
 DEFAULT_UPDATE_MESSAGE = "Revision updated."
 
 REVISION_URL_RE = re.compile(r"^\s*Revision URI: (http.+)$", flags=re.MULTILINE)
@@ -608,7 +609,7 @@ def add_parser(parser):
     submit_parser = parser.add_parser(
         "submit",
         aliases=["upload"],
-        help="Submit commit(s) to Phabricator.",
+        help="Submit commit(s) to Phabricator",
         description=(
             "MozPhab will change the working directory and amend the commits during "
             "the submission process."
@@ -630,9 +631,7 @@ def add_parser(parser):
         help="Submit with confirmation (default: %s)" % (not config.auto_submit),
     )
     submit_parser.add_argument(
-        "--message",
-        "-m",
-        help="Provide a custom update message (default: %s)" % DEFAULT_UPDATE_MESSAGE,
+        "--message", "-m", help="Provide a custom update message (default: none)",
     )
     submit_parser.add_argument(
         "--force",
@@ -643,8 +642,8 @@ def add_parser(parser):
     submit_parser.add_argument(
         "--force-delete",
         action="store_true",
-        help="Mercurial only. Override the fail if a DAG branch point detected "
-        "and no evolve installed",
+        help="Mercurial only: Ignore error caused by a DAG branch point without "
+        "evolve installed",
     )
     submit_parser.add_argument(
         "--bug", "-b", help="Set Bug ID for all commits (default: from commit)"
@@ -652,7 +651,7 @@ def add_parser(parser):
     submit_parser.add_argument(
         "--no-bug",
         action="store_true",
-        help="Continue if a bug number is not provided.",
+        help="Continue if a bug number is not provided",
     )
     submit_parser.add_argument(
         "--reviewer",
@@ -703,24 +702,24 @@ def add_parser(parser):
         "--remote",
         "-u",
         action="append",
-        help='Set upstream branch to detect the starting commit. (default: "")',
+        help='Set upstream branch to detect the starting commit (default: "")',
     )
     submit_parser.add_argument(
-        "--arc", dest="no_arc", action="store_false", help="Submits with Arcanist.",
+        "--arc", dest="no_arc", action="store_false", help="Submits with Arcanist",
     )
     submit_parser.add_argument(
         "--force-vcs",
         action="store_true",
-        help="EXPERIMENTAL: Override VCS compatibility check.",
+        help="EXPERIMENTAL: Override VCS compatibility check",
     )
     submit_parser.add_argument(
         "--safe-mode",
         dest="safe_mode",
         action="store_true",
-        help="Run VCS with only necessary extensions.",
+        help="Run VCS with only necessary extensions",
     )
     submit_parser.add_argument(
-        "--single", "-s", action="store_true", help="Submit a single commit.",
+        "--single", "-s", action="store_true", help="Submit a single commit",
     )
     submit_parser.add_argument(
         "start_rev",

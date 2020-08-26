@@ -264,14 +264,14 @@ def add_parser(parser):
         "--safe-mode",
         dest="safe_mode",
         action="store_true",
-        help="Run VCS with only necessary extensions.",
+        help="Run VCS with only necessary extensions",
     )
     reorg_parser.add_argument(
         "--upstream",
         "--remote",
         "-u",
         action="append",
-        help='Set upstream branch to detect the starting commit. (default: "")',
+        help='Set upstream branch to detect the starting commit (default: "")',
     )
     reorg_parser.add_argument(
         "start_rev",

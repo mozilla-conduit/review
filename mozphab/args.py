@@ -4,6 +4,7 @@
 
 import argparse
 import os
+import textwrap
 
 from importlib import import_module
 
@@ -19,7 +20,18 @@ def parse_args(argv):
     main_parser.add_argument(
         "--trace", "--debug", action="store_true", help=argparse.SUPPRESS
     )
-    parser = argparse.ArgumentParser(parents=[main_parser])
+    parser = argparse.ArgumentParser(
+        parents=[main_parser],
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.dedent(
+            """
+            If moz-phab is executed without specifying a command, the 'submit' command
+            will be executed.
+
+            For more help on 'submit' and its options run 'moz-phab submit --help'.
+            """
+        ),
+    )
 
     commands_parser = parser.add_subparsers(
         dest="command",

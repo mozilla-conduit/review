@@ -28,6 +28,6 @@ def add_parser(parser):
         "--safe-mode",
         dest="safe_mode",
         action="store_true",
-        help="Run VCS with only necessary extensions.",
+        help="Run VCS with only necessary extensions",
     )
     cert_parser.set_defaults(func=install_certificate, needs_repo=True, no_arc=True)
