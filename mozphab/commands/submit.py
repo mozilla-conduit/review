@@ -377,7 +377,9 @@ def submit(repo, args):
     try:
         with wait_message("Checking commits.."):
             repo.check_commits_for_submit(
-                commits, validate_reviewers=not args.wip, require_bug=not args.no_bug,
+                commits,
+                validate_reviewers=not args.wip,
+                require_bug=not args.no_bug,
             )
     except Error as e:
         if not args.force:
@@ -631,7 +633,9 @@ def add_parser(parser):
         help="Submit with confirmation (default: %s)" % (not config.auto_submit),
     )
     submit_parser.add_argument(
-        "--message", "-m", help="Provide a custom update message (default: none)",
+        "--message",
+        "-m",
+        help="Provide a custom update message (default: none)",
     )
     submit_parser.add_argument(
         "--force",
@@ -705,7 +709,10 @@ def add_parser(parser):
         help='Set upstream branch to detect the starting commit (default: "")',
     )
     submit_parser.add_argument(
-        "--arc", dest="no_arc", action="store_false", help="Submits with Arcanist",
+        "--arc",
+        dest="no_arc",
+        action="store_false",
+        help="Submits with Arcanist",
     )
     submit_parser.add_argument(
         "--force-vcs",
@@ -719,7 +726,10 @@ def add_parser(parser):
         help="Run VCS with only necessary extensions",
     )
     submit_parser.add_argument(
-        "--single", "-s", action="store_true", help="Submit a single commit",
+        "--single",
+        "-s",
+        action="store_true",
+        help="Submit a single commit",
     )
     submit_parser.add_argument(
         "start_rev",

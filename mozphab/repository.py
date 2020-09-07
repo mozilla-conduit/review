@@ -285,8 +285,7 @@ class Repository(object):
         return False
 
     def _api_url(self):
-        """Return a base URL for conduit API call
-        """
+        """Return a base URL for conduit API call"""
         return urllib.parse.urljoin(self.phab_url, "api/")
 
     @property

@@ -117,7 +117,12 @@ def git(
 @mock.patch("mozphab.helpers.which")
 @mock.patch("mozphab.repository.read_json_field")
 def hg(
-    m_read_json_field, m_which, m_os_path, m_hg_hg_out, safe_environ, repo_phab_url,
+    m_read_json_field,
+    m_which,
+    m_os_path,
+    m_hg_hg_out,
+    safe_environ,
+    repo_phab_url,
 ):
     m_read_json_field.return_value = "TEST"
     m_os_path.join = os.path.join

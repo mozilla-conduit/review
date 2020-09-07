@@ -135,7 +135,8 @@ def test_update_user_data(m_prompt, m_user_data, m_config, get_telemetry):
     m_user_data.set_user_data.side_effect = None
     m_user_data.set_user_data.return_value = True
     m_user_data.configure_mock(
-        is_employee=True, is_data_collected=True,
+        is_employee=True,
+        is_data_collected=True,
     )
     m_config.configure_mock(telemetry_enabled=True)
     t.update_user_data()
@@ -196,7 +197,9 @@ def test_set_metrics(m_config, m_user_data, get_telemetry):
     t.set_os.assert_not_called()
 
     # switched off, no repo
-    m_user_data.configure_mock(is_data_collected=False,)
+    m_user_data.configure_mock(
+        is_data_collected=False,
+    )
     m_config.configure_mock(telemetry_enabled=True)
     t.set_metrics(Args())
     t.update_user_data.assert_not_called()
@@ -241,7 +244,9 @@ def test_set_metrics(m_config, m_user_data, get_telemetry):
     t.set_os.reset_mock()
     m_config.configure_mock(telemetry_enabled=True)
     t.update_user_data.return_value = True
-    m_user_data.configure_mock(is_data_collected=True,)
+    m_user_data.configure_mock(
+        is_data_collected=True,
+    )
     # telemetry is disabled in `update_user_data`
     t.disable()
     t.set_metrics(Args(needs_repo=True))

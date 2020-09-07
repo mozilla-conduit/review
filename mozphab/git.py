@@ -271,7 +271,7 @@ class Git(Repository):
 
     @staticmethod
     def _get_direct_children(node, rev_list):
-        """ Return direct children of the commit.
+        """Return direct children of the commit.
 
         Args:
             node: The SHA1 of a node to check for direct children

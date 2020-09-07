@@ -172,7 +172,8 @@ def reorganise(repo, args):
 
     logger.warning(
         "Reorganisation based on {} commit{}:".format(
-            len(commits), "" if len(commits) == 1 else "s",
+            len(commits),
+            "" if len(commits) == 1 else "s",
         )
     )
 
@@ -223,13 +224,15 @@ def reorganise(repo, args):
                 if t["type"] == "children.set":
                     logger.info(
                         " * {child} will depend on {parent}".format(
-                            child=conduit.phid_to_id(t["value"][0]), parent=node_id,
+                            child=conduit.phid_to_id(t["value"][0]),
+                            parent=node_id,
                         )
                     )
                 if t["type"] == "children.remove":
                     logger.info(
                         " * {child} will no longer depend on {parent}".format(
-                            child=conduit.phid_to_id(t["value"][0]), parent=node_id,
+                            child=conduit.phid_to_id(t["value"][0]),
+                            parent=node_id,
                         )
                     )
 
