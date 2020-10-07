@@ -6,28 +6,57 @@ import operator
 import re
 import concurrent.futures
 
-from collections import namedtuple
-
 from .conduit import conduit
 
 
 class Diff:
     """Representation of the Diff used to submit to the Phabricator."""
 
-    Hunk = namedtuple(
-        "Hunk",
-        [
-            "old_off",
-            "old_len",
-            "new_off",
-            "new_len",
-            "old_eof_newline",
-            "new_eof_newline",
-            "added",
-            "deleted",
-            "corpus",
-        ],
-    )
+    class Hunk:
+        def __init__(self, *, old_off, old_len, new_off, new_len, lines):
+            """
+            Hunk object, encapsulates hunk metadata and diff lines.
+
+            For the following hunk:
+            @@ -23,6 +23,7 @@ jobs:
+             - run:
+                 name: install dependencies
+                 command: |
+             +     set -e
+                   # install modern hg
+                   sudo pip3 install --disable-pip-version-check mercurial hg-evolve
+                   # configure hg
+
+            :param int old_off: old offset (eg. -23)
+            :param int old_len: old length/line count (eg. 6)
+            :param int new_off: new offset (eg. +23)
+            :param int new_len: new length (eg. 7)
+            :param list[str] lines: list of diff lines, starting with "+", "-", or " ",
+                   including the trailing "\n".  (eg. the 7 lines following the @@ line)
+            """
+            self.old_off = old_off
+            self.old_len = old_len
+            self.new_off = new_off
+            self.new_len = new_len
+            self.corpus = "".join(lines)
+
+            self.old_eof_newline = True
+            self.new_eof_newline = True
+            self.added = 0
+            self.deleted = 0
+
+            prev_line = " "
+            for line in lines:
+                if line[0] == "+":
+                    self.added += 1
+                elif line[0] == "-":
+                    self.deleted += 1
+                if line.endswith("No newline at end of file\n"):
+                    if prev_line[0] != "+":
+                        self.old_eof_newline = False
+                    if prev_line[0] != "-":
+                        self.new_eof_newline = False
+                prev_line = line
 
     class Change:
         def __init__(self, path):
@@ -49,6 +78,54 @@ class Diff:
         @property
         def deleted(self):
             return sum(hunk.deleted for hunk in self.hunks)
+
+        def from_git_diff(self, git_diff):
+            """Generate hunks from the provided git_diff output."""
+
+            # Process each hunk
+            hunk = None
+            in_header = True
+            for line in git_diff.splitlines(keepends=True):
+                # Skip lines before the start of the first hunk header
+                if in_header:
+                    if not line.startswith("@@"):
+                        continue
+                    in_header = False
+
+                # Start of hunk
+                if line.startswith("@@"):
+                    # Store previously collected hunk
+                    if hunk and hunk["lines"]:
+                        self.hunks.append(Diff.Hunk(**hunk))
+
+                    # Start a new collection
+                    (old_off, new_off, old_len, new_len) = Diff.parse_git_diff(line)
+                    hunk = dict(
+                        old_off=old_off,
+                        new_off=new_off,
+                        old_len=old_len,
+                        new_len=new_len,
+                        lines=[],
+                    )
+
+                else:
+                    hunk["lines"].append(line)
+            if hunk and hunk["lines"]:
+                self.hunks.append(Diff.Hunk(**hunk))
+
+        def set_as_binary(self, *, a_body, a_mime, b_body, b_mime):
+            """Updates Change contents to the provided binary data."""
+            self.binary = True
+
+            self.uploads = [
+                {"type": "old", "value": a_body, "mime": a_mime, "phid": None},
+                {"type": "new", "value": b_body, "mime": b_mime, "phid": None},
+            ]
+
+            if a_mime.startswith("image/") or b_mime.startswith("image/"):
+                self.file_type = Diff.FileType("IMAGE")
+            else:
+                self.file_type = Diff.FileType("BINARY")
 
         def to_conduit(self, node):
             # Record upload information
@@ -149,7 +226,7 @@ class Diff:
             self.changes[path] = self.Change(path)
         return self.changes[path]
 
-    def set_change_kind(self, change, kind, a_mode, b_mode, a_path, b_path):
+    def set_change_kind(self, change, kind, a_mode, b_mode, a_path, _b_path):
         """Determine the correct kind from the letter."""
         if kind == "A":
             change.kind = self.Kind("ADD")

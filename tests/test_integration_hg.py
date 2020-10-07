@@ -457,15 +457,15 @@ Differential Revision: http://example.test/D123
                         "type": 1,  # ADD
                         "hunks": [
                             {
-                                "corpus": "+added\n\\ No newline at end of file\n",
-                                "addLines": 1,
                                 "oldOffset": 0,
+                                "oldLength": 0,
                                 "newOffset": 1,
-                                "newLength": 2,
+                                "newLength": 1,
+                                "addLines": 1,
                                 "delLines": 0,
                                 "isMissingOldNewline": False,
-                                "oldLength": 0,
                                 "isMissingNewNewline": True,
+                                "corpus": "+added\n\\ No newline at end of file\n",
                             }
                         ],
                         "commitHash": mock.ANY,

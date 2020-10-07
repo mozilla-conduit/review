@@ -677,48 +677,68 @@ class Git(Repository):
                 change.binary = True
 
         if change.binary:
-            a_mime = mimetypes.guess_type(a_path)[0] or ""
-            b_mime = mimetypes.guess_type(b_path)[0] or ""
-            change.uploads = [
-                {"type": "old", "value": a_body, "mime": a_mime, "phid": None},
-                {"type": "new", "value": b_body, "mime": b_mime, "phid": None},
-            ]
-            if a_mime.startswith("image/") or b_mime.startswith("image/"):
-                change.file_type = Diff.FileType("IMAGE")
-            else:
-                change.file_type = Diff.FileType("BINARY")
+            change.set_as_binary(
+                a_body=a_body,
+                a_mime=mimetypes.guess_type(a_path)[0] or "",
+                b_body=b_body,
+                b_mime=mimetypes.guess_type(b_path)[0] or "",
+            )
+
         else:
             # We can only diff changed blobs.
             if a_blob == b_blob:
                 # No changes in the file contents.
-                lines = a_body.splitlines(True)
-                lines = [" %s" % l for l in lines]
-                old_off = new_off = 1
-                old_len = new_len = len(lines)
+                lines = a_body.splitlines(keepends=True)
+                if lines:
+                    lines = [" %s" % line for line in lines]
+                    change.hunks.append(
+                        Diff.Hunk(
+                            old_off=1,
+                            old_len=len(lines),
+                            new_off=1,
+                            new_len=len(lines),
+                            lines=lines,
+                        )
+                    )
+
             elif a_blob is None:
                 # The file is created.
-                lines = b_body.splitlines(True)
-                lines = ["+%s" % l for l in lines]
-                new_len = len(lines)
-                if lines and not lines[-1].endswith("\n"):
-                    lines[-1] = "{}\n".format(lines[-1])
-                    lines.append("\\ No newline at end of file\n")
+                lines = b_body.splitlines(keepends=True)
+                if lines:
+                    new_len = len(lines)
+                    lines = ["+%s" % line for line in lines]
+                    if lines and not lines[-1].endswith("\n"):
+                        lines[-1] = "{}\n".format(lines[-1])
+                        lines.append("\\ No newline at end of file\n")
+                    change.hunks.append(
+                        Diff.Hunk(
+                            old_off=0,
+                            old_len=0,
+                            new_off=1,
+                            new_len=new_len,
+                            lines=lines,
+                        )
+                    )
 
-                old_off = 0
-                new_off = 1
-                old_len = 0
             elif b_blob is None:
                 # The file is removed.
-                lines = a_body.splitlines(True)
-                lines = ["-%s" % l for l in lines]
-                old_len = len(lines)
-                if lines and not lines[-1].endswith("\n"):
-                    lines[-1] = "{}\n".format(lines[-1])
-                    lines.append("\\ No newline at end of file\n")
+                lines = a_body.splitlines(keepends=True)
+                if lines:
+                    old_len = len(lines)
+                    lines = ["-%s" % line for line in lines]
+                    if lines and not lines[-1].endswith("\n"):
+                        lines[-1] = "{}\n".format(lines[-1])
+                        lines.append("\\ No newline at end of file\n")
+                    change.hunks.append(
+                        Diff.Hunk(
+                            old_off=1,
+                            old_len=old_len,
+                            new_off=0,
+                            new_len=0,
+                            lines=lines,
+                        )
+                    )
 
-                old_off = 1
-                new_off = 0
-                new_len = 0
             else:
                 # There are changes in the file.
                 if self.args.lesscontext or file_size > environment.MAX_CONTEXT_SIZE:
@@ -736,40 +756,8 @@ class Git(Repository):
                     a_blob,
                     b_blob,
                 ]
-                git_diff = self.git_out(diff_args, expect_binary=True)
-                git_diff = str(git_diff, "utf-8").splitlines(keepends=True)
-                lines = git_diff[4:]
-                old_off, new_off, old_len, new_len = Diff.parse_git_diff(lines.pop(0))
-
-            # Collect some stats about the diff, and generate the corpus we
-            # want to send to Phabricator.
-            if lines:
-                old_eof_newline = True
-                new_eof_newline = True
-                old_line = " "
-                corpus = "".join(lines)
-                for line in lines:
-                    if line.endswith("No newline at end of file\n"):
-                        if old_line[0] != "+":
-                            old_eof_newline = False
-                        if old_line[0] != "-":
-                            new_eof_newline = False
-                    old_line = line
-
-                change.hunks = [
-                    diff.Hunk(
-                        old_off=old_off,
-                        old_len=old_len,
-                        new_off=new_off,
-                        new_len=new_len,
-                        old_eof_newline=old_eof_newline,
-                        new_eof_newline=new_eof_newline,
-                        added=sum(1 for l in lines if l[0] == "+"),
-                        deleted=sum(1 for l in lines if l[0] == "-"),
-                        corpus=corpus,
-                    )
-                ]
-            change.file_type = diff.FileType("TEXT")
+                git_diff = self.git_out(diff_args, expect_binary=True).decode("utf-8")
+                change.from_git_diff(git_diff)
 
         diff.set_change_kind(change, kind_l[0], a_mode, b_mode, a_path, b_path)
 

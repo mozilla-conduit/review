@@ -5,9 +5,11 @@
 # coding=utf-8
 
 import mock
+import textwrap
+
+from .conftest import assert_attributes
 
 from mozphab import environment, mozphab
-
 from mozphab.diff import Diff
 
 mozphab.SHOW_SPINNER = False
@@ -32,21 +34,25 @@ def test_create(m_git_out, m_cat_file, m_file_size, git):
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
-    assert change.file_type.name == "TEXT"
     m_git_out.assert_not_called()
-    assert change.hunks[0] == diff.Hunk(
-        old_off=0,
-        old_len=0,
-        new_off=1,
-        new_len=1,
-        old_eof_newline=True,
-        new_eof_newline=True,
-        added=1,
-        deleted=0,
-        corpus="+a\n",
-    )
+    assert change.file_type.name == "TEXT"
     assert change.kind.name == "ADD"
     assert change.cur_mode == "100644"
+    assert len(change.hunks) == 1
+    assert_attributes(
+        change.hunks[0],
+        dict(
+            old_off=0,
+            old_len=0,
+            new_off=1,
+            new_len=1,
+            old_eof_newline=True,
+            new_eof_newline=True,
+            added=1,
+            deleted=0,
+            corpus="+a\n",
+        ),
+    )
 
 
 @mock.patch("mozphab.git.Git._file_size")
@@ -72,7 +78,6 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
-    assert change.file_type.name == "TEXT"
     m_git_out.assert_called_once_with(
         [
             "diff",
@@ -86,21 +91,26 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
         ],
         expect_binary=True,
     )
-    assert change.hunks[0] == diff.Hunk(
-        old_off=1,
-        old_len=1,
-        new_off=1,
-        new_len=2,
-        old_eof_newline=True,
-        new_eof_newline=True,
-        added=1,
-        deleted=0,
-        corpus=" a\n+b",
-    )
+    assert change.file_type.name == "TEXT"
     assert change.kind.name == "CHANGE"
     assert change.old_mode is None
     assert change.cur_mode is None
     assert change.old_path == "a"
+    assert len(change.hunks) == 1
+    assert_attributes(
+        change.hunks[0],
+        dict(
+            old_off=1,
+            old_len=1,
+            new_off=1,
+            new_len=2,
+            old_eof_newline=True,
+            new_eof_newline=True,
+            added=1,
+            deleted=0,
+            corpus=" a\n+b",
+        ),
+    )
 
 
 @mock.patch("mozphab.git.Git._file_size")
@@ -117,8 +127,8 @@ def test_create_empty(m_git_out, m_cat_file, m_file_size, git):
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
-    assert change.file_type.name == "TEXT"
     m_git_out.assert_not_called()
+    assert change.file_type.name == "TEXT"
     assert not change.hunks
     assert change.kind.name == "ADD"
     assert change.cur_mode == "100644"
@@ -138,18 +148,21 @@ def test_delete_file(m_git_out, m_cat_file, m_file_size, git):
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
-    assert change.file_type.name == "TEXT"
     m_git_out.assert_not_called()
-    assert change.hunks[0] == diff.Hunk(
-        old_off=1,
-        old_len=2,
-        new_off=0,
-        new_len=0,
-        old_eof_newline=True,
-        new_eof_newline=True,
-        added=0,
-        deleted=2,
-        corpus="-a\n-b\n",
+    assert change.file_type.name == "TEXT"
+    assert_attributes(
+        change.hunks[0],
+        dict(
+            old_off=1,
+            old_len=2,
+            new_off=0,
+            new_len=0,
+            old_eof_newline=True,
+            new_eof_newline=True,
+            added=0,
+            deleted=2,
+            corpus="-a\n-b\n",
+        ),
     )
 
 
@@ -168,8 +181,8 @@ def test_recognize_binary(m_git_out, m_cat_file, m_file_size, git):
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
-    assert change.file_type.name == "BINARY"
     m_git_out.assert_not_called()
+    assert change.file_type.name == "BINARY"
     assert change.uploads == [
         dict(type="old", value=b"", mime="application/octet-stream", phid=None),
         dict(type="new", value=content, mime="application/octet-stream", phid=None),
@@ -192,8 +205,8 @@ def test_recognize_long_text_as_binary(m_git_out, m_cat_file, m_file_size, git):
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
-    assert change.file_type.name == "BINARY"
     m_git_out.assert_not_called()
+    assert change.file_type.name == "BINARY"
     assert change.uploads == [
         dict(type="old", value=b"", mime="", phid=None),
         dict(type="new", value=content, mime="", phid=None),
@@ -257,3 +270,105 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
         ],
         expect_binary=True,
     )
+
+
+def test_multiple_hunks():
+    git_diff = textwrap.dedent(
+        """
+        diff --git a/fn b/fn
+        --- a/fn
+        +++ b/fn
+        @@ -4,3 +4,2 @@ c
+        d
+        -e
+        f
+        @@ -11,3 +10,2 @@ j
+        k
+        -l
+        m
+        @@ -25,2 +21,1 @@ x
+        y
+        -z
+        """
+    )
+
+    change = Diff.Change("x")
+    change.from_git_diff(git_diff)
+
+    assert len(change.hunks) == 3
+    assert_attributes(
+        change.hunks[0],
+        dict(
+            old_off=4,
+            old_len=3,
+            new_off=4,
+            new_len=2,
+            old_eof_newline=True,
+            new_eof_newline=True,
+            added=0,
+            deleted=1,
+            corpus="d\n-e\nf\n",
+        ),
+    )
+    assert_attributes(
+        change.hunks[1],
+        dict(
+            old_off=11,
+            old_len=3,
+            new_off=10,
+            new_len=2,
+            old_eof_newline=True,
+            new_eof_newline=True,
+            added=0,
+            deleted=1,
+            corpus="k\n-l\nm\n",
+        ),
+    )
+    assert_attributes(
+        change.hunks[2],
+        dict(
+            old_off=25,
+            old_len=2,
+            new_off=21,
+            new_len=1,
+            old_eof_newline=True,
+            new_eof_newline=True,
+            added=0,
+            deleted=1,
+            corpus="y\n-z\n",
+        ),
+    )
+
+
+def test_set_as_binary():
+    change = Diff.Change("x")
+    change.set_as_binary(
+        a_body=b"a",
+        a_mime="pdf/",
+        b_body=b"b",
+        b_mime="pdf/",
+    )
+    assert change.binary
+    assert change.uploads == [
+        {"type": "old", "value": b"a", "mime": "pdf/", "phid": None},
+        {"type": "new", "value": b"b", "mime": "pdf/", "phid": None},
+    ]
+    assert change.file_type.name == "BINARY"
+
+    change = Diff.Change("x")
+    change.set_as_binary(
+        a_body=b"a",
+        a_mime="image/jpeg",
+        b_body=b"b",
+        b_mime="pdf/",
+    )
+    assert change.file_type.name == "IMAGE"
+
+    change = Diff.Change("x")
+    change.set_as_binary(
+        a_body=b"a",
+        a_mime="image/jpeg",
+        b_body=b"b",
+        b_mime="pdf/",
+    )
+    assert change.file_type.name == "IMAGE"

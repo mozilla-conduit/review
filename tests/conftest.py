@@ -76,6 +76,15 @@ def search_rev(
     }
 
 
+def assert_attributes(hunk, expected):
+    for name, value in expected.items():
+        if hunk.__getattribute__(name) != value:
+            raise AssertionError(
+                "%s: expected '%s', got '%s'"
+                % (name, value, hunk.__getattribute__(name))
+            )
+
+
 @pytest.fixture
 def hg_sha():
     def ret():

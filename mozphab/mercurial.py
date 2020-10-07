@@ -199,8 +199,8 @@ class Mercurial(Repository):
         # be deleted in cleanup(). Mercurial will automatically move the
         # bookmark to the successors as we update commits.
         for active, bookmark in [
-            l.split(" ", 1)
-            for l in self.hg_out(["bookmark", "-T", "{active} {bookmark}\n"])
+            line.split(" ", 1)
+            for line in self.hg_out(["bookmark", "-T", "{active} {bookmark}\n"])
         ]:
             if active == "True":
                 self.previous_bookmark = bookmark
@@ -900,41 +900,70 @@ class Mercurial(Repository):
 
         return meta
 
-    def _change_add(self, change, fn, _, parent, node):
+    def _change_add(self, change, fn, _old_fn, _parent, node):
         """Create a change about adding a file to the commit."""
         meta = self._get_file_meta(fn, node)
         telemetry.metrics.mozphab.submission.files_size.accumulate(meta["file_size"])
+
         if meta["binary"]:
-            self._change_set_binary(change, "", meta["bin_body"], "", meta["mime"])
-        else:
-            lines = meta["body"].splitlines(keepends=True)
-            lines = ["+%s" % l for l in lines]
-
-            if lines and not lines[-1].endswith("\n"):
-                lines[-1] = "{}\n".format(lines[-1])
-                lines.append("\\ No newline at end of file\n")
-
-            self._change_create_hunk(
-                change, fn, lines, meta["file_size"], parent, node, 0, 1, 0, len(lines)
+            change.set_as_binary(
+                a_body="",
+                a_mime="",
+                b_body=meta["bin_body"],
+                b_mime=meta["mime"],
             )
+            return
 
-    def _change_del(self, change, fn, _, parent, node):
+        lines = meta["body"].splitlines(keepends=True)
+        lines = ["+%s" % line for line in lines]
+        new_len = len(lines)
+
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] = "{}\n".format(lines[-1])
+            lines.append("\\ No newline at end of file\n")
+
+        change.hunks.append(
+            Diff.Hunk(
+                old_off=0,
+                new_off=1,
+                old_len=0,
+                new_len=new_len,
+                lines=lines,
+            )
+        )
+
+    def _change_del(self, change, fn, _old_fn, parent, _node):
         """Create a change about deleting a file from the commit."""
         meta = self._get_file_meta(fn, parent)
         telemetry.metrics.mozphab.submission.files_size.accumulate(meta["file_size"])
+
         if meta["binary"]:
-            self._change_set_binary(change, meta["bin_body"], "", meta["mime"], "")
-        else:
-            lines = meta["body"].splitlines(keepends=True)
-            lines = ["-%s" % l for l in lines]
-
-            if lines and not lines[-1].endswith("\n"):
-                lines[-1] = "{}\n".format(lines[-1])
-                lines.append("\\ No newline at end of file\n")
-
-            self._change_create_hunk(
-                change, fn, lines, meta["file_size"], parent, node, 1, 0, len(lines), 0
+            change.set_as_binary(
+                a_body=meta["bin_body"],
+                a_mime=meta["mime"],
+                b_body="",
+                b_mime="",
             )
+            return
+
+        lines = meta["body"].splitlines(keepends=True)
+        lines = ["-%s" % line for line in lines]
+
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] = "{}\n".format(lines[-1])
+            lines.append("\\ No newline at end of file\n")
+
+        old_len = len(lines)
+
+        change.hunks.append(
+            Diff.Hunk(
+                old_off=1,
+                new_off=0,
+                old_len=old_len,
+                new_len=0,
+                lines=lines,
+            )
+        )
 
     def _change_mod(self, change, fn, old_fn, parent, node):
         """Create a change about modified file in the commit."""
@@ -942,121 +971,49 @@ class Mercurial(Repository):
         b_meta = self._get_file_meta(fn, node)
         file_size = max(a_meta["file_size"], b_meta["file_size"])
         telemetry.metrics.mozphab.submission.files_size.accumulate(file_size)
+
         if a_meta["binary"] or b_meta["binary"]:
-            self._change_set_binary(
-                change,
-                a_meta["bin_body"],
-                b_meta["bin_body"],
-                a_meta["mime"],
-                b_meta["mime"],
+            # Binary file.
+            change.set_as_binary(
+                a_body=a_meta["bin_body"],
+                a_mime=a_meta["mime"],
+                b_body=b_meta["bin_body"],
+                b_mime=b_meta["mime"],
             )
-        else:
-            if a_meta["body"] == b_meta["body"]:
-                lines = a_meta["body"].splitlines(True)
-                lines = [" %s" % l for l in lines]
-                old_off = new_off = 1
-                old_len = new_len = len(lines)
-            else:
-                if self.args.lesscontext or file_size > environment.MAX_CONTEXT_SIZE:
-                    context_size = 100
-                else:
-                    context_size = environment.MAX_CONTEXT_SIZE
-
-                # Monitoring if parsing the diff is not slowing down the submit process.
-                start = time.process_time()
-                git_diff = self.hg_out(
-                    ["diff", "--git", "-U%s" % context_size, "-r", parent, fn],
-                    expect_binary=True,
-                )
-                git_diff = str(git_diff, "utf-8").splitlines(keepends=True)
-                # Remove all info above the header
-                lines = []
-                found_hdr = False
-                for line in git_diff:
-                    if not found_hdr:
-                        found_hdr = line.startswith("@@")
-
-                    if found_hdr:
-                        lines.append(line)
-
-                if file_size > environment.MAX_CONTEXT_SIZE / 2:
-                    logger.debug(
-                        "Splitting the diff (size: %s) took %ss",
-                        file_size,
-                        time.process_time() - start,
-                    )
-
-                old_off, new_off, old_len, new_len = Diff.parse_git_diff(lines.pop(0))
-
-            self._change_create_hunk(
-                change,
-                fn,
-                lines,
-                file_size,
-                parent,
-                node,
-                old_off,
-                new_off,
-                old_len,
-                new_len,
-            )
-
-    def _change_set_binary(self, change, a_body, b_body, a_mime, b_mime):
-        """Sets `Change` object as binary."""
-        change.binary = True
-        change.uploads = [
-            {"type": "old", "value": a_body, "mime": a_mime, "phid": None},
-            {"type": "new", "value": b_body, "mime": b_mime, "phid": None},
-        ]
-        if a_mime.startswith("image/") or b_mime.startswith("image/"):
-            change.file_type = Diff.FileType("IMAGE")
-        else:
-            change.file_type = Diff.FileType("BINARY")
-
-    def _change_create_hunk(
-        self,
-        change,
-        fn,
-        lines,
-        file_size,
-        parent,
-        node,
-        old_off,
-        new_off,
-        old_len,
-        new_len,
-    ):
-        """Creates a hunk for the Change object.
-
-        Collects some stats about the diff, and generates the corpus we
-        want to send to the Phabricator.
-        """
-        change.file_type = Diff.FileType("TEXT")
-        if not lines:
             return
 
-        old_eof_newline = True
-        new_eof_newline = True
-        old_line = " "
-        corpus = "".join(lines)
-        for line in lines:
-            if line.endswith("No newline at end of file\n"):
-                if old_line[0] != "+":
-                    old_eof_newline = False
-                if old_line[0] != "-":
-                    new_eof_newline = False
-            old_line = line
-
-        change.hunks = [
-            Diff.Hunk(
-                old_off=old_off,
-                old_len=old_len,
-                new_off=new_off,
-                new_len=new_len,
-                old_eof_newline=old_eof_newline,
-                new_eof_newline=new_eof_newline,
-                added=sum(1 for l in lines if l[0] == "+"),
-                deleted=sum(1 for l in lines if l[0] == "-"),
-                corpus=corpus,
+        if a_meta["body"] == b_meta["body"]:
+            # File contents unchanged.
+            lines = a_meta["body"].splitlines(keepends=True)
+            lines = [" %s" % line for line in lines]
+            change.hunks.append(
+                Diff.Hunk(
+                    old_off=1,
+                    new_off=1,
+                    old_len=len(lines),
+                    new_len=len(lines),
+                    lines=lines,
+                )
             )
-        ]
+            return
+
+        if self.args.lesscontext or file_size > environment.MAX_CONTEXT_SIZE:
+            context_size = 100
+        else:
+            context_size = environment.MAX_CONTEXT_SIZE
+
+        start = time.process_time()
+
+        # Using binary here to ensure we avoid converting newlines
+        git_diff = self.hg_out(
+            ["diff", "--git", "--unified", str(context_size), "--rev", parent, fn],
+            expect_binary=True,
+        ).decode("utf-8")
+        change.from_git_diff(git_diff)
+
+        if file_size > environment.MAX_CONTEXT_SIZE / 2:
+            logger.debug(
+                "Splitting the diff (size: %s) took %ss",
+                file_size,
+                time.process_time() - start,
+            )
