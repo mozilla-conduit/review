@@ -12,9 +12,18 @@ from .logger import logger
 
 
 class Config(object):
-    def __init__(self, should_access_file=True):
-        self._filename = os.path.join(environment.HOME_DIR, ".moz-phab-config")
-        self.name = "~/.moz-phab-config"  # human-readable name
+    def __init__(self, should_access_file=True, filename=None):
+        """Sets default config and overrides it with values from the config file.
+
+        Kwargs:
+            should_access_file (bool) - should the file be read/write?
+            filename (string) - file to read/write the config - used only for testing.
+        """
+        self._filename = filename or os.path.join(
+            environment.HOME_DIR, ".moz-phab-config"
+        )
+        # human-readable name, will diverge from _filename if initialized with filename
+        self.name = "~/.moz-phab-config"
 
         # Default values.
         defaults = """

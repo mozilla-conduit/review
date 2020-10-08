@@ -9,6 +9,7 @@ import pytest
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 from glean import testing
@@ -21,6 +22,7 @@ from mozphab.mercurial import Mercurial
 from mozphab import (
     arcanist,
     conduit,
+    config as config_module,
     environment,
     mozphab,
     repository,
@@ -245,8 +247,18 @@ def safe_environ(monkeypatch):
 
 
 @pytest.fixture
-def in_process(monkeypatch, safe_environ, request):
+def config():
+    """Replace the original config with the fake one."""
+    with tempfile.NamedTemporaryFile() as temp:
+        return config_module.Config(filename=temp.name)
+
+
+@pytest.fixture
+def in_process(monkeypatch, safe_environ, request, config):
     """Set up an environment to run moz-phab within the current process."""
+    monkeypatch.setattr("mozphab.config.config", config)
+    monkeypatch.setattr("mozphab.git.config", config)
+    monkeypatch.setattr("mozphab.mercurial.config", config)
     # Make sure other tests didn't leak and mess up the module-level
     # global variables :/
     monkeypatch.setattr(environment, "DEBUG", True)

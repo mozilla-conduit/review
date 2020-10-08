@@ -10,6 +10,7 @@ from importlib import import_module
 
 from mozphab import commands
 
+from .config import config
 from .detect_repository import find_repo_root
 from .logger import logger
 
@@ -29,6 +30,15 @@ def parse_args(argv):
             will be executed.
 
             For more help on 'submit' and its options run 'moz-phab submit --help'.
+            """
+        ),
+        epilog=textwrap.dedent(
+            f"""\
+                configuration:
+                    {config.name}
+
+                documentation:
+                    https://github.com/mozilla-conduit/review/blob/master/README.md
             """
         ),
     )
