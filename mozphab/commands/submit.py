@@ -109,7 +109,12 @@ def amend_revision_url(body, new_url):
 
 
 def show_commit_stack(
-    commits, validate=True, ignore_reviewers=False, show_rev_urls=False
+    commits,
+    wip=None,
+    validate=True,
+    ignore_reviewers=False,
+    show_rev_urls=False,
+    show_updated_only=False,
 ):
     """Log the commit stack in a human readable form."""
 
@@ -124,13 +129,23 @@ def show_commit_stack(
         ids = [int(c["rev-id"]) for c in commits if c.get("rev-id")]
         if ids:
             with wait_message("Loading existing revisions..."):
-                conduit.get_revisions(ids=ids)
+                revisions = conduit.get_revisions(ids=ids)
+
+            # preload diffs
+            with wait_message("Loading diffs..."):
+                diffs = conduit.get_diffs([r["fields"]["diffPHID"] for r in revisions])
 
     for commit in reversed(commits):
+        if show_updated_only and not commit["submit"]:
+            continue
+
         closed = False
         change_bug_id = False
         is_author = True
         revision = None
+        wip_removed = False
+        wip_set = False
+        reviewers_added = False
 
         if commit.get("rev-id"):
             action = action_template % ("D" + commit["rev-id"])
@@ -155,48 +170,99 @@ def show_commit_stack(
                         revision["fields"]["authorPHID"] != whoami["phid"]
                     ):
                         is_author = False
+
+                    # Do we remove "Changes Planned" status?
+                    wip_removed = (
+                        not wip
+                        and revision["fields"]["status"]["value"] == "changes-planned"
+                    )
+
+                    # Do we set "Changes Planned" status?
+                    wip_set = (
+                        wip
+                        and revision["fields"]["status"]["value"] != "changes-planned"
+                    )
+
+                    # Any reviewers added to a revision without them?
+                    reviewers_added = bool(
+                        not revision["attachments"]["reviewers"]["reviewers"]
+                        and commit["reviewers"]["granted"]
+                    )
+
+                    # if SHA1 hasn't changed
+                    # and we're not changing the WIP status
+                    # and we're not adding reviewers to a revision without reviewers
+                    # and we're not changing the bug-id
+                    sha1_changed = (
+                        commit["node"]
+                        != diffs[revision["fields"]["diffPHID"]]["attachments"][
+                            "commits"
+                        ]["commits"][0]["identifier"]
+                    )
+                    if (
+                        not sha1_changed
+                        and not wip_removed
+                        and not wip_set
+                        and not reviewers_added
+                        and not change_bug_id
+                        and not closed
+                    ):
+                        commit["submit"] = False
+
         else:
             action = action_template % "New"
 
         logger.info("%s %s %s", action, commit["name"], commit["title-preview"])
         if validate:
-            if change_bug_id:
-                logger.warning(
-                    "!! Bug ID in Phabricator revision will be changed from %s to %s",
-                    revision["fields"]["bugzilla.bug-id"],
-                    commit["bug-id"],
+            if not commit["submit"]:
+                logger.info(
+                    " * This revision is not changed and will not be submitted."
                 )
 
-            if not is_author:
-                logger.warning(
-                    "!! You don't own this revision. Normally, you should only\n"
-                    '   update revisions you own. You can "Commandeer" this\n'
-                    "   revision from the web interface if you want to become\n"
-                    "   the owner."
-                )
+            else:
+                if wip_removed:
+                    logger.warning(
+                        '!! "Changes Planned" status will change to "Request Review"'
+                    )
 
-            if closed:
-                logger.warning(
-                    "!! This revision is closed!\n"
-                    "   It will be reopened if submission proceeds.\n"
-                    "   You can stop now and refine the stack range."
-                )
+                if change_bug_id:
+                    logger.warning(
+                        "!! Bug ID in Phabricator revision will change from %s to %s",
+                        revision["fields"]["bugzilla.bug-id"],
+                        commit["bug-id"],
+                    )
 
-            if not commit["bug-id"]:
-                logger.warning("!! Missing Bug ID")
+                if not is_author:
+                    logger.warning(
+                        "!! You don't own this revision. Normally, you should only\n"
+                        '   update revisions you own. You can "Commandeer" this\n'
+                        "   revision from the web interface if you want to become\n"
+                        "   the owner."
+                    )
 
-            if commit["bug-id-orig"] and commit["bug-id"] != commit["bug-id-orig"]:
-                logger.warning(
-                    "!! Bug ID changed from %s to %s",
-                    commit["bug-id-orig"],
-                    commit["bug-id"],
-                )
+                if closed:
+                    logger.warning(
+                        "!! This revision is closed!\n"
+                        "   It will be reopened if submission proceeds.\n"
+                        "   You can stop now and refine the stack range."
+                    )
 
-            if (
-                not ignore_reviewers
-                and not commit["reviewers"]["granted"] + commit["reviewers"]["request"]
-            ):
-                logger.warning("!! Missing reviewers")
+                if not commit["bug-id"]:
+                    logger.warning("!! Missing Bug ID")
+
+                if commit["bug-id-orig"] and commit["bug-id"] != commit["bug-id-orig"]:
+                    logger.warning(
+                        "!! Bug ID changed from %s to %s",
+                        commit["bug-id-orig"],
+                        commit["bug-id"],
+                    )
+
+                if (
+                    not ignore_reviewers
+                    and not commit["reviewers"]["granted"]
+                    + commit["reviewers"]["request"]
+                ):
+                    logger.warning("!! Missing reviewers")
 
         if show_rev_urls and commit["rev-id"]:
             logger.warning("-> %s/D%s", conduit.repo.phab_url, commit["rev-id"])
@@ -373,7 +439,7 @@ def submit(repo, args):
         update_commits_from_args(commits, args)
 
     # Validate commit stack is suitable for review.
-    show_commit_stack(commits, validate=True, ignore_reviewers=args.wip)
+    show_commit_stack(commits, wip=args.wip, validate=True, ignore_reviewers=args.wip)
     try:
         with wait_message("Checking commits.."):
             repo.check_commits_for_submit(
@@ -445,6 +511,10 @@ def submit(repo, args):
 
         check_in_needed = args.check_in_needed and commit["orig-node"] == last_node
         # Only revisions being updated have an ID.  Newly created ones don't.
+        if not commit["submit"]:
+            previous_commit = commit
+            continue
+
         is_update = bool(commit["rev-id"])
         revision_to_update = (
             revisions_to_update[commit["rev-id"]] if is_update else None
@@ -612,7 +682,9 @@ def submit(repo, args):
         repo.refresh_commit_stack(commits)
 
     logger.warning("\nCompleted")
-    show_commit_stack(commits, validate=False, show_rev_urls=True)
+    show_commit_stack(
+        commits, validate=False, show_rev_urls=True, show_updated_only=True
+    )
     telemetry.metrics.mozphab.submission.process_time.stop()
 
 

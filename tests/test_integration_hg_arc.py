@@ -4,7 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import mock
 
-from .conftest import hg_out
+from .conftest import hg_out, search_diff, search_rev
 
 from mozphab import mozphab
 
@@ -79,37 +79,11 @@ def test_submit_update(in_process, hg_repo_path):
     call_conduit.side_effect = (
         {},
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
-        {
-            "data": [
-                {
-                    "id": 123,
-                    "phid": "PHID-REV-1",
-                    "fields": {
-                        "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review", "closed": False},
-                        "authorPHID": "PHID-USER-1",
-                    },
-                    "attachments": {"reviewers": {"reviewers": []}},
-                }
-            ]
-        },  # get reviewers for updated revision
+        dict(data=[search_rev(rev=123)]),
+        dict(data=[search_diff()]),
+        # get reviewers for updated revision
         dict(phid="PHID-USER-1"),
-        {
-            "data": [
-                {
-                    "id": "123",
-                    "phid": "PHID-REV-1",
-                    "fields": {
-                        "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review", "closed": False},
-                        "authorPHID": "PHID-USER-1",
-                    },
-                    "attachments": {
-                        "reviewers": {"reviewers": [{"reviewerPHID": "PHID-USER-1"}]}
-                    },
-                }
-            ]
-        },  # get reviewers for updated revision
+        dict(data=[search_rev(rev=123, reviewers=["PHID-USER-1"])]),
     )
     check_call_by_line.reset_mock()
     testfile = hg_repo_path / "X"
@@ -137,7 +111,7 @@ Bug 1 - A
 Differential Revision: http://example.test/D123
 """
     assert log == expected
-    assert call_conduit.call_count == 4
+    assert call_conduit.call_count == 5
     arc_call_conduit.assert_called_once_with("conduit.ping", {}, mock.ANY)
     check_call_by_line.assert_called_once()  # update
 
@@ -147,22 +121,8 @@ def test_submit_update_reviewers_not_updated(in_process, hg_repo_path):
     call_conduit.side_effect = (
         {},
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
-        {
-            "data": [
-                {
-                    "id": 123,
-                    "phid": "PHID-REV-1",
-                    "fields": {
-                        "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review", "closed": False},
-                        "authorPHID": "PHID-USER-1",
-                    },
-                    "attachments": {
-                        "reviewers": {"reviewers": [{"reviewerPHID": "PHID-USER-1"}]}
-                    },
-                }
-            ]
-        },  # get reviewers for updated revision
+        dict(data=[search_rev(rev=123, reviewers=["PHID-USER-1"])]),
+        dict(data=[search_diff()]),
         dict(phid="PHID-USER-1"),
         [{"userName": "alice", "phid": "PHID-USER-1"}],
     )
@@ -198,20 +158,8 @@ def test_submit_update_no_new_reviewers(in_process, hg_repo_path):
     call_conduit.side_effect = (
         {},
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
-        {
-            "data": [
-                {
-                    "id": 123,
-                    "phid": "PHID-REV-1",
-                    "fields": {
-                        "bugzilla.bug-id": "1",
-                        "status": {"value": "changes-planned", "closed": False},
-                        "authorPHID": "PHID-USER-1",
-                    },
-                    "attachments": {"reviewers": {"reviewers": []}},
-                }
-            ]
-        },  # get reviewers for updated revision
+        dict(data=[search_rev(rev=123, status="changes-planned")]),
+        dict(data=[search_diff()]),
         dict(phid="PHID-USER-1"),
         [{"userName": "alice", "phid": "PHID-USER-1"}],
     )
@@ -260,22 +208,8 @@ def test_submit_update_bug_id(in_process, hg_repo_path):
     call_conduit.side_effect = (
         {},
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
-        {
-            "data": [
-                {
-                    "id": 123,
-                    "phid": "PHID-REV-1",
-                    "fields": {
-                        "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review", "closed": False},
-                        "authorPHID": "PHID-USER-1",
-                    },
-                    "attachments": {
-                        "reviewers": {"reviewers": [{"reviewerPHID": "PHID-USER-1"}]}
-                    },
-                }
-            ]
-        },  # get reviewers for updated revision
+        dict(data=[search_rev(rev=123, reviewers=["PHID-USER-1"])]),
+        dict(data=[search_diff()]),
         dict(phid="PHID-USER-1"),
         [{"userName": "alice", "phid": "PHID-USER-1"}],
     )
@@ -313,4 +247,4 @@ Differential Revision: http://example.test/D123
         },
         mock.ANY,
     )
-    assert call_conduit.call_count == 5
+    assert call_conduit.call_count == 6

@@ -7,7 +7,7 @@ import mock
 import pytest
 
 from callee import Contains
-from .conftest import git_out
+from .conftest import git_out, search_diff, search_rev
 
 from mozphab import environment, exceptions, mozphab
 
@@ -446,20 +446,10 @@ def test_submit_update(in_process, git_repo_path, init_sha):
         dict(),
         # diffusion.repository.search
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
-        dict(
-            data=[
-                {
-                    "fields": {
-                        "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review", "closed": False},
-                        "authorPHID": "PHID-USER-1",
-                    },
-                    "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
-                    "id": 123,
-                    "attachments": {"reviewers": {"reviewers": []}},
-                }
-            ]
-        ),
+        # diffusion.revision.search
+        dict(data=[search_rev(rev=123)]),
+        # diffusion.diff.search
+        dict(data=[search_diff()]),
         # whoami
         dict(phid="PHID-USER-1"),
         # differential.creatediff
@@ -491,6 +481,7 @@ Differential Revision: http://example.test/D123
         is_development=True,
     )
 
+    assert call_conduit.call_count == 8
     log = git_out("log", "--format=%s%n%n%b", "-1")
     expected = """\
 Bug 1 - Ą
@@ -499,6 +490,41 @@ Differential Revision: http://example.test/D123
 
 """
     assert log == expected
+
+
+def test_submit_update_no_change(in_process, git_repo_path, init_sha, git_sha):
+    testfile = git_repo_path / "X"
+    testfile.write_text("a")
+    git_out("add", ".")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text(
+        """\
+Bug 1 - A
+
+Differential Revision: http://example.test/D123
+"""
+    )
+    git_out("commit", "--file", "msg")
+    sha = git_sha()
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # diffusion.revision.search
+        dict(data=[search_rev(rev=123)]),
+        # diffusion.diff.search
+        dict(data=[search_diff(node=sha)]),
+        # whoami
+        dict(phid="PHID-USER-1"),
+    )
+
+    mozphab.main(
+        ["submit", "--yes"] + [init_sha],
+        is_development=True,
+    )
+    assert call_conduit.call_count == 5
 
 
 def test_submit_remove_cr(in_process, git_repo_path, init_sha):
@@ -677,20 +703,8 @@ def test_submit_update_no_message(in_process, git_repo_path, init_sha):
         dict(),
         # diffusion.repository.search
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
-        dict(
-            data=[
-                {
-                    "fields": {
-                        "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review", "closed": False},
-                        "authorPHID": "PHID-USER-1",
-                    },
-                    "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
-                    "id": 123,
-                    "attachments": {"reviewers": {"reviewers": []}},
-                }
-            ]
-        ),
+        dict(data=[search_rev(rev=123)]),
+        dict(data=[search_diff()]),
         dict(phid="PHID-USER-1"),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
@@ -800,20 +814,8 @@ def test_submit_update_arc(in_process, git_repo_path, init_sha):
     call_conduit.side_effect = (
         {},  # ping
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
-        {  # differential.revision.search
-            "data": [
-                {
-                    "fields": {
-                        "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review", "closed": False},
-                        "authorPHID": "PHID-USER-1",
-                    },
-                    "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
-                    "id": 123,
-                    "attachments": {"reviewers": {"reviewers": []}},
-                }
-            ]
-        },
+        dict(data=[search_rev(rev=123)]),
+        dict(data=[search_diff()]),
         dict(phid="PHID-USER-1"),
     )
     testfile = git_repo_path / "X"
@@ -855,20 +857,9 @@ def test_submit_update_bug_id_arc(in_process, git_repo_path, init_sha):
     call_conduit.side_effect = (
         dict(),
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
-        {
-            "data": [
-                {
-                    "id": 123,
-                    "phid": "PHID-REV-1",
-                    "fields": {
-                        "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review", "closed": False},
-                        "authorPHID": "PHID-USER-1",
-                    },
-                    "attachments": {"reviewers": {"reviewers": []}},
-                }
-            ]
-        },  # get reviewers for updated revision
+        dict(data=[search_rev(rev=123)]),
+        dict(data=[search_diff()]),
+        # get reviewers for updated revision
         dict(phid="PHID-USER-1"),
     )
     arc_call_conduit.reset_mock()
@@ -913,21 +904,12 @@ def test_submit_update_revision_not_found(in_process, git_repo_path, init_sha):
         dict(),
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # response for searching D123 and D124
-        dict(
-            data=[
-                {
-                    "fields": {
-                        "bugzilla.bug-id": "1",
-                        "status": {"value": "needs-review", "closed": False},
-                    },
-                    "phid": "PHID-DREV-y7x5hvdpe2gyerctdqqz",
-                    "id": 123,
-                    "attachments": {"reviewers": {"reviewers": []}},
-                }
-            ]
-        ),
+        dict(data=[search_rev(rev=123)]),
+        dict(data=[search_diff()]),
         # moz-phab asks again for D124
         dict(data=[]),
+        # whoami
+        dict(phid="PHID-USER-1"),
         # moz-phab asks again for D124
         dict(data=[]),
         # moz-phab asks again for D124

@@ -370,6 +370,7 @@ class Mercurial(Repository):
                 {
                     "name": "%s:%s" % (rev, short_node(node)),
                     "node": node,
+                    "submit": True,
                     "public-node": node,
                     "orig-node": node,
                     "title": desc[0],

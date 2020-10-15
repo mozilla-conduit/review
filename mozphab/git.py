@@ -395,6 +395,7 @@ class Git(Repository):
                     "name": short_node(node),
                     "node": node,
                     "orig-node": node,
+                    "submit": True,
                     "title": desc[0],
                     "title-preview": desc[0],
                     "body": "\n".join(desc[1:]).rstrip(),

@@ -9,6 +9,8 @@ from callee import Contains
 from mozphab.commands import submit
 from mozphab import environment, exceptions, helpers, mozphab, repository
 
+from .conftest import search_diff, search_rev
+
 mozphab.SHOW_SPINNER = False
 
 
@@ -28,6 +30,7 @@ def commit(bug_id=None, reviewers=None, body="", name="", title="", rev_id=None)
         "body": body,
         "rev-id": rev_id,
         "node": uuid.uuid4().hex,
+        "submit": True,
     }
 
 
@@ -489,23 +492,48 @@ class Commits(unittest.TestCase):
         # r?one,two
         self.assertEqual("r?one", replace("r?one,two", reviewers_dict([["one"], []])))
 
-    @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
-    @mock.patch("mozphab.conduit.ConduitAPI.whoami")
+    @mock.patch("mozphab.commands.submit.conduit.get_revisions")
+    @mock.patch("mozphab.commands.submit.conduit.get_diffs")
+    @mock.patch("mozphab.commands.submit.conduit.whoami")
     @mock.patch("mozphab.commands.submit.logger")
-    def test_show_commit_stack(self, mock_logger, m_whoami, m_get_revisions):
+    def test_show_commit_stack(
+        self, mock_logger, m_whoami, m_get_diffs, m_get_revisions
+    ):
         class Repository:
             phab_url = "http://phab"
             path = "x"
             api_url = "x"
             dot_path = "x"
 
+        def _commit(
+            name="aaa000",
+            node="aaa000aaa000",
+            title="A",
+            rev=None,
+            bug="1",
+            bug_orig="1",
+            granted=None,
+            request=None,
+        ):
+            granted = granted or []
+            request = request or []
+            return {
+                "name": name,
+                "node": node,
+                "submit": True,
+                "title-preview": title,
+                "rev-id": rev,
+                "bug-id-orig": bug_orig,
+                "bug-id": bug,
+                "reviewers": {"granted": granted, "request": request},
+            }
+
         repo = Repository()
-        mozphab.conduit.set_repo(repo)
+        submit.conduit.set_repo(repo)
 
         m_whoami.return_value = dict(phid="PHID-USER-1")
-        m_get_revisions.return_value = [
-            {"fields": {"bugzilla.bug-id": "1", "authorPHID": "PHID-USER-1"}}
-        ]
+        m_get_revisions.return_value = [search_rev()]
+        m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
 
         submit.show_commit_stack([])
         self.assertFalse(mock_logger.info.called, "logger.info() shouldn't be called")
@@ -522,10 +550,7 @@ class Commits(unittest.TestCase):
         )
         mock_logger.reset_mock()
 
-        submit.show_commit_stack(
-            [{"name": "aaa000", "title-preview": "A", "rev-id": "12", "bug-id": "1"}],
-            validate=False,
-        )
+        submit.show_commit_stack([_commit(rev="12")], validate=False)
         mock_logger.info.assert_called_with("%s %s %s", "(D12)", "aaa000", "A")
         self.assertFalse(
             mock_logger.warning.called, "logger.warning() shouldn't be called"
@@ -533,10 +558,7 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
 
         submit.show_commit_stack(
-            [
-                {"name": "aaa000", "title-preview": "A"},
-                {"name": "bbb000", "title-preview": "B"},
-            ],
+            [_commit(), _commit(name="bbb000", title="B")],
             validate=False,
         )
         self.assertEqual(2, mock_logger.info.call_count)
@@ -550,107 +572,84 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
 
         submit.show_commit_stack(
-            [
-                {
-                    "name": "aaa000",
-                    "title-preview": "A",
-                    "bug-id-orig": 2,
-                    "bug-id": 1,
-                    "reviewers": {"granted": [], "request": ["one"]},
-                }
-            ],
-            validate=True,
+            [_commit(bug_orig="2", bug="1", granted=["alice"])], validate=True
         )
         mock_logger.info.assert_called_with("%s %s %s", "(New)", "aaa000", "A")
-        mock_logger.warning.assert_called_with("!! Bug ID changed from %s to %s", 2, 1)
+        mock_logger.warning.assert_called_with(
+            "!! Bug ID changed from %s to %s", "2", "1"
+        )
         mock_logger.reset_mock()
 
-        submit.show_commit_stack(
-            [
-                {
-                    "name": "aaa000",
-                    "title-preview": "A",
-                    "bug-id": 1,
-                    "bug-id-orig": None,
-                    "reviewers": {"granted": [], "request": []},
-                }
-            ],
-            validate=True,
-        )
+        submit.show_commit_stack([_commit()], validate=True)
         mock_logger.warning.assert_called_with("!! Missing reviewers")
         mock_logger.reset_mock()
 
         submit.show_commit_stack(
-            [{"name": "aaa000", "title-preview": "A", "rev-id": "123", "bug-id": "1"}],
+            [_commit(rev="123")],
             validate=False,
             show_rev_urls=True,
         )
         mock_logger.warning.assert_called_with("-> %s/D%s", "http://phab", "123")
 
+        # Do not update not changed commits
         m_get_revisions.reset_mock()
         m_get_revisions.return_value = [
-            {
-                "id": "1",
-                "phid": "PHID-1",
-                "fields": {
-                    "bugzilla.bug-id": "1",
-                    "authorPHID": "PHID-USER-1",
-                    "status": {"closed": False},
-                },
-            },
-            {
-                "id": "2",
-                "phid": "PHID-2",
-                "fields": {
-                    "bugzilla.bug-id": "1",
-                    "authorPHID": "PHID-USER-1",
-                    "status": {"closed": False},
-                },
-            },
+            search_rev(),
+            search_rev(rev="2", phid="PHID-REV-2", diff="PHID-DIFF-2"),
         ]
         # we're changing bug id in the first revision to 2
         submit.show_commit_stack(
             [
-                {
-                    "name": "aaa000",
-                    "title-preview": "A",
-                    "bug-id-orig": 1,
-                    "bug-id": "2",
-                    "rev-id": "1",
-                    "reviewers": {"granted": [], "request": [""]},
-                },
-                {
-                    "name": "bbb000",
-                    "title-preview": "B",
-                    "bug-id-orig": "1",
-                    "bug-id": "1",
-                    "rev-id": "2",
-                    "reviewers": {"granted": [], "request": [""]},
-                },
+                _commit(rev="1", bug="2", bug_orig="1", granted=["alice"]),
+                _commit(
+                    name="bbb000",
+                    node="bbb000bbb000",
+                    title="B",
+                    rev="2",
+                    granted=["alice"],
+                ),
             ],
             validate=True,
         )
         assert mock_logger.warning.call_args_list[1] == mock.call(
-            "!! Bug ID in Phabricator revision will be changed from %s to %s", "1", "2"
+            "!! Bug ID in Phabricator revision will change from %s to %s", "1", "2"
         )
         assert m_get_revisions.call_count == 3
         mock_logger.reset_mock()
 
         m_whoami.return_value = dict(phid="PHID-USER-2")
         submit.show_commit_stack(
-            [
-                {
-                    "name": "aaa000",
-                    "title-preview": "A",
-                    "rev-id": "12",
-                    "bug-id-orig": "1",
-                    "bug-id": "1",
-                    "reviewers": {"granted": ["alice"], "request": []},
-                }
-            ],
+            [_commit(rev="1", granted=["alice"])],
             validate=True,
         )
         mock_logger.warning.assert_called_once_with(Contains("Commandeer"))
+
+        # Information about not updating the commit if not changed
+        mock_logger.reset_mock()
+        m_whoami.return_value = dict(phid="PHID-USER-1")
+        m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
+        m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
+
+        submit.show_commit_stack([_commit(rev="1", granted=["alice"])], validate=True)
+        assert mock_logger.info.call_args_list[1] == mock.call(
+            Contains("revision is not changed")
+        )
+
+        # Removing the WIP state from the revision without changing the commit's SHA1
+        mock_logger.reset_mock()
+        m_get_revisions.return_value = [search_rev(status="changes-planned")]
+        submit.show_commit_stack([_commit(rev="1", granted=["alice"])], validate=True)
+        mock_logger.warning.assert_called_once_with(
+            Contains('"Changes Planned" status will change')
+        )
+
+        # Adding the WIP state to the revision without changing the commit's SHA1
+        mock_logger.reset_mock()
+        m_get_revisions.return_value = [search_rev()]
+        submit.show_commit_stack(
+            [_commit(rev="1", granted=["alice"])], wip=True, validate=True
+        )
+        mock_logger.warning.assert_not_called()
 
     @mock.patch("mozphab.commands.submit.update_commit_title_previews")
     def test_update_commits_from_args(self, m_update_title):
@@ -668,7 +667,11 @@ class Commits(unittest.TestCase):
 
         _commits = [
             {"title": "A", "reviewers": dict(granted=[], request=[]), "bug-id": None},
-            {"title": "B", "reviewers": dict(granted=[], request=["one"]), "bug-id": 1},
+            {
+                "title": "B",
+                "reviewers": dict(granted=[], request=["one"]),
+                "bug-id": "1",
+            },
         ]
 
         # No change if noreviewer  args provided
@@ -688,21 +691,21 @@ class Commits(unittest.TestCase):
                     {
                         "title": "B",
                         "reviewers": dict(granted=["two"], request=["one"]),
-                        "bug-id": 1,
+                        "bug-id": "1",
                     },
                 ],
             )
 
         # Adding and removing reviewers, forcing the bug ID
         commits = copy.deepcopy(_commits)
-        update(commits, Args(reviewer=["two", "three"], bug=2))
+        update(commits, Args(reviewer=["two", "three"], bug="2"))
         assert commits[0]["title"] == "A"
-        assert commits[0]["bug-id"] == 2
+        assert commits[0]["bug-id"] == "2"
         assert "two" in commits[0]["reviewers"]["granted"]
         assert "three" in commits[0]["reviewers"]["granted"]
 
         assert commits[1]["title"] == "B"
-        assert commits[1]["bug-id"] == 2
+        assert commits[1]["bug-id"] == "2"
         assert "two" in commits[1]["reviewers"]["granted"]
         assert "three" in commits[1]["reviewers"]["granted"]
 
@@ -721,7 +724,7 @@ class Commits(unittest.TestCase):
         assert "three!" in lwr(commits[0]["reviewers"]["granted"])
 
         assert commits[1]["title"] == "B"
-        assert commits[1]["bug-id"] == 1
+        assert commits[1]["bug-id"] == "1"
         assert "two!" in lwr(commits[1]["reviewers"]["granted"])
         assert "three!" in lwr(commits[1]["reviewers"]["granted"])
 
@@ -741,7 +744,7 @@ class Commits(unittest.TestCase):
         assert "four!" in lwr(commits[0]["reviewers"]["granted"])
 
         assert commits[1]["title"] == "B"
-        assert commits[1]["bug-id"] == 1
+        assert commits[1]["bug-id"] == "1"
         assert "four!" in commits[1]["reviewers"]["granted"]
         assert "two!" in commits[1]["reviewers"]["granted"]
         assert "one" in commits[1]["reviewers"]["request"]
@@ -764,7 +767,7 @@ class Commits(unittest.TestCase):
                     {
                         "title": "B",
                         "reviewers": dict(granted=["two!"], request=["one!"]),
-                        "bug-id": 1,
+                        "bug-id": "1",
                     },
                 ],
             )

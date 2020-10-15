@@ -42,6 +42,40 @@ def create_temp_fn(*filenames):
     return m_temp_fn
 
 
+def search_diff(diff=1, phid="PHID-DIFF-1", node="aaa000aaa000"):
+    return {
+        "id": diff,
+        "phid": phid,
+        "attachments": {"commits": {"commits": [{"identifier": node}]}},
+    }
+
+
+def search_rev(
+    rev=1,
+    phid="PHID-DREV-1",
+    bug="1",
+    status="needs-review",
+    closed=False,
+    author="PHID-USER-1",
+    diff="PHID-DIFF-1",
+    reviewers=None,
+):
+    reviewers = reviewers or []
+    return {
+        "id": rev,
+        "phid": phid,
+        "fields": {
+            "bugzilla.bug-id": bug,
+            "status": {"value": status, "closed": closed},
+            "authorPHID": author,
+            "diffPHID": diff,
+        },
+        "attachments": {
+            "reviewers": {"reviewers": [{"reviewerPHID": r} for r in reviewers]}
+        },
+    }
+
+
 @pytest.fixture
 def hg_sha():
     def ret():
