@@ -67,10 +67,10 @@ def test_submit_create(in_process, git_repo_path, init_sha):
         [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     (git_repo_path / "X").write_text(u"ą\nb\nc\n", encoding="utf-8")
     (git_repo_path / "Y").write_text("no line ending")
@@ -190,10 +190,10 @@ def test_submit_create_added_not_commited(in_process, git_repo_path, init_sha):
         [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     (git_repo_path / "X").write_text("ą\r\nb\nc\n", encoding="utf-8")
     (git_repo_path / "Y").write_text("no line ending")
@@ -220,10 +220,10 @@ def test_submit_create_no_bug(in_process, git_repo_path, init_sha):
         [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     testfile = git_repo_path / "X"
     testfile.write_text("a\n")
@@ -278,10 +278,10 @@ def test_submit_create_binary(in_process, git_repo_path, init_sha, data_file):
         dict(),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     shutil.copyfile(str(data_file), str(git_repo_path / "img.png"))
     git_out("add", ".")
@@ -321,10 +321,10 @@ def test_submit_create_binary_existing(in_process, git_repo_path, init_sha, data
         # no file.upload call
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     shutil.copyfile(str(data_file), str(git_repo_path / "img.png"))
     git_out("add", ".")
@@ -372,10 +372,10 @@ def test_submit_create_binary_chunked(in_process, git_repo_path, init_sha, data_
         dict(),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     shutil.copyfile(str(data_file), str(git_repo_path / "img.png"))
     git_out("add", ".")
@@ -464,10 +464,10 @@ def test_submit_update(in_process, git_repo_path, init_sha):
         dict(phid="PHID-USER-1"),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     testfile = git_repo_path / "X"
     testfile.write_text("ą", encoding="utf-8")
@@ -511,18 +511,18 @@ def test_submit_remove_cr(in_process, git_repo_path, init_sha):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         [dict(userName="alice", phid="PHID-USER-1")],
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        dict(),
         dict(object=dict(id="123")),
+        dict(),
         # UPDATE
         # no need to ping (checked)
         # no need to check reviewer
         # no need to search for repository repository data is saved in .hg
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-2", diffid="2")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="124")),
+        # differential.setdiffproperty
+        dict(),
     )
     test_a = git_repo_path / "X"
     test_a.write_text("a\r\nb\n")
@@ -609,10 +609,10 @@ def test_submit_single_last(in_process, git_repo_path, init_sha):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     (git_repo_path / "X").write_text("a\n")
     git_out("add", "X")
@@ -642,10 +642,10 @@ def test_submit_single_first(in_process, git_repo_path, init_sha, git_sha):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     (git_repo_path / "X").write_text("a\n")
     git_out("add", "X")
@@ -694,10 +694,10 @@ def test_submit_update_no_message(in_process, git_repo_path, init_sha):
         dict(phid="PHID-USER-1"),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     (git_repo_path / "X").write_text(u"ą", encoding="utf-8")
     git_out("add", ".")
@@ -976,10 +976,10 @@ def test_empty_file(in_process, git_repo_path, init_sha):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     testfile = git_repo_path / "X"
     testfile.touch()
@@ -1001,10 +1001,10 @@ Differential Revision: http://example.test/D123
     call_conduit.side_effect = (
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-2", diffid="2")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="124")),
+        # differential.setdiffproperty
+        dict(),
     )
     testfile.unlink()
     git_out("commit", "-a", "--message", "B")

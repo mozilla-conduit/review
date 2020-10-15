@@ -441,6 +441,8 @@ def submit(repo, args):
 
     last_node = commits[-1]["orig-node"]
     for commit in commits:
+        diff = None
+
         check_in_needed = args.check_in_needed and commit["orig-node"] == last_node
         # Only revisions being updated have an ID.  Newly created ones don't.
         is_update = bool(commit["rev-id"])
@@ -498,9 +500,7 @@ def submit(repo, args):
                     diff.upload_files()
 
                 with wait_message("Submitting the diff..."):
-                    diff_phid = diff.submit(commit, message)
-            else:
-                diff_phid = None
+                    diff.submit(commit)
 
             if is_update:
                 with wait_message("Updating revision..."):
@@ -508,7 +508,7 @@ def submit(repo, args):
                         commit,
                         has_commit_reviewers,
                         existing_reviewers,
-                        diff_phid=diff_phid,
+                        diff_phid=diff.phid,
                         wip=args.wip,
                         comment=args.message,
                         check_in_needed=check_in_needed,
@@ -519,7 +519,7 @@ def submit(repo, args):
                         commit,
                         commit["title-preview"],
                         summary,
-                        diff_phid,
+                        diff.phid,
                         has_commit_reviewers,
                         wip=args.wip,
                         check_in_needed=check_in_needed,
@@ -595,6 +595,11 @@ def submit(repo, args):
             commit["rev-id"] = parse_arc_diff_rev(commit["body"])
             with wait_message("Updating commit.."):
                 repo.amend_commit(commit, commits)
+
+        # Diff property has to be set after potential SHA1 change.
+        if args.no_arc and diff:
+            with wait_message("Setting diff metadata..."):
+                diff.set_property(commit, message)
 
         previous_commit = commit
 

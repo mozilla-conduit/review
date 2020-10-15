@@ -139,9 +139,9 @@ class Diff:
             self.name = name
 
     def __init__(self):
-        # self.commit = commit
         self.changes = {}
         self.phid = None
+        self.id = None
 
     def change_for(self, path):
         if path not in self.changes:
@@ -206,7 +206,7 @@ class Diff:
                 path = change.cur_path if upload["type"] == "new" else change.old_path
                 upload["phid"] = conduit.file_upload(path, upload["value"])
 
-    def submit(self, commit, message):
+    def submit(self, commit):
         files_changed = sorted(
             self.changes.values(), key=operator.attrgetter("cur_path")
         )
@@ -218,11 +218,13 @@ class Diff:
             changes, conduit.repo.get_public_node(commit["parent"])
         )
 
-        # Add information about our local commit to the patch. This info is
-        # needed by Lando.
-        conduit.set_diff_property(diff["diffid"], commit, message)
-
+        self.phid = diff["phid"]
+        self.id = diff["diffid"]
         return diff["phid"]
+
+    def set_property(self, commit, message):
+        """Add information about our local commit to the patch."""
+        conduit.set_diff_property(self.id, commit, message)
 
     @staticmethod
     def parse_git_diff(hdr):

@@ -31,10 +31,10 @@ def test_submit_create(in_process, hg_repo_path):
         [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     write_text(hg_repo_path / "A to rename", "rename me\nsecond line\n")
     write_text(hg_repo_path / "B to remove", "remove me\n")
@@ -255,10 +255,10 @@ def test_submit_create_no_trailing_newline(in_process, hg_repo_path):
         [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     write_text(hg_repo_path / "A to rename", "rename me\nsecond line")
     write_text(hg_repo_path / "B to remove", "remove me")
@@ -484,10 +484,10 @@ def test_submit_create_no_bug(in_process, hg_repo_path):
         [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     write_text(hg_repo_path / "x", "a")
     hg_out("add")
@@ -516,10 +516,10 @@ def test_submit_create_binary(in_process, hg_repo_path, data_file):
         dict(),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     shutil.copyfile(str(data_file), str(hg_repo_path / "img.png"))
     hg_out("add")
@@ -559,10 +559,10 @@ def test_submit_create_binary_existing(in_process, hg_repo_path, data_file):
         # no file.upload call
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     shutil.copyfile(str(data_file), str(hg_repo_path / "img.png"))
     hg_out("add")
@@ -610,10 +610,10 @@ def test_submit_create_binary_chunked(in_process, hg_repo_path, data_file):
         dict(),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     shutil.copyfile(str(data_file), str(hg_repo_path / "img.png"))
     hg_out("add")
@@ -687,18 +687,18 @@ def test_submit_remove_cr(in_process, hg_repo_path):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
         [dict(userName="alice", phid="PHID-USER-1")],
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        dict(),
         dict(object=dict(id="123")),
+        dict(),
         # UPDATE
         # no need to ping (checked)
         # no need to check reviewer
         # no need to search for repository repository data is saved in .hg
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-2", diffid="2")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="124")),
+        # differential.setdiffproperty
+        dict(),
     )
     (hg_repo_path / "X").write_text("a\r\nb\n")
     hg_out("add")
@@ -784,10 +784,10 @@ def test_submit_single_first(in_process, hg_repo_path, hg_sha):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     write_text(hg_repo_path / "X", "a\n")
     hg_out("add", "X")
@@ -820,10 +820,10 @@ def test_submit_single_last(in_process, hg_repo_path):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     write_text(hg_repo_path / "X", "a\n")
     hg_out("add", "X")
@@ -853,10 +853,10 @@ def test_multiple_copy(in_process, hg_repo_path):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
-        # differential.setdiffproperty
-        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
     )
     write_text(hg_repo_path / "X", "a\n")
     hg_out("add", "X")
