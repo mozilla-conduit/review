@@ -266,6 +266,20 @@ using the default settings.
 3. To run moz-phab after making modifications use `venv\Scripts\moz-phab-dev`
 4. To run tests use `venv\Scripts\pytest -vv`
 
+### Circle CI
+
+`mozphab` uses Circle CI to ensure all tests pass on macOS, Linux, and Windows.
+
+To ensure that your changes work, run `circleci` locally.
+
+1. Ensure you have the `circleci` client installed, see https://circleci.com/docs/2.0/local-cli/
+2. In your clone of this repository, run:
+   `circleci local execute --job test_3_8`
+
+This will run all the Python 3.8 tests in a dockerized environment.
+This step takes a while, so you might want to run `pytest` for working on your changes,
+as explained above.
+
 ### Submitting patches
 
 Pull Requests are not accepted here; please submit changes to Phabricator using `moz-phab`.
