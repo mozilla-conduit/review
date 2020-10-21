@@ -6,6 +6,8 @@ from distutils.version import LooseVersion
 from .conftest import create_temp_fn
 
 from mozphab import environment, exceptions, mozphab
+from mozphab.mercurial import Mercurial
+
 
 mozphab.SHOW_SPINNER = False
 
@@ -89,7 +91,8 @@ def test_finalize_no_evolve(m_hg_rebase, hg):
 @mock.patch("mozphab.mercurial.parse_config")
 @mock.patch("mozphab.mercurial.Mercurial.hg_out")
 @mock.patch("mozphab.mercurial.Mercurial.hg_log")
-def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
+@mock.patch("mozphab.mercurial.hglib.open")
+def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
     class Args:
         def __init__(self, start="(auto)", end=".", safe_mode=False, single=False):
             self.start_rev = start
@@ -109,11 +112,10 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
     # evolve & shelve
     hg._hg = []
     hg.set_args(Args())
-    assert (
-        ["--config", "extensions.rebase="]
-        + ["--pager", "never"]
-        + ["--config", "rebase.experimental.inmemory=true"]
-    ) == hg._hg
+
+    assert "extensions.rebase" in hg._config_options
+    assert hg._config_options["rebase.experimental.inmemory"] == "true"
+    assert hg._extra_options["--pager"] == "never"
     assert hg.use_evolve
     assert not hg.has_shelve
 
@@ -121,37 +123,43 @@ def test_set_args(m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
     hg.mercurial_version = LooseVersion("4.0")
     hg._hg = []
     hg.set_args(Args())
-    assert (["--config", "extensions.rebase="] + ["--pager", "never"]) == hg._hg
+    assert "extensions.rebase" in hg._config_options
+    assert "rebase.experimental.inmemory" not in hg._config_options
+    assert hg._extra_options["--pager"] == "never"
     hg.mercurial_version = LooseVersion("4.5")
 
     # safe_mode
-    safe_mode_options = (
-        ["--config", "extensions.rebase="]
-        + ["--pager", "never"]
-        + ["--config", "ui.username=username"]
-        + ["--config", "extensions.evolve="]
-    )
     hg._hg = []
     hg.set_args(Args(safe_mode=True))
-    assert safe_mode_options == hg._hg
+    options = hg._get_config_options()
+    assert options == [
+        ("extensions.rebase", ""),
+        ("ui.username", "username"),
+        ("extensions.evolve", ""),
+    ]
 
     m_config.safe_mode = True
     hg._hg = []
     hg.set_args(Args())
-    assert safe_mode_options == hg._hg
+    options = hg._get_config_options()
+    assert options == [
+        ("extensions.rebase", ""),
+        ("ui.username", "username"),
+        ("extensions.evolve", ""),
+    ]
     m_config.safe_mode = False
 
     # no evolve
     m_parse_config.return_value = {"ui.username": "username", "extensions.shelve": ""}
     hg._hg = []
     hg.set_args(Args())
-    assert (
-        ["--config", "extensions.rebase="]
-        + ["--pager", "never"]
-        + ["--config", "rebase.experimental.inmemory=true"]
-        + ["--config", "experimental.evolution.createmarkers=true"]
-        + ["--config", "extensions.strip="]
-    ) == hg._hg
+    options = hg._get_config_options()
+    assert options == [
+        ("extensions.rebase", ""),
+        ("rebase.experimental.inmemory", "true"),
+        ("experimental.evolution.createmarkers", "true"),
+        ("extensions.strip", ""),
+    ]
     assert not hg.use_evolve
     assert hg.has_shelve
 
@@ -531,3 +539,39 @@ def test_check_vcs(hg):
 
     hg.args = Args(force_vcs=True)
     assert hg.check_vcs()
+
+
+@mock.patch("mozphab.mercurial.hglib.open")
+@mock.patch("mozphab.repository.Repository._phab_url")
+@mock.patch("os.path.isdir")
+@mock.patch("mozphab.helpers.which")
+def test_repository_cached(m_which, m_is_dir, m_phab_url, m_open, *patched):
+    class MyRepo:
+        version = 4, 7, 3
+
+        def rawcommand(self, *args, **kw):
+            return b"ui.username=xxx"
+
+    m_is_dir.return_value = True
+    m_phab_url.return_value = ""
+    m_which.return_value = True
+    m_open.return_value = MyRepo()
+
+    hg = Mercurial("x")
+
+    class Args:
+        def __init__(self):
+            self.start_rev = "(auto)"
+            self.end_rev = "."
+            self.safe_mode = True
+            self.single = False
+
+    hg._repo = None
+    hg.set_args(Args())
+    current_repo = hg.repository
+    assert current_repo is not None
+
+    # makes sure we cache the `hgclient` instance when using the
+    # same args
+    hg.set_args(Args())
+    assert hg.repository is current_repo

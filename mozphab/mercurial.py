@@ -7,11 +7,13 @@ import os
 import re
 import time
 import uuid
+from shlex import quote
 
 from contextlib import suppress
 from distutils.version import LooseVersion
 from functools import lru_cache
 
+import hglib
 from mozphab import environment
 
 from .config import config
@@ -27,7 +29,6 @@ from .helpers import (
 from .logger import logger
 from .repository import Repository
 from .spinner import wait_message
-from .subprocess_wrapper import check_call, check_output
 from .telemetry import telemetry
 
 MINIMUM_MERCURIAL_VERSION = LooseVersion("4.3.3")
@@ -42,8 +43,7 @@ class Mercurial(Repository):
 
         super().__init__(path, dot_path)
         self.vcs = "hg"
-
-        self._hg = config.hg_command.copy()
+        self._hg_binary = config.hg_command[0]
         self.revset = None
         self.strip_nodes = []
         self.status = None
@@ -55,26 +55,52 @@ class Mercurial(Repository):
         self.previous_bookmark = None
         self.has_temporary_bookmark = False
 
-        # Normalise/standardise Mercurial's output.
-        os.environ["HGPLAIN"] = "1"
-        os.environ["HGENCODING"] = "UTF-8"
+        # Check for `hg` presence
+        if not which_path(self._hg_binary):
+            raise Error(f"Failed to find hg executable ({self._hg_binary})")
 
-        # Check for `hg`, and mercurial version.
-        if not which_path(self._hg[0]):
-            raise Error("Failed to find hg executable ({})".format(self._hg[0]))
-        m = re.search(
-            r"\(version ([^)]+)\)", self.hg_out(["--version", "--quiet"], split=False)
-        )
-        if not m:
-            raise Error("Failed to determine Mercurial version.")
-        self.mercurial_version = LooseVersion(m.group(1))
+        self._config_options = {}
+        self._safe_config_options = {}
+        self._extra_options = {}
+        self._safe_mode = False
+        self._repo_path = path.encode("utf8")
+        hglib.HGPATH = self._hg_binary
+        self._repo = None
+        self._configs = []
+        major, minor, micro, *_ = self.repository.version
+        self.mercurial_version = LooseVersion(f"{major}.{minor}.{micro}")
         self.vcs_version = str(self.mercurial_version)
         if self.mercurial_version < MINIMUM_MERCURIAL_VERSION:
             raise Error(
-                "You are currently running Mercurial %s.  "
-                "Mercurial %s or newer is required."
-                % (self.mercurial_version, MINIMUM_MERCURIAL_VERSION)
+                f"You are currently running Mercurial {self.mercurial_version}.  "
+                f"Mercurial {MINIMUM_MERCURIAL_VERSION} or newer is required."
             )
+
+    @property
+    def repository(self):
+        """Returns the hglib.hgclient instance.
+
+        If the config has changed, recreate the instance.
+        """
+        configs = [f"{key}={value}" for key, value in self._get_config_options()]
+        configs.sort()
+        # returns the repo instance if the config has not changed.
+        if self._repo is not None and self._configs == configs:
+            return self._repo
+
+        self._configs = configs
+        self._repo = hglib.open(self._repo_path, encoding="UTF-8", configs=configs)
+        return self._repo
+
+    def _get_config_options(self):
+        """Returns the --config options for hg
+
+        Updated with the safe ones when safe mode is used.
+        """
+        options = dict(self._config_options)
+        if self._safe_mode:
+            options.update(self._safe_config_options)
+        return list(options.items())
 
     @classmethod
     def is_repo(cls, path):
@@ -117,10 +143,49 @@ class Mercurial(Repository):
         return not status["T"]
 
     def hg(self, command, **kwargs):
-        check_call(self._hg + command, cwd=self.path, **kwargs)
+        self.hg_out(command, **kwargs)
 
-    def hg_out(self, command, **kwargs):
-        return check_output(self._hg + command, cwd=self.path, **kwargs)
+    def hg_out(
+        self,
+        command,
+        expect_binary=False,
+        strip=True,
+        keep_ends=False,
+        split=True,
+        never_log=False,
+    ):
+        logger.debug("$ %s", " ".join(quote(s) for s in command))
+
+        def error_handler(exit_code, stdout, stderr):
+            if stdout and not never_log:
+                logger.debug(stdout.decode())
+
+            if stderr and not never_log:
+                logger.debug(stderr.decode())
+
+            raise CommandError(
+                "command '%s' failed to complete successfully" % command[0], exit_code
+            )
+
+        command = [c.encode() for c in command]
+        for arg, value in self._extra_options.items():
+            command.extend([arg.encode(), value.encode()])
+
+        out = self.repository.rawcommand(command, eh=error_handler)
+
+        if expect_binary:
+            logger.debug("%s bytes of data received", len(out))
+            return out
+
+        out = out.decode()
+        if strip:
+            out = out.rstrip()
+        if split:
+            out = out.splitlines(keep_ends)
+        if out and not never_log:
+            logger.debug(out)
+
+        return out
 
     def hg_log(self, revset, split=True, select="node"):
         return self.hg_out(["log", "-T", "{%s}\n" % select, "-r", revset], split=split)
@@ -223,6 +288,13 @@ class Mercurial(Repository):
         super().refresh_commit_stack(commits)
 
     def set_args(self, args):
+        """Sets up the right environment for hg, prior to running it.
+
+        Sets:
+        - all the --config options (includes safe mode)
+        - extra options
+        - the `revset` attribute
+        """
         super().set_args(args)
 
         # Load hg config into hg_config.  We'll specify specific settings on
@@ -235,39 +307,38 @@ class Mercurial(Repository):
             ),
         )
 
-        safe_mode = self.args.safe_mode or config.safe_mode
-        safe_options = []
-        options = []
+        self._safe_mode = self.args.safe_mode or config.safe_mode
+        self._safe_config_options.clear()
+        self._config_options.clear()
+        self._extra_options.clear()
 
         # Need to use the correct username.
         if "ui.username" not in hg_config:
             raise Error("ui.username is not configured in your hgrc")
+        self._safe_config_options["ui.username"] = hg_config["ui.username"]
 
-        safe_options.extend(["--config", "ui.username=%s" % hg_config["ui.username"]])
+        # Always need rebase.
+        self._config_options["extensions.rebase"] = ""
 
-        options.extend(
-            # Always need rebase.
-            ["--config", "extensions.rebase="]
-            # Mercurial should never paginate the response.
-            + ["--pager", "never"]
-        )
+        # Mercurial should never paginate the response.
+        self._extra_options["--pager"] = "never"
 
         # Perform rebases in-memory to improve performance (requires v4.5+).
-        if not safe_mode and self.mercurial_version >= LooseVersion("4.5"):
-            options.extend(["--config", "rebase.experimental.inmemory=true"])
+        if not self._safe_mode and self.mercurial_version >= LooseVersion("4.5"):
+            self._config_options["rebase.experimental.inmemory"] = "true"
 
         # Enable evolve if the user's currently using it.  evolve makes amending
         # commits with children trivial (amongst other things).
         ext_evolve = self._get_extension("evolve", hg_config)
         if ext_evolve is not None:
-            safe_options.extend(["--config", "extensions.evolve=%s" % ext_evolve])
+            self._safe_config_options["extensions.evolve"] = ext_evolve
             self.use_evolve = True
 
         # Otherwise just enable obsolescence markers, and when we're done remove
         # the obsstore we created.
         else:
-            options.extend(["--config", "experimental.evolution.createmarkers=true"])
-            options.extend(["--config", "extensions.strip="])
+            self._config_options["experimental.evolution.createmarkers"] = "true"
+            self._config_options["extensions.strip"] = ""
             self.use_evolve = False
             self.obsstore = os.path.join(self.path, ".hg", "store", "obsstore")
             self.unlink_obsstore = not os.path.exists(self.obsstore)
@@ -276,29 +347,25 @@ class Mercurial(Repository):
         ext_mq = self._get_extension("mq", hg_config)
         self.has_mq = ext_mq is not None
         if self.has_mq:
-            safe_options.extend(["--config", "extensions.mq=%s" % ext_mq])
+            self._safe_config_options["extensions.mq"] = ext_mq
 
         # `shelve` is useful for dealing with uncommitted changes; track if it's
         # currently enabled so we can tailor our error accordingly.
         self.has_shelve = self._get_extension("shelve", hg_config) is not None
 
         # Disable the user's hgrc file, to ensure we run without rogue extensions.
-        if safe_mode:
+        if self._safe_mode:
             os.environ["HGRCPATH"] = ""
-            options.extend(safe_options)
-
+            options = self._get_config_options()
             logger.debug(
                 "hg extensions (safe mode): %s",
                 ", ".join(self._get_extensions(from_args=options)),
             )
-
         else:
             logger.debug(
                 "hg extensions: %s",
                 ", ".join(self._get_extensions(from_config=hg_config)),
             )
-
-        self._hg.extend(options)
 
         if hasattr(self.args, "start_rev"):
             is_single = hasattr(self.args, "single") and self.args.single
