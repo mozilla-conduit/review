@@ -63,7 +63,7 @@ class Mercurial(Repository):
         self._safe_config_options = {}
         self._extra_options = {}
         self._safe_mode = False
-        self._repo_path = path.encode("utf8")
+        self._repo_path = path
         hglib.HGPATH = self._hg_binary
         self._repo = None
         self._configs = []
@@ -87,6 +87,9 @@ class Mercurial(Repository):
         # returns the repo instance if the config has not changed.
         if self._repo is not None and self._configs == configs:
             return self._repo
+
+        if self._repo:
+            self._repo.close()
 
         self._configs = configs
         self._repo = hglib.open(self._repo_path, encoding="UTF-8", configs=configs)

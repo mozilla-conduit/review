@@ -552,6 +552,9 @@ def test_repository_cached(m_which, m_is_dir, m_phab_url, m_open, *patched):
         def rawcommand(self, *args, **kw):
             return b"ui.username=xxx"
 
+        def close(self):
+            pass
+
     m_is_dir.return_value = True
     m_phab_url.return_value = ""
     m_which.return_value = True
