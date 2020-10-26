@@ -100,12 +100,8 @@ jobs:
           name: setup
           command: |
             python3 -m venv venv
-            ./venv/bin/pip3 --disable-pip-version-check install .
-      - run:
-          name: tests
-          command: |
-            python3 --version
-            git --version
+            python3 setup.py sdist
+            ./venv/bin/pip3 --disable-pip-version-check install dist/MozPhab*.tar.gz
       - run:
           name: run tests
           command: |
