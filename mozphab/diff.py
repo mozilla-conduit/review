@@ -4,6 +4,7 @@
 
 import operator
 import re
+import concurrent.futures
 
 from collections import namedtuple
 
@@ -200,11 +201,26 @@ class Diff:
         else:
             raise "unsupported change type %s" % kind
 
+    def _upload_file(self, change, upload):
+        path = change.cur_path if upload["type"] == "new" else change.old_path
+        upload["phid"] = conduit.file_upload(path, upload["value"])
+
     def upload_files(self):
-        for change in list(self.changes.values()):
-            for upload in change.uploads:
-                path = change.cur_path if upload["type"] == "new" else change.old_path
-                upload["phid"] = conduit.file_upload(path, upload["value"])
+        futures = []
+
+        # files are uploaded in parallel, using a pool of threads.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            for change in list(self.changes.values()):
+                for upload in change.uploads:
+                    futures.append(executor.submit(self._upload_file, change, upload))
+
+            # wait for all uploads to be finished
+            concurrent.futures.wait(futures)
+
+            # check that all went well. If not, propagate the first error here
+            # by calling the future's result() method
+            for upload in futures:
+                upload.result()
 
     def submit(self, commit):
         files_changed = sorted(
