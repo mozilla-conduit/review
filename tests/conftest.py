@@ -148,6 +148,7 @@ def git(
 
 
 @pytest.fixture
+@mock.patch("mozphab.repository.os.chdir")
 @mock.patch("mozphab.mercurial.Mercurial.repository")
 @mock.patch("mozphab.repository.os.path")
 @mock.patch("mozphab.helpers.which")
@@ -159,6 +160,7 @@ def hg(
     m_which,
     m_os_path,
     m_repository,
+    m_os_chdir,
     safe_environ,
     repo_phab_url,
 ):
@@ -168,6 +170,7 @@ def hg(
     m_which.return_value = True
     m_os_path.isfile.return_value = False
     m_repository.version = 4, 7, 1, "bleh"
+    m_os_chdir.return_value = True
     mozphab.config.hg_command = ["hg"]
     hg = Mercurial("x")
     hg.use_evolve = True

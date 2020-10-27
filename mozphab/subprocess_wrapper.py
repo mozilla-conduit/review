@@ -11,9 +11,13 @@ from .exceptions import CommandError
 from .logger import logger
 
 
+def debug_log_command(command):
+    logger.debug("$ %s", " ".join(quote(s.replace("\n", r"\n")) for s in command))
+
+
 def check_call(command, **kwargs):
     # wrapper around subprocess.check_call with debug output
-    logger.debug("$ %s", " ".join(quote(s) for s in command))
+    debug_log_command(command)
     kwargs["encoding"] = "UTF-8"
     try:
         subprocess.check_call(command, **kwargs)
@@ -25,7 +29,7 @@ def check_call(command, **kwargs):
 
 def check_call_by_line(command, cwd=None, never_log=False):
     # similar to check_call, yields for line-by-line processing
-    logger.debug("$ %s", " ".join(quote(s) for s in command))
+    debug_log_command(command)
 
     # Connecting the STDIN to the PIPE will make arc throw an exception on reading
     # user input
@@ -67,7 +71,7 @@ def check_output(
     expect_binary=False,
 ):
     # wrapper around subprocess.check_output with debug output and splitting
-    logger.debug("$ %s", " ".join(quote(s) for s in command))
+    debug_log_command(command)
     kwargs = dict(cwd=cwd, stdin=stdin, stderr=stderr)
     if not expect_binary:
         kwargs["universal_newlines"] = True

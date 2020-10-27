@@ -543,9 +543,10 @@ def test_check_vcs(hg):
 
 @mock.patch("mozphab.mercurial.hglib.open")
 @mock.patch("mozphab.repository.Repository._phab_url")
+@mock.patch("mozphab.repository.os.chdir")
 @mock.patch("os.path.isdir")
 @mock.patch("mozphab.helpers.which")
-def test_repository_cached(m_which, m_is_dir, m_phab_url, m_open, *patched):
+def test_repository_cached(m_which, m_is_dir, m_os_chdir, m_phab_url, m_open, *patched):
     class MyRepo:
         version = 4, 7, 3
 
@@ -556,6 +557,7 @@ def test_repository_cached(m_which, m_is_dir, m_phab_url, m_open, *patched):
             pass
 
     m_is_dir.return_value = True
+    m_os_chdir.return_value = True
     m_phab_url.return_value = ""
     m_which.return_value = True
     m_open.return_value = MyRepo()

@@ -7,7 +7,6 @@ import os
 import re
 import time
 import uuid
-from shlex import quote
 
 from contextlib import suppress
 from distutils.version import LooseVersion
@@ -29,6 +28,7 @@ from .helpers import (
 from .logger import logger
 from .repository import Repository
 from .spinner import wait_message
+from .subprocess_wrapper import debug_log_command
 from .telemetry import telemetry
 
 MINIMUM_MERCURIAL_VERSION = LooseVersion("4.3.3")
@@ -75,6 +75,10 @@ class Mercurial(Repository):
                 f"You are currently running Mercurial {self.mercurial_version}.  "
                 f"Mercurial {MINIMUM_MERCURIAL_VERSION} or newer is required."
             )
+
+        # Some Mercurial commands require the current working directory to be
+        # set to the repository root (eg. `hg files`).
+        os.chdir(self._repo_path)
 
     @property
     def repository(self):
@@ -157,8 +161,6 @@ class Mercurial(Repository):
         split=True,
         never_log=False,
     ):
-        logger.debug("$ %s", " ".join(quote(s) for s in command))
-
         def error_handler(exit_code, stdout, stderr):
             if stdout and not never_log:
                 logger.debug(stdout.decode())
@@ -170,10 +172,11 @@ class Mercurial(Repository):
                 "command '%s' failed to complete successfully" % command[0], exit_code
             )
 
-        command = [c.encode() for c in command]
         for arg, value in self._extra_options.items():
-            command.extend([arg.encode(), value.encode()])
+            command.extend([arg, value])
 
+        debug_log_command(["hg"] + command)
+        command = [c.encode() for c in command]
         out = self.repository.rawcommand(command, eh=error_handler)
 
         if expect_binary:
@@ -183,12 +186,9 @@ class Mercurial(Repository):
         out = out.decode()
         if strip:
             out = out.rstrip()
-        if split:
-            out = out.splitlines(keep_ends)
         if out and not never_log:
             logger.debug(out)
-
-        return out
+        return out.splitlines(keep_ends) if split else out
 
     def hg_log(self, revset, split=True, select="node"):
         return self.hg_out(["log", "-T", "{%s}\n" % select, "-r", revset], split=split)
