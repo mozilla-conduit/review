@@ -23,6 +23,7 @@ jobs:
       - run:
           name: install dependencies
           command: |
+            set -e
             # install modern hg
             sudo pip3 install --disable-pip-version-check mercurial hg-evolve
             # configure hg
@@ -37,12 +38,14 @@ jobs:
       - run:
           name: versions
           command: |
+            set -e
             python3 --version
             git --version
             pip3 --disable-pip-version-check list --format freeze | egrep '^(mercurial|hg-evolve)=='
       - run:
           name: run tests
           command: |
+            set -e
             mkdir test-reports
             for F in tests/test_*.py; do
               pytest --junitxml=test-reports/junit-$( basename $F .py ).xml -vv $F
@@ -83,8 +86,15 @@ jobs:
           name: run tests
           command: |
             mkdir test-reports
-            pytest --junitxml=test-reports/junit.xml -vv
-            foreach ($f in Get-ChildItem -Path "tests" -Filter test_*.py) {python -m pytest --junitxml=test-reports/junit-$($f.BaseName).xml -vv $f.FullName}
+            function RunTest {
+              & python -m pytest -vv @args
+              if ($LASTEXITCODE -ne 0) {
+                exit $LASTEXITCODE
+              }
+            }
+            foreach ($f in Get-ChildItem -Path "tests" -Filter test_*.py) {
+              RunTest --junitxml=test-reports/junit-$($f.BaseName).xml $f.FullName
+            }
       - store_test_results:
           path: test-reports
       - store_artifacts:
