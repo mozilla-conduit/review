@@ -5,6 +5,7 @@
 import mimetypes
 import os
 import re
+import sys
 import time
 import uuid
 
@@ -27,7 +28,7 @@ from .helpers import (
 )
 from .logger import logger
 from .repository import Repository
-from .spinner import wait_message
+from .spinner import wait_message, clear_terminal_line
 from .subprocess_wrapper import debug_log_command
 from .telemetry import telemetry
 
@@ -150,11 +151,12 @@ class Mercurial(Repository):
         return not status["T"]
 
     def hg(self, command, **kwargs):
-        self.hg_out(command, **kwargs)
+        self.hg_out(command, capture=False, **kwargs)
 
     def hg_out(
         self,
         command,
+        capture=True,
         expect_binary=False,
         strip=True,
         keep_ends=False,
@@ -162,14 +164,22 @@ class Mercurial(Repository):
         never_log=False,
     ):
         def error_handler(exit_code, stdout, stderr):
-            if stdout and not never_log:
-                logger.debug(stdout.decode())
+            if not capture:
+                clear_terminal_line()
+                if stderr:
+                    print(stderr.decode(), file=sys.stderr, end="")
+                if stdout:
+                    print(stdout.decode(), end="")
 
-            if stderr and not never_log:
-                logger.debug(stderr.decode())
+            if not never_log:
+                if stderr:
+                    logger.debug(stderr.decode().rstrip())
+                if stdout:
+                    logger.debug(stdout.decode().rstrip())
 
             raise CommandError(
-                "command '%s' failed to complete successfully" % command[0], exit_code
+                "command '%s' failed to complete successfully" % command[0].decode(),
+                exit_code,
             )
 
         for arg, value in self._extra_options.items():
@@ -188,7 +198,13 @@ class Mercurial(Repository):
             out = out.rstrip()
         if out and not never_log:
             logger.debug(out)
-        return out.splitlines(keep_ends) if split else out
+
+        if capture:
+            return out.splitlines(keep_ends) if split else out
+
+        clear_terminal_line()
+        print(out, end="")
+        return None
 
     def hg_log(self, revset, split=True, select="node"):
         return self.hg_out(["log", "-T", "{%s}\n" % select, "-r", revset], split=split)

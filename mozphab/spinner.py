@@ -11,6 +11,12 @@ from contextlib import contextmanager
 from mozphab import environment
 
 
+def clear_terminal_line():
+    if environment.HAS_ANSI:
+        sys.stdout.write("\r\033[K")  # move to start of line, erase to end of line
+        sys.stdout.flush()
+
+
 def signal_sigint(self, *args):
     print("\nCancelled")
     raise KeyboardInterrupt()
@@ -45,10 +51,9 @@ class Spinner(threading.Thread):
                 time.sleep(0.2)
         finally:
             if environment.HAS_ANSI:
-                sys.stdout.write("\r\033[K")
+                clear_terminal_line()
             else:
                 sys.stdout.write(chr(8) + " \n")
-            sys.stdout.flush()
 
 
 @contextmanager
