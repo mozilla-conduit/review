@@ -64,6 +64,8 @@ def _conduit_side_effect(calls=1):
             [
                 # differential.creatediff
                 dict(dict(phid="PHID-DIFF-{}".format(i), diffid=str(i))),
+                # differential.setdiffproperty
+                dict(),
                 # differential.revision.edit
                 dict(object=dict(id=str(123 + i))),
                 # differential.setdiffproperty

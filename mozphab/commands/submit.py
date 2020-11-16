@@ -570,7 +570,7 @@ def submit(repo, args):
                     diff.upload_files()
 
                 with wait_message("Submitting the diff..."):
-                    diff.submit(commit)
+                    diff.submit(commit, message)
 
             if is_update:
                 with wait_message("Updating revision..."):

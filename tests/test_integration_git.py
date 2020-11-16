@@ -67,6 +67,8 @@ def test_submit_create(in_process, git_repo_path, init_sha):
         [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -178,6 +180,12 @@ Differential Revision: http://example.test/D123
         )
         in call_conduit.call_args_list
     )
+    assert (
+        call_conduit.call_args_list.count(
+            mock.call("differential.setdiffproperty", mock.ANY)
+        )
+        == 2
+    )
 
 
 def test_submit_create_added_not_commited(in_process, git_repo_path, init_sha):
@@ -190,6 +198,8 @@ def test_submit_create_added_not_commited(in_process, git_repo_path, init_sha):
         [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -220,6 +230,8 @@ def test_submit_create_no_bug(in_process, git_repo_path, init_sha):
         [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -278,6 +290,8 @@ def test_submit_create_binary(in_process, git_repo_path, init_sha, data_file):
         dict(),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -321,6 +335,8 @@ def test_submit_create_binary_existing(in_process, git_repo_path, init_sha, data
         # no file.upload call
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -372,6 +388,8 @@ def test_submit_create_binary_chunked(in_process, git_repo_path, init_sha, data_
         dict(),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -454,6 +472,8 @@ def test_submit_update(in_process, git_repo_path, init_sha):
         dict(phid="PHID-USER-1"),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -481,7 +501,7 @@ Differential Revision: http://example.test/D123
         is_development=True,
     )
 
-    assert call_conduit.call_count == 8
+    assert call_conduit.call_count == 9
     log = git_out("log", "--format=%s%n%n%b", "-1")
     expected = """\
 Bug 1 - Ą
@@ -533,11 +553,19 @@ def test_submit_remove_cr(in_process, git_repo_path, init_sha):
 
     call_conduit.side_effect = (
         # CREATE
+        # ping
         dict(),
+        # diffusion.repository.search
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # user.search
         [dict(userName="alice", phid="PHID-USER-1")],
+        # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
         dict(),
         # UPDATE
         # no need to ping (checked)
@@ -545,6 +573,8 @@ def test_submit_remove_cr(in_process, git_repo_path, init_sha):
         # no need to search for repository repository data is saved in .hg
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-2", diffid="2")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="124")),
         # differential.setdiffproperty
@@ -635,6 +665,8 @@ def test_submit_single_last(in_process, git_repo_path, init_sha):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -668,6 +700,8 @@ def test_submit_single_first(in_process, git_repo_path, init_sha, git_sha):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -708,6 +742,8 @@ def test_submit_update_no_message(in_process, git_repo_path, init_sha):
         dict(phid="PHID-USER-1"),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -958,6 +994,8 @@ def test_empty_file(in_process, git_repo_path, init_sha):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -983,6 +1021,8 @@ Differential Revision: http://example.test/D123
     call_conduit.side_effect = (
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-2", diffid="2")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="124")),
         # differential.setdiffproperty

@@ -31,6 +31,8 @@ def test_submit_create(in_process, hg_repo_path):
         [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -78,6 +80,12 @@ Differential Revision: http://example.test/D123
             {"diff_id": "1", "name": "local:commits", "data": Contains('"rev": "')},
         )
         in call_conduit.call_args_list
+    )
+    assert (
+        call_conduit.call_args_list.count(
+            mock.call("differential.setdiffproperty", mock.ANY)
+        )
+        == 2
     )
     assert (
         mock.call(
@@ -255,6 +263,8 @@ def test_submit_create_no_trailing_newline(in_process, hg_repo_path):
         [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -484,6 +494,8 @@ def test_submit_create_no_bug(in_process, hg_repo_path):
         [dict(userName="alice", phid="PHID-USER-1")],
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -516,6 +528,8 @@ def test_submit_create_binary(in_process, hg_repo_path, data_file):
         dict(),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -559,6 +573,8 @@ def test_submit_create_binary_existing(in_process, hg_repo_path, data_file):
         # no file.upload call
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -610,6 +626,8 @@ def test_submit_create_binary_chunked(in_process, hg_repo_path, data_file):
         dict(),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -683,11 +701,19 @@ def test_submit_remove_cr(in_process, hg_repo_path):
 
     call_conduit.side_effect = (
         # CREATE
+        # ping
         dict(),
+        # diffusion.repository.search
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        # user.search
         [dict(userName="alice", phid="PHID-USER-1")],
+        # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
         dict(object=dict(id="123")),
+        # differential.setdiffproperty
         dict(),
         # UPDATE
         # no need to ping (checked)
@@ -695,6 +721,8 @@ def test_submit_remove_cr(in_process, hg_repo_path):
         # no need to search for repository repository data is saved in .hg
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-2", diffid="2")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="124")),
         # differential.setdiffproperty
@@ -784,6 +812,8 @@ def test_submit_single_first(in_process, hg_repo_path, hg_sha):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -820,6 +850,8 @@ def test_submit_single_last(in_process, hg_repo_path):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty
@@ -853,6 +885,8 @@ def test_multiple_copy(in_process, hg_repo_path):
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
         # differential.creatediff
         dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
         # differential.revision.edit
         dict(object=dict(id="123")),
         # differential.setdiffproperty

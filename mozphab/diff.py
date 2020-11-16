@@ -222,7 +222,7 @@ class Diff:
             for upload in futures:
                 upload.result()
 
-    def submit(self, commit):
+    def submit(self, commit, message):
         files_changed = sorted(
             self.changes.values(), key=operator.attrgetter("cur_path")
         )
@@ -236,6 +236,7 @@ class Diff:
 
         self.phid = diff["phid"]
         self.id = diff["diffid"]
+        self.set_property(commit, message)
         return diff["phid"]
 
     def set_property(self, commit, message):
