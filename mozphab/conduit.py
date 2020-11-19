@@ -60,11 +60,16 @@ class ConduitAPI:
         Returns:
             API Token string
         """
+
+        if "api_token" in cache:
+            return cache.get("api_token")
+
         token = read_json_field(
             [get_arcrc_path()], ["hosts", self.repo.api_url, "token"]
         )
         if not token:
             raise ConduitAPIError(environment.INSTALL_CERT_MSG)
+        cache.set("api_token", token)
         return token
 
     def save_api_token(self, token):
@@ -87,12 +92,13 @@ class ConduitAPI:
         if created:
             os.chmod(filename, 0o600)
 
-    def call(self, api_method, api_call_args):
+    def call(self, api_method, api_call_args, *, api_token=None):
         """Call Conduit API and return the JSON API call result.
 
         Args:
             api_method: The API method name to call, like 'differential.revision.edit'.
             api_call_args: JSON dict of call args to send.
+            api_token: Use specific token to authentication instead of saved value.
 
         Returns:
             JSON API call result object
@@ -104,7 +110,9 @@ class ConduitAPI:
         logger.debug("%s %s", url.geturl(), api_call_args)
 
         api_call_args = api_call_args.copy()
-        api_call_args["__conduit__"] = {"token": self.load_api_token()}
+        api_call_args["__conduit__"] = {
+            "token": api_token if api_token else self.load_api_token()
+        }
         body = urllib.parse.urlencode(
             {
                 "params": json.dumps(api_call_args),
@@ -670,11 +678,11 @@ class ConduitAPI:
 
         return file_phid
 
-    def whoami(self):
+    def whoami(self, *, api_token=None):
         if "whoami" in cache:
             return cache.get("whoami")
 
-        who = self.call("user.whoami", {})
+        who = self.call("user.whoami", {}, api_token=api_token)
         cache.set("whoami", who)
         return who
 
