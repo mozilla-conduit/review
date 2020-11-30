@@ -7,9 +7,8 @@ import datetime
 import hashlib
 import json
 import os
-import urllib.parse
-
-from http.client import HTTPConnection, HTTPSConnection
+import urllib.parse as url_parse
+import urllib.request as url_request
 
 from mozphab import environment
 
@@ -106,39 +105,38 @@ class ConduitAPI:
         Raises:
             ConduitAPIError if the API threw an error back at us.
         """
-        url = urllib.parse.urlparse(urllib.parse.urljoin(self.repo.api_url, api_method))
-        logger.debug("%s %s", url.geturl(), api_call_args)
-
-        api_call_args = api_call_args.copy()
-        api_call_args["__conduit__"] = {
-            "token": api_token if api_token else self.load_api_token()
-        }
-        body = urllib.parse.urlencode(
-            {
-                "params": json.dumps(api_call_args),
-                "output": "json",
-                "__conduit__": True,
-            }
+        req_args = self._build_request(
+            method=api_method,
+            args=api_call_args,
+            token=api_token,
         )
-        # Send the POST request
-        if url.scheme == "https":
-            conn = HTTPSConnection(url.netloc)
-        elif environment.HTTP_ALLOWED:
-            # Allow for an HTTP connection in suite.
-            conn = HTTPConnection(url.netloc)
-        else:
-            raise CommandError("Only https connections are allowed.")
+        logger.debug("%s %s", req_args["url"], api_call_args)
 
-        conn.request("POST", url.geturl(), body=body)
+        with url_request.urlopen(url_request.Request(**req_args)) as r:
+            res = json.load(r)
+        if res["error_code"]:
+            raise ConduitAPIError(res.get("error_info", "Error %s" % res["error_code"]))
+        return res["result"]
 
-        # Read the response as JSON
-        response = json.loads(conn.getresponse().read().decode("utf-8"))
-        if response["error_code"]:
-            raise ConduitAPIError(
-                response.get("error_info", "Error %s" % response["error_code"])
-            )
-
-        return response["result"]
+    def _build_request(self, *, method, args, token):
+        """Return dict with Request args for calling the specified conduit method."""
+        return dict(
+            url=url_parse.urljoin(self.repo.api_url, method),
+            method="POST",
+            data=url_parse.urlencode(
+                {
+                    "params": json.dumps(
+                        {
+                            **args,
+                            "__conduit__": {"token": token or self.load_api_token()},
+                        },
+                        separators=(",", ":"),
+                    ),
+                    "output": "json",
+                    "__conduit__": True,
+                }
+            ).encode(),
+        )
 
     def ping(self):
         """Sends a ping to the Phabricator server using `conduit.ping` API.

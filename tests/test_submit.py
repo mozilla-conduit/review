@@ -11,8 +11,6 @@ from mozphab import environment, exceptions, helpers, mozphab, repository
 
 from .conftest import search_diff, search_rev
 
-mozphab.SHOW_SPINNER = False
-
 
 def reviewers_dict(reviewers=None):
     return dict(

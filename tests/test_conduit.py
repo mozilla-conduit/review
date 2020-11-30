@@ -39,52 +39,102 @@ def test_load_api_token(m_read):
     assert mozphab.conduit.load_api_token() == "x"
 
 
-@mock.patch("mozphab.conduit.HTTPSConnection")
 @mock.patch("mozphab.conduit.ConduitAPI.load_api_token")
-def test_call(m_token, m_Connect):
-    conn = mock.Mock()
-    m_Connect.return_value = conn
-    from io import BytesIO
-
-    conn.getresponse.return_value = BytesIO(b'{"result": "x", "error_code": false}')
-    m_token.return_value = "token"
+def test_build_request(m_load_api_token):
+    m_load_api_token.return_value = "saved-token"
     mozphab.conduit.set_repo(Repo())
 
-    assert mozphab.conduit.call("method", dict(call="args")) == "x"
-    conn.request.assert_called_once_with(
-        "POST",
-        "https://api_url/method",
-        body="params=%7B%22call%22%3A+%22args%22%2C+"
-        "%22__conduit__%22%3A+%7B"
-        "%22token%22%3A+%22token%22%7D%7D&"
-        "output=json"
-        "&__conduit__=True",
-    )
+    # default token
+    assert mozphab.conduit._build_request(
+        method="method",
+        args=dict(call="args"),
+        token=None,
+    ) == {
+        "data": (
+            b"params=%7B%22"
+            b"call%22%3A%22args%22%2C%22"
+            b"__conduit__%22%3A%7B%22"
+            b"token%22%3A%22saved-token%22%7D%7D&"
+            b"output=json&"
+            b"__conduit__=True"
+        ),
+        "method": "POST",
+        "url": "https://api_url/method",
+    }
 
-    conn.getresponse.return_value = BytesIO(b'{"result": "x", "error_code": false}')
-    assert mozphab.conduit.call("method", dict(call="ćwikła")) == "x"
-    conn.request.assert_called_with(
-        "POST",
-        "https://api_url/method",
-        body="params=%7B%22call%22%3A+%22%5Cu0107wik%5Cu0142a%22%2C+"
-        "%22__conduit__%22%3A+%7B%22token%22%3A+%22token%22%7D%7D"
-        "&output=json&__conduit__=True",
-    )
+    # provided token
+    assert mozphab.conduit._build_request(
+        method="method",
+        args=dict(call="args"),
+        token="my-token",
+    ) == {
+        "data": (
+            b"params=%7B%22"
+            b"call%22%3A%22args%22%2C%22"
+            b"__conduit__%22%3A%7B%22"
+            b"token%22%3A%22my-token%22%7D%7D&"
+            b"output=json&"
+            b"__conduit__=True"
+        ),
+        "method": "POST",
+        "url": "https://api_url/method",
+    }
 
-    m_Connect.reset_mock()
-    conn.reset_mock()
-    conn.getresponse.return_value = BytesIO(b'{"result": "x", "error_code": false}')
-    assert mozphab.conduit.call("method", dict(empty_dict={}, empty_list=[])) == "x"
-    conn.request.assert_called_once_with(
-        "POST",
-        "https://api_url/method",
-        body="params=%7B%22empty_dict%22%3A+%7B%7D%2C+%22empty_list%22%3A+"
-        "%5B%5D%2C+%22__conduit__%22%3A+%7B%22token%22%3A+%22token%22%7D%7D"
-        "&output=json&__conduit__=True",
-    )
+    # unicode
+    assert mozphab.conduit._build_request(
+        method="method",
+        args=dict(call="ćwikła"),
+        token=None,
+    ) == {
+        "data": (
+            b"params=%7B%22"
+            b"call%22%3A%22%5Cu0107wik%5Cu0142a%22%2C%22"
+            b"__conduit__%22%3A%7B%22"
+            b"token%22%3A%22saved-token%22%7D%7D&"
+            b"output=json&"
+            b"__conduit__=True"
+        ),
+        "method": "POST",
+        "url": "https://api_url/method",
+    }
 
-    conn.getresponse.return_value = BytesIO(b'{"error_info": "x", "error_code": 1}')
+    # empty dict, empty list
+    assert mozphab.conduit._build_request(
+        method="method",
+        args=dict(empty_dict={}, empty_list=[]),
+        token=None,
+    ) == {
+        "data": (
+            b"params=%7B%22"
+            b"empty_dict%22%3A%7B%7D%2C%22empty_list%22%3A%5B%5D%2C%22"
+            b"__conduit__%22%3A%7B%22"
+            b"token%22%3A%22saved-token%22%7D%7D&"
+            b"output=json&"
+            b"__conduit__=True"
+        ),
+        "method": "POST",
+        "url": "https://api_url/method",
+    }
 
+
+@mock.patch("urllib.request.urlopen")
+@mock.patch("mozphab.conduit.ConduitAPI.load_api_token")
+def test_call(m_load_api_token, m_urlopen):
+    m_load_api_token.return_value = "token"
+    mozphab.conduit.set_repo(Repo())
+
+    # build fake context-manager to mock urlopen
+    cm = mock.MagicMock()
+    cm.getcode.return_value = 200
+    cm.__enter__.return_value = cm
+    m_urlopen.return_value = cm
+
+    # success
+    cm.read.return_value = json.dumps({"result": "result", "error_code": False})
+    assert mozphab.conduit.call("method", dict(call="args")) == "result"
+
+    # error
+    cm.read.return_value = json.dumps({"error_info": "aieee", "error_code": 1})
     with pytest.raises(ConduitAPIError):
         mozphab.conduit.call("method", dict(call="args"))
 

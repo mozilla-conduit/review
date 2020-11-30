@@ -11,8 +11,6 @@ from .conftest import git_out, search_diff, search_rev
 
 from mozphab import environment, exceptions, mozphab
 
-mozphab.SHOW_SPINNER = False
-
 
 arc_call_conduit = mock.Mock()
 

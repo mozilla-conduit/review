@@ -289,7 +289,14 @@ class Repository(object):
 
     def _api_url(self):
         """Return a base URL for conduit API call"""
-        return urllib.parse.urljoin(self.phab_url, "api/")
+        url = urllib.parse.urljoin(self.phab_url, "api/")
+
+        if not (
+            urllib.parse.urlparse(url).scheme == "https" or environment.HTTP_ALLOWED
+        ):
+            raise Error("Only https connections are allowed.")
+
+        return url
 
     @property
     def phab_repo(self):

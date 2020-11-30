@@ -8,8 +8,6 @@ from .conftest import create_temp_fn
 
 from mozphab import environment, exceptions, mozphab
 
-environment.SHOW_SPINNER = False
-
 
 @mock.patch("mozphab.git.Git.git_out")
 def test_cherry(m_git_git_out, git):

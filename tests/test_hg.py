@@ -9,8 +9,6 @@ from mozphab import environment, exceptions, mozphab, diff
 from mozphab.diff import Diff
 from mozphab.mercurial import Mercurial
 
-mozphab.SHOW_SPINNER = False
-
 
 @mock.patch("mozphab.mercurial.Mercurial.hg_out")
 def test_get_successor(m_hg_hg_out, hg):

@@ -32,6 +32,10 @@ from mozphab import (
 )
 
 
+environment.SHOW_SPINNER = False
+environment.HTTP_ALLOWED = True
+
+
 def create_temp_fn(*filenames):
     m_temp_fn = mock.Mock()
     if len(filenames) > 1:

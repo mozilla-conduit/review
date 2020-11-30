@@ -6,8 +6,6 @@ import pytest
 from mozphab.commands import patch
 from mozphab import exceptions, helpers, mozphab
 
-mozphab.SHOW_SPINNER = False
-
 
 def test_check_revision_id():
     check_revision_id = patch.check_revision_id

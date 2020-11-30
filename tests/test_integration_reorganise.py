@@ -8,7 +8,6 @@ from .conftest import git_out, hg_out
 
 from mozphab import exceptions, mozphab
 
-mozphab.SHOW_SPINNER = False
 
 call_conduit = mock.Mock()
 

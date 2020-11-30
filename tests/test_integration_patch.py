@@ -10,8 +10,6 @@ from .conftest import hg_out, git_out
 
 from mozphab import mozphab
 
-mozphab.SHOW_SPINNER = False
-
 
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")

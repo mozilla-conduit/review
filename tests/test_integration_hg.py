@@ -11,8 +11,6 @@ from .conftest import hg_out, write_text
 
 from mozphab import environment, mozphab
 
-mozphab.SHOW_SPINNER = False
-
 # Fail if arc ping is called
 arc_ping = mock.Mock()
 arc_ping.return_value = False

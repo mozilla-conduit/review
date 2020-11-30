@@ -9,10 +9,8 @@ import textwrap
 
 from .conftest import assert_attributes
 
-from mozphab import environment, mozphab
+from mozphab import environment
 from mozphab.diff import Diff
-
-mozphab.SHOW_SPINNER = False
 
 
 class Args:

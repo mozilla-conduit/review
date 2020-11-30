@@ -7,8 +7,6 @@ from .conftest import hg_out
 
 from mozphab import mozphab
 
-mozphab.SHOW_SPINNER = False
-
 
 _revision = 100
 

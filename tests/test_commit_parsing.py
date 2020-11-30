@@ -1,9 +1,7 @@
 import unittest
 
-from mozphab import helpers, mozphab
+from mozphab import helpers
 from mozphab.commands import submit
-
-mozphab.SHOW_SPINNER = False
 
 
 class CommitParsing(unittest.TestCase):

@@ -8,8 +8,6 @@ from .conftest import hg_out, search_diff, search_rev
 
 from mozphab import mozphab
 
-mozphab.SHOW_SPINNER = False
-
 
 arc_call_conduit = mock.Mock()
 arc_call_conduit.return_value = [{"userName": "alice", "phid": "PHID-USER-1"}]
