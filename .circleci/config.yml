@@ -21,9 +21,11 @@ jobs:
     steps:
       - checkout
       - run:
-          name: install dependencies
+          name: setup
           command: |
             set -e
+            mkdir -p ~/test-reports
+            mkdir -p ~/coredumps
             # install modern hg
             sudo pip3 install --disable-pip-version-check mercurial hg-evolve
             # configure hg
@@ -41,19 +43,22 @@ jobs:
             set -e
             python3 --version
             git --version
-            pip3 --disable-pip-version-check list --format freeze | egrep '^(mercurial|hg-evolve)=='
+            pip3 --disable-pip-version-check list --format freeze
       - run:
           name: run tests
           command: |
             set -e
-            mkdir test-reports
+            ulimit -c unlimited
             for F in tests/test_*.py; do
-              pytest --junitxml=test-reports/junit-$( basename $F .py ).xml -vv $F
+              pytest --junitxml=~/test-reports/junit-$( basename $F .py ).xml -vv $F
             done
+            cp core.* ~/coredumps || true
       - store_test_results:
-          path: test-reports
+          path: ~/test-reports
       - store_artifacts:
-          path: test-reports
+          path: ~/test-reports
+      - store_artifacts:
+          path: ~/coredumps
   test_3_7:
     <<: *test_template
     docker:
