@@ -12,6 +12,7 @@ import urllib.request as url_request
 
 from mozphab import environment
 
+from .environment import USER_AGENT
 from .exceptions import (
     CommandError,
     Error,
@@ -126,6 +127,7 @@ class ConduitAPI:
         return dict(
             url=url_parse.urljoin(self.repo.api_url, method),
             method="POST",
+            headers={"User-Agent": USER_AGENT},
             data=url_parse.urlencode(
                 {
                     "params": json.dumps(

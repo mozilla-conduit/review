@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import os
+import pkg_resources
 import sys
 
 from pathlib import Path
@@ -44,3 +45,19 @@ INSTALL_CERT_MSG = (
 )
 MAX_TEXT_SIZE = 10 * 1024 * 1024
 MAX_CONTEXT_SIZE = 4 * 1024 * 1024
+
+
+MOZPHAB_NAME = "MozPhab"  # PyPi package name
+
+
+def _get_mozphab_version():
+    # Currently installed version of MozPhab
+    try:
+        return pkg_resources.get_distribution(MOZPHAB_NAME).version
+    except pkg_resources.DistributionNotFound:
+        return "0.0.0"
+
+
+MOZPHAB_VERSION = _get_mozphab_version()
+
+USER_AGENT = f"{MOZPHAB_NAME}/{MOZPHAB_VERSION}"

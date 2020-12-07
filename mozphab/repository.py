@@ -37,6 +37,12 @@ class Repository(object):
         self.call_sign = self._get_setting("repository.callsign")
         self.bmo_url = self._get_setting("bmo_url")
 
+        if self.bmo_url and not (
+            urllib.parse.urlparse(self.bmo_url).scheme == "https"
+            or environment.HTTP_ALLOWED
+        ):
+            raise Error("Only https connections are allowed.")
+
     def is_worktree_clean(self):
         """Check if the working tree is clean."""
 

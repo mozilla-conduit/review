@@ -12,27 +12,19 @@ import __main__ as script_module
 
 from distutils.dist import Distribution
 from pathlib import Path
-from pkg_resources import get_distribution, parse_version
+from pkg_resources import parse_version
 
 from mozphab import environment
 
 from .arcanist import update_arc
 from .config import config
+from .environment import MOZPHAB_VERSION
 from .exceptions import Error
 from .logger import logger, stop_logging
 from .subprocess_wrapper import check_call
 
 ARC_UPDATE_FREQUENCY = 24 * 7  # hours
 SELF_UPDATE_FREQUENCY = 24 * 3  # hours
-
-
-def get_installed_distribution():
-    return get_distribution("MozPhab")
-
-
-def get_name_and_version():
-    dist = get_installed_distribution()
-    return "{} ({})".format(dist.project_name, dist.version)
 
 
 def get_pypi_info():
@@ -58,7 +50,7 @@ def check_for_updates(with_arc=True):
         and time.time() - config.self_last_check > SELF_UPDATE_FREQUENCY * 60 * 60
     ):
         config.self_last_check = int(time.time())
-        current_version = get_installed_distribution().version
+        current_version = MOZPHAB_VERSION
         pypi_info = get_pypi_info()
         logger.debug(
             "Versions - local: {}, PyPI: {}".format(

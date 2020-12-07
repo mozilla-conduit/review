@@ -6,7 +6,6 @@
 import json
 import mock
 import pytest
-import re
 from contextlib import contextmanager
 from immutabledict import immutabledict
 
@@ -61,6 +60,7 @@ def test_build_request(m_load_api_token):
         ),
         "method": "POST",
         "url": "https://api_url/method",
+        "headers": {"User-Agent": mock.ANY},
     }
 
     # provided token
@@ -79,6 +79,7 @@ def test_build_request(m_load_api_token):
         ),
         "method": "POST",
         "url": "https://api_url/method",
+        "headers": {"User-Agent": mock.ANY},
     }
 
     # unicode
@@ -97,6 +98,7 @@ def test_build_request(m_load_api_token):
         ),
         "method": "POST",
         "url": "https://api_url/method",
+        "headers": {"User-Agent": mock.ANY},
     }
 
     # empty dict, empty list
@@ -115,6 +117,7 @@ def test_build_request(m_load_api_token):
         ),
         "method": "POST",
         "url": "https://api_url/method",
+        "headers": {"User-Agent": mock.ANY},
     }
 
 
@@ -138,7 +141,7 @@ def test_call(m_load_api_token, m_urlopen):
     cm.read.return_value = json.dumps({"error_info": "aieee", "error_code": 1})
     with pytest.raises(ConduitAPIError) as conduit_error:
         mozphab.conduit.call("method", dict(call="args"))
-    assert re.search("^Phabricator Error: ", conduit_error.value.args[0])
+    assert conduit_error.value.args[0].startswith("Phabricator Error: ")
 
 
 @mock.patch("mozphab.conduit.ConduitAPI.call")

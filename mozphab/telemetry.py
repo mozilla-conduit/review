@@ -13,9 +13,9 @@ from mozphab import environment
 
 from .bmo import BMOAPIError
 from .config import config
+from .environment import MOZPHAB_VERSION
 from .helpers import prompt
 from .logger import logger
-from .updater import get_installed_distribution
 from .user import user_data
 
 logging.getLogger("glean").setLevel(logging.DEBUG)
@@ -32,12 +32,11 @@ def if_telemetry_enabled(func):
 class Telemetry:
     def __init__(self):
         """Initiate Glean, load pings and metrics."""
-        dist = get_installed_distribution()
 
         logger.debug("Initializing Glean...")
         Glean.initialize(
             application_id="MozPhab",
-            application_version=dist.version,
+            application_version=MOZPHAB_VERSION,
             upload_enabled=config.telemetry_enabled,
             configuration=Configuration(),
             data_dir=Path(environment.MOZBUILD_PATH) / "telemetry-data",

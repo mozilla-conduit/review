@@ -26,7 +26,7 @@ from .logger import init_logging, logger
 from .spinner import wait_message
 from .sentry import init_sentry, report_to_sentry
 from .telemetry import telemetry
-from .updater import check_for_updates, get_name_and_version
+from .updater import check_for_updates
 
 # Known Issues
 # - commits with a description already modified by arc (ie. the follow the arc commit
@@ -55,7 +55,8 @@ def main(argv, *, is_development):
             environment.SHOW_SPINNER = False
 
         init_logging()
-        logger.debug(get_name_and_version())
+
+        logger.debug("%s (%s)", environment.MOZPHAB_NAME, environment.MOZPHAB_VERSION)
 
         if not args.no_arc:
             install_arc_if_required()

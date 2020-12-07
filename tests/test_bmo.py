@@ -3,58 +3,68 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import mock
+import json
 import pytest
-import re
 
-from mozphab.bmo import BMOAPI, BMOAPIError
-from mozphab.exceptions import CommandError
-
-
-@mock.patch("mozphab.bmo.BMOAPI.call")
-def test_get(m_call):
-    bmo = BMOAPI()
-    bmo.get("arg", kwarg="value")
-    m_call.assert_called_once_with("arg", "GET", kwarg="value")
+from mozphab.bmo import bmo, BMOAPIError
 
 
 @mock.patch("mozphab.bmo.BMOAPI.get")
 @mock.patch("mozphab.bmo.conduit")
 def test_whoami(m_conduit, m_get):
-    bmo = BMOAPI()
     bmo.whoami()
     m_get.assert_called_once_with("whoami", headers={"X-PHABRICATOR-TOKEN": mock.ANY})
     m_conduit.load_api_token.assert_called_once()
 
 
 @mock.patch("mozphab.bmo.conduit")
-@mock.patch("mozphab.bmo.HTTPConnection")
-@mock.patch("mozphab.bmo.HTTPSConnection")
-@mock.patch("mozphab.bmo.urllib.parse")
-@mock.patch("mozphab.bmo.environment")
-@mock.patch("mozphab.bmo.json")
-def test_call(m_json, m_env, m_parse, m_https, m_http, m_conduit):
-    bmo = BMOAPI()
-    m_env.HTTP_ALLOWED = True
+def test_build_request(m_conduit):
+    m_conduit.repo.bmo_url = "https://bmo.test"
 
-    m_conduit.repo.bmo_url = "http://bmo"
-    url = mock.Mock()
-    url.geturl.return_value = "http://bmo"
-    url.scheme = "http"
-    m_parse.urljoin.return_value = "http://bmo/rest/someapi"
-    m_parse.urlparse.return_value = url
-    m_json.loads.return_value = dict(success=True)
+    assert bmo._build_request(method="test_method") == {
+        "url": "https://bmo.test/rest/test_method",
+        "method": "GET",
+        "headers": {"User-Agent": mock.ANY},
+    }
 
-    url.get_url.reset_mock()
-    assert dict(success=True) == bmo.call("someapi", "GET")
-    m_parse.urljoin.assert_called_once_with("http://bmo", "rest/someapi")
-    m_parse.urlparse.assert_called_once_with("http://bmo/rest/someapi")
-    assert url.geturl.call_count == 3
+    assert bmo._build_request(method="test_method", headers={"X-Test": "true"}) == {
+        "url": "https://bmo.test/rest/test_method",
+        "method": "GET",
+        "headers": {"User-Agent": mock.ANY, "X-Test": "true"},
+    }
 
-    m_json.loads.return_value = dict(error=True)
+
+def test_sanitised_req():
+    assert bmo._sanitise_req(
+        {
+            "url": "https://bmo.test/rest/test_method",
+            "method": "GET",
+            "headers": {"X-PHABRICATOR-TOKEN": "cli-secret"},
+        }
+    ) == {
+        "url": "https://bmo.test/rest/test_method",
+        "method": "GET",
+        "headers": {"X-PHABRICATOR-TOKEN": "cli-XXXX"},
+    }
+
+
+@mock.patch("urllib.request.urlopen")
+@mock.patch("mozphab.bmo.conduit")
+def test_get(m_conduit, m_urlopen):
+    m_conduit.repo.bmo_url = "https://bmo.test"
+
+    # build fake context-manager to mock urlopen
+    cm = mock.MagicMock()
+    cm.getcode.return_value = 200
+    cm.__enter__.return_value = cm
+    m_urlopen.return_value = cm
+
+    # success
+    cm.read.return_value = json.dumps({"result": "result"})
+    assert bmo.get("method") == {"result": "result"}
+
+    # error
+    cm.read.return_value = json.dumps({"error": "aieee"})
     with pytest.raises(BMOAPIError) as bmo_error:
-        bmo.call("someapi", "GET")
-    assert re.search("^Bugzilla Error: ", bmo_error.value.args[0])
-
-    m_env.HTTP_ALLOWED = False
-    with pytest.raises(CommandError):
-        bmo.call("someapi", "GET")
+        bmo.get("method")
+    assert bmo_error.value.args[0].startswith("Bugzilla Error: ")

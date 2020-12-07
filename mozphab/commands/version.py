@@ -3,11 +3,11 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from mozphab.logger import logger
-from mozphab.updater import get_name_and_version
+from mozphab.environment import MOZPHAB_NAME, MOZPHAB_VERSION
 
 
 def log_current_version(_):
-    logger.info(get_name_and_version())
+    logger.info("%s (%s)", MOZPHAB_NAME, MOZPHAB_VERSION)
 
 
 def add_parser(parser):
