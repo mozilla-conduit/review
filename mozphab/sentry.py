@@ -8,6 +8,7 @@ import socket
 import ssl
 import urllib.error
 
+import hglib.error
 import sentry_sdk
 from pkg_resources import get_distribution
 from sentry_sdk.integrations.logging import LoggingIntegration
@@ -37,8 +38,9 @@ def report_to_sentry(e):
     if (
         # As we don't capture stdout/stderr, failures when running hg/git are not
         # actionable.  Some cases of CommandError never need reporting (eg. failure
-        # to apply a patch).
+        # to apply a patch).  Mercurial's command server can throw these as ServerErrors
         isinstance(e, CommandError)
+        or isinstance(e, hglib.error.ServerError)
         # SSLCertVerification errors are caused by a misconfigured Python install.
         or isinstance(e, ssl.SSLCertVerificationError)
         # Network unreachable
@@ -51,6 +53,9 @@ def report_to_sentry(e):
         or isinstance(e, urllib.error.URLError)
         # Connection resets are transient
         or isinstance(e, ConnectionResetError)
+        # Ctrl-C can manifest in a number of ways
+        or isinstance(e, KeyboardInterrupt)
+        or isinstance(e, BrokenPipeError)
     ):
         return
 
