@@ -930,6 +930,10 @@ class Mercurial(Repository):
             )
             return
 
+        # emtpy files don't have any hunks
+        if meta["file_size"] == 0:
+            return
+
         lines = meta["body"].splitlines(keepends=True)
         lines = ["+%s" % line for line in lines]
         new_len = len(lines)
@@ -960,6 +964,10 @@ class Mercurial(Repository):
                 b_body="",
                 b_mime="",
             )
+            return
+
+        # emtpy files don't have any hunks
+        if meta["file_size"] == 0:
             return
 
         lines = meta["body"].splitlines(keepends=True)

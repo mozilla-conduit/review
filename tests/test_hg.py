@@ -377,7 +377,12 @@ def test_file_meta_binary(m_cat, m_file_size, m_mime, hg):
 @mock.patch("mozphab.diff.Diff.Change.set_as_binary")
 def test_change_add(m_set_as_binary, m_get_file_meta, hg):
     change = Diff.Change("x")
-    m_get_file_meta.return_value = dict(binary=False, body="abc\n", file_size=123)
+    m_get_file_meta.return_value = dict(
+        binary=False,
+        bin_body=b"abc\n",
+        body="abc\n",
+        file_size=123,
+    )
     hg._change_add(change, "fn", None, "parent", "node")
     m_set_as_binary.assert_not_called()
     assert len(change.hunks) == 1
@@ -392,12 +397,13 @@ def test_change_add(m_set_as_binary, m_get_file_meta, hg):
         ),
     )
 
+    # binary
     change = Diff.Change("x")
     m_set_as_binary.reset_mock()
     m_get_file_meta.return_value = dict(
         binary=True,
         bin_body=b"abc\n",
-        body=b"abc\n",
+        body="abc\n",
         file_size=123,
         mime="MIME",
     )
@@ -409,6 +415,19 @@ def test_change_add(m_set_as_binary, m_get_file_meta, hg):
         b_body=b"abc\n",
         b_mime="MIME",
     )
+
+    # empty
+    change = Diff.Change("x")
+    m_set_as_binary.reset_mock()
+    m_get_file_meta.return_value = dict(
+        binary=False,
+        bin_body=b"",
+        body="",
+        file_size=0,
+    )
+    hg._change_add(change, "fn", None, "parent", "node")
+    assert not change.hunks
+    m_set_as_binary.assert_not_called()
 
 
 @mock.patch("mozphab.mercurial.Mercurial._get_file_meta")
@@ -435,12 +454,13 @@ def test_change_del(m_set_as_binary, m_get_file_meta, hg):
     )
     m_set_as_binary.assert_not_called()
 
+    # binary
     change = Diff.Change("x")
     m_set_as_binary.reset_mock()
     m_get_file_meta.return_value = dict(
         binary=True,
         bin_body=b"abc\n",
-        body=b"abc\n",
+        body="abc\n",
         file_size=123,
         mime="MIME",
     )
@@ -452,6 +472,19 @@ def test_change_del(m_set_as_binary, m_get_file_meta, hg):
         b_body="",
         b_mime="",
     )
+
+    # empty
+    change = Diff.Change("x")
+    m_set_as_binary.reset_mock()
+    m_get_file_meta.return_value = dict(
+        binary=False,
+        bin_body=b"",
+        body="",
+        file_size=0,
+    )
+    hg._change_del(change, "fn", None, "parent", "node")
+    assert not change.hunks
+    m_set_as_binary.assert_not_called()
 
 
 @mock.patch("mozphab.mercurial.Mercurial._get_file_meta")
