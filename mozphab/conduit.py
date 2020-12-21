@@ -42,7 +42,7 @@ class ConduitAPIError(Error):
     """Raised when the Phabricator Conduit API returns an error response."""
 
     def __init__(self, msg=None):
-        super().__init__(f'Phabricator Error: {msg}')
+        super().__init__(f"Phabricator Error: {msg if msg else 'Unknown Error'}")
 
 
 class ConduitAPI:

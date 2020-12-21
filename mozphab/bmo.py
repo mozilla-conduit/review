@@ -18,7 +18,7 @@ class BMOAPIError(Error):
     """Raised when the Bugzilla API returns an error response."""
 
     def __init__(self, msg=None):
-        super().__init__(f'Bugzilla Error: {msg}')
+        super().__init__(f"Bugzilla Error: {msg if msg else 'Unknown Error'}")
 
 
 class BMOAPI:
