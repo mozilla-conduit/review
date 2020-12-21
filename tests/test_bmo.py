@@ -53,7 +53,7 @@ def test_call(m_json, m_env, m_parse, m_https, m_http, m_conduit):
     m_json.loads.return_value = dict(error=True)
     with pytest.raises(BMOAPIError) as bmo_error:
         bmo.call("someapi", "GET")
-    assert re.search("^Error while communicating with Bugzilla", bmo_error.value.args[0])
+    assert re.search("^Bugzilla Error: ", bmo_error.value.args[0])
 
     m_env.HTTP_ALLOWED = False
     with pytest.raises(CommandError):

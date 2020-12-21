@@ -138,7 +138,7 @@ def test_call(m_load_api_token, m_urlopen):
     cm.read.return_value = json.dumps({"error_info": "aieee", "error_code": 1})
     with pytest.raises(ConduitAPIError) as conduit_error:
         mozphab.conduit.call("method", dict(call="args"))
-    assert re.search("^Error while communicating with Phabricator", conduit_error.value.args[0])
+    assert re.search("^Phabricator Error: ", conduit_error.value.args[0])
 
 @mock.patch("mozphab.conduit.ConduitAPI.call")
 def test_ping(m_call):
