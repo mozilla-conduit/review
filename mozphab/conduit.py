@@ -41,6 +41,11 @@ def normalise_reviewer(reviewer, strip_group=True):
 class ConduitAPIError(Error):
     """Raised when the Phabricator Conduit API returns an error response."""
 
+    def __init__(self, msg=""):
+        if msg:
+            msg = "Error while communicating with Phabricator - the server responded with:\n" + msg
+        super().__init__(msg)
+
 
 class ConduitAPI:
     def __init__(self):

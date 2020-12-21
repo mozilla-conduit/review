@@ -4,6 +4,7 @@
 
 import mock
 import pytest
+import re
 
 from mozphab.bmo import BMOAPI, BMOAPIError
 from mozphab.exceptions import CommandError
@@ -50,8 +51,9 @@ def test_call(m_json, m_env, m_parse, m_https, m_http, m_conduit):
     assert url.geturl.call_count == 3
 
     m_json.loads.return_value = dict(error=True)
-    with pytest.raises(BMOAPIError):
+    with pytest.raises(BMOAPIError) as bmo_error:
         bmo.call("someapi", "GET")
+    assert re.search("^Error while communicating with Bugzilla", bmo_error.value.args[0])
 
     m_env.HTTP_ALLOWED = False
     with pytest.raises(CommandError):

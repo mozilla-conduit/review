@@ -17,6 +17,11 @@ DEFAULT_BMO_HOST = "https://bugzilla.mozilla.org"
 class BMOAPIError(Error):
     """Raised when the Phabricator Conduit API returns an error response."""
 
+    def __init__(self, msg=""):
+        if msg:
+            msg = "Error while communicating with Bugzilla - the server responded with:\n" + msg
+        super().__init__(msg)
+
 
 class BMOAPI:
     def get(self, method, **kwargs):
