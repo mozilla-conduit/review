@@ -140,6 +140,7 @@ def test_call(m_load_api_token, m_urlopen):
         mozphab.conduit.call("method", dict(call="args"))
     assert re.search("^Phabricator Error: ", conduit_error.value.args[0])
 
+
 @mock.patch("mozphab.conduit.ConduitAPI.call")
 def test_ping(m_call):
     m_call.return_value = {}
