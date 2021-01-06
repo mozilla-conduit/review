@@ -108,6 +108,45 @@ class CommitParsing(unittest.TestCase):
         self.assertParsed(([], ["gps"]), parse("stuff; r=gps DONTBUILD"))
         self.assertParsed(([], ["gps"]), parse("stuff; r=gps (DONTBUILD)"))
 
+        # make sure things work with a period in the nickname
+        self.assertParsed(
+            ([], ["jimmy.james", "bill.mcneal"]),
+            parse("stuff;r=jimmy.james,r=bill.mcneal"),
+        )
+
+        # make sure period at the end does not get included
+        self.assertParsed(([], ["jimmy"]), parse("stuff;r=jimmy."))
+
+        # check some funky names too
+        self.assertParsed(([], ["a"]), parse("stuff;r=a"))
+        self.assertParsed(([], ["aa"]), parse("stuff;r=aa"))
+        self.assertParsed(([], [".a"]), parse("stuff;r=.a"))
+        self.assertParsed(([], ["..a"]), parse("stuff;r=..a"))
+        self.assertParsed(([], ["...a"]), parse("stuff;r=...a"))
+        self.assertParsed(([], ["a...a"]), parse("stuff;r=a...a"))
+        self.assertParsed(([], ["a.b"]), parse("stuff;r=a.b"))
+        self.assertParsed(([], ["a.b.c"]), parse("stuff;r=a.b.c"))
+        self.assertParsed(([], ["-.-.-"]), parse("stuff;r=-.-.-"))
+
+        # altogether now with some spaces sprinkled here and there
+        self.assertParsed(
+            (
+                [],
+                [
+                    "a",
+                    "aa",
+                    ".a",
+                    "..a",
+                    "...a",
+                    "a...a",
+                    "a.b",
+                    "a.b.c",
+                    "-.-.-",
+                ],
+            ),
+            parse("stuff;r=a,aa,.a,..a,...a, a...a,a.b, a.b.c, -.-.-"),
+        )
+
         # bare r?
         self.assertParsed(([], []), parse("stuff; r?"))
         self.assertParsed(([], []), parse("stuff, r="))
@@ -174,6 +213,12 @@ class CommitParsing(unittest.TestCase):
         self.assertEqual("stuff; r=romulus!", morph("stuff; r!romulus!"))
         self.assertEqual("stuff; r=romulus!", morph("stuff; r=romulus!"))
         self.assertEqual("stuff; r=romulus!.", morph("stuff; r!romulus."))
+
+        self.assertEqual("stuff; r=a!,a.b!", morph("stuff; r!a,a.b"))
+        self.assertEqual("stuff; r=a!, r=a.b", morph("stuff; r!a, r=a.b"))
+        self.assertEqual("stuff; r=a.b!", morph("stuff; r!a.b!"))
+        self.assertEqual("stuff; r=a.b!", morph("stuff; r=a.b!"))
+        self.assertEqual("stuff; r=a.b!.", morph("stuff; r!a.b."))
 
     def test_arc_diff_rev(self):
         parse = helpers.parse_arc_diff_rev

@@ -37,7 +37,8 @@ BUG_ID_RE = re.compile(r"(?:(?:bug|b=)(?:\s*)(\d+)(?=\b))", flags=re.IGNORECASE)
 LIST = r"[;,\/\\]\s*"
 LIST_RE = re.compile(LIST)
 IRC_NICK_CHARS = r"a-zA-Z0-9\-\_!"  # includes !, which is different from commitparser
-IRC_NICK = r"#?[" + IRC_NICK_CHARS + "]+"
+IRC_NICK_CHARS_WITH_PERIOD = IRC_NICK_CHARS + r"."
+IRC_NICK = r"#?[" + IRC_NICK_CHARS_WITH_PERIOD + r"]*[" + IRC_NICK_CHARS + r"]+"
 REVIEWERS_RE = (
     r"([\s(.\[;,])(r%s)("
     + IRC_NICK
@@ -51,7 +52,7 @@ ALL_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"[=?]")
 REQUEST_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"[?]")
 GRANTED_REVIEWERS_RE = re.compile(REVIEWERS_RE % r"=")
 R_SPECIFIER_RE = re.compile(r"\br[=?]")
-BLOCKING_REVIEWERS_RE = re.compile(r"\b(r!)([" + IRC_NICK_CHARS + ",]+)")
+BLOCKING_REVIEWERS_RE = re.compile(r"\b(r!)([" + IRC_NICK_CHARS_WITH_PERIOD + ",]+)")
 
 DEPENDS_ON_RE = re.compile(r"^\s*Depends on\s*D(\d+)\s*$", flags=re.MULTILINE)
 
@@ -265,17 +266,23 @@ def parse_reviewers(title):
         "r?" reviewers under the "request" key
         "r=" reviewers under the "granted" key
     """
-    request_reviewers = []
-    for match in re.finditer(REQUEST_REVIEWERS_RE, title):
-        if not match.group(3):
-            continue
-        request_reviewers.extend(re.split(LIST_RE, match.group(3)))
-    granted_reviewers = []
-    for match in re.finditer(GRANTED_REVIEWERS_RE, title):
-        if not match.group(3):
-            continue
-        granted_reviewers.extend(re.split(LIST_RE, match.group(3)))
-    return dict(request=request_reviewers, granted=granted_reviewers)
+
+    def extend_matches(match_re, matches):
+        """Extends `matches` with any matches found using `match_re`.
+        Args:
+            match_re (str): a regular expression string to search with
+            matches (list of str): a list of strings of reviewers captured
+        Returns:
+            dict (str, list of str): a dictionary of requested and granted reviewers
+        """
+        for match in re.finditer(match_re, title):
+            if match.group(3):
+                matches.extend(re.split(LIST_RE, match.group(3)))
+
+    reviewers = {"request": [], "granted": []}
+    extend_matches(REQUEST_REVIEWERS_RE, reviewers["request"])
+    extend_matches(GRANTED_REVIEWERS_RE, reviewers["granted"])
+    return reviewers
 
 
 def strip_depends_on(body):

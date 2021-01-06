@@ -57,9 +57,9 @@ def morph_blocking_reviewers(commits):
         if matchobj.group(1) == "r!":
             nick = matchobj.group(2)
 
-            # strip trailing , so we can put it back later
-            if nick.endswith(","):
-                suffix = ","
+            # strip trailing , or . so we can put it back later
+            if nick[-1] in (",", "."):
+                suffix = nick[-1]
                 nick = nick[:-1]
             else:
                 suffix = ""

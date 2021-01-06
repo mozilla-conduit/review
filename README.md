@@ -298,5 +298,5 @@ production data.
 You can order the suite to use your local code by calling:
 
 ```
-$ docker-compose -f docker-compose.yml -f docker-compose.review.yml run local-dev`
+$ docker-compose -f docker-compose.yml -f docker-compose.review.yml run local-dev
 ````
