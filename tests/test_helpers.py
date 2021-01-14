@@ -2,6 +2,7 @@ import builtins
 import datetime
 import json
 import mock
+import os
 import pytest
 import subprocess
 import unittest
@@ -245,7 +246,7 @@ def test_disabled_reviewers(call_conduit):
         # user.query
         [
             dict(userName="alice", phid="PHID-USER-1"),
-            dict(userName="goober", phid="PHID-USER-2", roles=[u"disabled"]),
+            dict(userName="goober", phid="PHID-USER-2", roles=["disabled"]),
         ],
         # project.search
         {"data": [], "maps": {"slugMap": {}}},
@@ -575,3 +576,101 @@ def test_temporary_file_unicode():
     with helpers.temporary_file(message) as fname:
         with Path(fname).open(encoding="utf-8") as f:
             assert f.readline() == message
+
+
+@pytest.fixture
+def linesep():
+    return os.linesep
+
+
+class TestCreateHunkLines:
+    @pytest.mark.parametrize("prefix", ("+", "-", " "))
+    def test_create_hunk_lines_empty_body_do_not_check_eof(self, prefix, linesep):
+        """Expect no lines when provided a completely empty file."""
+        lines, eof_has_no_new_line = helpers.create_hunk_lines(
+            body="", prefix=prefix, check_eof=False
+        )
+        assert lines == []
+        assert eof_has_no_new_line is None
+
+    @pytest.mark.parametrize("prefix", ("+", "-", " "))
+    def test_create_hunk_lines_empty_body_check_eof(self, prefix, linesep):
+        """Expect "no newline message" when provided a completely empty file."""
+        lines, eof_had_no_newline = helpers.create_hunk_lines(
+            body="", prefix=prefix, check_eof=True
+        )
+        assert lines == [
+            f"\\ No newline at end of file{linesep}",
+        ]
+        assert eof_had_no_newline
+
+    @pytest.mark.parametrize("prefix", ("+", "-", " "))
+    def test_create_hunk_lines_empty_line_do_not_check_eof(self, prefix, linesep):
+        """Expect a prefixed line to be returned and the EOF check to not proceed.
+
+        NOTE: Though this functionality is currently implemented, it does not match
+        what Mercurial does with new, empty files that do not have any content. In those
+        cases, Mercurial does not provide any hunks at all regardless if a newline
+        characters exists or does not exist at the end of the file.
+        """
+        lines, eof_has_no_new_line = helpers.create_hunk_lines(
+            body=f"{linesep}", prefix=prefix, check_eof=False
+        )
+        assert lines == [f"{prefix}{linesep}"]
+        assert eof_has_no_new_line is None
+
+    @pytest.mark.parametrize("prefix", ("+", "-", " "))
+    def test_create_hunk_lines_empty_line_check_eof(self, prefix, linesep):
+        """Expect a prefixed line to be returned, and the EOF check to pass.
+
+        NOTE: Though this functionality is currently implemented, it does not match
+        what Mercurial does with new, empty files that do not have any content. In those
+        cases, Mercurial does not provide any hunks at all regardless if a newline
+        characters exists or does not exist at the end of the file.
+        """
+        lines, eof_had_no_newline = helpers.create_hunk_lines(
+            body=f"{linesep}", prefix=prefix, check_eof=True
+        )
+        assert lines == [f"{prefix}{linesep}"]
+        assert not eof_had_no_newline
+
+    @pytest.mark.parametrize("prefix", ("+", "-", " "))
+    def test_create_hunk_lines_no_newline_eof_do_not_check_eof(self, prefix, linesep):
+        """Expect a list of two lines, the last line having no line separator."""
+        lines, eof_had_no_newline = helpers.create_hunk_lines(
+            body=f"hello{linesep}world", prefix=prefix, check_eof=False
+        )
+        assert lines == [
+            f"{prefix}hello{linesep}",
+            f"{prefix}world",
+        ]
+        assert eof_had_no_newline is None
+
+    @pytest.mark.parametrize("prefix", ("+", "-", " "))
+    def test_create_hunk_lines_no_newline_eof_check_eof(self, prefix, linesep):
+        """Expect a list of three lines, all having line separators.
+
+        NOTE: The last message is appended as an extra line, to match with what
+        Mercurial outputs when showing diffs.
+        """
+        lines, eof_had_no_newline = helpers.create_hunk_lines(
+            body=f"hello{linesep}world", prefix=prefix, check_eof=True
+        )
+        assert lines == [
+            f"{prefix}hello{linesep}",
+            f"{prefix}world{linesep}",
+            f"\\ No newline at end of file{linesep}",
+        ]
+        assert eof_had_no_newline
+
+    def test_create_hunk_lines_disallowed_prefix(self, linesep):
+        """Expect an exception to be raised when a disallowed prefix is provided"""
+        with pytest.raises(ValueError):
+            helpers.create_hunk_lines("hello world", "*")
+
+    @mock.patch("mozphab.helpers.os")
+    def test_create_hunk_lines_incompatible_linesep(self, mock_os):
+        """Expect an exception to be raised when a bad linesep is encountered"""
+        mock_os.linesep = "\r"
+        with pytest.raises(ValueError):
+            helpers.create_hunk_lines("hello world", "+")

@@ -9,6 +9,11 @@ import re
 import stat
 import sys
 import tempfile
+from typing import (
+    List,
+    Optional,
+    Tuple,
+)
 
 from contextlib import contextmanager
 from shutil import which
@@ -389,3 +394,62 @@ def short_node(text):
         except ValueError:
             pass
     return text
+
+
+def create_hunk_lines(
+    body: str, prefix: str, check_eof: bool = True
+) -> Tuple[List[str], Optional[bool]]:
+    """Parse a text body into a list of lines to be used in hunks.
+
+    Args:
+        body: A string containing the raw content of the file.
+        prefix: A character (e.g. "+") indicating whether the lines are to be
+            added or removed or are unchanged.
+        check_eof: Whether to check or not to check the end of the file for the
+            newline character. If set to True, the check is performed and if a
+            newline character is missing, it will be added to the last entry in
+            `lines` along with a message.
+
+    Returns:
+        A tuple containing a list of strings to be used when generating the corpus
+            of the hunks, as well as boolean representing whether the file
+            terminated with a new line or not if applicable, `None` if not.
+    """
+    allowed_prefixes = ("+", "-", " ")
+    if prefix not in allowed_prefixes:
+        raise ValueError(f"Prefix should be one of {allowed_prefixes}")
+
+    # Windows has a different line separator combo than the rest of the world.
+    # This should be "\n" on Linux/Unix/Mac OS and "\r\n" on Windows
+    allowed_lineseps = ("\n", "\r\n")
+    linesep = os.linesep
+    if linesep not in allowed_lineseps:
+        raise ValueError("Unsupported line separator encountered: {repr(linesep)}")
+
+    empty_file = body == ""
+
+    if empty_file:
+        # `body` has absolutely nothing in it, return values accordingly.
+        if check_eof:
+            return [f"\\ No newline at end of file{linesep}"], True
+        else:
+            return [], None
+
+    # Split lines on line separators
+    lines = body.split(linesep)
+    eof_missing_newline = lines[-1] != ""
+
+    # Re-add line separators for all lines except the last line.
+    last_line = lines.pop()
+    lines = [f"{prefix}{line}{linesep}" for line in lines]
+    if eof_missing_newline:
+        if check_eof:
+            # Re-add the last line with the line separator, and another line
+            # indicating that no new line was at the EOF.
+            lines.append(f"{prefix}{last_line}{linesep}")
+            lines.append(f"\\ No newline at end of file{linesep}")
+        else:
+            # Re-add the last line as is since we weren't supposed to touch it.
+            lines.append(f"{prefix}{last_line}")
+
+    return lines, eof_missing_newline if check_eof else None

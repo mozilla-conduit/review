@@ -20,6 +20,7 @@ from .config import config
 from .diff import Diff
 from .exceptions import CommandError, Error, NotFoundError
 from .helpers import (
+    create_hunk_lines,
     parse_config,
     short_node,
     temporary_binary_file,
@@ -934,13 +935,10 @@ class Mercurial(Repository):
         if meta["file_size"] == 0:
             return
 
-        lines = meta["body"].splitlines(keepends=True)
-        lines = ["+%s" % line for line in lines]
+        lines, eof_missing_newline = create_hunk_lines(meta["body"], "+")
         new_len = len(lines)
-
-        if lines and not lines[-1].endswith("\n"):
-            lines[-1] = "{}\n".format(lines[-1])
-            lines.append("\\ No newline at end of file\n")
+        if eof_missing_newline:
+            new_len -= 1
 
         change.hunks.append(
             Diff.Hunk(
@@ -970,13 +968,7 @@ class Mercurial(Repository):
         if meta["file_size"] == 0:
             return
 
-        lines = meta["body"].splitlines(keepends=True)
-        lines = ["-%s" % line for line in lines]
-
-        if lines and not lines[-1].endswith("\n"):
-            lines[-1] = "{}\n".format(lines[-1])
-            lines.append("\\ No newline at end of file\n")
-
+        lines = create_hunk_lines(meta["body"], "-")[0]
         old_len = len(lines)
 
         change.hunks.append(
@@ -1008,8 +1000,7 @@ class Mercurial(Repository):
 
         if a_meta["body"] == b_meta["body"]:
             # File contents unchanged.
-            lines = a_meta["body"].splitlines(keepends=True)
-            lines = [" %s" % line for line in lines]
+            lines = create_hunk_lines(a_meta["body"], " ", check_eof=False)[0]
             change.hunks.append(
                 Diff.Hunk(
                     old_off=1,
