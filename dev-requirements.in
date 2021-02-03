@@ -1,0 +1,13 @@
+black==20.8b1
+callee==0.3.1
+colorama==0.4.3; sys_platform == "win32"
+dataclasses==0.7; python_version < "3.7"
+flake8-bugbear==20.1.4
+flake8==3.7.9
+funcsigs==1.0.2
+immutabledict==1.0.0
+importlib-metadata==0.23
+mock==3.0.5
+pbr==5.4.3
+pytest==5.2.1
+scandir==1.10.0
