@@ -90,6 +90,12 @@ def assert_attributes(hunk, expected):
 
 
 @pytest.fixture
+def posix_linesep():
+    """POSIX line separator (i.e. newline character)."""
+    return "\n"
+
+
+@pytest.fixture
 def hg_sha():
     def ret():
         return hg_out("id", "-i").rstrip("\n")

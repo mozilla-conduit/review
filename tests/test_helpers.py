@@ -2,7 +2,6 @@ import builtins
 import datetime
 import json
 import mock
-import os
 import pytest
 import subprocess
 import unittest
@@ -578,13 +577,9 @@ def test_temporary_file_unicode():
             assert f.readline() == message
 
 
-@pytest.fixture
-def linesep():
-    return os.linesep
-
-
+@pytest.mark.parametrize("prefix", ("+", "-", " "))
+@pytest.mark.parametrize("linesep", ("\n", "\r\n"))
 class TestCreateHunkLines:
-    @pytest.mark.parametrize("prefix", ("+", "-", " "))
     def test_create_hunk_lines_empty_body_do_not_check_eof(self, prefix, linesep):
         """Expect no lines when provided a completely empty file."""
         lines, eof_has_no_new_line = helpers.create_hunk_lines(
@@ -593,18 +588,16 @@ class TestCreateHunkLines:
         assert lines == []
         assert eof_has_no_new_line is None
 
-    @pytest.mark.parametrize("prefix", ("+", "-", " "))
     def test_create_hunk_lines_empty_body_check_eof(self, prefix, linesep):
         """Expect "no newline message" when provided a completely empty file."""
         lines, eof_had_no_newline = helpers.create_hunk_lines(
             body="", prefix=prefix, check_eof=True
         )
         assert lines == [
-            f"\\ No newline at end of file{linesep}",
+            f"\\ No newline at end of file\n",
         ]
         assert eof_had_no_newline
 
-    @pytest.mark.parametrize("prefix", ("+", "-", " "))
     def test_create_hunk_lines_empty_line_do_not_check_eof(self, prefix, linesep):
         """Expect a prefixed line to be returned and the EOF check to not proceed.
 
@@ -619,7 +612,6 @@ class TestCreateHunkLines:
         assert lines == [f"{prefix}{linesep}"]
         assert eof_has_no_new_line is None
 
-    @pytest.mark.parametrize("prefix", ("+", "-", " "))
     def test_create_hunk_lines_empty_line_check_eof(self, prefix, linesep):
         """Expect a prefixed line to be returned, and the EOF check to pass.
 
@@ -634,7 +626,6 @@ class TestCreateHunkLines:
         assert lines == [f"{prefix}{linesep}"]
         assert not eof_had_no_newline
 
-    @pytest.mark.parametrize("prefix", ("+", "-", " "))
     def test_create_hunk_lines_no_newline_eof_do_not_check_eof(self, prefix, linesep):
         """Expect a list of two lines, the last line having no line separator."""
         lines, eof_had_no_newline = helpers.create_hunk_lines(
@@ -646,7 +637,6 @@ class TestCreateHunkLines:
         ]
         assert eof_had_no_newline is None
 
-    @pytest.mark.parametrize("prefix", ("+", "-", " "))
     def test_create_hunk_lines_no_newline_eof_check_eof(self, prefix, linesep):
         """Expect a list of three lines, all having line separators.
 
@@ -658,19 +648,149 @@ class TestCreateHunkLines:
         )
         assert lines == [
             f"{prefix}hello{linesep}",
-            f"{prefix}world{linesep}",
-            f"\\ No newline at end of file{linesep}",
+            f"{prefix}world\n",
+            f"\\ No newline at end of file\n",
         ]
         assert eof_had_no_newline
 
-    def test_create_hunk_lines_disallowed_prefix(self, linesep):
+    def test_create_hunk_lines_disallowed_prefix(self, prefix, linesep):
         """Expect an exception to be raised when a disallowed prefix is provided"""
         with pytest.raises(ValueError):
             helpers.create_hunk_lines("hello world", "*")
 
-    @mock.patch("mozphab.helpers.os")
-    def test_create_hunk_lines_incompatible_linesep(self, mock_os):
-        """Expect an exception to be raised when a bad linesep is encountered"""
-        mock_os.linesep = "\r"
-        with pytest.raises(ValueError):
-            helpers.create_hunk_lines("hello world", "+")
+
+class TestSplitLines:
+    """Tests the `helpers.split_lines` method.
+
+    The tests here are meant to illustrate the functionality of `helpers.split_lines`
+    method, as there are a few special cases (most notably when an input string begins
+    or ends with a newline character.) The tests cover POSIX and DOS style line
+    terminators, as well as when an input contains a combination of both."""
+
+    def test_empty_body(self):
+        """Expect a single, empty string entry when given an empty body."""
+        body = ""
+        expected = [""]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
+    def test_single_line_no_eof_linesep(self):
+        """Expect a single string entry when provided with a string with no newlines."""
+        body = "line1"
+        expected = ["line1"]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
+    def test_two_lines_no_eof_linesep_posix(self):
+        """Expect a list of lines and newline characters when given multiple lines."""
+        body = "line1\nline2"
+        expected = ["line1", "\n", "line2"]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
+    def test_two_lines_eof_linesep_posix(self):
+        """Expect last entry to be empty string when input is newline terminated."""
+        body = "line1\nline2\n"
+        expected = ["line1", "\n", "line2", "\n", ""]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
+    def test_two_lines_no_eof_linesep_dos(self):
+        """Test two lines without EOF CRLF."""
+        body = "line1\r\nline2"
+        expected = ["line1", "\r\n", "line2"]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
+    def test_two_lines_eof_linesep_dos(self):
+        """Test two lines with CRLF line terminators. Last entry should be empty."""
+        body = "line1\r\nline2\r\n"
+        expected = ["line1", "\r\n", "line2", "\r\n", ""]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
+    def test_three_lines_mix_linesep_no_eof_linesep(self):
+        """Test a mix of dos and posix line separators. Result should include both."""
+        body = "line1\r\nline2\nline3"
+        expected = ["line1", "\r\n", "line2", "\n", "line3"]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
+    def test_three_lines_mix_linesep_eof_linesep(self):
+        """Test a mix of line separators with EOF CRLF. Last entry should be empty."""
+        body = "line1\r\nline2\nline3\r\n"
+        expected = ["line1", "\r\n", "line2", "\n", "line3", "\r\n", ""]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
+    def test_three_newline_characters(self):
+        """Test three empty lines. First and last entries should be empty."""
+        body = "\n\n\n"
+        expected = ["", "\n", "", "\n", "", "\n", ""]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
+        body = "\n\r\n\n"
+        expected = ["", "\n", "", "\r\n", "", "\n", ""]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
+        body = "\r\n\r\n\r\n"
+        expected = ["", "\r\n", "", "\r\n", "", "\r\n", ""]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
+    def test_one_line_followed_by_newline_characters(self):
+        """Test one line followed by newlines. Last entry should be empty."""
+        body = "line1\n\n\n"
+        expected = ["line1", "\n", "", "\n", "", "\n", ""]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
+
+class TestJoinLineseps:
+    def test_empty_list(self):
+        """Empty list of lines should return empty list."""
+        lines = []
+        expected = []
+        actual = helpers.join_lineseps(lines)
+        assert expected == actual
+
+    def test_one_line(self):
+        """A list with a single entry should return the same entry back."""
+        lines = ["line1"]
+        expected = ["line1"]
+        actual = helpers.join_lineseps(lines)
+        assert expected == actual
+
+    def test_one_line_with_newline(self):
+        """A list of two entries should return one entry with the joined string."""
+        lines = ["line1", "\n"]
+        expected = ["line1\n"]
+        actual = helpers.join_lineseps(lines)
+        assert expected == actual
+
+    def test_two_lines_no_eof_newline(self):
+        """A list of three entries should return the first two joined and the last."""
+        lines = ["line1", "\n", "line2"]
+        expected = ["line1\n", "line2"]
+        actual = helpers.join_lineseps(lines)
+        assert expected == actual
+
+    def test_two_lines_with_eof_newline(self):
+        """A list of four entries should return a list of two joined strings."""
+        lines = ["line1", "\n", "line2", "\n"]
+        expected = ["line1\n", "line2\n"]
+        actual = helpers.join_lineseps(lines)
+        assert expected == actual
+
+    def test_two_empty_lines(self):
+        """A list of four entries should return a list of two joined strings.
+
+        This test is basically the same test as above, but added to illustrate the usage
+        of this method to join empty lines.
+        """
+        lines = ["", "\n", "", "\n"]
+        expected = ["\n", "\n"]
+        actual = helpers.join_lineseps(lines)
+        assert expected == actual

@@ -14,6 +14,7 @@ from typing import (
     Optional,
     Tuple,
 )
+from itertools import zip_longest
 
 from contextlib import contextmanager
 from shutil import which
@@ -414,42 +415,82 @@ def create_hunk_lines(
         A tuple containing a list of strings to be used when generating the corpus
             of the hunks, as well as boolean representing whether the file
             terminated with a new line or not if applicable, `None` if not.
+
+    Note:
+        When the body is missing a newline at the end, the appended lines will use a
+        POSIX line terminator regardless of what line separators are already used in the
+        body.
     """
     allowed_prefixes = ("+", "-", " ")
     if prefix not in allowed_prefixes:
         raise ValueError(f"Prefix should be one of {allowed_prefixes}")
-
-    # Windows has a different line separator combo than the rest of the world.
-    # This should be "\n" on Linux/Unix/Mac OS and "\r\n" on Windows
-    allowed_lineseps = ("\n", "\r\n")
-    linesep = os.linesep
-    if linesep not in allowed_lineseps:
-        raise ValueError("Unsupported line separator encountered: {repr(linesep)}")
 
     empty_file = body == ""
 
     if empty_file:
         # `body` has absolutely nothing in it, return values accordingly.
         if check_eof:
-            return [f"\\ No newline at end of file{linesep}"], True
+            return [f"\\ No newline at end of file\n"], True
         else:
             return [], None
 
     # Split lines on line separators
-    lines = body.split(linesep)
+    lines = split_lines(body)
     eof_missing_newline = lines[-1] != ""
 
     # Re-add line separators for all lines except the last line.
     last_line = lines.pop()
-    lines = [f"{prefix}{line}{linesep}" for line in lines]
+    lines = join_lineseps(lines)
+    lines = [f"{prefix}{line}" for line in lines]
     if eof_missing_newline:
         if check_eof:
             # Re-add the last line with the line separator, and another line
             # indicating that no new line was at the EOF.
-            lines.append(f"{prefix}{last_line}{linesep}")
-            lines.append(f"\\ No newline at end of file{linesep}")
+            lines.append(f"{prefix}{last_line}\n")
+            lines.append(f"\\ No newline at end of file\n")
         else:
             # Re-add the last line as is since we weren't supposed to touch it.
             lines.append(f"{prefix}{last_line}")
 
     return lines, eof_missing_newline if check_eof else None
+
+
+def split_lines(body):
+    """Split a string on line separators, and keep line endings.
+
+    This method behaves the same as `str.splitlines(True)`, but only splits on POSIX
+    and DOS style line endings.
+
+    Args:
+        body: An arbitrary string.
+
+    Returns:
+        A list of strings consisting of lines and line separators.
+
+    Example:
+        >>> test = "line1\nline2\r\nline3"
+        >>> split_lines(test)
+        >>> ["line1", "\n", "line2", "\r\n", "line3"]
+    """
+    return re.split("(\n|\r\n)", body)
+
+
+def join_lineseps(lines):
+    """Given a list of strings, join every two entries together where possible.
+
+    NOTE: If the list length is odd, then the last entry is joined with an empty string.
+
+    Args:
+        lines: A list of strings representing lines to join.
+
+    Returns:
+        A list of strings that contains a joined list of strings.
+
+    Example:
+        >>> test = ["line1", "\n", "line2", "\r\n", "line3"]
+        >>> join_lineseps(test)
+        >>> ["line1\n", "line2\r\n", "line3"]
+    """
+    return [
+        "".join(line) for line in zip_longest(lines[0::2], lines[1::2], fillvalue="")
+    ]
