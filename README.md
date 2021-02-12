@@ -245,9 +245,9 @@ using the default settings.
 1. Ensure you have Python 3, Git, and Mercurial installed
    - eg. using `homebrew` on macOS, or your Linux distribution's package manager
    - `python3`, `git`, and `hg` executables must be on the system path
-2. In your clone of this repository run the following commands:
+2. In your clone of this repository run the following commands (adjusting to the version of Python):
    - `python3 -m venv venv`
-   - `venv/bin/pip3 install -r dev-requirements.txt`
+   - `venv/bin/pip3 install -r dev/requirements/python3.9.txt`
    - `venv/bin/pip3 install -e .`
 3. To run moz-phab after making modifications use `venv/bin/moz-phab-dev`
 4. To run tests use `venv/bin/pytest -vv`
@@ -266,6 +266,30 @@ using the default settings.
 3. To run moz-phab after making modifications use `venv\Scripts\moz-phab-dev`
 4. To run tests use `venv\Scripts\pytest -vv`
 
+### Regenerating requirements files
+
+Requirements files (those found in the `dev/requirements` directory) are automatically
+generated using pip-tools. These requirement files are used in the CircleCI
+configuration to install requirements that run remotely on CircleCI. You can use Docker
+to regenerate these files.
+
+#### On Linux
+
+To generate `dev/requirements/python*.*.txt`, run the following commands while in the
+`dev` directory:
+
+- `docker-compose run generate-python3.6-requirements`
+- `docker-compose run generate-python3.7-requirements`
+- `docker-compose run generate-python3.8-requirements`
+- `docker-compose run generate-python3.9-requirements`
+
+#### On Windows
+
+To generate `dev/requirements/windows.txt`, make sure you are not running Docker in WSL
+mode then run the following command:
+
+- `docker-compose run generate-windows-requirements`
+
 ### Circle CI
 
 `mozphab` uses Circle CI to ensure all tests pass on macOS, Linux, and Windows.
@@ -279,6 +303,22 @@ To ensure that your changes work, run `circleci` locally.
 This will run all the Python 3.8 tests in a dockerized environment.
 This step takes a while, so you might want to run `pytest` for working on your changes,
 as explained above.
+
+#### Circle CI on Windows
+
+As of the time of writing, `circleci-cli` on Windows does not allow you to execute
+Windows tests locally. When CircleCI is running your windows tests remotely, it will
+use a Windows Orb that is configured to use a special Windows executor that is preloaded
+with various development packages. The Windows virtual machine will use Miniconda to
+bootstrap the Python environment, which can cause some problems when installing
+additional requirements. The `generate-windows` container that is used to generate
+requirements files for Windows can be used to run your tests, as well as to test package
+installation. To do that, run the following commands:
+
+- `docker-compose run generate-windows powershell.exe`
+- `cd C:\review`
+- `pip install dev\requirements\windows.txt`
+- `pytest`
 
 ### Submitting patches
 
