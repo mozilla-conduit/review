@@ -25,7 +25,7 @@ setup(
     package_data={"mozphab": ["metrics.yaml", "pings.yaml"]},
     install_requires=[
         "distro",
-        "glean-sdk==33.0.4",
+        "glean-sdk>=33.10.1",
         "python-hglib==2.6.1",
         "sentry-sdk>=0.14.3",
         "setuptools",
