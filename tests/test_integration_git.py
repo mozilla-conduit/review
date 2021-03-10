@@ -655,6 +655,49 @@ def test_submit_remove_cr(in_process, git_repo_path, init_sha):
     )
 
 
+def test_submit_remove_form_feed(in_process, git_repo_path, init_sha):
+    """Test deleting a file with a form feed character will not corrupt the diff."""
+    call_conduit.side_effect = (
+        # CREATE
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        # user.search
+        [dict(userName="alice", phid="PHID-USER-1")],
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
+    )
+
+    test_a = git_repo_path / "X"
+    test_a.write_text("some line\fcontaining form feed\na second line\n")
+    git_out("add", "X")
+    git_out("commit", "-am", "A r?alice")
+
+    # delete file
+    test_a.unlink()
+    git_out("commit", "-am", "B r?alice")
+
+    call_conduit.reset_mock()
+    mozphab.main(["submit", "--yes", "--bug", "1", "HEAD~"], is_development=True)
+
+    failing = True
+    for arg in call_conduit.call_args_list:
+        if arg[0][0] == "differential.creatediff":
+            assert arg[0][1]["changes"][0]["hunks"][0]["corpus"] == (
+                "-some line\fcontaining form feed\n-a second line\n"
+            )
+            failing = False
+
+    assert not failing
+
+
 def test_submit_single_last(in_process, git_repo_path, init_sha):
     call_conduit.side_effect = (
         # ping

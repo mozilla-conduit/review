@@ -747,6 +747,13 @@ class TestSplitLines:
         actual = helpers.split_lines(body)
         assert actual == expected
 
+    def test_form_feed_character_mixed_in(self):
+        """Test handling of form feed character."""
+        body = "line1\nline2\fstill on line2\nline3\n"
+        expected = ["line1", "\n", "line2\fstill on line2", "\n", "line3", "\n", ""]
+        actual = helpers.split_lines(body)
+        assert actual == expected
+
 
 class TestJoinLineseps:
     def test_empty_list(self):
@@ -792,5 +799,12 @@ class TestJoinLineseps:
         """
         lines = ["", "\n", "", "\n"]
         expected = ["\n", "\n"]
+        actual = helpers.join_lineseps(lines)
+        assert expected == actual
+
+    def test_form_feed_character(self):
+        """Form feed character should be treated like any other character."""
+        lines = ["line1", "\n", "line2\fstill on line2"]
+        expected = ["line1\n", "line2\fstill on line2"]
         actual = helpers.join_lineseps(lines)
         assert expected == actual

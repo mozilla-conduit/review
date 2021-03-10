@@ -17,7 +17,13 @@ from .config import config
 from .diff import Diff
 from .exceptions import CommandError, Error, NotFoundError
 from .gitcommand import GitCommand
-from .helpers import prompt, short_node, temporary_binary_file, temporary_file
+from .helpers import (
+    prompt,
+    short_node,
+    temporary_binary_file,
+    temporary_file,
+    create_hunk_lines,
+)
 from .logger import logger
 from .repository import Repository
 from .spinner import wait_message
@@ -688,9 +694,8 @@ class Git(Repository):
             # We can only diff changed blobs.
             if a_blob == b_blob:
                 # No changes in the file contents.
-                lines = a_body.splitlines(keepends=True)
+                lines = create_hunk_lines(a_body, " ", False)[0]
                 if lines:
-                    lines = [" %s" % line for line in lines]
                     change.hunks.append(
                         Diff.Hunk(
                             old_off=1,
@@ -700,16 +705,13 @@ class Git(Repository):
                             lines=lines,
                         )
                     )
-
             elif a_blob is None:
                 # The file is created.
-                lines = b_body.splitlines(keepends=True)
+                lines, eof_missing_newline = create_hunk_lines(b_body, "+")
                 if lines:
                     new_len = len(lines)
-                    lines = ["+%s" % line for line in lines]
-                    if lines and not lines[-1].endswith("\n"):
-                        lines[-1] = "{}\n".format(lines[-1])
-                        lines.append("\\ No newline at end of file\n")
+                    if eof_missing_newline:
+                        new_len -= 1
                     change.hunks.append(
                         Diff.Hunk(
                             old_off=0,
@@ -722,13 +724,11 @@ class Git(Repository):
 
             elif b_blob is None:
                 # The file is removed.
-                lines = a_body.splitlines(keepends=True)
+                lines, eof_missing_newline = create_hunk_lines(a_body, "-")
                 if lines:
                     old_len = len(lines)
-                    lines = ["-%s" % line for line in lines]
-                    if lines and not lines[-1].endswith("\n"):
-                        lines[-1] = "{}\n".format(lines[-1])
-                        lines.append("\\ No newline at end of file\n")
+                    if eof_missing_newline:
+                        old_len -= 1
                     change.hunks.append(
                         Diff.Hunk(
                             old_off=1,

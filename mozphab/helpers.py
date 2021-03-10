@@ -425,12 +425,12 @@ def create_hunk_lines(
     if prefix not in allowed_prefixes:
         raise ValueError(f"Prefix should be one of {allowed_prefixes}")
 
-    empty_file = body == ""
+    empty_file = body in ("", b"")
 
     if empty_file:
         # `body` has absolutely nothing in it, return values accordingly.
         if check_eof:
-            return [f"\\ No newline at end of file\n"], True
+            return ["\\ No newline at end of file\n"], True
         else:
             return [], None
 
@@ -447,7 +447,7 @@ def create_hunk_lines(
             # Re-add the last line with the line separator, and another line
             # indicating that no new line was at the EOF.
             lines.append(f"{prefix}{last_line}\n")
-            lines.append(f"\\ No newline at end of file\n")
+            lines.append("\\ No newline at end of file\n")
         else:
             # Re-add the last line as is since we weren't supposed to touch it.
             lines.append(f"{prefix}{last_line}")
@@ -472,7 +472,12 @@ def split_lines(body):
         >>> split_lines(test)
         >>> ["line1", "\n", "line2", "\r\n", "line3"]
     """
-    return re.split("(\n|\r\n)", body)
+    binary = isinstance(body, bytes)
+    pattern = b"(\n|\r\n)"
+    if not binary:
+        pattern = pattern.decode("utf-8")
+
+    return re.split(pattern, body)
 
 
 def join_lineseps(lines):

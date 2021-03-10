@@ -127,7 +127,8 @@ def test_create_empty(m_git_out, m_cat_file, m_file_size, git):
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
     assert change.file_type.name == "TEXT"
-    assert not change.hunks
+    assert len(change.hunks) == 1
+    assert change.hunks[0].corpus == "\\ No newline at end of file\n"
     assert change.kind.name == "ADD"
     assert change.cur_mode == "100644"
 
