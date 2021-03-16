@@ -62,6 +62,8 @@ BLOCKING_REVIEWERS_RE = re.compile(r"\b(r!)([" + IRC_NICK_CHARS_WITH_PERIOD + ",
 
 DEPENDS_ON_RE = re.compile(r"^\s*Depends on\s*D(\d+)\s*$", flags=re.MULTILINE)
 
+WIP_RE = re.compile(r"^(?:WIP[: ]|WIP$)", flags=re.IGNORECASE)
+
 
 def which_path(path):
     """Check if an executable is provided. Fall back to which if not.
@@ -236,10 +238,14 @@ def has_arc_rejections(body):
     return all(r.search(body) for r in ARC_REJECT_RE_LIST)
 
 
+def wip_in_commit_title(title):
+    return WIP_RE.search(title) is not None
+
+
 def augment_commits_from_body(commits):
     """Extract metadata from commit body as fields.
 
-    Adds: rev-id, bug-id, reviewers
+    Adds: rev-id, bug-id, reviewers, wip
     """
     for commit in commits:
         commit["rev-id"] = parse_arc_diff_rev(commit["body"])
@@ -257,6 +263,9 @@ def augment_commits_from_body(commits):
 
         # reviewers
         commit["reviewers"] = parse_reviewers(commit["title"])
+
+        # mark commit as WIP if commit desc starts with "WIP:"
+        commit["wip"] = wip_in_commit_title(commit["title"])
 
     update_commit_title_previews(commits)
 
@@ -293,6 +302,14 @@ def parse_reviewers(title):
 
 def strip_depends_on(body):
     return DEPENDS_ON_RE.sub("", body).rstrip()
+
+
+def revision_title_from_commit(commit):
+    """Returns a string suitable for a Revision title for the given commit."""
+    title = WIP_RE.sub("", commit["title-preview"]).lstrip()
+    if commit["wip"]:
+        title = "WIP: %s" % title
+    return title
 
 
 def update_commit_title_previews(commits):

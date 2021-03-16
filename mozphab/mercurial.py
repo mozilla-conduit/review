@@ -231,7 +231,7 @@ class Mercurial(Repository):
 
     def after_submit(self):
         # Restore the previously active commit.
-        self.hg(["update", self.previous_bookmark])
+        self.hg(["update", self.previous_bookmark, "--quiet"])
 
     def cleanup(self):
         # Remove the store of obsolescence markers; if the user doesn't have evolve
@@ -683,9 +683,7 @@ class Mercurial(Repository):
             + ["--dest", dest_commit["node"]]
         )
 
-    def check_commits_for_submit(
-        self, commits, validate_reviewers=True, require_bug=True
-    ):
+    def check_commits_for_submit(self, commits, require_bug=True):
         # 'Greatest Common Ancestor'/'Merge Base' should be included in the revset.
         ancestor = self.hg_log("ancestor(%s)" % self.revset, split=False)
         if ancestor not in [c["node"] for c in commits]:
@@ -732,9 +730,7 @@ class Mercurial(Repository):
                 err.append("You can enable the shelve extension via `hg config --edit`")
             raise Error("\n".join(err))
 
-        super().check_commits_for_submit(
-            commits, validate_reviewers=validate_reviewers, require_bug=require_bug
-        )
+        super().check_commits_for_submit(commits, require_bug=require_bug)
 
     def _get_file_modes(self, commit):
         """Get modes of the modified files."""

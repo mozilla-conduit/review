@@ -22,6 +22,7 @@ from .exceptions import (
 from .helpers import (
     get_arcrc_path,
     read_json_field,
+    revision_title_from_commit,
     strip_differential_revision,
 )
 from .logger import logger
@@ -464,19 +465,16 @@ class ConduitAPI:
     def create_revision(
         self,
         commit,
-        title,
         summary,
         diff_phid,
-        has_commit_reviewers,
-        wip=False,
         check_in_needed=False,
     ):
         """Create a new revision in Phabricator."""
         transactions = [
-            dict(type="title", value=title),
+            dict(type="title", value=revision_title_from_commit(commit)),
             dict(type="summary", value=summary),
         ]
-        if has_commit_reviewers and not wip:
+        if commit["has-reviewers"] and not commit["wip"]:
             self.update_revision_reviewers(transactions, commit)
 
         if commit["bug-id"]:
@@ -484,24 +482,22 @@ class ConduitAPI:
         return self.edit_revision(
             transactions=transactions,
             diff_phid=diff_phid,
-            wip=wip,
+            wip=commit["wip"],
             check_in_needed=check_in_needed,
         )
 
     def update_revision(
         self,
         commit,
-        has_commit_reviewers,
         existing_reviewers,
         diff_phid=None,
-        wip=False,
         comment=None,
         check_in_needed=False,
     ):
         """Update an existing revision in Phabricator."""
         # Update the title and summary
         transactions = [
-            dict(type="title", value=commit["title"]),
+            dict(type="title", value=revision_title_from_commit(commit)),
             dict(type="summary", value=strip_differential_revision(commit["body"])),
         ]
 
@@ -510,7 +506,7 @@ class ConduitAPI:
             transactions.append(dict(type="comment", value=comment))
 
         # Add reviewers only if revision lacks them
-        if has_commit_reviewers and not wip:
+        if commit["has-reviewers"] and not commit["wip"]:
             if not existing_reviewers:
                 self.update_revision_reviewers(transactions, commit)
 
@@ -526,7 +522,7 @@ class ConduitAPI:
             transactions=transactions,
             diff_phid=diff_phid,
             rev_id=commit["rev-id"],
-            wip=wip,
+            wip=commit["wip"],
             check_in_needed=check_in_needed,
         )
 
@@ -536,29 +532,42 @@ class ConduitAPI:
         diff_phid=None,
         rev_id=None,
         wip=False,
-        force_wip=False,
         check_in_needed=False,
     ):
         """Edit (create or update) a revision."""
         trans = list(transactions or [])
+        set_wip_later = False
+
         # diff_phid is not present for changes in revision settings (like WIP)
         if diff_phid:
             trans.append(dict(type="update", value=diff_phid))
 
-        set_wip_later = False
+        existing_status = None
+        if rev_id:
+            try:
+                args = dict(ids=[int(rev_id)])
+            except ValueError:
+                args = dict(phids=[rev_id])
+            existing_revision = conduit.get_revisions(**args)[0]
+            existing_status = existing_revision["fields"]["status"]["value"]
+
+        # Set revision for changes-planned or needs-review as required.
+        # Phabricator will throw an error if we attempt to set a status to the same
+        # as the current status.
         if wip:
-            if rev_id and not force_wip:
-                # Set "changes planned" in a new request called after the update one.
-                # Phab API validation would return with an error if "changes planned
-                # would be set in the first API call.
-                existing_revision = conduit.get_revisions(ids=[int(rev_id)])[0]
-                set_wip_later = (
-                    existing_revision["fields"]["status"]["value"] == "changes-planned"
-                )
+            # Phabriactor will automatically set the revision to needs-review
+            # after the call to differential.revision.edit.  Flag that we'll need to
+            # make a subsequent API call to set the status to changes-planned to match
+            # our WIP state.
+            if existing_status == "changes-planned":
+                set_wip_later = True
+            else:
+                trans.append(dict(type="plan-changes", value=True))
+        else:
+            if existing_status != "needs-review":
+                trans.append(dict(type="request-review", value=True))
 
-        if force_wip or wip and not set_wip_later:
-            trans.append(dict(type="plan-changes", value=True))
-
+        # Add the check-in-needed tag if required.
         if check_in_needed:
             logger.info(f"Adding #{CHECK_IN_NEEDED} to revision.")
             check_in_needed_phid = conduit.get_project_phid(CHECK_IN_NEEDED)
@@ -570,17 +579,24 @@ class ConduitAPI:
                     f"Project #{CHECK_IN_NEEDED} doesn't exist."
                 )
 
+        # Call differential.revision.edit
         api_call_args = dict(transactions=trans)
-
         if rev_id:
             api_call_args["objectIdentifier"] = rev_id
-
         revision = self.call("differential.revision.edit", api_call_args)
         if not revision:
             raise ConduitAPIError("Can't edit the revision.")
 
-        if wip and set_wip_later:
-            return self.edit_revision(rev_id=rev_id, force_wip=True)
+        # Set changes-planned if required.
+        # Note set_wip_later can only be true if there's an existing revision.
+        if set_wip_later:
+            revision = self.call(
+                "differential.revision.edit",
+                dict(
+                    objectIdentifier=rev_id,
+                    transactions=[dict(type="plan-changes", value=True)],
+                ),
+            )
 
         return revision
 
@@ -625,7 +641,7 @@ class ConduitAPI:
                 "author": commit["author-name"],
                 "authorEmail": commit["author-email"],
                 "time": commit["author-date-epoch"],
-                "summary": commit["title-preview"],
+                "summary": revision_title_from_commit(commit),
                 "message": message,
                 "commit": conduit.repo.get_public_node(commit["node"]),
                 "parents": [conduit.repo.get_public_node(commit["parent"])],

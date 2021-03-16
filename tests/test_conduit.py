@@ -416,6 +416,7 @@ def test_diff_property(m_call, git, hg):
         "title-preview": "Title Preview",
         "node": "abc",
         "parent": "def",
+        "wip": False,
     }
     mozphab.conduit.set_diff_property("1", commit, "message")
     m_call.assert_called_once_with(
@@ -565,5 +566,10 @@ def test_check_in_needed(m_call, m_project_phid):
     m_project_phid.assert_called_once_with("check-in_needed")
     m_call.assert_called_once_with(
         "differential.revision.edit",
-        dict(transactions=[dict(type="projects.add", value=["PHID-PROJ-1"])]),
+        dict(
+            transactions=[
+                dict(type="request-review", value=True),
+                dict(type="projects.add", value=["PHID-PROJ-1"]),
+            ]
+        ),
     )

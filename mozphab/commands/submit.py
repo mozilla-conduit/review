@@ -14,6 +14,7 @@ from mozphab.helpers import (
     BLOCKING_REVIEWERS_RE,
     parse_arc_diff_rev,
     prompt,
+    revision_title_from_commit,
     strip_differential_revision,
     temporary_file,
     update_commit_title_previews,
@@ -110,9 +111,7 @@ def amend_revision_url(body, new_url):
 
 def show_commit_stack(
     commits,
-    wip=None,
     validate=True,
-    ignore_reviewers=False,
     show_rev_urls=False,
     show_updated_only=False,
 ):
@@ -139,49 +138,43 @@ def show_commit_stack(
         if show_updated_only and not commit["submit"]:
             continue
 
-        closed = False
-        change_bug_id = False
+        revision_is_closed = False
+        revision_is_wip = False
+        bug_id_changed = False
         is_author = True
         revision = None
-        wip_removed = False
-        wip_set = False
-        reviewers_added = False
 
         if commit.get("rev-id"):
             action = action_template % ("D" + commit["rev-id"])
+
             if validate:
                 revisions = conduit.get_revisions(ids=[int(commit["rev-id"])])
-                if len(revisions) > 0:
+                if revisions:
                     revision = revisions[0]
+                    fields = revision["fields"]
+
+                    # WIP if either in changes-planned state, or if the revision has the
+                    # `draft` flag set.
+                    revision_is_wip = (
+                        fields["status"]["value"] == "changes-planned"
+                        or fields["isDraft"]
+                    )
 
                     # Check if target bug ID is the same as in the Phabricator revision
-                    change_bug_id = (
-                        "bugzilla.bug-id" in revision["fields"]
-                        and revision["fields"]["bugzilla.bug-id"]
-                        and (commit["bug-id"] != revision["fields"]["bugzilla.bug-id"])
+                    bug_id_changed = fields.get("bugzilla.bug-id") and (
+                        commit["bug-id"] != fields["bugzilla.bug-id"]
                     )
 
                     # Check if revision is closed
-                    closed = revision["fields"]["status"]["closed"]
+                    revision_is_closed = fields["status"]["closed"]
 
                     # Check if comandeering is required
-                    whoami = conduit.whoami()
-                    if "authorPHID" in revision["fields"] and (
-                        revision["fields"]["authorPHID"] != whoami["phid"]
+                    with wait_message("Figuring out who you are..."):
+                        whoami = conduit.whoami()
+                    if "authorPHID" in fields and (
+                        fields["authorPHID"] != whoami["phid"]
                     ):
                         is_author = False
-
-                    # Do we remove "Changes Planned" status?
-                    wip_removed = (
-                        not wip
-                        and revision["fields"]["status"]["value"] == "changes-planned"
-                    )
-
-                    # Do we set "Changes Planned" status?
-                    wip_set = (
-                        wip
-                        and revision["fields"]["status"]["value"] != "changes-planned"
-                    )
 
                     # Any reviewers added to a revision without them?
                     reviewers_added = bool(
@@ -190,22 +183,18 @@ def show_commit_stack(
                     )
 
                     # if SHA1 hasn't changed
-                    # and we're not changing the WIP status
+                    # and we're not changing the WIP or draft status
                     # and we're not adding reviewers to a revision without reviewers
                     # and we're not changing the bug-id
-                    sha1_changed = (
-                        commit["node"]
-                        != diffs[revision["fields"]["diffPHID"]]["attachments"][
-                            "commits"
-                        ]["commits"][0]["identifier"]
-                    )
+                    diff_phid = fields["diffPHID"]
+                    diff_commits = diffs[diff_phid]["attachments"]["commits"]["commits"]
+                    sha1_changed = commit["node"] != diff_commits[0]["identifier"]
                     if (
                         not sha1_changed
-                        and not wip_removed
-                        and not wip_set
+                        and commit["wip"] == revision_is_wip
                         and not reviewers_added
-                        and not change_bug_id
-                        and not closed
+                        and not bug_id_changed
+                        and not revision_is_closed
                     ):
                         commit["submit"] = False
 
@@ -216,53 +205,57 @@ def show_commit_stack(
         if validate:
             if not commit["submit"]:
                 logger.info(
-                    " * This revision is not changed and will not be submitted."
+                    " * This revision has not changed and will not be submitted."
                 )
+                continue
 
-            else:
-                if wip_removed:
+            if revision:
+                if not commit["wip"] and revision_is_wip:
                     logger.warning(
                         '!! "Changes Planned" status will change to "Request Review"'
                     )
-
-                if change_bug_id:
+                if commit["wip"] and not revision_is_wip:
                     logger.warning(
-                        "!! Bug ID in Phabricator revision will change from %s to %s",
-                        revision["fields"]["bugzilla.bug-id"],
-                        commit["bug-id"],
+                        '!! "Request Review" status will change to "Changes Planned"'
                     )
 
-                if not is_author:
-                    logger.warning(
-                        "!! You don't own this revision. Normally, you should only\n"
-                        '   update revisions you own. You can "Commandeer" this\n'
-                        "   revision from the web interface if you want to become\n"
-                        "   the owner."
-                    )
+            if bug_id_changed:
+                logger.warning(
+                    "!! Bug ID in Phabricator revision will change from %s to %s",
+                    revision["fields"]["bugzilla.bug-id"],
+                    commit["bug-id"],
+                )
 
-                if closed:
-                    logger.warning(
-                        "!! This revision is closed!\n"
-                        "   It will be reopened if submission proceeds.\n"
-                        "   You can stop now and refine the stack range."
-                    )
+            if not is_author:
+                logger.warning(
+                    "!! You don't own this revision. Normally, you should only\n"
+                    '   update revisions you own. You can "Commandeer" this\n'
+                    "   revision from the web interface if you want to become\n"
+                    "   the owner."
+                )
 
-                if not commit["bug-id"]:
-                    logger.warning("!! Missing Bug ID")
+            if revision_is_closed:
+                logger.warning(
+                    "!! This revision is closed!\n"
+                    "   It will be reopened if submission proceeds.\n"
+                    "   You can stop now and refine the stack range."
+                )
 
-                if commit["bug-id-orig"] and commit["bug-id"] != commit["bug-id-orig"]:
-                    logger.warning(
-                        "!! Bug ID changed from %s to %s",
-                        commit["bug-id-orig"],
-                        commit["bug-id"],
-                    )
+            if not commit["bug-id"]:
+                logger.warning("!! Missing Bug ID")
 
-                if (
-                    not ignore_reviewers
-                    and not commit["reviewers"]["granted"]
-                    + commit["reviewers"]["request"]
-                ):
-                    logger.warning("!! Missing reviewers")
+            if commit["bug-id-orig"] and commit["bug-id"] != commit["bug-id-orig"]:
+                logger.warning(
+                    "!! Bug ID changed from %s to %s",
+                    commit["bug-id-orig"],
+                    commit["bug-id"],
+                )
+
+            if not commit["has-reviewers"]:
+                logger.warning(
+                    "!! Missing reviewers\n"
+                    '   It will be submitted as "Changes Planned"'
+                )
 
         if show_rev_urls and commit["rev-id"]:
             logger.warning("-> %s/D%s", conduit.repo.phab_url, commit["rev-id"])
@@ -320,19 +313,24 @@ def update_commits_from_args(commits, args):
     If no reviewers are provided by args and an `always_blocking` flag is set
     change all reviewers in title to blocking.
     """
+
     # Build list of reviewers from args.
     reviewers = list(set(args.reviewer)) if args.reviewer else []
+
     # Order might be changed here `list(set(["one", "two"])) == ['two', 'one']`
     reviewers.sort()
     blockers = [r.rstrip("!") for r in args.blocker] if args.blocker else []
+
     # User might use "-r <nick>!" to provide a blocking reviewer.
     # Add all such blocking reviewers to blockers list.
     blockers += [r.rstrip("!") for r in reviewers if r.endswith("!")]
     blockers = list(set(blockers))
     blockers.sort()
+
     # Remove blocking reviewers from reviewers list
     reviewers_no_flag = [r.strip("!") for r in reviewers]
     reviewers = [r for r in reviewers_no_flag if r.lower() not in blockers]
+
     # Add all blockers to reviewers list. Reviewers list will contain a list
     # of all reviewers where blocking ones are marked with the "!" suffix.
     reviewers += make_blocking(blockers)
@@ -362,13 +360,22 @@ def update_commits_from_args(commits, args):
         else:
             granted = commit["reviewers"].get("granted", [])
             requested = commit["reviewers"].get("request", [])
-
         commit["reviewers"] = dict(granted=granted, request=requested)
+        commit["has-reviewers"] = bool(granted + requested)
+
         if args.bug:
             # Bug ID command arg used.
             commit["bug-id"] = args.bug
 
-    # Otherwise honour config setting to always use blockers
+        # Mark a commit as WIP if --wip is provided, or if the commit does not have
+        # any reviewers.  This is in addition to checking for the WIP: prefix in
+        # helpers.augment_commits_from_body()
+        if args.wip or not commit["has-reviewers"]:
+            commit["wip"] = True
+        else:
+            commit.setdefault("wip", False)
+
+    # Honour config setting to always use blockers
     if not reviewers and config.always_blocking:
         for commit in commits:
             commit["reviewers"] = dict(
@@ -425,12 +432,6 @@ def submit(repo, args):
         commits = repo.commit_stack(single=args.single)
     if not commits:
         raise Error("Failed to find any commits to submit")
-    logger.warning(
-        "Submitting %s commit%s %s:",
-        len(commits),
-        "" if len(commits) == 1 else "s",
-        "as Work In Progress" if args.wip else "for review",
-    )
 
     with wait_message("Loading commits.."):
         # Pre-process to load metadata.
@@ -438,19 +439,32 @@ def submit(repo, args):
         augment_commits_from_body(commits)
         update_commits_from_args(commits, args)
 
+    # Display a one-line summary of commit and WIP count.
+    commit_count = len(commits)
+    wip_commit_count = sum(1 for commit in commits if commit["wip"])
+
+    if wip_commit_count == commit_count:
+        status = "as Work In Progress"
+    elif wip_commit_count:
+        status = f"{wip_commit_count} as Work In Progress"
+    else:
+        status = "for review"
+
+    logger.warning(f"Submitting {commit_count} commit{'s'[:commit_count^1]} {status}")
+
     # Validate commit stack is suitable for review.
-    show_commit_stack(commits, wip=args.wip, validate=True, ignore_reviewers=args.wip)
+    show_commit_stack(commits, validate=True)
     try:
         with wait_message("Checking commits.."):
-            repo.check_commits_for_submit(
-                commits,
-                validate_reviewers=not args.wip,
-                require_bug=not args.no_bug,
-            )
+            repo.check_commits_for_submit(commits, require_bug=not args.no_bug)
     except Error as e:
         if not args.force:
             raise Error("Unable to submit commits:\n\n%s" % e)
         logger.error("Ignoring issues found with commits:\n\n%s", e)
+
+    if not any(commit["submit"] for commit in commits):
+        logger.warning("No changes to submit.")
+        return
 
     # Show a warning if there are untracked files.
     if config.warn_untracked:
@@ -524,9 +538,6 @@ def submit(repo, args):
             if revision_to_update
             else None
         )
-        has_commit_reviewers = bool(
-            commit["reviewers"]["granted"] + commit["reviewers"]["request"]
-        )
 
         # Let the user know something's happening.
         if is_update:
@@ -534,11 +545,11 @@ def submit(repo, args):
         else:
             logger.info("\nCreating new revision:")
 
-        logger.info("%s %s", commit["name"], commit["title-preview"])
+        logger.info("%s %s", commit["name"], revision_title_from_commit(commit))
         repo.checkout(commit["node"])
 
         # WIP submissions shouldn't set reviewers on phabricator.
-        if args.wip:
+        if commit["wip"]:
             reviewers = ""
         else:
             reviewers = ", ".join(
@@ -547,7 +558,7 @@ def submit(repo, args):
 
         # Create arc-annotated commit description.
         template_vars = dict(
-            title=commit["title-preview"],
+            title=revision_title_from_commit(commit),
             body=commit["body"],
             reviewers=reviewers,
             bug_id=commit["bug-id"],
@@ -576,10 +587,8 @@ def submit(repo, args):
                 with wait_message("Updating revision..."):
                     rev = conduit.update_revision(
                         commit,
-                        has_commit_reviewers,
                         existing_reviewers,
                         diff_phid=diff.phid,
-                        wip=args.wip,
                         comment=args.message,
                         check_in_needed=check_in_needed,
                     )
@@ -587,11 +596,8 @@ def submit(repo, args):
                 with wait_message("Creating a new revision..."):
                     rev = conduit.create_revision(
                         commit,
-                        commit["title-preview"],
                         summary,
                         diff.phid,
-                        has_commit_reviewers,
-                        wip=args.wip,
                         check_in_needed=check_in_needed,
                     )
 
@@ -608,7 +614,7 @@ def submit(repo, args):
                 )
                 if args.nolint:
                     arc_args.append("--nolint")
-                if args.wip:
+                if commit["wip"]:
                     arc_args.append("--plan-changes")
                 if args.lesscontext:
                     arc_args.append("--less-context")
@@ -640,7 +646,11 @@ def submit(repo, args):
                     update_revision_bug_id(transactions, commit, revision)
 
                     # Add reviewers only if revision lacks them
-                    if not args.wip and has_commit_reviewers and not existing_reviewers:
+                    if (
+                        not commit["wip"]
+                        and commit["has-reviewers"]
+                        and not existing_reviewers
+                    ):
                         conduit.update_revision_reviewers(transactions, commit)
                         if current_status != "needs-review":
                             transactions.append(dict(type="request-review"))
@@ -659,6 +669,8 @@ def submit(repo, args):
         body = amend_revision_url(commit["body"], revision_url)
 
         # Amend the commit if required.
+        # As commit rewriting can be expensive we avoid it in some circumstances, such
+        # as pre-pending "WIP: " to commits submitted as WIP to Phabricator.
         if commit["title-preview"] != commit["title"] or body != commit["body"]:
             commit["title"] = commit["title-preview"]
             commit["body"] = body

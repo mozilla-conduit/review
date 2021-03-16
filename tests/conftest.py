@@ -63,6 +63,7 @@ def search_rev(
     author="PHID-USER-1",
     diff="PHID-DIFF-1",
     reviewers=None,
+    is_draft=False,
 ):
     reviewers = reviewers or []
     return {
@@ -73,6 +74,7 @@ def search_rev(
             "status": {"value": status, "closed": closed},
             "authorPHID": author,
             "diffPHID": diff,
+            "isDraft": is_draft,
         },
         "attachments": {
             "reviewers": {"reviewers": [{"reviewerPHID": r} for r in reviewers]}
@@ -287,7 +289,7 @@ def git_repo_path(monkeypatch, tmp_path):
     monkeypatch.chdir(str(repo_path))
     arcconfig = repo_path / ".arcconfig"
     arcconfig.write_text(json.dumps({"phabricator.uri": phabricator_uri}))
-    git_out("init")
+    git_out("init", "--initial-branch", "main")
     git_out("add", ".")
     git_out("commit", "--message", "initial commit")
     return repo_path

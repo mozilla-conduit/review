@@ -249,6 +249,21 @@ class CommitParsing(unittest.TestCase):
         self.assertFalse(reject("Summary: blah"))
         self.assertFalse(reject("Reviewers: blah"))
 
+    def test_commit_title_is_wip(self):
+        is_wip = helpers.wip_in_commit_title
+
+        self.assertFalse(is_wip("blah"))
+        self.assertTrue(is_wip("WIP: blah"))
+        self.assertTrue(is_wip("WIP blah"))
+        self.assertTrue(is_wip("WIP"))
+        self.assertTrue(is_wip("wip: blah"))
+        self.assertTrue(is_wip("wip blah"))
+        self.assertTrue(is_wip("wip"))
+        self.assertFalse(is_wip("WIPblah"))
+        self.assertFalse(is_wip(" WIP: blah"))
+        self.assertFalse(is_wip(" WIP blah"))
+        self.assertFalse(is_wip(" WIP"))
+
 
 if __name__ == "__main__":
     unittest.main()

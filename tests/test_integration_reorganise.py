@@ -74,8 +74,21 @@ def test_new_separate_revisions_to_stack(in_process, git_repo_path, init_sha):
     call_conduit.side_effect = (
         # ping
         dict(),
-        # searc revisions
-        dict(data=[dict(phid="PHID-1", id=1), dict(phid="PHID-2", id=2)]),
+        # search revisions
+        dict(
+            data=[
+                dict(
+                    phid="PHID-1",
+                    id=1,
+                    fields=dict(status=dict(value="needs-review")),
+                ),
+                dict(
+                    phid="PHID-2",
+                    id=2,
+                    fields=dict(status=dict(value="needs-review")),
+                ),
+            ]
+        ),
         # edge search
         dict(data=[]),
         # differential.edit_revision
@@ -125,9 +138,21 @@ def test_add_revision_existing_stack(in_process, git_repo_path, init_sha):
         # search revisions
         dict(
             data=[
-                dict(phid="PHID-1", id=1),
-                dict(phid="PHID-2", id=2),
-                dict(phid="PHID-3", id=3),
+                dict(
+                    phid="PHID-1",
+                    id=1,
+                    fields=dict(status=dict(value="needs-review")),
+                ),
+                dict(
+                    phid="PHID-2",
+                    id=2,
+                    fields=dict(status=dict(value="needs-review")),
+                ),
+                dict(
+                    phid="PHID-3",
+                    id=3,
+                    fields=dict(status=dict(value="needs-review")),
+                ),
             ]
         ),
         # edge search
@@ -220,9 +245,21 @@ def test_add_revision_existing_stack_hg(in_process, hg_repo_path):
         # search revisions
         dict(
             data=[
-                dict(phid="PHID-1", id=1),
-                dict(phid="PHID-2", id=2),
-                dict(phid="PHID-3", id=3),
+                dict(
+                    phid="PHID-1",
+                    id=1,
+                    fields=dict(status=dict(value="needs-review")),
+                ),
+                dict(
+                    phid="PHID-2",
+                    id=2,
+                    fields=dict(status=dict(value="needs-review")),
+                ),
+                dict(
+                    phid="PHID-3",
+                    id=3,
+                    fields=dict(status=dict(value="needs-review")),
+                ),
             ]
         ),
         # edge search
@@ -304,7 +341,15 @@ def test_abandon_a_revision(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         dict(),  # ping
-        dict(data=[dict(phid="PHID-1", id=1)]),  # differential.revision.search
+        dict(
+            data=[
+                dict(
+                    phid="PHID-1",
+                    id=1,
+                    fields=dict(status=dict(value="needs-review")),
+                )
+            ]
+        ),  # differential.revision.search
         dict(
             data=[
                 dict(
@@ -323,7 +368,15 @@ def test_abandon_a_revision(in_process, git_repo_path, init_sha):
                 )
             ]
         ),  # differential.edge.search
-        dict(data=[dict(phid="PHID-2", id=2)]),  # differential.revision.search
+        dict(
+            data=[
+                dict(
+                    phid="PHID-2",
+                    id=2,
+                    fields=dict(status=dict(value="needs-review")),
+                )
+            ]
+        ),  # differential.revision.search
         dict(data=[dict(phid="PHID-1", id=1)]),  # differential.edit_revision
         dict(data=[dict(phid="PHID-2", id=2)]),  # differential.edit_revision
     )

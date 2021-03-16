@@ -510,14 +510,17 @@ Differential Revision: http://example.test/D123
     assert log == expected
 
 
-def test_submit_update_no_change(in_process, git_repo_path, init_sha, git_sha):
+@mock.patch("mozphab.commands.submit.logger.warning")
+def test_submit_update_no_change(
+    m_logger_warning, in_process, git_repo_path, init_sha, git_sha
+):
     testfile = git_repo_path / "X"
     testfile.write_text("a")
     git_out("add", ".")
     msgfile = git_repo_path / "msg"
     msgfile.write_text(
         """\
-Bug 1 - A
+Bug 1 - A, r=test
 
 Differential Revision: http://example.test/D123
 """
@@ -531,18 +534,21 @@ Differential Revision: http://example.test/D123
         # diffusion.repository.search
         dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
         # diffusion.revision.search
-        dict(data=[search_rev(rev=123)]),
+        dict(data=[search_rev(rev=123, reviewers=("test",))]),
         # diffusion.diff.search
         dict(data=[search_diff(node=sha)]),
         # whoami
         dict(phid="PHID-USER-1"),
+        # user.query
+        [dict(phid="PHID-USER-2", userName="test")],
     )
 
     mozphab.main(
         ["submit", "--yes"] + [init_sha],
         is_development=True,
     )
-    assert call_conduit.call_count == 5
+    assert call_conduit.call_count == 6
+    assert m_logger_warning.called_once_with("No changes to submit.")
 
 
 def test_submit_remove_cr(in_process, git_repo_path, init_sha):

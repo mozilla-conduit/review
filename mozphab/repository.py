@@ -164,9 +164,7 @@ class Repository(object):
     def format_patch(self, diff, body, author, author_date):
         """Format a patch appropriate for importing."""
 
-    def check_commits_for_submit(
-        self, commits, *, validate_reviewers=True, require_bug=True
-    ):
+    def check_commits_for_submit(self, commits, *, require_bug=True):
         """Validate the list of commits (from commit_stack) are ok to submit"""
         errors = []
         warnings = []
@@ -197,18 +195,21 @@ class Repository(object):
                 error_msg += "* %s\n" % name
             errors.append(error_msg)
 
-        if validate_reviewers:
-            # Flatten and deduplicate reviewer list, keeping track of the
-            # associated commit
-            for commit in commits:
-                for group in list(commit["reviewers"].keys()):
-                    for reviewer in commit["reviewers"][group]:
-                        all_reviewers.setdefault(group, set())
-                        all_reviewers[group].add(reviewer)
+        # Flatten and deduplicate reviewer list, keeping track of the
+        # associated commit
+        for commit in commits:
+            # We can ignore reviewers on WIP commits, as they won't be passed to Phab
+            if commit["wip"]:
+                continue
 
-                        reviewer = normalise_reviewer(reviewer)
-                        reviewer_commit_map.setdefault(reviewer, [])
-                        reviewer_commit_map[reviewer].append(commit["node"])
+            for group in list(commit["reviewers"].keys()):
+                for reviewer in commit["reviewers"][group]:
+                    all_reviewers.setdefault(group, set())
+                    all_reviewers[group].add(reviewer)
+
+                    reviewer = normalise_reviewer(reviewer)
+                    reviewer_commit_map.setdefault(reviewer, [])
+                    reviewer_commit_map[reviewer].append(commit["node"])
 
         # Verify all reviewers in a single call
         for invalid_reviewer in conduit.check_for_invalid_reviewers(all_reviewers):
