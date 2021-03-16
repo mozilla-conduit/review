@@ -6,6 +6,7 @@ import json
 import mock
 import os
 import pytest
+import re
 import shutil
 import subprocess
 import sys
@@ -289,7 +290,14 @@ def git_repo_path(monkeypatch, tmp_path):
     monkeypatch.chdir(str(repo_path))
     arcconfig = repo_path / ".arcconfig"
     arcconfig.write_text(json.dumps({"phabricator.uri": phabricator_uri}))
-    git_out("init", "--initial-branch", "main")
+
+    # Use --initial-branch where available to avoid an unnecessary warning
+    m = re.search(r"(\d+\.\d+)\.\d+", git_out("version"))
+    if m and float(m[1]) >= 2.28:
+        git_out("init", "--initial-branch", "main")
+    else:
+        git_out("init")
+
     git_out("add", ".")
     git_out("commit", "--message", "initial commit")
     return repo_path
