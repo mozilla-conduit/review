@@ -573,3 +573,110 @@ def test_check_in_needed(m_call, m_project_phid):
             ]
         ),
     )
+
+
+class TestEditRevision:
+    @staticmethod
+    def _get_revisions(status):
+        return [dict(fields=dict(status=dict(value=status)))]
+
+    @mock.patch("mozphab.repository.conduit.get_revisions")
+    @mock.patch("mozphab.repository.conduit.call")
+    def test_wip_changes_planned(self, m_call, m_get_revisions):
+        # wip + changes-planned -> plan-changes
+        m_get_revisions.return_value = self._get_revisions("changes-planned")
+        conduit.edit_revision(rev_id=1, wip=True)
+        call_args = m_call.call_args_list
+        assert len(call_args) == 2
+        assert call_args[0] == mock.call(
+            "differential.revision.edit",
+            dict(
+                transactions=[],
+                objectIdentifier=1,
+            ),
+        )
+        assert call_args[1] == mock.call(
+            "differential.revision.edit",
+            dict(
+                transactions=[
+                    dict(type="plan-changes", value=True),
+                ],
+                objectIdentifier=1,
+            ),
+        )
+
+    @mock.patch("mozphab.repository.conduit.get_revisions")
+    @mock.patch("mozphab.repository.conduit.call")
+    def test_wip_needs_review(self, m_call, m_get_revisions):
+        # wip + needs-review -> plan-changes
+        m_get_revisions.return_value = self._get_revisions("needs-review")
+        conduit.edit_revision(rev_id=1, wip=True)
+        m_call.assert_called_once_with(
+            "differential.revision.edit",
+            dict(
+                transactions=[
+                    dict(type="plan-changes", value=True),
+                ],
+                objectIdentifier=1,
+            ),
+        )
+
+    @mock.patch("mozphab.repository.conduit.get_revisions")
+    @mock.patch("mozphab.repository.conduit.call")
+    def test_wip_accepted(self, m_call, m_get_revisions):
+        # wip + accepted -> plan-changes
+        m_get_revisions.return_value = self._get_revisions("accepted")
+        conduit.edit_revision(rev_id=1, wip=True)
+        m_call.assert_called_once_with(
+            "differential.revision.edit",
+            dict(
+                transactions=[
+                    dict(type="plan-changes", value=True),
+                ],
+                objectIdentifier=1,
+            ),
+        )
+
+    @mock.patch("mozphab.repository.conduit.get_revisions")
+    @mock.patch("mozphab.repository.conduit.call")
+    def test_no_wip_changes_planned(self, m_call, m_get_revisions):
+        # no-wip + changes-planned -> request-review
+        m_get_revisions.return_value = self._get_revisions("changes-planned")
+        conduit.edit_revision(rev_id=1, wip=False)
+        m_call.assert_called_once_with(
+            "differential.revision.edit",
+            dict(
+                transactions=[
+                    dict(type="request-review", value=True),
+                ],
+                objectIdentifier=1,
+            ),
+        )
+
+    @mock.patch("mozphab.repository.conduit.get_revisions")
+    @mock.patch("mozphab.repository.conduit.call")
+    def test_no_wip_needs_review(self, m_call, m_get_revisions):
+        # no-wip + needs-review -> no-op
+        m_get_revisions.return_value = self._get_revisions("needs-review")
+        conduit.edit_revision(rev_id=1, wip=False)
+        m_call.assert_called_once_with(
+            "differential.revision.edit",
+            dict(
+                transactions=[],
+                objectIdentifier=1,
+            ),
+        )
+
+    @mock.patch("mozphab.repository.conduit.get_revisions")
+    @mock.patch("mozphab.repository.conduit.call")
+    def test_no_wip_accepted(self, m_call, m_get_revisions):
+        # no-wip + accepted -> no-op
+        m_get_revisions.return_value = self._get_revisions("accepted")
+        conduit.edit_revision(rev_id=1, wip=False)
+        m_call.assert_called_once_with(
+            "differential.revision.edit",
+            dict(
+                transactions=[],
+                objectIdentifier=1,
+            ),
+        )

@@ -564,7 +564,7 @@ class ConduitAPI:
             else:
                 trans.append(dict(type="plan-changes", value=True))
         else:
-            if existing_status != "needs-review":
+            if existing_status not in ("needs-review", "accepted"):
                 trans.append(dict(type="request-review", value=True))
 
         # Add the check-in-needed tag if required.
