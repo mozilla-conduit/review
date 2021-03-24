@@ -666,11 +666,14 @@ class Commits(unittest.TestCase):
         update = submit.update_commits_from_args
 
         class Args:
-            def __init__(self, reviewer=None, blocker=None, bug=None, wip=False):
+            def __init__(
+                self, reviewer=None, blocker=None, bug=None, wip=False, no_wip=False
+            ):
                 self.reviewer = reviewer
                 self.blocker = blocker
                 self.bug = bug
                 self.wip = wip
+                self.no_wip = no_wip
 
         _commits = [
             {"title": "A", "reviewers": dict(granted=[], request=[]), "bug-id": None},
@@ -765,11 +768,23 @@ class Commits(unittest.TestCase):
         assert "one" in commits[1]["reviewers"]["request"]
         assert "three!" in commits[1]["reviewers"]["request"]
 
+        # reviewerless should result in WIP commits
+        commits = copy.deepcopy(_commits)
+        update(commits, Args())
+        assert commits[0]["wip"]
+        assert not commits[1]["wip"]
+
         # Force WIP
         commits = copy.deepcopy(_commits)
         update(commits, Args(wip=True))
         assert commits[0]["wip"]
         assert commits[1]["wip"]
+
+        # reviewerless with --no-wip shouldn't be WIP
+        commits = copy.deepcopy(_commits)
+        update(commits, Args(no_wip=True))
+        assert not commits[0]["wip"]
+        assert not commits[1]["wip"]
 
         # Forcing blocking reviewers
         commits = copy.deepcopy(_commits)

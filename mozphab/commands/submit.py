@@ -254,7 +254,8 @@ def show_commit_stack(
             if not commit["has-reviewers"]:
                 logger.warning(
                     "!! Missing reviewers\n"
-                    '   It will be submitted as "Changes Planned"'
+                    '   It will be submitted as "Changes Planned".\n'
+                    "   Run submit again with --no-wip to prevent this."
                 )
 
         if show_rev_urls and commit["rev-id"]:
@@ -370,7 +371,7 @@ def update_commits_from_args(commits, args):
         # Mark a commit as WIP if --wip is provided, or if the commit does not have
         # any reviewers.  This is in addition to checking for the WIP: prefix in
         # helpers.augment_commits_from_body()
-        if args.wip or not commit["has-reviewers"]:
+        if not args.no_wip and (args.wip or not commit["has-reviewers"]):
             commit["wip"] = True
         else:
             commit.setdefault("wip", False)
@@ -775,11 +776,19 @@ def add_parser(parser):
         action="store_true",
         help="Add a `check-in-needed tag to the top most revision",
     )
-    submit_parser.add_argument(
+    wip_group = submit_parser.add_mutually_exclusive_group()
+    wip_group.add_argument(
         "--wip",
         "--plan-changes",
         action="store_true",
         help="Create or update a revision without requesting a code review",
+    )
+    wip_group.add_argument(
+        "--no-wip",
+        action="store_true",
+        help="Don't mark reviewer-less commits as work-in-progress. Commits "
+        "with descriptions that start with WIP: will continue to be "
+        "flagged as work-in-progress.",
     )
     submit_parser.add_argument(
         "--less-context",
