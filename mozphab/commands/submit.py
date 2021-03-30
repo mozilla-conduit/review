@@ -474,7 +474,7 @@ def local_uplift_if_possible(args, repo, commits) -> bool:
 
 
 def submit(repo, args):
-    telemetry.metrics.mozphab.submission.preparation_time.start()
+    telemetry().submission.preparation_time.start()
     with wait_message("Checking connection to Phabricator."):
         # Check if raw Conduit API can be used
         if not conduit.check():
@@ -550,8 +550,8 @@ def submit(repo, args):
             "be result in a comment on new revisions."
         )
 
-    telemetry.metrics.mozphab.submission.preparation_time.stop()
-    telemetry.metrics.mozphab.submission.commits_count.add(len(commits))
+    telemetry().submission.preparation_time.stop()
+    telemetry().submission.commits_count.add(len(commits))
 
     # Confirmation prompt.
     if args.yes:
@@ -572,7 +572,7 @@ def submit(repo, args):
             config.write()
 
     # Process.
-    telemetry.metrics.mozphab.submission.process_time.start()
+    telemetry().submission.process_time.start()
     previous_commit = None
     # Collect all existing revisions to get reviewers info.
     rev_ids_to_update = [int(c["rev-id"]) for c in commits if c.get("rev-id")]
@@ -639,7 +639,7 @@ def submit(repo, args):
             diff = repo.get_diff(commit)
 
         if diff:
-            telemetry.metrics.mozphab.submission.files_count.add(len(diff.changes))
+            telemetry().submission.files_count.add(len(diff.changes))
             with wait_message("Uploading binary file(s)..."):
                 diff.upload_files()
 
@@ -700,7 +700,7 @@ def submit(repo, args):
     show_commit_stack(
         commits, validate=False, show_rev_urls=True, show_updated_only=True
     )
-    telemetry.metrics.mozphab.submission.process_time.stop()
+    telemetry().submission.process_time.stop()
 
 
 def add_parser(parser):

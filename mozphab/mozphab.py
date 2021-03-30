@@ -24,7 +24,7 @@ from .exceptions import Error
 from .logger import init_logging, logger
 from .spinner import wait_message
 from .sentry import init_sentry, report_to_sentry
-from .telemetry import telemetry
+from .telemetry import telemetry, configure_telemetry
 from .updater import check_for_updates
 
 # Known Issues
@@ -72,10 +72,11 @@ def main(argv, *, is_development):
 
             conduit.set_repo(repo)
 
-        telemetry.set_metrics(args, is_development=is_development)
+        if not is_development:
+            configure_telemetry(args)
 
         if repo is not None:
-            telemetry.set_vcs(repo)
+            telemetry().set_vcs(repo)
             try:
                 args.func(repo, args)
             finally:
@@ -84,8 +85,8 @@ def main(argv, *, is_development):
         else:
             args.func(args)
 
-        telemetry.metrics.mozphab.usage.command_time.stop()
-        telemetry.submit()
+        telemetry().usage.command_time.stop()
+        telemetry().submit()
 
     except KeyboardInterrupt:
         pass

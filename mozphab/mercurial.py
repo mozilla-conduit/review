@@ -993,7 +993,7 @@ class Mercurial(Repository):
     def _change_add(self, change, fn, _old_fn, _parent, node):
         """Create a change about adding a file to the commit."""
         meta = self._get_file_meta(fn, node)
-        telemetry.metrics.mozphab.submission.files_size.accumulate(meta["file_size"])
+        telemetry().submission.files_size.accumulate(meta["file_size"])
 
         if meta["binary"]:
             change.set_as_binary(
@@ -1026,7 +1026,7 @@ class Mercurial(Repository):
     def _change_del(self, change, fn, _old_fn, parent, _node):
         """Create a change about deleting a file from the commit."""
         meta = self._get_file_meta(fn, parent)
-        telemetry.metrics.mozphab.submission.files_size.accumulate(meta["file_size"])
+        telemetry().submission.files_size.accumulate(meta["file_size"])
 
         if meta["binary"]:
             change.set_as_binary(
@@ -1059,7 +1059,7 @@ class Mercurial(Repository):
         a_meta = self._get_file_meta(old_fn, parent)
         b_meta = self._get_file_meta(fn, node)
         file_size = max(a_meta["file_size"], b_meta["file_size"])
-        telemetry.metrics.mozphab.submission.files_size.accumulate(file_size)
+        telemetry().submission.files_size.accumulate(file_size)
 
         if a_meta["binary"] or b_meta["binary"]:
             # Binary file.

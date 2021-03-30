@@ -140,7 +140,7 @@ def stack_transactions(remote_phids, local_phids):
 
 
 def reorganise(repo, args):
-    telemetry.metrics.mozphab.submission.preparation_time.start()
+    telemetry().submission.preparation_time.start()
 
     with wait_message("Checking connection to Phabricator."):
         # Check if raw Conduit API can be used
@@ -236,7 +236,7 @@ def reorganise(repo, args):
                         )
                     )
 
-    telemetry.metrics.mozphab.submission.preparation_time.stop()
+    telemetry().submission.preparation_time.stop()
 
     if args.yes:
         pass
@@ -245,13 +245,13 @@ def reorganise(repo, args):
         if res == "No":
             sys.exit(1)
 
-    telemetry.metrics.mozphab.submission.process_time.start()
+    telemetry().submission.process_time.start()
 
     with wait_message("Applying transactions..."):
         for phid, rev_transactions in transactions.items():
             conduit.edit_revision(rev_id=phid, transactions=rev_transactions)
 
-    telemetry.metrics.mozphab.submission.process_time.stop()
+    telemetry().submission.process_time.stop()
     logger.info("Stack has been reorganised.")
 
 

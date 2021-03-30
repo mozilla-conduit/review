@@ -721,7 +721,7 @@ class Git(Repository):
             b_size = self._file_size(b_blob)
 
         file_size = max(a_size, b_size)
-        telemetry.metrics.mozphab.submission.files_size.accumulate(file_size)
+        telemetry().submission.files_size.accumulate(file_size)
 
         # Detect if we're binary, and generate a unified diff
         if b"\0" in a_body or b"\0" in b_body or file_size > environment.MAX_TEXT_SIZE:
