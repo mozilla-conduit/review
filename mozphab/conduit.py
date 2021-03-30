@@ -563,9 +563,13 @@ class ConduitAPI:
                 set_wip_later = True
             else:
                 trans.append(dict(type="plan-changes", value=True))
-        else:
-            if existing_status not in ("needs-review", "accepted"):
-                trans.append(dict(type="request-review", value=True))
+
+        # Let the Phabricator sort out the correct status for new revisions to avoid
+        # emails being sent before phabbugs has processed the revision.
+        # Updates to existing reviews that have been accepted shouldn't be triggered
+        # for re-review.
+        elif existing_status and existing_status not in ("needs-review", "accepted"):
+            trans.append(dict(type="request-review", value=True))
 
         # Add the check-in-needed tag if required.
         if check_in_needed:
