@@ -252,11 +252,12 @@ def show_commit_stack(
                 )
 
             if not commit["has-reviewers"]:
-                logger.warning(
-                    "!! Missing reviewers\n"
-                    '   It will be submitted as "Changes Planned".\n'
-                    "   Run submit again with --no-wip to prevent this."
-                )
+                logger.warning("!! Missing reviewers")
+                if commit["wip"]:
+                    logger.warning(
+                        '   It will be submitted as "Changes Planned".\n'
+                        "   Run submit again with --no-wip to prevent this."
+                    )
 
         if show_rev_urls and commit["rev-id"]:
             logger.warning("-> %s/D%s", conduit.repo.phab_url, commit["rev-id"])
