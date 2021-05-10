@@ -593,10 +593,14 @@ class TestCreateHunkLines:
         lines, eof_had_no_newline = helpers.create_hunk_lines(
             body="", prefix=prefix, check_eof=True
         )
-        assert lines == [
-            f"\\ No newline at end of file\n",
-        ]
-        assert eof_had_no_newline
+        if prefix != "+":
+            assert lines == [
+                f"\\ No newline at end of file\n",
+            ]
+            assert eof_had_no_newline
+        else:
+            assert lines == []
+            assert eof_had_no_newline is None
 
     def test_create_hunk_lines_empty_line_do_not_check_eof(self, prefix, linesep):
         """Expect a prefixed line to be returned and the EOF check to not proceed.

@@ -446,7 +446,7 @@ def create_hunk_lines(
 
     if empty_file:
         # `body` has absolutely nothing in it, return values accordingly.
-        if check_eof:
+        if check_eof and prefix != "+":
             return ["\\ No newline at end of file\n"], True
         else:
             return [], None
