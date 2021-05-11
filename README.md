@@ -51,46 +51,49 @@ always_full_stack = False
 self_last_check = 0
 arc_last_check = 0
 self_auto_update = True
+get_pre_releases = False
 
 [error_reporting]
 report_to_sentry = True
 ```
 
-- `ui.no_ansi` : never use ANSI colours (default: auto-detected).
-- `vcs.safe_mode` : use only safe VCS settings (default: false). Use `--safe-mode`
+- `ui.no_ansi` : Never use ANSI colours (default: auto-detected).
+- `vcs.safe_mode` : Use only safe VCS settings (default: `False`). Use `--safe-mode`
     option to switch it on for a one-time usage.
-- `git.remote`: comma separated string. Default remotes used to find the first
+- `git.remote`: Comma separated string. Default remotes used to find the first
     unpublished commit. Default, empty string, means that a list of remotes will
     be read from `git remote` command.
-- `git.command_path`: command path to Git binary.
-- `hg.command_path`: command path to Mercurial binary.
-- `submit.auto_submit` : when true the confirmation prompt will be skipped
-    (default: false).
-- `submit.always_blocking` : when true reviewers in commit descriptions will be marked
-    as blocking. reviewers specified on the command line override this setting
-    (default: false).
-- `submit.warn_untracked` : when true show a warning if there are uncommitted or
-    untracked changes in the working directory (default: true)
+- `git.command_path`: Command path to Git binary.
+- `hg.command_path`: Command path to Mercurial binary.
+- `submit.auto_submit` : When `True` the confirmation prompt will be skipped (default:
+    `False`).
+- `submit.always_blocking` : When `True` reviewers in commit descriptions will be
+    marked as blocking. reviewers specified on the command line override this setting
+    (default: `False`).
+- `submit.warn_untracked` : When `True` show a warning if there are uncommitted or
+    untracked changes in the working directory (default: `True`).
 - `patch.apply_to` : [base/here] Where to apply the patches by default. If `"base"`
     `moz-phab` will look for the SHA1 in the first commit. If `"here"` - current
     commit/checkout will be used (default: base).
-- `patch.create_bookmark` : affects only when patching a Mercurial repository. If `True`
-    `moz-phab` will create a bookmark (based on the last revision number) for the
+- `patch.create_bookmark` : Affects only when patching a Mercurial repository. If
+    `True` moz-phab will create a bookmark (based on the last revision number) for the
     new DAG branch point.
-- `patch.always_full_stack` : when `False` and the patched revision has successors,
+- `patch.always_full_stack` : When `False` and the patched revision has successors,
     moz-phab will ask if the whole stack should be patched instead. If `True`
     moz-phab will do it without without asking.
-- `updater.self_last_check` : epoch timestamp (local timezone) indicating the last time
+- `updater.self_last_check` : Epoch timestamp (local timezone) indicating the last time
     an update check was performed for this script.  set to `-1` to disable this check.
-- `updater.arc_last_check` : epoch timestamp (local timezone) indicating the last time
+- `updater.arc_last_check` : Epoch timestamp (local timezone) indicating the last time
     an update was performed for arc.  set to `-1` to disable this check.
-- `self_auto_update` : when `True` moz-phab will auto-update if a new version is available.
-    If `False` moz-phab will only warn about the new version.
-- `error_reporting.report_to_sentry` : when `True` moz-phab will submit exceptions to 
+- `self_auto_update` : When `True` moz-phab will auto-update if a new version is
+    available. If `False` moz-phab will only warn about the new version.
+- `get_pre_releases` : When `True` moz-phab auto-update will fetch pre-releases if they
+    are available, otherwise pre-releases will be ignored (default: `False`).
+- `error_reporting.report_to_sentry` : When `True` moz-phab will submit exceptions to
     Sentry so moz-phab devs can see unreported errors.
 
 `moz-phab` can also be configured via the following environmental variables:
-- `DEBUG` : enabled debugging output (default: disabled)
+- `DEBUG` : Enabled debugging output (default: disabled).
 
 ## Execution
 

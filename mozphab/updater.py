@@ -112,6 +112,9 @@ def self_upgrade():
         + ["--disable-pip-version-check"]
     )
 
+    if config.get_pre_releases:
+        command += ["--pre"]
+
     # If moz-phab was installed with --user, we need to pass it to pip
     # Create "install" distutils command with --user to find the scripts_path
     d = Distribution()

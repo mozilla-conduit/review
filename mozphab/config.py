@@ -54,6 +54,7 @@ class Config(object):
             self_last_check = 0
             arc_last_check = 0
             self_auto_update = True
+            get_pre_releases = False
 
             [error_reporting]
             report_to_sentry = True
@@ -83,6 +84,7 @@ class Config(object):
         self.always_full_stack = self._config.getboolean("patch", "always_full_stack")
         self.self_last_check = self._config.getint("updater", "self_last_check")
         self.self_auto_update = self._config.getboolean("updater", "self_auto_update")
+        self.get_pre_releases = self._config.getboolean("updater", "get_pre_releases")
         self.arc_last_check = self._config.getint("updater", "arc_last_check")
         git_remote = self._config.get("git", "remote")
         self.git_remote = git_remote.replace(" ", "").split(",") if git_remote else []
@@ -117,6 +119,7 @@ class Config(object):
             self._set("updater", "self_last_check", self.self_last_check)
             self._set("updater", "arc_last_check", self.arc_last_check)
             self._set("updater", "self_auto_update", self.self_auto_update)
+            self._set("updater", "get_pre_releases", self.get_pre_releases)
             self._set("telemetry", "enabled", self.telemetry_enabled)
 
         else:
