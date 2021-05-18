@@ -29,6 +29,6 @@ setup(
     # would be different than >=X.Y
     python_requires=">=3.6",
     url="https://github.com/mozilla-conduit/review",
-    version="0.1.98",
+    version="0.1.99",
     zip_safe=False,
 )
