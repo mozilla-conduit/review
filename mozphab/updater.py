@@ -8,7 +8,6 @@ import subprocess
 import sys
 import time
 import urllib.request
-import __main__ as script_module
 
 from distutils.dist import Distribution
 from pathlib import Path
@@ -115,6 +114,11 @@ def self_upgrade():
     if config.get_pre_releases:
         command += ["--pre"]
 
+    # sys.path[0] is the directory containing the script that was used to
+    # start python. This will be something like:
+    # "<python environment>/bin" or "<python environment>\Scripts" (Windows)
+    script_dir = Path(sys.path[0])
+
     # If moz-phab was installed with --user, we need to pass it to pip
     # Create "install" distutils command with --user to find the scripts_path
     d = Distribution()
@@ -125,7 +129,6 @@ def self_upgrade():
     i.prefix = i.exec_prefix = i.home = i.install_base = i.install_platbase = None
     i.finalize_options()
     # Checking if the moz-phab script is installed in user's scripts directory
-    script_dir = Path(script_module.__file__).resolve().parent
     user_dir = Path(i.install_scripts).resolve()
     if script_dir == user_dir:
         command.append("--user")
