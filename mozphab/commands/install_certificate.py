@@ -41,4 +41,4 @@ def add_parser(parser):
         action="store_true",
         help="Run VCS with only necessary extensions",
     )
-    cert_parser.set_defaults(func=install_certificate, needs_repo=True, no_arc=True)
+    cert_parser.set_defaults(func=install_certificate, needs_repo=True)

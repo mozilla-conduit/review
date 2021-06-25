@@ -288,4 +288,4 @@ def add_parser(parser):
         default=".",
         help="End revision of range to reorganise (default: current commit)",
     )
-    reorg_parser.set_defaults(func=reorganise, needs_repo=True, no_arc=True)
+    reorg_parser.set_defaults(func=reorganise, needs_repo=True)

@@ -177,7 +177,6 @@ def test_set_metrics(m_config, m_user_data, get_telemetry):
         ):
             self.needs_repo = needs_repo
             self.command = command
-            self.no_arc = True
             if force_vcs is not None:
                 self.force_vcs = force_vcs
 

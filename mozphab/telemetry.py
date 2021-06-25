@@ -164,7 +164,6 @@ class Telemetry:
         self.metrics.mozphab.usage.override_switch.set(
             getattr(args, "force_vcs", False) or getattr(args, "force", False)
         )
-        self.metrics.mozphab.usage.arcanist.set(not args.no_arc)
         self.metrics.mozphab.usage.command_time.start()
         self.metrics.mozphab.user.installation.set(user_data.installation_id)
         self.metrics.mozphab.user.id.set(user_data.user_code)

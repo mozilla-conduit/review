@@ -7,7 +7,6 @@ import urllib.parse
 
 from mozphab import environment
 
-from .arcanist import arc_ping
 from .conduit import conduit, normalise_reviewer
 from .exceptions import Error
 from .helpers import (
@@ -278,21 +277,6 @@ class Repository(object):
 
         if unavailable_reviewers_warning:
             logger.warning("Notice: reviewer availability overridden.")
-
-    def check_arc(self):
-        """Check if arc can communicate with Phabricator."""
-        # Check if the cache file exists
-        path = os.path.join(self.dot_path, ".moz-phab_arc-configured")
-        if os.path.isfile(path):
-            return True
-
-        if arc_ping(self.path):
-            # Create the cache file
-            with open(path, "a"):
-                os.utime(path, None)
-            return True
-
-        return False
 
     def _api_url(self):
         """Return a base URL for conduit API call"""

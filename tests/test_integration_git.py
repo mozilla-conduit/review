@@ -12,8 +12,6 @@ from .conftest import git_out, search_diff, search_rev
 from mozphab import environment, exceptions, mozphab
 
 
-arc_call_conduit = mock.Mock()
-
 call_conduit = mock.Mock()
 
 
@@ -27,32 +25,6 @@ check_call_by_line = mock.Mock()
 check_call_by_line.side_effect = by_line_mock
 
 initial_sha = None
-
-
-def test_submit_create_arc(in_process, git_repo_path, init_sha):
-    call_conduit.side_effect = (
-        dict(),
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
-        [{"userName": "alice", "phid": "PHID-USER-1"}],
-    )
-    testfile = git_repo_path / "X"
-    testfile.write_text("a")
-    git_out("add", ".")
-    git_out("commit", "--message", "A r?alice")
-    testfile = git_repo_path / "untracked"
-    testfile.write_text("a")
-
-    mozphab.main(
-        ["submit", "--arc", "--yes", "--bug", "1", init_sha], is_development=True
-    )
-
-    log = git_out("log", "--format=%s%n%n%b", "-1")
-    expected = """
-Bug 1 - A r?alice
-
-Differential Revision: http://example.test/D123
-"""
-    assert log.strip() == expected.strip()
 
 
 def test_submit_create(in_process, git_repo_path, init_sha):
@@ -250,28 +222,6 @@ A r?alice
 
 Differential Revision: http://example.test/D123
 """
-    assert log.strip() == expected.strip()
-
-
-def test_submit_create_binary_arc(in_process, git_repo_path, init_sha, data_file):
-    call_conduit.side_effect = (
-        dict(),
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
-        [{"userName": "alice", "phid": "PHID-USER-1"}],
-    )
-    shutil.copyfile(str(data_file), str(git_repo_path / "img.png"))
-    git_out("add", ".")
-    git_out("commit", "--message", "IMG")
-
-    mozphab.main(
-        ["submit", "--arc", "--yes", "--bug", "1", init_sha], is_development=True
-    )
-    expected = """
-Bug 1 - IMG
-
-Differential Revision: http://example.test/D123
-"""
-    log = git_out("log", "--format=%s%n%n%b", "-1")
     assert log.strip() == expected.strip()
 
 
@@ -818,166 +768,6 @@ Differential Revision: http://example.test/D123
 
 """
     assert log == expected
-
-
-def test_submit_different_author_arc(in_process, git_repo_path, init_sha):
-    call_conduit.reset_mock()
-    call_conduit.side_effect = (
-        dict(),
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
-        [{"userName": "alice", "phid": "PHID-USER-1"}],
-    )
-    testfile = git_repo_path / "X"
-    testfile.write_text("a")
-    git_out("add", ".")
-    git_out(
-        "commit",
-        "--date",
-        "Tue, 22 Jan 2019 13:42:48 +0000",
-        "--author",
-        "foo <foo@bar.com>",
-        "--message",
-        "A r?alice",
-    )
-    testfile.write_text("b")
-    git_out(
-        "commit",
-        "--date",
-        "Tue, 22 Jan 2019 13:43:48 +0000",
-        "--author",
-        "bar <bar@foo.com>",
-        "--all",
-        "--message",
-        "B r?alice",
-    )
-
-    mozphab.main(
-        ["submit", "--arc", "--yes", "--bug", "1", init_sha], is_development=True
-    )
-
-    log = git_out("log", "--format=%aD+++%an+++%ae", "-2")
-    expected = """\
-Tue, 22 Jan 2019 13:43:48 +0000+++bar+++bar@foo.com
-Tue, 22 Jan 2019 13:42:48 +0000+++foo+++foo@bar.com
-"""
-    assert log == expected
-
-
-def test_submit_utf8_author_arc(in_process, git_repo_path, init_sha):
-    call_conduit.reset_mock()
-    call_conduit.side_effect = (
-        dict(),
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
-        [{"userName": "alice", "phid": "PHID-USER-1"}],
-    )
-    testfile = git_repo_path / "X"
-    testfile.write_text("a")
-    git_out("add", ".")
-    git_out(
-        "commit",
-        "--date",
-        "Tue, 22 Jan 2019 13:42:48 +0000",
-        "--author",
-        "ćwikła <ćwikła@bar.com>",
-        "--message",
-        "A r?alice",
-    )
-
-    mozphab.main(
-        ["submit", "--arc", "--yes", "--bug", "1", init_sha], is_development=True
-    )
-
-    log = git_out("log", "--format=%aD+++%an+++%ae", "-1")
-    expected = "Tue, 22 Jan 2019 13:42:48 +0000+++ćwikła+++ćwikła@bar.com\n"
-    assert log == expected
-
-
-def test_submit_update_arc(in_process, git_repo_path, init_sha):
-    call_conduit.reset_mock()
-    call_conduit.side_effect = (
-        {},  # ping
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
-        dict(data=[search_rev(rev=123)]),
-        dict(data=[search_diff()]),
-        dict(phid="PHID-USER-1"),
-    )
-    testfile = git_repo_path / "X"
-    testfile.write_text("a")
-    git_out("add", ".")
-
-    # Write out our commit message as if the program had already run and appended
-    # a Differential Revision keyword to the commit body for tracking.
-    git_out(
-        "commit",
-        "--message",
-        """\
-Bug 1 - A
-
-Differential Revision: http://example.test/D123
-""",
-    )
-
-    mozphab.main(
-        ["submit", "--arc", "--yes"]
-        + ["--bug", "1"]
-        + ["--message", "update message ćwikła"]
-        + [init_sha],
-        is_development=True,
-    )
-
-    log = git_out("log", "--format=%s%n%n%b", "-1")
-    expected = """\
-Bug 1 - A
-
-Differential Revision: http://example.test/D123
-
-"""
-    assert log == expected
-
-
-def test_submit_update_bug_id_arc(in_process, git_repo_path, init_sha):
-    call_conduit.reset_mock()
-    call_conduit.side_effect = (
-        dict(),
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
-        dict(data=[search_rev(rev=123)]),
-        dict(data=[search_diff()]),
-        # get reviewers for updated revision
-        dict(phid="PHID-USER-1"),
-    )
-    arc_call_conduit.reset_mock()
-    arc_call_conduit.side_effect = (
-        {},
-        {"data": {}},
-    )
-    testfile = git_repo_path / "X"
-    testfile.write_text("a")
-    git_out("add", ".")
-
-    # Write out our commit message as if the program had already run and appended
-    # a Differential Revision keyword to the commit body for tracking.
-    git_out(
-        "commit",
-        "--message",
-        """\
-Bug 1 - A
-
-Differential Revision: http://example.test/D123
-""",
-    )
-
-    mozphab.main(
-        ["submit", "--arc", "--yes", "--bug", "2", init_sha], is_development=True
-    )
-
-    arc_call_conduit.assert_called_with(
-        "differential.revision.edit",
-        {
-            "objectIdentifier": "D123",
-            "transactions": [{"type": "bugzilla.bug-id", "value": "2"}],
-        },
-        mock.ANY,
-    )
 
 
 def test_submit_update_revision_not_found(in_process, git_repo_path, init_sha):

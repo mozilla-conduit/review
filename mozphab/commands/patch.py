@@ -317,4 +317,4 @@ def add_parser(parser):
         action="store_true",
         help="EXPERIMENTAL: Override VCS compatibility check",
     )
-    patch_parser.set_defaults(func=patch, needs_repo=True, no_arc=True)
+    patch_parser.set_defaults(func=patch, needs_repo=True)

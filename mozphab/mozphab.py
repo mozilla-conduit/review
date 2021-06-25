@@ -16,7 +16,6 @@ import traceback
 
 from mozphab import environment
 
-from .arcanist import install_arc_if_required
 from .args import parse_args
 from .conduit import conduit
 from .config import config
@@ -58,16 +57,13 @@ def main(argv, *, is_development):
 
         logger.debug("%s (%s)", environment.MOZPHAB_NAME, environment.MOZPHAB_VERSION)
 
-        if not args.no_arc:
-            install_arc_if_required()
-
         # Ensure that `patch --raw ..` only outputs the patch
         if args.command == "patch" and getattr(args, "raw", False):
             environment.SHOW_SPINNER = False
             logger.setLevel(logging.ERROR)
 
         elif args.command != "self-update":
-            check_for_updates(with_arc=not args.no_arc)
+            check_for_updates()
 
         repo = None
         if args.needs_repo:

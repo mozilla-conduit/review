@@ -15,14 +15,12 @@ from pkg_resources import parse_version
 
 from mozphab import environment
 
-from .arcanist import update_arc
 from .config import config
 from .environment import MOZPHAB_VERSION
 from .exceptions import Error
 from .logger import logger, stop_logging
 from .subprocess_wrapper import check_call
 
-ARC_UPDATE_FREQUENCY = 24 * 7  # hours
 SELF_UPDATE_FREQUENCY = 24 * 3  # hours
 
 
@@ -33,16 +31,8 @@ def get_pypi_info():
     return response["info"]
 
 
-def check_for_updates(with_arc=True):
+def check_for_updates():
     """Log a message if an update is required/available"""
-    # Update arc.
-    if (
-        with_arc
-        and config.arc_last_check >= 0
-        and time.time() - config.arc_last_check > ARC_UPDATE_FREQUENCY * 60 * 60
-    ):
-        update_arc()
-
     # Update self.
     if (
         config.self_last_check >= 0

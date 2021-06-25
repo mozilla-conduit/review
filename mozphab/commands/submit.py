@@ -4,7 +4,7 @@
 
 import re
 
-from mozphab import arcanist, environment
+from mozphab import environment
 
 from mozphab.conduit import conduit
 from mozphab.config import config
@@ -16,12 +16,10 @@ from mozphab.helpers import (
     prompt,
     revision_title_from_commit,
     strip_differential_revision,
-    temporary_file,
     update_commit_title_previews,
 )
 from mozphab.logger import logger
 from mozphab.spinner import wait_message
-from mozphab.subprocess_wrapper import check_call_by_line
 from mozphab.telemetry import telemetry
 
 # The DEFAULT_UPDATE_MESSAGE is only required when using arc to submit.
@@ -414,9 +412,6 @@ def update_revision_bug_id(transactions, commit, revision):
 
 
 def submit(repo, args):
-    if environment.DEBUG:
-        arcanist.ARC.append("--trace")
-
     telemetry.metrics.mozphab.submission.preparation_time.start()
     with wait_message("Checking connection to Phabricator."):
         # Check if raw Conduit API can be used
@@ -425,10 +420,6 @@ def submit(repo, args):
 
         # Check if local and remote VCS matches
         repo.check_vcs()
-
-        # Check if arc is configured
-        if not args.no_arc and not repo.check_arc():
-            raise Error("Failed to run %s." % arcanist.ARC_COMMAND)
 
     repo.before_submit()
 
@@ -551,7 +542,6 @@ def submit(repo, args):
             logger.info("\nCreating new revision:")
 
         logger.info("%s %s", commit["name"], revision_title_from_commit(commit))
-        repo.checkout(commit["node"])
 
         # WIP submissions shouldn't set reviewers on phabricator.
         if commit["wip"]:
@@ -575,100 +565,37 @@ def submit(repo, args):
 
         message = arc_message(template_vars)
 
-        if args.no_arc:
-            # Create a diff if needed
-            with wait_message("Creating local diff..."):
-                diff = repo.get_diff(commit)
+        # Create a diff if needed
+        with wait_message("Creating local diff..."):
+            diff = repo.get_diff(commit)
 
-            if diff:
-                telemetry.metrics.mozphab.submission.files_count.add(len(diff.changes))
-                with wait_message("Uploading binary file(s)..."):
-                    diff.upload_files()
+        if diff:
+            telemetry.metrics.mozphab.submission.files_count.add(len(diff.changes))
+            with wait_message("Uploading binary file(s)..."):
+                diff.upload_files()
 
-                with wait_message("Submitting the diff..."):
-                    diff.submit(commit, message)
+            with wait_message("Submitting the diff..."):
+                diff.submit(commit, message)
 
-            if is_update:
-                with wait_message("Updating revision..."):
-                    rev = conduit.update_revision(
-                        commit,
-                        existing_reviewers,
-                        diff_phid=diff.phid,
-                        comment=args.message,
-                        check_in_needed=check_in_needed,
-                    )
-            else:
-                with wait_message("Creating a new revision..."):
-                    rev = conduit.create_revision(
-                        commit,
-                        summary,
-                        diff.phid,
-                        check_in_needed=check_in_needed,
-                    )
-
-            revision_url = "%s/D%s" % (repo.phab_url, rev["object"]["id"])
-
-        else:
-            # Run arc.
-            with temporary_file(message) as message_file:
-                arc_args = (
-                    ["diff"]
-                    + ["--base", "arc:this"]
-                    + ["--allow-untracked", "--no-amend", "--no-ansi"]
-                    + ["--message-file", message_file]
+        if is_update:
+            with wait_message("Updating revision..."):
+                rev = conduit.update_revision(
+                    commit,
+                    existing_reviewers,
+                    diff_phid=diff.phid,
+                    comment=args.message,
+                    check_in_needed=check_in_needed,
                 )
-                if args.nolint:
-                    arc_args.append("--nolint")
-                if commit["wip"]:
-                    arc_args.append("--plan-changes")
-                if args.lesscontext:
-                    arc_args.append("--less-context")
-                if is_update:
-                    message = args.message if args.message else DEFAULT_UPDATE_MESSAGE
-                    arc_args.extend(
-                        ["--message", message] + ["--update", commit["rev-id"]]
-                    )
-                else:
-                    arc_args.append("--create")
+        else:
+            with wait_message("Creating a new revision..."):
+                rev = conduit.create_revision(
+                    commit,
+                    summary,
+                    diff.phid,
+                    check_in_needed=check_in_needed,
+                )
 
-                revision_url = None
-                for line in check_call_by_line(
-                    arcanist.ARC + arc_args, cwd=repo.path, never_log=True
-                ):
-                    print(line)
-                    revision_url = extract_revision_url(line) or revision_url
-
-            if not revision_url:
-                raise Error("Failed to find 'Revision URL' in arc output")
-
-            if is_update:
-                current_status = revision_to_update["fields"]["status"]["value"]
-                with wait_message("Updating D%s.." % commit["rev-id"]):
-                    transactions = []
-                    revision = conduit.get_revisions(ids=[int(commit["rev-id"])])[0]
-
-                    update_revision_description(transactions, commit, revision)
-                    update_revision_bug_id(transactions, commit, revision)
-
-                    # Add reviewers only if revision lacks them
-                    if (
-                        not commit["wip"]
-                        and commit["has-reviewers"]
-                        and not existing_reviewers
-                    ):
-                        conduit.update_revision_reviewers(transactions, commit)
-                        if current_status != "needs-review":
-                            transactions.append(dict(type="request-review"))
-
-                    if transactions:
-                        arcanist.call_conduit(
-                            "differential.revision.edit",
-                            {
-                                "objectIdentifier": "D%s" % commit["rev-id"],
-                                "transactions": transactions,
-                            },
-                            repo.path,
-                        )
+        revision_url = "%s/D%s" % (repo.phab_url, rev["object"]["id"])
 
         # Append/replace div rev url to/in commit description.
         body = amend_revision_url(commit["body"], revision_url)
@@ -684,7 +611,7 @@ def submit(repo, args):
                 repo.amend_commit(commit, commits)
 
         # Diff property has to be set after potential SHA1 change.
-        if args.no_arc and diff:
+        if diff:
             with wait_message("Setting diff metadata..."):
                 diff.set_property(commit, message)
 
@@ -818,12 +745,6 @@ def add_parser(parser):
         "-u",
         action="append",
         help='Set upstream branch to detect the starting commit (default: "")',
-    )
-    submit_parser.add_argument(
-        "--arc",
-        dest="no_arc",
-        action="store_false",
-        help="Submits with Arcanist",
     )
     submit_parser.add_argument(
         "--force-vcs",

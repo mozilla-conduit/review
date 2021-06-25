@@ -21,7 +21,6 @@ from mozphab.git import Git
 from mozphab.mercurial import Mercurial
 
 from mozphab import (
-    arcanist,
     conduit,
     config as config_module,
     environment,
@@ -344,18 +343,6 @@ def in_process(monkeypatch, safe_environ, request, config):
     # is safe to skip and doing so makes it easier to test other conduit call sites.
     monkeypatch.setattr(submit, "update_revision_description", mock.MagicMock())
 
-    def arc_ping(self, *args):
-        return True
-
-    def arc_out(self, *args, **kwargs):
-        return json.dumps(
-            {
-                "error": None,
-                "errorMessage": None,
-                "response": [{"userName": "alice", "phid": "PHID-USER-1"}],
-            }
-        )
-
     # Modify user_data object to not touch the file
     user.USER_INFO_FILE = mock.Mock()
     user.USER_INFO_FILE.exists.return_value = False
@@ -372,23 +359,6 @@ def in_process(monkeypatch, safe_environ, request, config):
     # Allow to define the check_call_by_line function in the testing module
     def check_call_by_line_static(*args, **kwargs):
         return ["Revision URI: http://example.test/D123"]
-
-    check_call_by_line = getattr(
-        request.module, "check_call_by_line", check_call_by_line_static
-    )
-
-    # Allow to define the arccall_conduit function in the testing module
-    arc_call_conduit = getattr(
-        request.module, "arc_call_conduit", arcanist.call_conduit
-    )
-
-    # Allow to define the arc_ping function in the testing module
-    arc_ping_mock = getattr(request.module, "arc_ping", arc_ping)
-
-    monkeypatch.setattr(arcanist, "arc_ping", arc_ping_mock)
-    monkeypatch.setattr(arcanist, "arc_out", arc_out)
-    monkeypatch.setattr(submit, "check_call_by_line", check_call_by_line)
-    monkeypatch.setattr(arcanist, "call_conduit", arc_call_conduit)
 
     def call_conduit_static(self, *args):
         # Return alice as the only valid reviewer name from Phabricator.

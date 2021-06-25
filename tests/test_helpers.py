@@ -1,6 +1,5 @@
 import builtins
 import datetime
-import json
 import mock
 import pytest
 import subprocess
@@ -10,7 +9,6 @@ from pathlib import Path
 
 from mozphab.commands import submit
 from mozphab import (
-    arcanist,
     conduit,
     detect_repository,
     environment,
@@ -115,40 +113,6 @@ class Helpers(unittest.TestCase):
         args = Args(path="some path")
         self.assertEqual(repo, mozphab.repo_from_args(args))
         repo.set_args.assert_called_once_with(args)
-
-    def test_arc_message(self):
-        self.assertEqual(
-            "Title\n\nSummary:\nMessage\n\n\n\nTest Plan:\n\n"
-            "Reviewers: reviewer\n\nSubscribers:\n\nBug #: 1",
-            submit.arc_message(
-                dict(title="Title", body="Message", reviewers="reviewer", bug_id=1)
-            ),
-        )
-
-        self.assertEqual(
-            "Title\n\nSummary:\nMessage\n\nDepends on D123\n\nTest Plan:\n\n"
-            "Reviewers: reviewer\n\nSubscribers:\n\nBug #: 1",
-            submit.arc_message(
-                dict(
-                    title="Title",
-                    body="Message",
-                    reviewers="reviewer",
-                    bug_id=1,
-                    depends_on="Depends on D123",
-                )
-            ),
-        )
-
-        self.assertEqual(
-            "\n\nSummary:\n\n\n"
-            "\n\nTest Plan:"
-            "\n\nReviewers: "
-            "\n\nSubscribers:"
-            "\n\nBug #: ",
-            submit.arc_message(
-                dict(title=None, body=None, reviewers=None, bug_id=None)
-            ),
-        )
 
     def test_strip_differential_revision_from_commit_body(self):
         self.assertEqual("", helpers.strip_differential_revision("\n\n"))
@@ -311,66 +275,6 @@ def test_reviewer_case_sensitivity(call_conduit):
         },
     )
     assert [] == conduit.conduit.check_for_invalid_reviewers(reviewers)
-
-
-@mock.patch("mozphab.arcanist.arc_out")
-def test_api_call_with_no_errors_returns_api_response_json(arc_out):
-    # fmt: off
-    arc_out.return_value = json.dumps(
-        {
-            "error": None,
-            "errorMessage": None,
-            "response": {"data": "ok"}
-        }
-    )
-    # fmt: on
-    api_response = arcanist.call_conduit("my.method", {}, "")
-
-    assert api_response == {"data": "ok"}
-    arc_out.assert_called_once_with(
-        ["call-conduit", "my.method"],
-        cwd="",
-        log_output_to_console=False,
-        stdin=mock.ANY,
-        stderr=mock.ANY,
-        search_error=arcanist.ARC_CONDUIT_ERROR,
-    )
-
-
-@mock.patch("mozphab.arcanist.arc_out")
-def test_api_call_with_error_raises_exception(arc_out):
-    arc_out.return_value = json.dumps(
-        {
-            "error": "ERR-CONDUIT-CORE",
-            "errorMessage": "**sad trombone**",
-            "response": None,
-        }
-    )
-
-    with pytest.raises(arcanist.ArcConduitAPIError) as err:
-        arcanist.call_conduit("my.method", {}, "")
-        assert err.message == "**sad trombone**"
-
-
-@mock.patch("mozphab.arcanist.arc_out")
-def test_arc_ping_with_invalid_certificate_returns_false(arc_out):
-    arc_out.side_effect = exceptions.CommandError
-    assert not arcanist.arc_ping("")
-
-
-@mock.patch("mozphab.gitcommand.which_path")
-@mock.patch("mozphab.gitcommand.check_call")
-@mock.patch("os.path.exists")
-@mock.patch("os.makedirs")
-def test_install(_makedirs, m_exists, m_check_call, _which_path, git_command):
-    install = arcanist.install_arc_if_required
-    m_exists.return_value = True
-    install()
-    m_check_call.assert_not_called()
-
-    m_exists.return_value = False
-    install()
-    assert 2 == m_check_call.call_count
 
 
 def test_get_users_no_users():
