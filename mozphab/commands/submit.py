@@ -188,7 +188,10 @@ def show_commit_stack(
                     # and we're not changing the bug-id
                     diff_phid = fields["diffPHID"]
                     diff_commits = diffs[diff_phid]["attachments"]["commits"]["commits"]
-                    sha1_changed = commit["node"] != diff_commits[0]["identifier"]
+                    sha1_changed = (
+                        not diff_commits
+                        or commit["node"] != diff_commits[0]["identifier"]
+                    )
                     if (
                         not sha1_changed
                         and commit["wip"] == revision_is_wip
