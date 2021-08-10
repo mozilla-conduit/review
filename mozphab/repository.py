@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import json
 import os
 import urllib.parse
 
@@ -306,15 +307,26 @@ class Repository(object):
         It is stored in a file to avoid calling the API on every run.
         """
         if not self._phid:
-            # check file
             path = os.path.join(self.dot_path, ".moz-phab_phid")
+
             if os.path.isfile(path):
                 with open(path) as f:
-                    self._phid = f.readline()
+                    try:
+                        repo_phids = json.load(f)
+                    except json.decoder.JSONDecodeError:
+                        # File is probably using the old format.
+                        repo_phids = {}
+                    repo_phid = repo_phids.get(self.call_sign, None)
             else:
-                self._phid = self.phab_repo["phid"]
+                repo_phids = {}
+                repo_phid = None
+
+            if not repo_phid:
+                repo_phid = self.phab_repo["phid"]
+                repo_phids[self.call_sign] = repo_phid
                 with open(path, "w") as f:
-                    f.write(self._phid)
+                    json.dump(repo_phids, f)
+            self._phid = repo_phid
 
         return self._phid
 
