@@ -542,6 +542,7 @@ def submit(repo, args):
             logger.info("\nCreating new revision:")
 
         logger.info("%s %s", commit["name"], revision_title_from_commit(commit))
+        repo.checkout(commit["node"])
 
         # WIP submissions shouldn't set reviewers on phabricator.
         if commit["wip"]:
