@@ -49,7 +49,6 @@ always_full_stack = False
 
 [updater]
 self_last_check = 0
-arc_last_check = 0
 self_auto_update = True
 get_pre_releases = False
 
@@ -83,8 +82,6 @@ report_to_sentry = True
     moz-phab will do it without without asking.
 - `updater.self_last_check` : Epoch timestamp (local timezone) indicating the last time
     an update check was performed for this script.  set to `-1` to disable this check.
-- `updater.arc_last_check` : Epoch timestamp (local timezone) indicating the last time
-    an update was performed for arc.  set to `-1` to disable this check.
 - `self_auto_update` : When `True` moz-phab will auto-update if a new version is
     available. If `False` moz-phab will only warn about the new version.
 - `get_pre_releases` : When `True` moz-phab auto-update will fetch pre-releases if they
@@ -146,9 +143,6 @@ abandoned manually.  See
 planned fixes.  Also note that "fix-up" commits are not yet supported;
 see [bug 1481542](https://bugzilla.mozilla.org/show_bug.cgi?id=1481542).
 
-MozPhab is not using Arcanist to submit commits to Phabricator.
-If you wish to do so add the `--arc` switch. File a bug if you needed to use it because
-MozPhab failed to submit with default settings.
 
 ### Downloading a patch from Phabricator
 
@@ -218,18 +212,6 @@ Differential Revision: https://phabricator.services.mozilla.com/D[revision]
 ```
 
 replacing `[revision]` with the identifier of your revision.
-
-### Running arc commands
-
-* **Note** You will need to have PHP installed to run `arc` commands. *
-
-`moz-phab arc` allows running Arcanist commands indirectly:
-
-```
-$ moz-phab arc ARG [ARG ...]
-```
-
-`arc feature` will become `moz-phab arc feature`.
 
 ## Reporting Issues
 
