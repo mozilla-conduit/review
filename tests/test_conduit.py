@@ -558,6 +558,30 @@ def test_get_project_phid(m_get_projects):
     assert phid == "PHID-PROJ-1"
 
 
+@mock.patch("mozphab.repository.conduit.call")
+def test_get_repositories_with_tag(m_call):
+    m_call.side_effect(
+        [
+            {
+                "": "",
+            }
+        ]
+    )
+
+    repositories = mozphab.conduit.get_repositories_with_tag("uplift")
+
+    # Ensure only one result for "uplift"
+    assert len(repositories) == 1
+    
+    repo = repositories[0]
+
+    # Test the repo has the expected phid
+    assert repo[""]
+
+    # Using a tag that isn't associated with a repo should result in a `NotFoundError`
+    with pytest.raises(exceptions.NotFoundError) as e:
+        mozphab.conduit.get_repositories_with_tag("bad-tag")
+
 @mock.patch("mozphab.repository.conduit.get_project_phid")
 @mock.patch("mozphab.repository.conduit.call")
 def test_check_in_needed(m_call, m_project_phid):

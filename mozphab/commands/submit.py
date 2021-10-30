@@ -8,12 +8,16 @@ from mozphab import environment
 
 from mozphab.conduit import conduit
 from mozphab.config import config
-from mozphab.exceptions import Error
+from mozphab.exceptions import (
+    CommandError,
+    Error,
+)
 from mozphab.helpers import (
     augment_commits_from_body,
     BLOCKING_REVIEWERS_RE,
     parse_arc_diff_rev,
     prompt,
+    move_drev_to_original,
     revision_title_from_commit,
     strip_differential_revision,
     update_commit_title_previews,
@@ -386,7 +390,23 @@ def update_commits_from_args(commits, args):
                 granted=make_blocking(commit["reviewers"]["granted"]),
             )
 
+    if args.command == "uplift":
+        update_commits_for_uplift(commits)
+
     update_commit_title_previews(commits)
+
+
+def update_commits_for_uplift(commits):
+    """Prepares a set of commits for uplifting."""
+    # When uplifting, ensure the `Differential Revison` line is properly
+    # moved, and that `rev-id` is updated to not point at the original revision.
+    # TODO: make sure this doesn't cause updates to uplift revisions to instead submit something new
+    for commit in commits:
+        commit["body"], commit["rev-id"] = move_drev_to_original(
+            commit["body"],
+            commit["rev-id"],
+        )
+        #commit["reviewers"].append("release-managers")
 
 
 def update_revision_description(transactions, commit, revision):
@@ -428,6 +448,16 @@ def submit(repo, args):
         commits = repo.commit_stack(single=args.single)
     if not commits:
         raise Error("Failed to find any commits to submit")
+
+    # If this is an uplift and we can rebase onto the uplift train, do so automatically.
+    rebased_uplift = (
+        args.command == "uplift"
+        and not args.no_rebase
+    )
+    if rebased_uplift:
+        unified_head = repo.map_callsign_to_unified_head(args.train)
+        with wait_message(f"Rebasing commits onto {unified_head}"):
+            repo.uplift_commits(unified_head, commits)
 
     with wait_message("Loading commits.."):
         # Pre-process to load metadata.
@@ -608,8 +638,12 @@ def submit(repo, args):
             commit["title"] = commit["title-preview"]
             commit["body"] = body
             commit["rev-id"] = parse_arc_diff_rev(commit["body"])
-            with wait_message("Updating commit.."):
-                repo.amend_commit(commit, commits)
+
+            # Only amend the commit with updated info if this is a rebased uplift.
+            # TODO consider doing this in a cleaner way?
+            if args.command != "uplift" or rebased_uplift:
+                with wait_message("Updating commit.."):
+                    repo.amend_commit(commit, commits)
 
         # Diff property has to be set after potential SHA1 change.
         if diff:
@@ -643,6 +677,12 @@ def add_parser(parser):
             "the submission process."
         ),
     )
+    add_submit_arguments(submit_parser)
+    submit_parser.set_defaults(func=submit, needs_repo=True)
+
+
+def add_submit_arguments(submit_parser):
+    """Add `moz-phab submit` command line arguments to a parser.""" 
     submit_parser.add_argument(
         "--path", "-p", help="Set path to repository (default: detected)"
     )
@@ -777,4 +817,3 @@ def add_parser(parser):
         help="End revision of range to submit (default: current commit)",
     )
 
-    submit_parser.set_defaults(func=submit, needs_repo=True)

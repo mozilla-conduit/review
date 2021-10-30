@@ -9,6 +9,10 @@ import subprocess
 import sys
 import uuid
 
+from typing import (
+    List,
+)
+
 from datetime import datetime
 
 from mozphab import environment
@@ -620,6 +624,18 @@ class Git(Repository):
     def rebase_commit(self, source_commit, dest_commit):
         self._rebase(dest_commit["node"], source_commit["node"])
 
+    def map_callsign_to_unified_head(self, callsign: str) -> str:
+        unified_head = f"remotes/origin/bookmarks/{callsign}"
+        
+        if not self.is_node(unified_head):
+            raise ValueError(f"{callsign} could not be mapped to a unified head!")
+
+        return unified_head
+
+    def uplift_commits(self, dest: str, commits: List[dict]):
+        # TODO make this work with git
+        raise NotImplementedError("")
+
     def _rebase(self, newbase, upstream):
         self.git_call(["rebase", "--quiet", "--onto", newbase, upstream])
 
@@ -793,3 +809,4 @@ class Git(Repository):
             )
 
         return True
+

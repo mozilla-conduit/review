@@ -619,6 +619,28 @@ class ConduitAPI:
         cache.set(key, repo)
         return repo
 
+    def get_repositories_with_tag(self, tag: str) -> dict:
+        """Get repository information for repos associated with the given tag."""
+        key = f"repos-tag-{tag}"
+
+        entry = cache.get(key)
+        if entry:
+            return entry
+
+        api_call_args = {
+            "constraints": {
+                "projects": [tag],
+            }
+        }
+
+        data = self.call("diffusion.repository.search", api_call_args).get("data")
+        if not data:
+            raise NotFoundError(f"No repositories found with tag {tag}")
+
+        cache.set(key, data)
+        return data
+
+
     def create_diff(self, changes, base_revision):
         creation_method = ["moz-phab", conduit.repo.vcs]
         if conduit.repo.vcs == "git" and conduit.repo.is_cinnabar_required:

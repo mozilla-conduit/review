@@ -6,6 +6,10 @@ import json
 import os
 import urllib.parse
 
+from typing import (
+    List,
+)
+
 from mozphab import environment
 
 from .conduit import conduit, normalise_reviewer
@@ -151,6 +155,16 @@ class Repository(object):
 
     def amend_commit(self, commit, commits):
         """Amend commit description from `title` and `desc` fields"""
+
+    def map_callsign_to_unified_head(self, callsign: str) -> str:
+        """Return the expected VCS identifier for the given callsign.
+
+        Returns a VCS identifier that corresponds to the given Phabricator repository
+        callsign. Confirms the identified head exists in the repository.
+        """
+
+    def uplift_commits(self, dest: str, commits: List[dict]):
+        """Uplift the repo's revset onto `dest` and refresh `commits`."""
 
     def rebase_commit(self, source_commit, dest_commit):
         """Rebase source onto destination."""
