@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import json
 import mimetypes
 import os
 import re
@@ -12,6 +13,10 @@ import uuid
 from contextlib import suppress
 from distutils.version import LooseVersion
 from functools import lru_cache
+from typing import (
+    List,
+    Optional,
+)
 
 import hglib
 from mozphab import environment
@@ -674,12 +679,64 @@ class Mercurial(Repository):
         for node in non_stack_children:
             self.hg(["rebase", "--source", node, "--dest", commit["node"]])
 
+    def map_callsign_to_unified_head(self, callsign: str) -> Optional[str]:
+        if not self.is_node(callsign):
+            return None
+
+        return callsign
+
     def rebase_commit(self, source_commit, dest_commit):
         self.hg(
             ["rebase"]
             + ["--source", source_commit["node"]]
             + ["--dest", dest_commit["node"]]
         )
+
+    def uplift_commits(self, dest: str, commits: List[dict]) -> List[dict]:
+        out = self.hg_out(
+            [
+                # Send messages to `stderr` so `stdout` is pure JSON.
+                "--config",
+                "ui.message-output=stderr",
+                "rebase",
+                "-r",
+                self.revset,
+                "-d",
+                dest,
+                # Don't obsolete the original changesets.
+                "--keep",
+                "-T",
+                "json",
+            ],
+            split=False,
+        )
+
+        # Capture the JSON output from rebase and use it to refresh our commit stack.
+        # We need to do this since using `--keep` with rebase causes the newly produced
+        # changesets to not be marked as successors of the original revisions, which
+        # means `refresh_commit_stack` won't find any updates to make.
+        nodechanges = json.loads(out)[0]["nodechanges"]
+
+        if len(nodechanges) != len(commits):
+            raise ValueError(
+                f"Rebase created {len(nodechanges)} new changesets; "
+                f"{len(commits)} expected"
+            )
+
+        for commit in commits:
+            # We should have a single new commit for each commit we want to uplift.
+            # Error out if we don't as progressing with an inconsistent stack might
+            # cause behaviour we can't handle.
+            new = nodechanges.get(commit["node"])
+            if len(new) != 1:
+                raise ValueError(f"Should only have a single new item, got {new}")
+
+            self._refresh_commit(commit, new[0])
+
+        # Set revset to the new range of commits.
+        self.revset = "%s::%s" % (commits[0]["node"], commits[-1]["node"])
+
+        return commits
 
     def check_commits_for_submit(self, commits, require_bug=True):
         # 'Greatest Common Ancestor'/'Merge Base' should be included in the revset.

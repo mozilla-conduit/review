@@ -749,3 +749,40 @@ def test_augment_commits_from_body():
     assert commits[1]["reviewers"]["granted"] == ["blocker!"]
     assert commits[1]["title-preview"] == "WIP: Bug 2 - blah r=blocker!"
     assert commits[1]["wip"]
+
+
+def test_move_drev_to_original():
+    # Ensure the arguments are returned as-is when `rev_id` is `None`.
+    assert helpers.move_drev_to_original("blah", None) == (
+        "blah",
+        None,
+    ), "Passing `None` for `rev_id` should return the arguments."
+
+    # Ensure `Differential Revision` is moved to `Original` and `rev_id` is wiped.
+    commit_message = (
+        "bug 1: title r?reviewer\n"
+        "\n"
+        "Differential Revision: http://phabricator.test/D1"
+    )
+    expected = (
+        "bug 1: title r?reviewer\n" "\n" "Original Revision: http://phabricator.test/D1"
+    )
+    message, rev_id = helpers.move_drev_to_original(commit_message, 1)
+    assert (
+        message == expected
+    ), "`Differential Revision` not re-written to `Original Revision` on uplift."
+    assert rev_id is None, "`rev_id` not returned as `None` for new uplift."
+
+    # Ensure `Original` and `Differential` in commit message is recognized as update.
+    commit_message = (
+        "bug 1: title r?reviewer\n"
+        "\n"
+        "Original Revision: http://phabricator.test/D1"
+        "\n"
+        "Differential Revision: http://phabricator.test/D2"
+    )
+    message, rev_id = helpers.move_drev_to_original(commit_message, 2)
+    assert (
+        message == commit_message
+    ), "Commit message should not have changed when updating an uplift."
+    assert rev_id == 2, "`rev_id` should not have changed when updating an uplift."

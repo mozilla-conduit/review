@@ -9,7 +9,7 @@ class Error(Exception):
 
 
 class NotFoundError(Exception):
-    """Errors raised when node is not found."""
+    """Errors raised when data is not found."""
 
 
 class NonLinearException(Exception):

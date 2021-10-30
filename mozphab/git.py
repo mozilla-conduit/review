@@ -9,6 +9,11 @@ import subprocess
 import sys
 import uuid
 
+from typing import (
+    List,
+    Optional,
+)
+
 from datetime import datetime
 
 from mozphab import environment
@@ -619,6 +624,41 @@ class Git(Repository):
 
     def rebase_commit(self, source_commit, dest_commit):
         self._rebase(dest_commit["node"], source_commit["node"])
+
+    def map_callsign_to_unified_head(self, callsign: str) -> Optional[str]:
+        # TODO: there are apparently multiple ways to use git remote refs/branches,
+        # a template may not be appropriate.
+        # See https://github.com/glandium/git-cinnabar#remote-refs-styles
+        unified_head = f"remotes/origin/bookmarks/{callsign}"
+
+        if not self.is_node(unified_head):
+            return None
+
+        return unified_head
+
+    def uplift_commits(self, dest: str, commits: List[dict]) -> List[dict]:
+        # Branch name for the uplift.
+        mozphab_uplift_branch = f"{self.branch}_uplift"
+
+        # Create a new branch at the location of the tip of the revset.
+        self.git_call(["switch", "-c", mozphab_uplift_branch, self.revset[-1]])
+
+        # Rebase from the other end of the revset onto our target, specifying
+        # the commit before our revset start rev as the base.
+        self.git_call(["rebase", "--onto", dest, f"{self.revset[0]}^"])
+
+        # Update revset.
+        current = self._get_current_hash()
+        base_rev = f"{current}~{len(commits)}"
+        self.revset = self._revparse(base_rev), current
+
+        # Get new commit stack and raise if we can't detect any - this shouldn't happen.
+        new_commits = self.commit_stack()
+        if not new_commits:
+            raise ValueError("Didn't find any new commits after rebase!")
+
+        # Get new commit stack and update.
+        return new_commits
 
     def _rebase(self, newbase, upstream):
         self.git_call(["rebase", "--quiet", "--onto", newbase, upstream])

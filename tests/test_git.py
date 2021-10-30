@@ -545,3 +545,18 @@ description
     git.commit_stack(single=True)
     git._git_get_children.assert_not_called()
     git._is_child.assert_not_called()
+
+
+@mock.patch("mozphab.git.Git.is_node")
+def test_git_map_callsign_to_unified_head(m_is_node, git):
+    # If head is not a node in the repo, raise `ValueError`.
+    m_is_node.return_value = False
+    assert (
+        git.map_callsign_to_unified_head("beta") is None
+    ), "Unknown head should have returned `None`."
+
+    # If head is a node in the repo, should map to a remote branch.
+    m_is_node.return_value = True
+    assert (
+        git.map_callsign_to_unified_head("beta") == "remotes/origin/bookmarks/beta"
+    ), "beta did not correctly map to a branch"

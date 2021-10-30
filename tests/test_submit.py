@@ -671,13 +671,20 @@ class Commits(unittest.TestCase):
 
         class Args:
             def __init__(
-                self, reviewer=None, blocker=None, bug=None, wip=False, no_wip=False
+                self,
+                reviewer=None,
+                blocker=None,
+                bug=None,
+                wip=False,
+                no_wip=False,
+                command="submit",
             ):
                 self.reviewer = reviewer
                 self.blocker = blocker
                 self.bug = bug
                 self.wip = wip
                 self.no_wip = no_wip
+                self.command = command
 
         _commits = [
             {"title": "A", "reviewers": dict(granted=[], request=[]), "bug-id": None},

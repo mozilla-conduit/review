@@ -35,7 +35,12 @@ ARC_REJECT_RE_LIST = [
 
 
 ARC_DIFF_REV_RE = re.compile(
-    r"^\s*Differential Revision:\s*https?://.+/D(\d+)\s*$", flags=re.MULTILINE
+    r"^\s*Differential Revision:\s*(?P<phab_url>https?://.+)/D(?P<rev>\d+)\s*$",
+    flags=re.MULTILINE,
+)
+ORIGINAL_DIFF_REV_RE = re.compile(
+    r"^\s*Original Revision:\s*(?P<phab_url>https?://.+)/D(?P<rev>\d+)\s*$",
+    flags=re.MULTILINE,
 )
 
 # Bug and review regexs (from vct's commitparser)
@@ -175,11 +180,49 @@ def get_arcrc_path():
 
 def parse_arc_diff_rev(body):
     m = ARC_DIFF_REV_RE.search(body)
-    return m.group(1) if m else None
+    return m.group("rev") if m else None
 
 
 def strip_differential_revision(body):
     return ARC_DIFF_REV_RE.sub("", body).rstrip()
+
+
+def move_drev_to_original(
+    body: str, rev_id: Optional[int]
+) -> Tuple[str, Optional[int]]:
+    """Handle moving the `Differential Revision` line.
+
+    Moves the `Differential Revision` line to `Original Revision`, if a link
+    to the original revision does not already exist. If the `Original Revision`
+    line does exist, scrub the `Differential Revision` line.
+
+    Args:
+        body: `str` text of the commit message.
+        rev_id: `int` parsed integer representing the drev number for the revision.
+
+    Returns:
+        tuple of:
+            New commit message body text as `str`,
+            Revision id as `int`, or `None` if a new revision should be created.
+    """
+    # Previous logic did not find a revision id, so this function won't either.
+    if not rev_id:
+        return body, rev_id
+
+    differential_revision = ARC_DIFF_REV_RE.search(body)
+    original_revision = ORIGINAL_DIFF_REV_RE.search(body)
+
+    # If both match, this is an update to an uplift.
+    if differential_revision and original_revision:
+        return body, rev_id
+
+    def repl(match):
+        phab_url = match.group("phab_url")
+        rev = match.group("rev")
+        return f"\nOriginal Revision: {phab_url}/D{rev}"
+
+    # Update the commit message and set the `rev-id` to `None`.
+    return ARC_DIFF_REV_RE.sub(repl, body), None
 
 
 def parse_api_error(api_response):

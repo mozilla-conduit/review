@@ -213,6 +213,34 @@ Differential Revision: https://phabricator.services.mozilla.com/D[revision]
 
 replacing `[revision]` with the identifier of your revision.
 
+### Submitting an uplift request
+
+`moz-phab uplift` can be used to submit a patch for uplift to a release repository,
+bypassing the standard release train cycles. See [the Release Management wiki](https://wiki.mozilla.org/Release_Management/Feature_Uplift)
+for more details about uplifts.
+
+To see which trains can be submitted for an uplift request:
+
+```shell
+$ moz-phab uplift --list-trains
+```
+
+`moz-phab uplift` uses the same syntax as `moz-phab submit`. To submit an uplift
+request against mozilla-beta:
+
+```shell
+$ moz-phab uplift start_rev end_rev --train beta
+```
+
+When you submit an uplift within a unified repo (i.e., `mozilla-unified` or `gecko-dev`),
+`moz-phab uplift` will attempt to rebase the changes onto the head of the target
+train, while keeping the existing revisions in your VCS. When submitting an uplift
+from a non-unified repo (i.e., `mozilla-central`, `autoland` etc.) no new changesets
+will be created. You can disable the rebasing behaviour with `--no-rebase`.
+
+Once your request has been submitted, navigate to the tip commit of your stack
+and request an uplift using the action menu, in the same way you accept a revision.
+
 ## Reporting Issues
 
 We use [Bugzilla](https://bugzilla.mozilla.org/) to track development.

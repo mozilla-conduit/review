@@ -8,12 +8,15 @@ from mozphab import environment
 
 from mozphab.conduit import conduit
 from mozphab.config import config
-from mozphab.exceptions import Error
+from mozphab.exceptions import (
+    Error,
+)
 from mozphab.helpers import (
     augment_commits_from_body,
     BLOCKING_REVIEWERS_RE,
     parse_arc_diff_rev,
     prompt,
+    move_drev_to_original,
     revision_title_from_commit,
     strip_differential_revision,
     update_commit_title_previews,
@@ -386,7 +389,27 @@ def update_commits_from_args(commits, args):
                 granted=make_blocking(commit["reviewers"]["granted"]),
             )
 
+    if args.command == "uplift":
+        update_commits_for_uplift(commits)
+
     update_commit_title_previews(commits)
+
+
+def update_commits_for_uplift(commits):
+    """Prepares a set of commits for uplifting."""
+    for commit in commits:
+        # When uplifting, ensure the `Differential Revision` line is properly
+        # moved, and that `rev-id` is updated to not point at the original revision.
+        commit["body"], commit["rev-id"] = move_drev_to_original(
+            commit["body"],
+            commit["rev-id"],
+        )
+
+        # Clear all reviewers, setting only `#release-managers` as blocking.
+        commit["reviewers"] = {
+            "granted": [],
+            "request": ["#release-managers!"],
+        }
 
 
 def update_revision_description(transactions, commit, revision):
@@ -428,6 +451,16 @@ def submit(repo, args):
         commits = repo.commit_stack(single=args.single)
     if not commits:
         raise Error("Failed to find any commits to submit")
+
+    # If this is an uplift and we can rebase onto the uplift train,
+    # do so automatically.
+    uplift_with_rebase = args.command == "uplift" and not args.no_rebase
+    unified_head = (
+        repo.map_callsign_to_unified_head(args.train) if uplift_with_rebase else None
+    )
+    if unified_head:
+        with wait_message(f"Rebasing commits onto {unified_head}"):
+            commits = repo.uplift_commits(unified_head, commits)
 
     with wait_message("Loading commits.."):
         # Pre-process to load metadata.
@@ -608,8 +641,13 @@ def submit(repo, args):
             commit["title"] = commit["title-preview"]
             commit["body"] = body
             commit["rev-id"] = parse_arc_diff_rev(commit["body"])
-            with wait_message("Updating commit.."):
-                repo.amend_commit(commit, commits)
+
+            # Only amend the commit with updated info if this is not an uplifted
+            # rebase, or if it is an uplifted rebase where we found a unified
+            # head to apply the uplift against.
+            if not uplift_with_rebase or unified_head:
+                with wait_message("Updating commit.."):
+                    repo.amend_commit(commit, commits)
 
         # Diff property has to be set after potential SHA1 change.
         if diff:
@@ -643,72 +681,78 @@ def add_parser(parser):
             "the submission process."
         ),
     )
-    submit_parser.add_argument(
+    add_submit_arguments(submit_parser)
+    submit_parser.set_defaults(func=submit, needs_repo=True)
+
+
+def add_submit_arguments(parser):
+    """Add `moz-phab submit` command line arguments to a parser."""
+    parser.add_argument(
         "--path", "-p", help="Set path to repository (default: detected)"
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--yes",
         "-y",
         action="store_true",
         help="Submit without confirmation (default: %s)" % config.auto_submit,
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--interactive",
         "-i",
         action="store_true",
         help="Submit with confirmation (default: %s)" % (not config.auto_submit),
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--message",
         "-m",
         help="Provide a custom update message (default: none)",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--force",
         "-f",
         action="store_true",
         help="Override sanity checks and force submission; a tool of last resort",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--force-delete",
         action="store_true",
         help="Mercurial only: Ignore error caused by a DAG branch point without "
         "evolve installed",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--bug", "-b", help="Set Bug ID for all commits (default: from commit)"
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--no-bug",
         action="store_true",
         help="Continue if a bug number is not provided",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--reviewer",
         "--reviewers",
         "-r",
         action="append",
         help="Set review(s) for all commits (default: from commit)",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--blocker",
         "--blockers",
         "-R",
         action="append",
         help="Set blocking review(s) for all commits (default: from commit)",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--nolint",
         "--no-lint",
         action="store_true",
         help="Do not run lint (default: lint changed files if configured)",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--check-in-needed",
         action="store_true",
         help="Add a `check-in-needed tag to the top most revision",
     )
-    wip_group = submit_parser.add_mutually_exclusive_group()
+    wip_group = parser.add_mutually_exclusive_group()
     wip_group.add_argument(
         "--wip",
         "--plan-changes",
@@ -722,7 +766,7 @@ def add_parser(parser):
         "with descriptions that start with WIP: will continue to be "
         "flagged as work-in-progress.",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--less-context",
         "--lesscontext",
         action="store_true",
@@ -735,46 +779,44 @@ def add_parser(parser):
             "revision will be created that has only a few lines of context."
         ),
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--no-stack",
         action="store_true",
         help="Submit multiple commits, but do not mark them as dependent",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--upstream",
         "--remote",
         "-u",
         action="append",
         help='Set upstream branch to detect the starting commit (default: "")',
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--force-vcs",
         action="store_true",
         help="EXPERIMENTAL: Override VCS compatibility check",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--safe-mode",
         dest="safe_mode",
         action="store_true",
         help="Run VCS with only necessary extensions",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "--single",
         "-s",
         action="store_true",
         help="Submit a single commit",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "start_rev",
         nargs="?",
         default=environment.DEFAULT_START_REV,
         help="Start revision of range to submit (default: detected)",
     )
-    submit_parser.add_argument(
+    parser.add_argument(
         "end_rev",
         nargs="?",
         default=environment.DEFAULT_END_REV,
         help="End revision of range to submit (default: current commit)",
     )
-
-    submit_parser.set_defaults(func=submit, needs_repo=True)
