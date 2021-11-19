@@ -305,8 +305,6 @@ class Mercurial(Repository):
 
         self.revset = "%s::%s" % (commits[0]["node"], commits[-1]["node"])
 
-        super().refresh_commit_stack(commits)
-
     def set_args(self, args):
         """Sets up the right environment for hg, prior to running it.
 
