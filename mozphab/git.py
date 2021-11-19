@@ -174,8 +174,6 @@ class Git(Repository):
             commit["name"] = short_node(commit["node"])
         self.revset = (commits[0]["node"], commits[-1]["node"])
 
-        super().refresh_commit_stack(commits)
-
     def _cherry(self, command, remotes):
         """Run command and try all the remotes until success."""
         if not remotes:
