@@ -80,7 +80,9 @@ def uplift(repo, args):
 def add_parser(parser):
     uplift_parser = parser.add_parser(
         "uplift",
-        help="Create differential revisions requesting uplift",
+        # Hide `moz-phab uplift` from the help for bug 1754057.
+        # TODO: This should be reverted shortly after.
+        # help="Create differential revisions requesting uplift",
         description=(
             "MozPhab will create a new revision to request patches be uplifted "
             "to stable release trains."
@@ -95,7 +97,7 @@ def add_parser(parser):
         "--train",
         help=(
             "Indicate Phabricator callsign of the release train this stack "
-            "should be uplifted to.",
+            "should be uplifted to."
         ),
     )
     uplift_parser.add_argument(
@@ -107,7 +109,7 @@ def add_parser(parser):
         "--no-rebase",
         help=(
             "Send the specified range of commits as-is for uplift - do not attempt "
-            "to rebase.",
+            "to rebase."
         ),
         action="store_true",
     )
