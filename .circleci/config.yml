@@ -4,6 +4,26 @@
 
 version: 2.1
 
+# Define a filter that matches tags and not branches.
+tags-only-filter: &tags-only-filter
+  filters:
+    tags:
+      only:
+        - /.*/
+    branches:
+      ignore:
+        - /.*/
+
+# Define a filter that matches tags and branches.
+branches-and-tags-filter: &branches-and-tags-filter
+  filters:
+    tags:
+      only:
+        - /.*/
+    branches:
+      only:
+        - /.*/
+
 orbs:
   win: circleci/windows@2.4.0
 
@@ -11,12 +31,27 @@ workflows:
   version: 2
   test:
     jobs:
-      - test_3_7
-      - test_3_8
-      - test_3_9
-      - test_3_10
-      - test_win
-      - test_package
+      - test_3_7:
+          <<: *branches-and-tags-filter
+      - test_3_8:
+          <<: *branches-and-tags-filter
+      - test_3_9:
+          <<: *branches-and-tags-filter
+      - test_3_10:
+          <<: *branches-and-tags-filter
+      - test_win:
+          <<: *branches-and-tags-filter
+      - test_package:
+          <<: *branches-and-tags-filter
+      - publish:
+          <<: *tags-only-filter
+          requires:
+            - test_3_7
+            - test_3_8
+            - test_3_9
+            - test_3_10
+            - test_win
+            - test_package
 
 jobs:
   test_3_7: &test_template
@@ -136,3 +171,17 @@ jobs:
           command: |
             ./venv/bin/pip --disable-pip-version-check show MozPhab
             ./venv/bin/moz-phab version
+  publish:
+    docker:
+      - image: cimg/python:3.7
+    working_directory: ~/repo
+    steps:
+    - checkout
+    - run:
+        name: build-and-publish
+        # Generate packages and upload to PyPI via `twine`.
+        command: |
+            python setup.py sdist bdist_wheel
+            sudo pip install pipenv
+            pipenv install twine
+            pipenv run twine upload --repository pypi dist/*

@@ -1,3 +1,4 @@
+import os
 import sys
 
 from setuptools import setup
@@ -5,6 +6,14 @@ from setuptools import setup
 entry_points = {"console_scripts": ["moz-phab = mozphab.mozphab:run"]}
 if "develop" in sys.argv:
     entry_points["console_scripts"].append("moz-phab-dev = mozphab.mozphab:run_dev")
+
+VERSION = "1.1.0"
+
+# Validate that `CIRCLE_TAG` matches the current version.
+circle_tag = os.getenv("CIRCLE_TAG")
+if circle_tag and circle_tag != VERSION:
+    raise Exception("`CIRCLE_TAG` does not match `VERSION`.")
+
 
 setup(
     author="Mozilla",
@@ -30,6 +39,6 @@ setup(
     # would be different than >=X.Y
     python_requires=">=3.7",
     url="https://github.com/mozilla-conduit/review",
-    version="1.1.0",
+    version=VERSION,
     zip_safe=False,
 )
