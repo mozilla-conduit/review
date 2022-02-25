@@ -625,6 +625,25 @@ class Git(Repository):
     def rebase_commit(self, source_commit, dest_commit):
         self._rebase(dest_commit["node"], source_commit["node"])
 
+    def is_descendant(self, node: str) -> bool:
+        try:
+            # See `git help merge-base` for more.
+            # Note that this function is trying to determine if a commit is a
+            # descendant, but `merge-base` supports checking for an ancestor. These
+            # are the inverse of each other.
+            self.git_out(["merge-base", "--is-ancestor", node, self.revset[0]])
+        except CommandError as e:
+            # Exit code 1 means the commit is not a descendant.
+            if e.status == 1:
+                return False
+
+            # Any status > 1 is a command error - send that up to the user.
+            if e.status > 1:
+                raise e
+
+        # If the command ran without an error, the commit is a descendant.
+        return True
+
     def map_callsign_to_unified_head(self, callsign: str) -> Optional[str]:
         # TODO: there are apparently multiple ways to use git remote refs/branches,
         # a template may not be appropriate.

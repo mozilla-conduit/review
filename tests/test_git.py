@@ -420,6 +420,29 @@ def test_is_node(m_git_out, git):
     assert not git.is_node("aaa")
 
 
+@mock.patch("mozphab.git.Git.git_out")
+def test_is_descendant(m_git_out, git):
+    git.revset = ("abc", "def")
+
+    m_git_out.return_value = ""
+    assert (
+        git.is_descendant("aabbcc") is True
+    ), "Call to merge-base with 0 return code should indicate node is a descendant."
+
+    m_git_out.side_effect = exceptions.CommandError("", 1)
+    assert (
+        git.is_descendant("aabbcc") is False
+    ), "Call to merge-base with 1 return code should indicated node is not descendant."
+
+    m_git_out.side_effect = exceptions.CommandError("test", 255)
+    with pytest.raises(exceptions.CommandError) as e:
+        git.is_descendant("aabbcc")
+
+        assert (
+            e.args == "test"
+        ), "Original command exception was not raised to the caller."
+
+
 @mock.patch("mozphab.gitcommand.which")
 @mock.patch("mozphab.gitcommand.GitCommand.output")
 def test_is_cinnabar_installed(m_git_out, m_which, git, tmp_path):

@@ -679,6 +679,20 @@ class Mercurial(Repository):
         for node in non_stack_children:
             self.hg(["rebase", "--source", node, "--dest", commit["node"]])
 
+    def is_descendant(self, node: str) -> bool:
+        # Query the log for all commits that are both in the revset and descendants of
+        # `node`. If we get any results, then our revset is already based off of `node`.
+        out = self.hg_out(
+            ["log", "-r", f"{node}:: and {self.revset}", "-T", "{node}\n"],
+            split=False,
+        )
+
+        # If the command output is empty, our revset does not descend from `node`.
+        if not out:
+            return False
+
+        return True
+
     def map_callsign_to_unified_head(self, callsign: str) -> Optional[str]:
         if not self.is_node(callsign):
             return None

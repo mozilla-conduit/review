@@ -290,6 +290,19 @@ def test_is_node(m_hg_out, hg):
     assert not hg.is_node("aaa")
 
 
+@mock.patch("mozphab.mercurial.Mercurial.hg_out")
+def test_is_descendant(m_hg_out, hg):
+    m_hg_out.return_value = ""
+    assert (
+        hg.is_descendant("aabbcc") is False
+    ), "Empty log result should indicated commit is not a descendant."
+
+    m_hg_out.return_value = "aabbcc"
+    assert (
+        hg.is_descendant("aabbcc") is True
+    ), "Non-empty log result should indicated commit is a descendant."
+
+
 @mock.patch("mozphab.mercurial.Mercurial.is_node")
 def test_check_node(m_is_node, hg):
     node = "aabbcc"

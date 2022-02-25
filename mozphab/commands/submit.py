@@ -434,6 +434,45 @@ def update_revision_bug_id(transactions, commit, revision):
         transactions.append(dict(type="bugzilla.bug-id", value=commit["bug-id"]))
 
 
+def local_uplift_if_possible(args, repo, commits) -> bool:
+    """If possible, rebase local repository commits onto the target uplift train.
+
+    Uplifts will be performed if the `--no-rebase` argument is not
+    passed, if the local repository has a corresponding unified head
+    for the uplift train, and if the revset being submitted is not
+    already descendant from the target unified head.
+
+    Returns a `bool` indicating if the `commits` should avoid making local
+    repository changes to reflect new Phabricator revisions. If `True`,
+    local commits may be amended to reflect their state on Phabricator,
+    for example to add the `Differential Revision` line. If `False`, the
+    local repository commits should not be updated by `moz-phab`.
+    """
+    if args.no_rebase:
+        # If args tell us not to do a rebase, do not make any local changes and
+        # return without rebasing. This is the same as submitting an uplift where
+        # the original patch is sent to Phabricator without any modifications.
+        # In this case we want to avoid local amendments to commits.
+        return True
+
+    # Try and find a local repo identifier (hg bookmark, git remote branch) to rebase
+    # our revset onto.
+    unified_head = repo.map_callsign_to_unified_head(args.train)
+
+    if not unified_head:
+        # If we didn't find a unified head, we intend to submit an uplift without
+        # modifying the local repo state via a rebase.
+        return True
+
+    if not repo.is_descendant(unified_head):
+        # If we found a head to rebase onto and the commit isn't already a descendant
+        # of our target identifier, uplift the commits onto the unified head.
+        with wait_message(f"Rebasing commits onto {unified_head}"):
+            commits = repo.uplift_commits(unified_head, commits)
+
+    return False
+
+
 def submit(repo, args):
     telemetry.metrics.mozphab.submission.preparation_time.start()
     with wait_message("Checking connection to Phabricator."):
@@ -452,15 +491,11 @@ def submit(repo, args):
     if not commits:
         raise Error("Failed to find any commits to submit")
 
-    # If this is an uplift and we can rebase onto the uplift train,
-    # do so automatically.
-    uplift_with_rebase = args.command == "uplift" and not args.no_rebase
-    unified_head = (
-        repo.map_callsign_to_unified_head(args.train) if uplift_with_rebase else None
-    )
-    if unified_head:
-        with wait_message(f"Rebasing commits onto {unified_head}"):
-            commits = repo.uplift_commits(unified_head, commits)
+    if args.command == "uplift":
+        # Perform uplift logic during submission.
+        avoid_local_changes = local_uplift_if_possible(args, repo, commits)
+    else:
+        avoid_local_changes = False
 
     with wait_message("Loading commits.."):
         # Pre-process to load metadata.
@@ -642,10 +677,7 @@ def submit(repo, args):
             commit["body"] = body
             commit["rev-id"] = parse_arc_diff_rev(commit["body"])
 
-            # Only amend the commit with updated info if this is not an uplifted
-            # rebase, or if it is an uplifted rebase where we found a unified
-            # head to apply the uplift against.
-            if not uplift_with_rebase or unified_head:
+            if not avoid_local_changes:
                 with wait_message("Updating commit.."):
                     repo.amend_commit(commit, commits)
 

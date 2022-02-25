@@ -157,6 +157,9 @@ class Repository(object):
     def amend_commit(self, commit, commits):
         """Amend commit description from `title` and `desc` fields"""
 
+    def is_descendant(self, node: str) -> bool:
+        """Return `True` if the repository revset is descendant from `node`."""
+
     def map_callsign_to_unified_head(self, callsign: str) -> Optional[str]:
         """Return the expected VCS identifier for the given callsign.
 

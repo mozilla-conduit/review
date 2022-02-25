@@ -19,7 +19,7 @@ class NonLinearException(Exception):
 class CommandError(Exception):
     """Errors raised by external commands."""
 
-    status = None
+    status: int
 
     def __init__(self, msg="", status=1):
         self.status = status
