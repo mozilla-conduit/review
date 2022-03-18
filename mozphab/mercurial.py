@@ -366,6 +366,14 @@ class Mercurial(Repository):
             self.obsstore = os.path.join(self.path, ".hg", "store", "obsstore")
             self.unlink_obsstore = not os.path.exists(self.obsstore)
 
+            # Warn users that `evolve` is not enabled and direct
+            # them to `mach vcs-setup`.
+            logger.warning(
+                "moz-phab detected that hg isn't configured with `evolve`. This "
+                "usually causes severe performance issues. Run `./mach vcs-setup` "
+                "to configure evolve."
+            )
+
         # This script interacts poorly with mq.
         ext_mq = self._get_extension("mq", hg_config)
         self.has_mq = ext_mq is not None
