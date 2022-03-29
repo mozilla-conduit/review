@@ -249,7 +249,11 @@ def reorganise(repo, args):
 
     with wait_message("Applying transactions..."):
         for phid, rev_transactions in transactions.items():
-            conduit.edit_revision(rev_id=phid, transactions=rev_transactions)
+            conduit.edit_revision(
+                preserve_status=True,
+                rev_id=phid,
+                transactions=rev_transactions,
+            )
 
     telemetry().submission.process_time.stop()
     logger.info("Stack has been reorganised.")

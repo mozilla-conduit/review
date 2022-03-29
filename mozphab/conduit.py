@@ -31,6 +31,15 @@ from .simplecache import cache
 
 CHECK_IN_NEEDED = "check-in_needed"
 
+REVISION_STATUS_TO_TRANSACTION = {
+    "abandoned": "abandon",
+    "accepted": "accept",
+    "changes-planned": "plan-changes",
+    "draft": "draft",
+    "needs-review": "request-review",
+    "needs-revision": "reject",
+}
+
 
 def normalise_reviewer(reviewer, strip_group=True):
     """This provide a canonical form of the reviewer for comparison."""
@@ -533,10 +542,11 @@ class ConduitAPI:
         rev_id=None,
         wip=False,
         check_in_needed=False,
+        preserve_status=False,
     ):
         """Edit (create or update) a revision."""
         trans = list(transactions or [])
-        set_wip_later = False
+        post_trans = []
 
         # diff_phid is not present for changes in revision settings (like WIP)
         if diff_phid:
@@ -551,18 +561,31 @@ class ConduitAPI:
             existing_revision = conduit.get_revisions(**args)[0]
             existing_status = existing_revision["fields"]["status"]["value"]
 
+            if preserve_status and not wip and existing_status != "needs-review":
+                # Add a post-update transaction to set the status back to its
+                # pre-update value. We don't need to do this for `needs-review`
+                # since that is the status we are correcting from.
+                post_trans.append(
+                    dict(
+                        type=REVISION_STATUS_TO_TRANSACTION[existing_status],
+                        value=True,
+                    )
+                )
+
         # Set revision for changes-planned or needs-review as required.
         # Phabricator will throw an error if we attempt to set a status to the same
         # as the current status.
         if wip:
-            # Phabriactor will automatically set the revision to needs-review
-            # after the call to differential.revision.edit.  Flag that we'll need to
-            # make a subsequent API call to set the status to changes-planned to match
-            # our WIP state.
+            # Phabricator will automatically set the revision to needs-review
+            # after the call to differential.revision.edit. If we are a creating a new
+            # revision, we can add the `plan-changes` transaction to our create call.
+            # Existing revisions must make a subsequent API call to set the status to
+            # `changes-planned` to match our WIP state.
+            plan_changes_transaction = dict(type="plan-changes", value=True)
             if existing_status == "changes-planned":
-                set_wip_later = True
+                post_trans.append(plan_changes_transaction)
             else:
-                trans.append(dict(type="plan-changes", value=True))
+                trans.append(plan_changes_transaction)
 
         # Let the Phabricator sort out the correct status for new revisions to avoid
         # emails being sent before phabbugs has processed the revision.
@@ -591,14 +614,13 @@ class ConduitAPI:
         if not revision:
             raise ConduitAPIError("Can't edit the revision.")
 
-        # Set changes-planned if required.
-        # Note set_wip_later can only be true if there's an existing revision.
-        if set_wip_later:
+        # Run post-edit transactions if required.
+        if post_trans:
             revision = self.call(
                 "differential.revision.edit",
                 dict(
                     objectIdentifier=rev_id,
-                    transactions=[dict(type="plan-changes", value=True)],
+                    transactions=post_trans,
                 ),
             )
 
