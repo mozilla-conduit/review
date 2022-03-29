@@ -11,6 +11,7 @@ CLI to support submission of a series of commits to Phabricator. .
 
 import logging
 import os
+import ssl
 import sys
 import traceback
 
@@ -90,6 +91,23 @@ def main(argv, *, is_development):
 
     except KeyboardInterrupt:
         pass
+    except ssl.SSLCertVerificationError as e:
+        logger.error(e)
+
+        if e.reason == "CERTIFICATE_VERIFY_FAILED":
+            # Leave a helpful error message if the local issuer certificate
+            # can't be found.
+            logger.error(
+                "\nYour Python installation is incomplete as you lack a local issuer "
+                "certificate.\n"
+                "See the following link for steps to resolve your problem:\n"
+                "https://stackoverflow.com/questions/52805115/"
+                "certificate-verify-failed-unable-to-get-local-issuer-certificate\n"
+                "\n"
+                "If you still experience trouble please file a bug."
+            )
+
+        sys.exit(1)
     except Error as e:
         logger.error(e)
         sys.exit(1)
