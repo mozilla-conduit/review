@@ -93,6 +93,12 @@ def test_set_user_data(m_uuid, m_time, m_file, m_save, m_whoami, m_hashlib, user
     m_whoami.return_value = None
     assert not user_data.set_user_data()
 
+    user_data.is_employee = None
+    m_whoami.return_value = {"email": None}
+    assert (
+        not user_data.set_user_data()
+    ), "Status should not be updated without a valid email."
+
     # Update user_data, not employee
     m_whoami.side_effect = (dict(email="someemail", is_employee=False),)
     hexdigest = mock.Mock()
@@ -163,3 +169,8 @@ def test_whoami(m_conduit, m_bmo, user_data):
         name="someemail", groups=["mozilla-employee-confidential"]
     )
     assert user_data.whoami() == dict(email="some@email.com", is_employee=True)
+
+    m_conduit.whoami.return_value = dict(primaryEmail=None)
+    assert (
+        user_data.whoami() == dict(email=None, is_employee=False)
+    ), "When `primaryEmail` is empty, `is_employee` is False and doesn't fail."

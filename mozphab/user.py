@@ -67,6 +67,16 @@ class UserData:
             return None
 
         response = dict(email=who["primaryEmail"])
+
+        if not response["email"]:
+            # If `primaryEmail` is empty we log a warning and return.
+            logger.warning(
+                "You have not set a primary email address in Phabricator.\n"
+                "Please set a primary email address in your Phabricator settings."
+            )
+            response["is_employee"] = False
+            return response
+
         if response["email"].lower().endswith("@mozilla.com"):
             response["is_employee"] = True
             return response
@@ -94,7 +104,7 @@ class UserData:
             return False
 
         whoami = self.whoami()
-        if whoami is None:
+        if whoami is None or not whoami["email"]:
             # `user.whoami` failed.
             return False
 
