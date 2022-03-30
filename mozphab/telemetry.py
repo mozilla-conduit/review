@@ -96,7 +96,6 @@ class Telemetry:
         self.usage.override_switch.set(
             getattr(args, "force_vcs", False) or getattr(args, "force", False)
         )
-        self.usage.arcanist.set(not args.no_arc)
         self.usage.command_time.start()
         self.user.installation.set(user_data.installation_id)
         self.user.id.set(user_data.user_code)
