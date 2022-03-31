@@ -1,11 +1,6 @@
 version: '2'
 
 services:
-    generate-python3.6-requirements:
-        image: python:3.6
-        command: sh -c "cd /review && pip install pip-tools && python -m piptools compile dev/requirements/base.in --generate-hashes -o dev/requirements/python3.6.txt"
-        volumes:
-            - ..:/review
     generate-python3.7-requirements:
         image: python:3.7
         command: sh -c "cd /review && pip install pip-tools && python -m piptools compile dev/requirements/base.in --generate-hashes -o dev/requirements/python3.7.txt"

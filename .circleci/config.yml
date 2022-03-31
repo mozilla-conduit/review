@@ -7,7 +7,6 @@ workflows:
   version: 2
   test:
     jobs:
-      - test_3_6
       - test_3_7
       - test_3_8
       - test_3_9
@@ -15,11 +14,11 @@ workflows:
       - test_package
 
 jobs:
-  test_3_6: &test_template
-    docker:
-      - image: circleci/python:3.6
+  test_3_7: &test_template
     environment:
-      - REQUIREMENTS_FILE: dev/requirements/python3.6.txt
+      - REQUIREMENTS_FILE: dev/requirements/python3.7.txt
+    docker:
+      - image: circleci/python:3.7
     working_directory: ~/repo
     steps:
       - checkout
@@ -60,12 +59,6 @@ jobs:
           path: ~/test-reports
       - store_artifacts:
           path: ~/coredumps
-  test_3_7:
-    <<: *test_template
-    environment:
-      - REQUIREMENTS_FILE: dev/requirements/python3.7.txt
-    docker:
-      - image: circleci/python:3.7
   test_3_8:
     <<: *test_template
     environment:

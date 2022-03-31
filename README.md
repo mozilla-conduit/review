@@ -291,7 +291,6 @@ to regenerate these files.
 To generate `dev/requirements/python*.*.txt`, run the following commands while in the
 `dev` directory:
 
-- `docker-compose run generate-python3.6-requirements`
 - `docker-compose run generate-python3.7-requirements`
 - `docker-compose run generate-python3.8-requirements`
 - `docker-compose run generate-python3.9-requirements`
