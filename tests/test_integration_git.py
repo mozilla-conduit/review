@@ -44,10 +44,10 @@ def test_submit_create(in_process, git_repo_path, init_sha):
         # differential.setdiffproperty
         dict(),
     )
-    (git_repo_path / "X").write_text(u"ą\nb\nc\n", encoding="utf-8")
+    (git_repo_path / "X").write_text("ą\nb\nc\n", encoding="utf-8")
     (git_repo_path / "Y").write_text("no line ending")
     git_out("add", ".")
-    (git_repo_path / "msg").write_text(u"Ą r?alice", encoding="utf-8")
+    (git_repo_path / "msg").write_text("Ą r?alice", encoding="utf-8")
     git_out("commit", "--file", "msg")
     (git_repo_path / "untracked").write_text("a\n")
 
@@ -746,10 +746,10 @@ def test_submit_update_no_message(in_process, git_repo_path, init_sha):
         # differential.setdiffproperty
         dict(),
     )
-    (git_repo_path / "X").write_text(u"ą", encoding="utf-8")
+    (git_repo_path / "X").write_text("ą", encoding="utf-8")
     git_out("add", ".")
     (git_repo_path / "msg").write_text(
-        u"""\
+        """\
 Bug 1 - Ą
 
 Differential Revision: http://example.test/D123
@@ -789,11 +789,11 @@ def test_submit_update_revision_not_found(in_process, git_repo_path, init_sha):
         dict(data=[]),
     )
     testfile = git_repo_path / "X"
-    testfile.write_text(u"ą", encoding="utf-8")
+    testfile.write_text("ą", encoding="utf-8")
     git_out("add", ".")
     msgfile = git_repo_path / "msg"
     msgfile.write_text(
-        u"""\
+        """\
 Bug 1 - Ą
 
 Differential Revision: http://example.test/D123
@@ -801,9 +801,9 @@ Differential Revision: http://example.test/D123
         encoding="utf-8",
     )
     git_out("commit", "--file", "msg")
-    testfile.write_text(u"missing repo")
+    testfile.write_text("missing repo")
     msgfile.write_text(
-        u"""\
+        """\
 Bug 1 - missing revision
 
 Differential Revision: http://example.test/D124
