@@ -171,6 +171,6 @@ def test_whoami(m_conduit, m_bmo, user_data):
     assert user_data.whoami() == dict(email="some@email.com", is_employee=True)
 
     m_conduit.whoami.return_value = dict(primaryEmail=None)
-    assert (
-        user_data.whoami() == dict(email=None, is_employee=False)
+    assert user_data.whoami() == dict(
+        email=None, is_employee=False
     ), "When `primaryEmail` is empty, `is_employee` is False and doesn't fail."
