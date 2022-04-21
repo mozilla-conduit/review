@@ -167,6 +167,25 @@ def test_delete_file(m_git_out, m_cat_file, m_file_size, git):
 @mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
 @mock.patch("mozphab.git.Git.git_out")
+def test_delete_empty_file(m_git_out, m_cat_file, m_file_size, git):
+    raw = (
+        "100644 000000 61780798228d17af2d34fce4cfbdf35556832472 "
+        "0000000000000000000000000000000000000000 D\x00a"
+    )
+    diff = Diff()
+    m_cat_file.side_effect = (b"",)
+    m_file_size.return_value = 0
+    git.args = Args()
+
+    change = git._parse_diff_change(raw, diff)
+    m_git_out.assert_not_called()
+    assert change.file_type.name == "TEXT"
+    assert change.hunks == []
+
+
+@mock.patch("mozphab.git.Git._file_size")
+@mock.patch("mozphab.git.Git._cat_file")
+@mock.patch("mozphab.git.Git.git_out")
 def test_recognize_binary(m_git_out, m_cat_file, m_file_size, git):
     raw = (
         "000000 100644 0000000000000000000000000000000000000000 "

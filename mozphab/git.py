@@ -779,7 +779,7 @@ class Git(Repository):
                         )
                     )
 
-            elif b_blob is None:
+            elif b_blob is None and file_size:
                 # The file is removed.
                 lines, eof_missing_newline = create_hunk_lines(a_body, "-")
                 if lines:
@@ -795,8 +795,7 @@ class Git(Repository):
                             lines=lines,
                         )
                     )
-
-            else:
+            elif b_blob is not None:
                 # There are changes in the file.
                 if self.args.lesscontext or file_size > environment.MAX_CONTEXT_SIZE:
                     context_size = 100
