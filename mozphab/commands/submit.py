@@ -2,8 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import re
-
 from mozphab import environment
 
 from mozphab.conduit import conduit
@@ -28,7 +26,6 @@ from mozphab.telemetry import telemetry
 # The DEFAULT_UPDATE_MESSAGE is only required when using arc to submit.
 DEFAULT_UPDATE_MESSAGE = "Revision updated."
 
-REVISION_URL_RE = re.compile(r"^\s*Revision URI: (http.+)$", flags=re.MULTILINE)
 PHABRICATOR_URLS = {
     "https://phabricator.services.mozilla.com/": "Phabricator",
     "https://phabricator-dev.allizom.org/": "Phabricator-Dev",
@@ -76,12 +73,6 @@ def morph_blocking_reviewers(commits):
 
     for commit in commits:
         commit["title"] = BLOCKING_REVIEWERS_RE.sub(morph_reviewer, commit["title"])
-
-
-def extract_revision_url(line):
-    m = REVISION_URL_RE.search(line)
-    if m:
-        return m.group(1)
 
 
 def arc_message(template_vars):
