@@ -11,7 +11,7 @@ import time
 import uuid
 
 from contextlib import suppress
-from distutils.version import LooseVersion
+from packaging.version import Version
 from functools import lru_cache
 from typing import (
     List,
@@ -38,7 +38,7 @@ from .spinner import wait_message, clear_terminal_line
 from .subprocess_wrapper import debug_log_command
 from .telemetry import telemetry
 
-MINIMUM_MERCURIAL_VERSION = LooseVersion("4.3.3")
+MINIMUM_MERCURIAL_VERSION = Version("4.3.3")
 
 
 class Mercurial(Repository):
@@ -75,7 +75,7 @@ class Mercurial(Repository):
         self._repo = None
         self._configs = []
         major, minor, micro, *_ = self.repository.version
-        self.mercurial_version = LooseVersion(f"{major}.{minor}.{micro}")
+        self.mercurial_version = Version(f"{major}.{minor}.{micro}")
         self.vcs_version = str(self.mercurial_version)
         if self.mercurial_version < MINIMUM_MERCURIAL_VERSION:
             raise Error(
@@ -347,7 +347,7 @@ class Mercurial(Repository):
         self._extra_options["--pager"] = "never"
 
         # Perform rebases in-memory to improve performance (requires v4.5+).
-        if not self._safe_mode and self.mercurial_version >= LooseVersion("4.5"):
+        if not self._safe_mode and self.mercurial_version >= Version("4.5"):
             self._config_options["rebase.experimental.inmemory"] = "true"
 
         # Enable evolve if the user's currently using it.  evolve makes amending

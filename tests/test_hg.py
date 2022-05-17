@@ -1,7 +1,7 @@
 import copy
 import mock
 import pytest
-from distutils.version import LooseVersion
+from packaging.version import Version
 
 from .conftest import create_temp_fn, assert_attributes
 
@@ -103,7 +103,7 @@ def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
         hg.set_args(Args())
 
     # baseline config
-    hg.mercurial_version = LooseVersion("4.5")
+    hg.mercurial_version = Version("4.5")
     m_config.safe_mode = False
     m_parse_config.return_value = {"ui.username": "username", "extensions.evolve": ""}
 
@@ -118,13 +118,13 @@ def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
     assert not hg.has_shelve
 
     # inmemory rebase requires hg 4.5+
-    hg.mercurial_version = LooseVersion("4.0")
+    hg.mercurial_version = Version("4.0")
     hg._hg = []
     hg.set_args(Args())
     assert "extensions.rebase" in hg._config_options
     assert "rebase.experimental.inmemory" not in hg._config_options
     assert hg._extra_options["--pager"] == "never"
-    hg.mercurial_version = LooseVersion("4.5")
+    hg.mercurial_version = Version("4.5")
 
     # safe_mode
     hg._hg = []
