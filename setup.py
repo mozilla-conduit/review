@@ -14,7 +14,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "distro",
-        "glean-sdk>=36.0.0",
+        "glean-sdk>=50.0.1,==50.*",
         "packaging",
         "python-hglib>=2.6.2",
         "sentry-sdk>=0.14.3",

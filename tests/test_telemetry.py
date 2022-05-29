@@ -143,7 +143,7 @@ def test_set_metrics(m_config, m_user_data, m_update_user_data, get_telemetry):
     assert "submit" == t.usage.command.test_get_value()
     assert t.usage.override_switch.test_get_value() is False
     # `command_time.start()` has been called, but not stop, it has no value yet
-    assert not t.usage.command_time.test_has_value()
+    assert t.usage.command_time.test_get_value() is None
     assert (
         uuid.UUID("0000aabb-bbaa-0000-aabb-0000bbaa0000")
         == t.user.installation.test_get_value()
