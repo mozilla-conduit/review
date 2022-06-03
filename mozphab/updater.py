@@ -58,8 +58,8 @@ def check_for_updates():
         if sys.version_info < required_python_version:
             raise Error(
                 "Unable to upgrade to version {}.\n"
-                "MozPhab requires Python in version >= {}".format(
-                    pypi_info["version"], ".".join(required_python_version)
+                "MozPhab requires Python in version {}".format(
+                    pypi_info["version"], pypi_info["requires_python"]
                 )
             )
 
