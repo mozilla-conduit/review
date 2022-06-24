@@ -260,10 +260,12 @@ using the default settings.
    - `python3`, `git`, and `hg` executables must be on the system path
 2. In your clone of this repository run the following commands (adjusting to the version of Python):
    - `python3 -m venv venv`
-   - `venv/bin/pip3 install -r dev/requirements/python3.9.txt`
-   - `venv/bin/pip3 install -e .`
-3. To run moz-phab after making modifications use `venv/bin/moz-phab-dev`
-4. To run tests use `venv/bin/pytest -vv`
+   - `source venv/bin/activate`
+   - `pip3 install -r dev/requirements/python3.9.txt`
+   - `pip3 install -e .`
+3. To run moz-phab after making modifications use `moz-phab-dev`
+4. To run tests use `pytest -vv`
+5. To exit the virtual environment, use `deactivate`
 
 ### Windows
 
