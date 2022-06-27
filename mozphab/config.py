@@ -19,6 +19,8 @@ class Config(object):
             should_access_file (bool) - should the file be read/write?
             filename (string) - file to read/write the config - used only for testing.
         """
+        self._should_access_file = should_access_file
+
         self._filename = filename or os.path.join(
             environment.HOME_DIR, ".moz-phab-config"
         )
@@ -110,6 +112,9 @@ class Config(object):
         self._config.set(section, option, str(value))
 
     def write(self):
+        if not self._should_access_file:
+            return
+
         if os.path.exists(self._filename):
             logger.debug("updating %s", self._filename)
             self._set("submit", "auto_submit", self.auto_submit)
@@ -138,4 +143,8 @@ class Config(object):
             self._config.write(f)
 
 
-config = Config()
+should_access_file = True
+if os.environ.get("MOZPHAB_NO_USER_CONFIG", False):
+    should_access_file = False
+
+config = Config(should_access_file)

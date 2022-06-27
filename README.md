@@ -91,6 +91,8 @@ report_to_sentry = True
 
 `moz-phab` can also be configured via the following environmental variables:
 - `DEBUG` : Enabled debugging output (default: disabled).
+- `MOZPHAB_NO_USER_CONFIG` : Do not read from or write to `~/.moz-phab-config` 
+  (default: disabled).
 
 ## Execution
 

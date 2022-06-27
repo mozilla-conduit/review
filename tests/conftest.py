@@ -16,9 +16,12 @@ import time
 from glean import testing
 from pathlib import Path
 
-from mozphab.commands import submit
-from mozphab.git import Git
-from mozphab.mercurial import Mercurial
+# NOTE: Set the environment variables before importing any of mozphab modules.
+os.environ["MOZPHAB_NO_USER_CONFIG"] = "1"
+
+from mozphab.commands import submit  # noqa: E402
+from mozphab.git import Git  # noqa: E402
+from mozphab.mercurial import Mercurial  # noqa: E402
 
 from mozphab import (
     conduit,
@@ -29,7 +32,7 @@ from mozphab import (
     simplecache,
     updater,
     user,
-)
+)  # noqa: E402
 
 
 environment.SHOW_SPINNER = False
