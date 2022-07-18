@@ -1004,7 +1004,7 @@ class Mercurial(Repository):
             )
             return
 
-        # emtpy files don't have any hunks
+        # Empty files don't have any hunks.
         if meta["file_size"] == 0:
             return
 
@@ -1037,7 +1037,7 @@ class Mercurial(Repository):
             )
             return
 
-        # emtpy files don't have any hunks
+        # Empty files don't have any hunks.
         if meta["file_size"] == 0:
             return
 
@@ -1069,6 +1069,10 @@ class Mercurial(Repository):
                 b_body=b_meta["bin_body"],
                 b_mime=b_meta["mime"],
             )
+            return
+
+        # Empty files don't have any hunks.
+        if a_meta["file_size"] == 0 and b_meta["file_size"] == 0:
             return
 
         if a_meta["body"] == b_meta["body"]:
