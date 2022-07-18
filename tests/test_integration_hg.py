@@ -1043,7 +1043,10 @@ Differential Revision: http://example.test/D123
             },
         )
         in call_conduit.call_args_list
-    ), "The diff should have populated fields and `change.hunks` should be an empty list"
+    ), (
+        "The diff should have populated fields and "
+        "`change.hunks` should be an empty list"
+    )
 
     # Modify a file's mode
     call_conduit.reset_mock()
@@ -1100,7 +1103,10 @@ Differential Revision: http://example.test/D124
             },
         )
         in call_conduit.call_args_list
-    ), "The diff should contain filemode changes and `change.hunks` should be an empty list"
+    ), (
+        "The diff should contain filemode changes and "
+        "`change.hunks` should be an empty list"
+    )
 
     # Remove an empty file
     call_conduit.reset_mock()
@@ -1158,4 +1164,7 @@ Differential Revision: http://example.test/D125
             },
         )
         in call_conduit.call_args_list
-    ), "The diff should have empty `newProperties` and `change.hunks` should be an empty list"
+    ), (
+        "The diff should have empty `newProperties` and "
+        "`change.hunks` should be an empty list"
+    )
