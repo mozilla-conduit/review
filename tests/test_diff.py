@@ -135,6 +135,101 @@ def test_create_empty(m_git_out, m_cat_file, m_file_size, git):
 @mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
 @mock.patch("mozphab.git.Git.git_out")
+def test_change_empty(m_git_out, m_cat_file, m_file_size, git):
+    raw = (
+        "100644 100755 0000000000000000000000000000000000000000 "
+        "78981922613b2afb6025042ff6bd878ac1994e85 M\x00a"
+    )
+    diff = Diff()
+    m_cat_file.side_effect = (b"",)
+    m_file_size.return_value = 0
+    git.args = Args()
+
+    change = git._parse_diff_change(raw, diff)
+    m_git_out.assert_not_called()
+    assert (
+        change.file_type.name == "TEXT"
+    ), "The file should be recognized as a TEXT file"
+    assert (
+        change.hunks == []
+    ), "`change.hunks` should be an empty list when parsing empty files"
+    assert (
+        change.kind.name == "CHANGE"
+    ), "File mode changes should be recognized as a CHANGE"
+    assert (
+        change.old_mode == "100644"
+    ), "The file's original mode should be set to 100644"
+    assert (
+        change.cur_mode == "100755"
+    ), "The file's current mode should be set to 100755"
+
+
+@mock.patch("mozphab.mercurial.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial._get_file_meta")
+@mock.patch("mozphab.mercurial.Mercurial._get_parent")
+@mock.patch("mozphab.mercurial.Mercurial._get_file_modes")
+@mock.patch("uuid.uuid4")
+def test_change_empty_hg(
+    m_uuid4, m_get_file_modes, m_get_parent, m_get_file_meta, m_hg_out, hg
+):
+    commit = {
+        "name": "78981922613b",
+        "node": "78981922613b2afb6025042ff6bd878ac1994e85",
+        "orig-node": "78981922613b2afb6025042ff6bd878ac1994e85",
+        "parent": "422c2b7ab3b3",
+        "title": "test",
+        "body": "test",
+    }
+    m_get_parent.return_value = "422c2b7ab3b3c668038da977e4e93a5fc623169c"
+    m_get_file_modes.return_value = {
+        "fn": {
+            "old_mode": "100644",
+            "new_mode": "100755",
+        },
+    }
+    m_uuid4.side_effect = [
+        mock.Mock(hex="abc123"),
+        mock.Mock(hex="def456"),
+    ]
+    m_hg_out.side_effect = [
+        "--abc123----def456----abc123----def456--fn--abc123----def456----abc123--",
+    ]
+    m_get_file_meta.side_effect = [
+        dict(
+            binary=False,
+            bin_body=b"",
+            body="",
+            file_size=0,
+        ),
+        dict(
+            binary=False,
+            bin_body=b"",
+            body="",
+            file_size=0,
+        ),
+    ]
+
+    hg.args = Args()
+    diff = hg.get_diff(commit)
+    change = diff.changes.get("fn")
+
+    assert (
+        change.kind.name == "CHANGE"
+    ), "File mode changes should be recognized as a CHANGE"
+    assert (
+        change.old_mode == "100644"
+    ), "The file's original mode should be set to 100644"
+    assert (
+        change.cur_mode == "100755"
+    ), "The file's current mode should be set to 100755"
+    assert (
+        change.hunks == []
+    ), "`change.hunks` should be an empty list when parsing empty files"
+
+
+@mock.patch("mozphab.git.Git._file_size")
+@mock.patch("mozphab.git.Git._cat_file")
+@mock.patch("mozphab.git.Git.git_out")
 def test_delete_file(m_git_out, m_cat_file, m_file_size, git):
     raw = (
         "100644 000000 61780798228d17af2d34fce4cfbdf35556832472 "

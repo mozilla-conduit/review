@@ -3,6 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import mock
+import os
 import pytest
 import shutil
 
@@ -979,3 +980,182 @@ def test_multiple_copy(in_process, hg_repo_path):
         )
         in call_conduit.call_args_list
     )
+
+
+def test_empty_file(in_process, hg_repo_path, hg_sha):
+    # Add empty file
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        dict(),
+        # diffusion.repository.search
+        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="123")),
+        # differential.setdiffproperty
+        dict(),
+    )
+    testfile = hg_repo_path / "X"
+    testfile.touch()
+    hg_out("add")
+    hg_out("commit", "-m", "A")
+    sha = hg_sha()
+    mozphab.main(["submit", "--yes", "--bug", "1", sha], is_development=True)
+    log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
+    expected = """
+Bug 1 - A
+
+Differential Revision: http://example.test/D123
+"""
+    assert log.strip() == expected.strip()
+    assert (
+        mock.call(
+            "differential.creatediff",
+            {
+                "changes": [
+                    {
+                        "metadata": {},
+                        "oldPath": None,
+                        "currentPath": "X",
+                        "awayPaths": [],
+                        "oldProperties": {},
+                        "newProperties": {"unix:filemode": "100644"},
+                        "commitHash": mock.ANY,
+                        "type": 1,
+                        "fileType": 1,
+                        "hunks": [],
+                    }
+                ],
+                "sourceMachine": "http://example.test",
+                "sourceControlSystem": "hg",
+                "sourceControlPath": "/",
+                "sourceControlBaseRevision": mock.ANY,
+                "creationMethod": "moz-phab-hg",
+                "lintStatus": "none",
+                "unitStatus": "none",
+                "repositoryPHID": "PHID-REPO-1",
+                "sourcePath": mock.ANY,
+                "branch": "default",
+            },
+        )
+        in call_conduit.call_args_list
+    ), "The diff should have populated fields and `change.hunks` should be an empty list"
+
+    # Modify a file's mode
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-2", diffid="2")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="124")),
+        # differential.setdiffproperty
+        dict(),
+    )
+    os.chmod(testfile, 0o0755)
+
+    hg_out("commit", "-m", "B")
+    sha = hg_sha()
+    mozphab.main(["submit", "--yes", "--bug", "1", sha], is_development=True)
+    log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
+    expected = """
+Bug 1 - B
+
+Differential Revision: http://example.test/D124
+"""
+    assert log.strip() == expected.strip()
+    assert (
+        mock.call(
+            "differential.creatediff",
+            {
+                "changes": [
+                    {
+                        "metadata": {},
+                        "oldPath": "X",
+                        "currentPath": "X",
+                        "awayPaths": [],
+                        "oldProperties": {"unix:filemode": "100644"},
+                        "newProperties": {"unix:filemode": "100755"},
+                        "commitHash": mock.ANY,
+                        "type": 2,
+                        "fileType": 1,
+                        "hunks": [],
+                    }
+                ],
+                "sourceMachine": "http://example.test",
+                "sourceControlSystem": "hg",
+                "sourceControlPath": "/",
+                "sourceControlBaseRevision": mock.ANY,
+                "creationMethod": "moz-phab-hg",
+                "lintStatus": "none",
+                "unitStatus": "none",
+                "repositoryPHID": "PHID-REPO-1",
+                "sourcePath": mock.ANY,
+                "branch": "default",
+            },
+        )
+        in call_conduit.call_args_list
+    ), "The diff should contain filemode changes and `change.hunks` should be an empty list"
+
+    # Remove an empty file
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # differential.creatediff
+        dict(dict(phid="PHID-DIFF-3", diffid="3")),
+        # differential.setdiffproperty
+        dict(),
+        # differential.revision.edit
+        dict(object=dict(id="125")),
+        # differential.setdiffproperty
+        dict(),
+    )
+    testfile.unlink()
+    hg_out("addremove")
+    hg_out("commit", "-m", "C")
+    sha = hg_sha()
+    mozphab.main(["submit", "--yes", "--bug", "1", sha], is_development=True)
+    log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
+    expected = """
+Bug 1 - C
+
+Differential Revision: http://example.test/D125
+"""
+
+    assert log.strip() == expected.strip()
+    assert (
+        mock.call(
+            "differential.creatediff",
+            {
+                "changes": [
+                    {
+                        "metadata": {},
+                        "oldPath": "X",
+                        "currentPath": "X",
+                        "awayPaths": [],
+                        "oldProperties": {"unix:filemode": "100755"},
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "type": 3,
+                        "fileType": 1,
+                        "hunks": [],
+                    }
+                ],
+                "sourceMachine": "http://example.test",
+                "sourceControlSystem": "hg",
+                "sourceControlPath": "/",
+                "sourceControlBaseRevision": mock.ANY,
+                "creationMethod": "moz-phab-hg",
+                "lintStatus": "none",
+                "unitStatus": "none",
+                "repositoryPHID": "PHID-REPO-1",
+                "sourcePath": mock.ANY,
+                "branch": "default",
+            },
+        )
+        in call_conduit.call_args_list
+    ), "The diff should have empty `newProperties` and `change.hunks` should be an empty list"
