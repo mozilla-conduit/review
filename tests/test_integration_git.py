@@ -6,6 +6,7 @@ import shutil
 
 import mock
 import os
+import platform
 import pytest
 
 from callee import Contains
@@ -901,7 +902,13 @@ Differential Revision: http://example.test/D123
         # differential.setdiffproperty
         dict(),
     )
-    os.chmod(testfile, 0o0755)
+    # Windows cannot update UMASK bits in the same way Unix
+    # systems can, so use Git's update-index command to
+    # directly modify the index for the file.
+    if platform.system() == "Windows":
+        git_out("update-index", "--chmod=+x", str(testfile))
+    else:
+        os.chmod(testfile, 0o0755)
     git_out("commit", "-a", "--message", "B")
     mozphab.main(["submit", "--yes", "--bug", "1", "HEAD~"], is_development=True)
     log = git_out("log", "--format=%s%n%n%b", "-1")

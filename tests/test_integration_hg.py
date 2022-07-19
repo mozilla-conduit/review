@@ -4,6 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import mock
 import os
+import platform
 import pytest
 import shutil
 
@@ -982,6 +983,13 @@ def test_multiple_copy(in_process, hg_repo_path):
     )
 
 
+# To re-enable this test for Windows we would need a way to modify
+# UMASK bits similar to how it's done in test_integration_git.py.
+# However, Mercurial doesn't have an equivalent to `git update-index`.
+@pytest.mark.skipif(
+    platform.system() == "Windows",
+    reason="Skipped because Windows cannot modify UMASK bits",
+)
 def test_empty_file(in_process, hg_repo_path, hg_sha):
     # Add empty file
     call_conduit.reset_mock()
