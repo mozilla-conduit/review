@@ -28,7 +28,9 @@ def init_sentry():
         # want to report to Sentry.
     )
     sentry_sdk.init(
-        dsn="https://e8a2a97b86c7472f9308186547aebfa2@sentry.prod.mozaws.net/502",
+        dsn=(
+            "https://f2dcfa028ddb4540b5d64a855d480909@o1069899.ingest.sentry.io/6250015"
+        ),
         integrations=[sentry_logging],
         release=distribution.version,
     )
