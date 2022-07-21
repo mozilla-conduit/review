@@ -20,6 +20,7 @@ from .environment import MOZPHAB_VERSION
 from .exceptions import Error
 from .logger import logger, stop_logging
 from .subprocess_wrapper import check_call
+from .spinner import wait_message
 
 SELF_UPDATE_FREQUENCY = 24 * 3  # hours
 
@@ -70,8 +71,8 @@ def check_for_updates():
             return
 
         if config.self_auto_update:
-            logger.info("Upgrading to version %s", pypi_info["version"])
-            self_upgrade()
+            with wait_message(("Upgrading to version %s", pypi_info["version"])):
+                self_upgrade()
             logger.info("Restarting...")
 
             # Explicitly close the log files to avoid issues with processes holding
@@ -103,6 +104,9 @@ def self_upgrade():
 
     if config.get_pre_releases:
         command += ["--pre"]
+
+    if not environment.DEBUG:
+        command += ["--quiet"]
 
     # sys.path[0] is the directory containing the script that was used to
     # start python. This will be something like:
