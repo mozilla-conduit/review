@@ -75,23 +75,21 @@ class Config(object):
         if should_access_file:
             self._config.read([self._filename])
 
-        self.no_ansi = self._config.getboolean("ui", "no_ansi")
-        self.safe_mode = self._config.getboolean("vcs", "safe_mode")
-        self.auto_submit = self._config.getboolean("submit", "auto_submit")
-        self.always_blocking = self._config.getboolean("submit", "always_blocking")
-        self.warn_untracked = self._config.getboolean("submit", "warn_untracked")
+        self.no_ansi = self._getboolean("ui", "no_ansi")
+        self.safe_mode = self._getboolean("vcs", "safe_mode")
+        self.auto_submit = self._getboolean("submit", "auto_submit")
+        self.always_blocking = self._getboolean("submit", "always_blocking")
+        self.warn_untracked = self._getboolean("submit", "warn_untracked")
         self.apply_patch_to = self._config.get("patch", "apply_to")
-        self.create_bookmark = self._config.getboolean("patch", "create_bookmark")
-        self.always_full_stack = self._config.getboolean("patch", "always_full_stack")
-        self.self_last_check = self._config.getint("updater", "self_last_check")
-        self.self_auto_update = self._config.getboolean("updater", "self_auto_update")
-        self.get_pre_releases = self._config.getboolean("updater", "get_pre_releases")
+        self.create_bookmark = self._getboolean("patch", "create_bookmark")
+        self.always_full_stack = self._getboolean("patch", "always_full_stack")
+        self.self_last_check = self._getint("updater", "self_last_check")
+        self.self_auto_update = self._getboolean("updater", "self_auto_update")
+        self.get_pre_releases = self._getboolean("updater", "get_pre_releases")
         git_remote = self._config.get("git", "remote")
         self.git_remote = git_remote.replace(" ", "").split(",") if git_remote else []
-        self.report_to_sentry = self._config.getboolean(
-            "error_reporting", "report_to_sentry"
-        )
-        self.telemetry_enabled = self._config.getboolean("telemetry", "enabled")
+        self.report_to_sentry = self._getboolean("error_reporting", "report_to_sentry")
+        self.telemetry_enabled = self._getboolean("telemetry", "enabled")
         self._git_command = self._config.get("git", "command_path")
         self.git_command = (
             [self._git_command] if self._git_command else environment.GIT_COMMAND
@@ -110,6 +108,22 @@ class Config(object):
         if not self._config.has_section(section):
             self._config.add_section(section)
         self._config.set(section, option, str(value))
+
+    def _getboolean(self, section, option):
+        try:
+            return self._config.getboolean(section, option)
+        except ValueError as e:
+            raise ValueError(
+                f"could not convert {section}.{option} to a boolean: {str(e)}"
+            )
+
+    def _getint(self, section, option):
+        try:
+            return self._config.getint(section, option)
+        except ValueError as e:
+            raise ValueError(
+                f"could not convert {section}.{option} to an integer: {str(e)}"
+            )
 
     def write(self):
         if not self._should_access_file:
