@@ -52,10 +52,12 @@ def test_write(config):
     config.write()
 
     new_config = Config(filename=config._filename)
+    git_cmd = ["git.exe"] if platform.system() == "Windows" else ["git"]
+
     assert new_config.no_ansi is True
     assert new_config.safe_mode is True
     assert new_config.git_remote[0] == "test"
-    assert new_config.git_command[0] == "git"
+    assert new_config.git_command[0] == git_cmd[0]
     assert new_config.hg_command[0] == "test"
     assert new_config.auto_submit is True
     assert new_config.always_blocking is True
@@ -77,9 +79,9 @@ def test_invalid_int_field(config):
     with pytest.raises(ValueError) as e:
         Config(filename=config._filename)
 
-    assert (
-        str(e.value)
-        == "could not convert updater.self_last_check to an integer: invalid literal for int() with base 10: ''"
+    assert str(e.value) == (
+        "could not convert updater.self_last_check to an integer: "
+        "invalid literal for int() with base 10: ''"
     )
 
 
