@@ -6,9 +6,7 @@ from mozphab import environment
 
 from mozphab.conduit import conduit
 from mozphab.config import config
-from mozphab.exceptions import (
-    Error,
-)
+from mozphab.exceptions import Error
 from mozphab.helpers import (
     augment_commits_from_body,
     BLOCKING_REVIEWERS_RE,

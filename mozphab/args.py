@@ -63,12 +63,13 @@ def parse_args(argv):
 
     # if we're called without a command and from within a repository,
     # default to submit.
+    fallback = False
     if not argv or (
         not (set(argv) & {"-h", "--help"})
         and argv[0] not in [choice for choice in commands_parser.choices]
         and find_repo_root(os.getcwd())
     ):
-        logger.debug("defaulting to `submit`")
+        fallback = True
         argv.insert(0, "submit")
 
     main_args, unknown = main_parser.parse_known_args(argv)
@@ -82,6 +83,8 @@ def parse_args(argv):
     # copy across parsed main_args; they are defined in `args`, but not set
     for name, value in vars(main_args).items():
         args.__setattr__(name, value)
+
+    args.fallback = fallback
 
     # handle the help command here as printing help needs access to the parser
     if hasattr(args, "print_help"):
