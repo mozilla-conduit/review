@@ -391,3 +391,9 @@ def user_data(m_file):
 @pytest.fixture(name="reset_glean", scope="function", autouse=True)
 def fixture_reset_glean():
     testing.reset_glean(application_id="mozphab", application_version="0.1.86")
+
+
+@pytest.fixture(autouse=True)
+def mock_load_api_token(monkeypatch, request):
+    if "no_mock_token" not in request.keywords:
+        monkeypatch.setattr("mozphab.conduit.ConduitAPI.load_api_token", mock.MagicMock)

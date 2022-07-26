@@ -18,7 +18,7 @@ import traceback
 from mozphab import environment
 
 from .args import parse_args
-from .conduit import conduit
+from .conduit import conduit, ConduitAPIError
 from .config import config
 from .detect_repository import repo_from_args
 from .exceptions import Error
@@ -83,6 +83,14 @@ def main(argv, *, is_development):
             configure_telemetry(args)
 
         if repo is not None:
+            try:
+                conduit.load_api_token()
+            except ConduitAPIError:
+                logger.info("No API token detected, running `install-certificate`...")
+                install = parse_args(["install-certificate"])
+                install.func(repo, install)
+                logger.info("Token installed, resuming original command")
+
             telemetry().set_vcs(repo)
             try:
                 args.func(repo, args)

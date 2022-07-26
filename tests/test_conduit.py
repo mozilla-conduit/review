@@ -28,6 +28,7 @@ def test_set_args_from_repo():
     assert mozphab.conduit.repo == repo
 
 
+@pytest.mark.no_mock_token
 @mock.patch("mozphab.conduit.read_json_field")
 def test_load_api_token(m_read):
     m_read.return_value = False
