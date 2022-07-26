@@ -685,6 +685,7 @@ class Git(Repository):
     def _rebase(self, newbase, upstream):
         self.git_call(["rebase", "--quiet", "--onto", newbase, upstream])
 
+    @lru_cache(maxsize=128)
     def _file_size(self, blob):
         return int(self.git_out(["cat-file", "-s", blob], split=False))
 
