@@ -15,6 +15,7 @@ from typing import (
 )
 
 from datetime import datetime
+from functools import lru_cache
 
 from mozphab import environment
 
@@ -81,6 +82,7 @@ class Git(Repository):
 
         return self.git_out(["cinnabar", "hg2git", node], split=False)
 
+    @lru_cache(maxsize=None)
     def _git_to_hg(self, node):
         """Convert Git hashtag to Mercurial."""
         if not self.is_cinnabar_required:
@@ -89,6 +91,7 @@ class Git(Repository):
         hg_node = self.git_out(["cinnabar", "git2hg", node], split=False)
         return hg_node if hg_node != NULL_SHA1 else None
 
+    @lru_cache(maxsize=128)
     def get_public_node(self, node):
         """Return a Mercurial node if Cinnabar is required."""
         public_node = node
