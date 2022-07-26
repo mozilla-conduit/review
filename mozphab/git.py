@@ -689,6 +689,7 @@ class Git(Repository):
     def _file_size(self, blob):
         return int(self.git_out(["cat-file", "-s", blob], split=False))
 
+    @lru_cache(maxsize=128)
     def _cat_file(self, blob):
         return self.git_out(["cat-file", "blob", blob], split=False, expect_binary=True)
 
