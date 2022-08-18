@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from mozphab.conduit import conduit
+from mozphab.conduit import conduit, ConduitAPIError
 from mozphab.helpers import prompt
 from mozphab.logger import logger
 from mozphab.spinner import wait_message
@@ -21,14 +21,22 @@ def install_certificate(repo, args):
         "to Phabricator if necessary:\n\n%s/conduit/login/\n",
         conduit.repo.phab_url,
     )
-    token = prompt("Paste API Token from that page: ")
 
-    # Call a method that requires authentication to both verify the token and clear
-    # the default one-hour expiration of newly created tokens.
-    with wait_message("Verifying token"):
-        who = conduit.whoami(api_token=token)
-    conduit.save_api_token(token)
-    logger.info("Configured moz-phab for %s", who["realName"])
+    for attempts in range(3):
+        token = prompt("Paste API Token from that page: ")
+
+        # Call a method that requires authentication to both verify the token and clear
+        # the default one-hour expiration of newly created tokens.
+        try:
+            with wait_message("Verifying token"):
+                who = conduit.whoami(api_token=token)
+            conduit.save_api_token(token)
+            logger.info("Configured moz-phab for %s", who["realName"])
+            break
+        except ConduitAPIError as e:
+            logger.error(e)
+    else:
+        logger.error("Reached maximum retries for API Token validation.")
 
 
 def add_parser(parser):
