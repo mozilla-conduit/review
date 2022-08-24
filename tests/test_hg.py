@@ -313,6 +313,7 @@ def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
         ]
     )
 
+
 @mock.patch("mozphab.mercurial.temporary_binary_file")
 @mock.patch("mozphab.mercurial.Mercurial.hg")
 def test_apply_patch(m_hg, m_temp_bin_fn, hg):

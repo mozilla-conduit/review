@@ -123,6 +123,7 @@ def test_patch(
             skip_dependencies=False,
             include_abandoned=False,
             force_vcs=False,
+            name=None,
         ):
             self.revision_id = revision_id
             self.no_commit = no_commit
@@ -132,6 +133,7 @@ def test_patch(
             self.skip_dependencies = skip_dependencies
             self.include_abandoned = include_abandoned
             self.force_vcs = force_vcs
+            self.name = name
 
     git.args = Args()
     m_git_check_conduit.return_value = True
@@ -277,6 +279,12 @@ def test_patch(
     git.args = Args(apply_to="here")
     patch.patch(git, git.args)
     m_git_before_patch.assert_called_once_with(None, "phab-D1")
+
+    m_git_before_patch.reset_mock()
+    # --name NAME
+    git.args = Args(name="feature")
+    patch.patch(git, git.args)
+    m_git_before_patch.assert_called_once_with(node, "feature")
 
     # ########## no commit info in diffs
     m_get_diffs.return_value = {

@@ -319,6 +319,23 @@ def test_hg_patch_with_commit(
     assert "o |  changeset:   1" in result
     assert "|/   bookmark:    phab-D1" in result
 
+    # Same, but this time request a specific bookmark name.
+    m_get_revs.side_effect = ([REV_2], [REV_1])
+    m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
+    m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
+    m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
+    mozphab.main(["patch", "--name=myfeature", "D2"], is_development=True)
+    result = hg_out("log", "-G")
+    assert "@  changeset:   3:" in result
+    assert "|  bookmark:    myfeature" in result
+    assert "|  parent:      1" in result
+    assert "|  summary:     title R2" in result
+    assert "| o  changeset:   2" in result
+    assert "| |  bookmark:    phab-D1_1" in result
+    assert "| |  parent:      0" in result
+    assert "o |  changeset:   1" in result
+    assert "|/   bookmark:    phab-D1" in result
+
 
 REV_1 = dict(
     id=1,

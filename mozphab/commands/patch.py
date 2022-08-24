@@ -183,7 +183,12 @@ def patch(repo, args):
 
                 raise Error(msg)
 
-        branch_name = None if args.no_commit else "phab-D%s" % rev_id
+        if args.name:
+            branch_name = args.name
+        elif args.no_commit:
+            branch_name = None
+        else:
+            branch_name = "phab-D%s" % rev_id
         repo.before_patch(base_node, branch_name)
 
     parent = None
@@ -270,6 +275,13 @@ def add_parser(parser):
     )
     patch_group.add_argument(
         "--raw", action="store_true", help="Prints out the raw diff to the STDOUT"
+    )
+    patch_parser.add_argument(
+        "--name",
+        "-n",
+        dest="name",
+        metavar="NAME",
+        help="Use the given name for the bookmark, topic, or branch",
     )
     patch_parser.add_argument(
         "--no-commit",
