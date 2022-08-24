@@ -50,6 +50,7 @@ class Config(object):
             [patch]
             apply_to = base
             create_bookmark = True
+            create_topic = False
             always_full_stack = False
 
             [updater]
@@ -82,6 +83,7 @@ class Config(object):
         self.warn_untracked = self._getboolean("submit", "warn_untracked")
         self.apply_patch_to = self._config.get("patch", "apply_to")
         self.create_bookmark = self._getboolean("patch", "create_bookmark")
+        self.create_topic = self._getboolean("patch", "create_topic")
         self.always_full_stack = self._getboolean("patch", "always_full_stack")
         self.self_last_check = self._getint("updater", "self_last_check")
         self.self_auto_update = self._getboolean("updater", "self_auto_update")
@@ -150,6 +152,7 @@ class Config(object):
             self._set("submit", "warn_untracked", self.warn_untracked)
             self._set("patch", "apply_to", self.apply_patch_to)
             self._set("patch", "create_bookmark", self.create_bookmark)
+            self._set("patch", "create_topic", self.create_topic)
             self._set("patch", "always_full_stack", self.always_full_stack)
             self._set("telemetry", "enabled", self.telemetry_enabled)
 

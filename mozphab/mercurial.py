@@ -57,6 +57,7 @@ class Mercurial(Repository):
         self.obsstore = None
         self.unlink_obsstore = False
         self.use_evolve = False
+        self.use_topic = False
         self.has_mq = False
         self.has_shelve = False
         self.previous_bookmark = None
@@ -374,6 +375,12 @@ class Mercurial(Repository):
                 "to configure evolve."
             )
 
+        # User may wish to use topics rather than bookmarks.
+        ext_topic = self._get_extension("topic", hg_config)
+        if ext_topic is not None:
+            self._safe_config_options["extensions.topic"] = ext_topic
+            self.use_topic = True
+
         # This script interacts poorly with mq.
         ext_mq = self._get_extension("mq", hg_config)
         self.has_mq = ext_mq is not None
@@ -528,7 +535,7 @@ class Mercurial(Repository):
 
         Args:
             node - SHA1 or revision of the base commit
-            name - name of the bookmark to be created
+            name - name of the bookmark/topic to be created
         """
         # Checkout sha
         if node:
@@ -548,6 +555,16 @@ class Mercurial(Repository):
             self.hg(["bookmark", bookmark_name])
             if not self.args.raw:
                 logger.info("Bookmark set to %s", bookmark_name)
+
+        if name and self.use_topic and config.create_topic and not self.args.no_topic:
+            topics = self.hg_out(["topics", "-T", "{topic}\n"])
+            topic_name = name
+            i = 0
+            while topic_name in topics:
+                i += 1
+                topic_name = "%s_%s" % (name, i)
+
+            self.hg(["topic", topic_name])
 
     def apply_patch(self, diff, body, author, author_date):
         changeset_str = self.format_patch(diff, body, author, author_date)

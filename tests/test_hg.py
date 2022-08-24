@@ -105,9 +105,13 @@ def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
     # baseline config
     hg.mercurial_version = Version("4.5")
     m_config.safe_mode = False
-    m_parse_config.return_value = {"ui.username": "username", "extensions.evolve": ""}
+    m_parse_config.return_value = {
+        "ui.username": "username",
+        "extensions.evolve": "",
+        "extensions.topic": "",
+    }
 
-    # evolve & shelve
+    # evolve & topic & shelve
     hg._hg = []
     hg.set_args(Args())
 
@@ -115,6 +119,7 @@ def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
     assert hg._config_options["rebase.experimental.inmemory"] == "true"
     assert hg._extra_options["--pager"] == "never"
     assert hg.use_evolve
+    assert hg.use_topic
     assert not hg.has_shelve
 
     # inmemory rebase requires hg 4.5+
@@ -134,6 +139,7 @@ def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
         ("extensions.rebase", ""),
         ("ui.username", "username"),
         ("extensions.evolve", ""),
+        ("extensions.topic", ""),
     ]
 
     m_config.safe_mode = True
@@ -144,6 +150,7 @@ def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
         ("extensions.rebase", ""),
         ("ui.username", "username"),
         ("extensions.evolve", ""),
+        ("extensions.topic", ""),
     ]
     m_config.safe_mode = False
 
@@ -217,14 +224,17 @@ def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
             raw=False,
             applyto="base",
             no_bookmark=False,
+            no_topic=False,
         ):
             self.rev_id = rev_id
             self.nocommit = nocommit
             self.raw = raw
             self.applyto = applyto
             self.no_bookmark = no_bookmark
+            self.no_topic = no_topic
 
     m_config.create_bookmark = True
+    m_config.create_topic = False
     m_hg_out.side_effect = ["bookmark"]
     hg.args = Args()
     hg.before_patch("sha1", "bookmark")
@@ -269,6 +279,39 @@ def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
     hg.before_patch(None, "bookmark")
     m_hg_out.assert_not_called()
 
+    # Create a topic, but requested topic collides with an existing
+    # topic and so must be renamed.
+    m_config.create_topic = True
+    hg.use_topic = True
+    m_hg_out.reset_mock()
+    m_hg_out.side_effect = ["topic_1"]
+    hg.args = Args()
+    hg.before_patch("sha1", "topic")
+    m_checkout.assert_called_with("sha1")
+    m_hg_out.assert_called()
+    m_hg.assert_called_with(["topic", "topic_2"])
+    m_checkout.assert_called_once_with("sha1")
+
+    # No conflict => use requested name.
+    m_hg_out.side_effect = ["topic"]
+    hg.before_patch("sha1", "other")
+    m_hg.assert_called_with(["topic", "other"])
+
+    # Create both a bookmark and a topic. Not a useful thing to do,
+    # but it should work. And bookmark names and topic names should not
+    # collide when looking for pre-existing names.
+    from mock import call
+
+    m_config.create_bookmark = True
+    m_hg.reset_mock()  # Clear the calls.
+    m_hg_out.side_effect = ["bookmark", "topic"]
+    hg.before_patch("sha1", "bookmark")
+    m_hg.assert_has_calls(
+        [
+            call(["bookmark", "bookmark_1"]),
+            call(["topic", "bookmark"]),
+        ]
+    )
 
 @mock.patch("mozphab.mercurial.temporary_binary_file")
 @mock.patch("mozphab.mercurial.Mercurial.hg")

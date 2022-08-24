@@ -28,7 +28,7 @@ def patch(repo, args):
     By default:
     * perform sanity checks
     * find the base commit
-    * create a new branch/bookmark
+    * create a new branch/bookmark/topic
     * apply the patches and commit the changes
 
     args.no_commit is True - no commit will be created after applying diffs
@@ -284,6 +284,13 @@ def add_parser(parser):
         action="store_true",
         dest="no_bookmark",
         help="(Mercurial only) Do not create the bookmark",
+    )
+    patch_parser.add_argument(
+        "--no-topic",
+        "--notopic",
+        action="store_true",
+        dest="no_topic",
+        help="(Mercurial only) Do not create the topic",
     )
     patch_parser.add_argument(
         "--no-branch",

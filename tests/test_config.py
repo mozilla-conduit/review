@@ -22,6 +22,7 @@ def test_defaults(config):
     assert config.warn_untracked is True
     assert config.apply_patch_to == "base"
     assert config.create_bookmark is True
+    assert config.create_topic is False
     assert config.always_full_stack is False
     assert config.self_last_check == 0
     assert config.self_auto_update is True
@@ -43,6 +44,7 @@ def test_write(config):
     config.warn_untracked = False
     config.apply_patch_to = "here"
     config.create_bookmark = False
+    config.create_topic = True
     config.always_full_stack = True
     config.self_last_check = 12
     config.self_auto_update = False
@@ -64,6 +66,7 @@ def test_write(config):
     assert new_config.warn_untracked is False
     assert new_config.apply_patch_to == "here"
     assert new_config.create_bookmark is False
+    assert new_config.create_topic is True
     assert new_config.always_full_stack is True
     assert new_config.self_last_check == 0
     assert new_config.self_auto_update is True

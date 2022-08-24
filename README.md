@@ -45,6 +45,7 @@ warn_untracked = True
 [patch]
 apply_to = base
 create_bookmark = True
+create_topic = False
 always_full_stack = False
 
 [updater]
@@ -77,6 +78,10 @@ report_to_sentry = True
 - `patch.create_bookmark` : Affects only when patching a Mercurial repository. If
     `True` moz-phab will create a bookmark (based on the last revision number) for the
     new DAG branch point.
+- `patch.create_topic : Affects only when patching a Mercurial repository.
+    Requires the `topic` extension to be enabled. If `True` moz-phab will
+    create a topic (based on the last revision number) for the new DAG branch
+    point.
 - `patch.always_full_stack` : When `False` and the patched revision has successors,
     moz-phab will ask if the whole stack should be patched instead. If `True`
     moz-phab will do it without without asking.
@@ -158,7 +163,7 @@ invocation is
 To patch a stack ending with the revision `D123` run `moz-phab patch D123`.
 Diffs will be downloaded from Phabricator and applied using the underlying
 VCS (`import` for Mercurial or `apply` for Git). A commit for each revision will
-be created in a new bookmark (Mercurial) or branch (Git).
+be created in a new bookmark or topic (Mercurial) or branch (Git).
 
 This behavior can be modified with few options:
 
@@ -180,6 +185,12 @@ This behavior can be modified with few options:
 - `--no-bookmark` : used only when patching a Mercurial repository. If not
     provided - `moz-phab` will create a bookmark (based on the last revision number)
     for the new DAG branch point. The default behavior [is configurable](#configuration).
+
+- `--no-topic` : used only when patching a Mercurial repository. Requires the
+    `topic` extension to be enabled. If not provided and enabled in the
+    configuration - `moz-phab` will create a topic (based on the last revision
+    number) for the new DAG branch point. The default behavior [is
+    configurable](#configuration).
 
 - `--no-branch`: used only when patching a Git repository. If not provided -
     `moz-phab` will create a branch (based on the revision number). Otherwise
