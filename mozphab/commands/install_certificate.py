@@ -22,7 +22,7 @@ def install_certificate(repo, args):
         conduit.repo.phab_url,
     )
 
-    for attempts in range(3):
+    for _attempts in range(3):
         token = prompt("Paste API Token from that page: ")
 
         # Call a method that requires authentication to both verify the token and clear
