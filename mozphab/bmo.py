@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import json
+import time
 import urllib.parse as url_parse
 import urllib.error as url_error
 import urllib.request as url_request
@@ -58,8 +59,22 @@ class BMOAPI:
             sanitised["headers"]["X-PHABRICATOR-TOKEN"] = "cli-XXXX"
         return sanitised
 
+    def _req_with_retries(self, endpoint, headers=None, retries=3):
+        for attempt in range(retries):
+            try:
+                result = self.get(endpoint, headers)
+                break
+            except BMOAPIError as e:
+                logger.debug(e)
+
+            time.sleep(1.0 * attempt)
+        else:
+            raise Error(f"Reached maximum retries for BMO API (/{endpoint}).")
+
+        return result
+
     def whoami(self):
-        return self.get(
+        return self._req_with_retries(
             "whoami", headers={"X-PHABRICATOR-TOKEN": conduit.load_api_token()}
         )
 

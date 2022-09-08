@@ -3,11 +3,13 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import mock
+import pytest
 
 from contextlib import contextmanager
 from mozphab import user
 
 from mozphab.conduit import ConduitAPIError
+from mozphab.exceptions import Error
 
 
 @mock.patch("mozphab.user.USER_INFO_FILE")
@@ -174,3 +176,9 @@ def test_whoami(m_conduit, m_bmo, user_data):
     assert user_data.whoami() == dict(
         email=None, is_employee=False
     ), "When `primaryEmail` is empty, `is_employee` is False and doesn't fail."
+
+    # whoami raises an error if BMO.whoami raises Error
+    m_conduit.whoami.return_value = dict(primaryEmail="some@email.com")
+    m_bmo.whoami.side_effect = Error
+    with pytest.raises(Error):
+        user_data.whoami()

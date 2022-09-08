@@ -7,13 +7,16 @@ import json
 import pytest
 
 from mozphab.bmo import bmo, BMOAPIError
+from mozphab.exceptions import Error
 
 
-@mock.patch("mozphab.bmo.BMOAPI.get")
+@mock.patch("mozphab.bmo.BMOAPI._req_with_retries")
 @mock.patch("mozphab.bmo.conduit")
-def test_whoami(m_conduit, m_get):
+def test_whoami(m_conduit, m_req_with_retries):
     bmo.whoami()
-    m_get.assert_called_once_with("whoami", headers={"X-PHABRICATOR-TOKEN": mock.ANY})
+    m_req_with_retries.assert_called_once_with(
+        "whoami", headers={"X-PHABRICATOR-TOKEN": mock.ANY}
+    )
     m_conduit.load_api_token.assert_called_once()
 
 
@@ -68,3 +71,21 @@ def test_get(m_conduit, m_urlopen):
     with pytest.raises(BMOAPIError) as bmo_error:
         bmo.get("method")
     assert bmo_error.value.args[0].startswith("Bugzilla Error: ")
+
+
+@mock.patch("mozphab.bmo.BMOAPI.get")
+def test_req_with_retries(m_get):
+    # raises Error after 3 retries
+    m_get.side_effect = (BMOAPIError, BMOAPIError, BMOAPIError)
+    with pytest.raises(Error):
+        bmo._req_with_retries("test")
+
+    # raises error with custom retry amount
+    m_get.side_effect = (BMOAPIError, BMOAPIError)
+    with pytest.raises(Error):
+        bmo._req_with_retries("test", retries=2)
+
+    # returns result if successful
+    m_get.side_effect = None
+    m_get.return_value = {"message": "test"}
+    assert bmo._req_with_retries("test")["message"] == "test"
