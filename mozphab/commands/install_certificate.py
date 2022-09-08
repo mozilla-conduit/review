@@ -38,6 +38,8 @@ def install_certificate(repo, args):
     else:
         logger.error("Reached maximum retries for API Token validation.")
 
+    repo.validate_email()
+
 
 def add_parser(parser):
     cert_parser = parser.add_parser(

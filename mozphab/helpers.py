@@ -69,6 +69,8 @@ DEPENDS_ON_RE = re.compile(r"^\s*Depends on\s*D(\d+)\s*$", flags=re.MULTILINE)
 
 WIP_RE = re.compile(r"^(?:WIP[: ]|WIP$)", flags=re.IGNORECASE)
 
+VALID_EMAIL_RE = re.compile(r"[^@ \t\r\n]+@[^@ \t\r\n]+\.[^@ \t\r\n]+")
+
 
 def which_path(path):
     """Check if an executable is provided. Fall back to which if not.
@@ -559,3 +561,8 @@ def join_lineseps(lines):
     return [
         "".join(line) for line in zip_longest(lines[0::2], lines[1::2], fillvalue="")
     ]
+
+
+def is_valid_email(email: str) -> bool:
+    """Given a string, determines if it is a valid email."""
+    return VALID_EMAIL_RE.match(email) is not None

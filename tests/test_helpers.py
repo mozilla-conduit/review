@@ -786,3 +786,11 @@ def test_move_drev_to_original():
         message == commit_message
     ), "Commit message should not have changed when updating an uplift."
     assert rev_id == 2, "`rev_id` should not have changed when updating an uplift."
+
+
+def test_validate_email():
+    invalid_email = "Test User"
+    valid_email = "test@mozilla.com"
+
+    assert not helpers.is_valid_email(invalid_email)
+    assert helpers.is_valid_email(valid_email)

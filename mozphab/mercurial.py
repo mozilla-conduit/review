@@ -31,6 +31,7 @@ from .helpers import (
     temporary_binary_file,
     temporary_file,
     which_path,
+    is_valid_email,
 )
 from .logger import logger
 from .repository import Repository
@@ -62,6 +63,7 @@ class Mercurial(Repository):
         self.has_shelve = False
         self.previous_bookmark = None
         self.has_temporary_bookmark = False
+        self.username = ""
 
         # Check for `hg` presence
         if not which_path(self._hg_binary):
@@ -217,6 +219,8 @@ class Mercurial(Repository):
         return self.hg_out(["log", "-T", "{%s}\n" % select, "-r", revset], split=split)
 
     def before_submit(self):
+        self.validate_email()
+
         # Remember the currently checked out commit.  If a bookmark is active
         # just use that, otherwise create a randomly named bookmark which will
         # be deleted in cleanup(). Mercurial will automatically move the
@@ -340,6 +344,7 @@ class Mercurial(Repository):
         if "ui.username" not in hg_config:
             raise Error("ui.username is not configured in your hgrc")
         self._safe_config_options["ui.username"] = hg_config["ui.username"]
+        self.username = hg_config["ui.username"]
 
         # Always need rebase.
         self._config_options["extensions.rebase"] = ""
@@ -1126,3 +1131,20 @@ class Mercurial(Repository):
                 file_size,
                 time.process_time() - start,
             )
+
+    def validate_email(self):
+        email = self.extract_email_from_username()
+        if not is_valid_email(email):
+            raise Error(
+                f"Your username configured with Mercurial ({email}) "
+                f"must contain a valid email.\n"
+                f"Please see https://www.mercurial-scm.org/doc/hgrc.5.html "
+                f"for more information on editing your Mercurial configuration."
+                f"\n\nYou can also amend a commit via "
+                f'`hg commit --amend --user "username <some@email.com>"'
+            )
+
+    def extract_email_from_username(self) -> str:
+        """Extracts an email from a Mercurial username, if it exists.
+        Not guaranteed to return a valid email, make sure to validate."""
+        return self.username.split("<").pop().replace(">", "")

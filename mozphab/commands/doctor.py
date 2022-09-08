@@ -31,7 +31,9 @@ def doctor(repo, args):
         # Re-raise the exception if it is N/A to the above conditions.
         raise e
 
-    logger.info("No issues detected with moz-phab installation.")
+    repo.validate_email()
+
+    logger.info("No critical issues detected with moz-phab installation.")
 
 
 def add_parser(parser):

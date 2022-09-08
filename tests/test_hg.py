@@ -709,3 +709,25 @@ def test_hg_map_callsign_to_unified_head(m_is_node, hg):
     assert (
         hg.map_callsign_to_unified_head("beta") == "beta"
     ), "beta did not correctly map to a branch"
+
+
+def test_hg_validate_email(hg):
+    with pytest.raises(exceptions.Error):
+        hg.validate_email()
+
+    hg.username = "Test User <test@mozilla.com>"
+    assert hg.validate_email() is None, "validate_email() executes without error"
+
+
+def test_hg_extract_email_from_username(hg):
+    # Empty username
+    hg.username = ""
+    assert hg.extract_email_from_username() == ""
+
+    # Username without email
+    hg.username = "test user"
+    assert hg.extract_email_from_username() == "test user"
+
+    # Username with email
+    hg.username = "test user <test@email.com>"
+    assert hg.extract_email_from_username() == "test@email.com"

@@ -385,3 +385,6 @@ class Repository(object):
     def get_public_node(self, node):
         """Hashtag in a remote VCS."""
         return node
+
+    def validate_email(self):
+        """Validate a user's configured email address."""

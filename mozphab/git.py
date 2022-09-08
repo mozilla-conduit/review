@@ -29,6 +29,7 @@ from .helpers import (
     temporary_binary_file,
     temporary_file,
     create_hunk_lines,
+    is_valid_email,
 )
 from .logger import logger
 from .repository import Repository
@@ -112,6 +113,8 @@ class Git(Repository):
         )
 
     def before_submit(self):
+        self.validate_email()
+
         if self.is_index_modified():
             raise Error(
                 "Uncommitted changes present. "
@@ -856,3 +859,14 @@ class Git(Repository):
             )
 
         return True
+
+    def validate_email(self):
+        """Validate the user's configured email (user.email)."""
+        if not is_valid_email(self.git.email):
+            raise Error(
+                f"Your email configured with git ({self.git.email}) is not a valid "
+                f"format.\nPlease run `git config user.email some@email.com` to set "
+                f"the correct value.\n\nYou can also run `git commit --amend "
+                f'--author="Author Name <some@email.com>" --no-edit` to amend '
+                f"the most recent commit."
+            )

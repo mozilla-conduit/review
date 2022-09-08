@@ -27,6 +27,7 @@ class GitCommand:
         self.extensions = []
         self._cinnabar_installed = None
         self.safe_mode = config.safe_mode
+        self.email = ""
 
     def call(self, git_args, **kwargs):
         unicode_args = [
@@ -60,6 +61,7 @@ class GitCommand:
         if "user.email" not in git_config:
             raise Error("user.email is not configured in your gitconfig")
 
+        self.email = git_config["user.email"]
         safe_options.extend(["-c", "user.email=%s" % git_config["user.email"]])
 
         if "user.name" in git_config:

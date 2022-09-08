@@ -583,3 +583,11 @@ def test_git_map_callsign_to_unified_head(m_is_node, git):
     assert (
         git.map_callsign_to_unified_head("beta") == "remotes/origin/bookmarks/beta"
     ), "beta did not correctly map to a branch"
+
+
+def test_git_validate_email(git):
+    with pytest.raises(exceptions.Error):
+        git.validate_email()
+
+    git.git.email = "test@mozilla.com"
+    assert git.validate_email() is None, "validate_email() executes without error"
