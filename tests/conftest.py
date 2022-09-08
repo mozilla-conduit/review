@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 
 from glean import testing
 from pathlib import Path
@@ -352,9 +353,9 @@ def in_process(monkeypatch, safe_environ, request, config):
     user.user_data = user.UserData()
     user.user_data.update_from_dict(
         dict(
-            user_code="#" * 32,
+            user_code=str(uuid.uuid4()),
             is_employee=True,
-            installation_id="#" * 32,
+            installation_id=str(uuid.uuid4()),
             last_check=time.time(),
         )
     )

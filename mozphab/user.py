@@ -6,6 +6,8 @@ import json
 import time
 import uuid
 
+from typing import Optional
+
 from mozphab import environment
 from pathlib import Path
 
@@ -16,6 +18,28 @@ from .logger import logger
 
 USER_INFO_FILE = Path(environment.MOZBUILD_PATH) / "user_info.json"
 EMPLOYEE_CHECK_FREQUENCY = 24 * 7 * 60 * 60  # week
+
+
+def is_bad_uuid(key: str, value: Optional[str]) -> bool:
+    """Return `True` if the key/value pair corresponds to a faulty UUID."""
+    return (
+        key in {"installation_id", "user_code"}
+        and value is not None
+        and len(value) == 32
+    )
+
+
+def format_uuid(bad_uuid: str) -> str:
+    """Turn a non-hyphenated UUID `str` into a hyphenated one.
+
+    This function assumes the `bad_uuid` is a 32-character `str`,
+    usually already having been passed through `is_bad_uuid`.
+
+    See https://bugzilla.mozilla.org/show_bug.cgi?id=1788719 for more.
+    """
+    # Pass the 32-char string into a `UUID` object, then pass through
+    # `str()` to get the hyphenated 36-character version.
+    return str(uuid.UUID(bad_uuid))
 
 
 class UserData:
@@ -41,6 +65,11 @@ class UserData:
         """Assign attributes from a dict."""
         for key in self.keys:
             if key in dictionary:
+
+                # See bug 1788719.
+                if is_bad_uuid(key, dictionary[key]):
+                    dictionary[key] = format_uuid(dictionary[key])
+
                 setattr(self, key, dictionary[key])
 
     def set_from_file(self):
@@ -111,10 +140,12 @@ class UserData:
         is_employee = self.is_employee
 
         if self.installation_id is None:
-            self.installation_id = uuid.uuid4().hex
+            self.installation_id = str(uuid.uuid4())
+
+        user_code = hashlib.md5(whoami["email"].encode("utf-8")).hexdigest()
+        self.user_code = format_uuid(user_code)
 
         self.last_check = int(time.time())
-        self.user_code = hashlib.md5(whoami["email"].encode("utf-8")).hexdigest()
         self.is_employee = whoami["is_employee"]
         self.save_user_info(
             is_employee=self.is_employee,

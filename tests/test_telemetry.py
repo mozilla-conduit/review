@@ -133,8 +133,8 @@ def test_set_metrics(m_config, m_user_data, m_update_user_data, get_telemetry):
     m_update_user_data.return_value = True
     m_user_data.configure_mock(
         is_data_collected=True,
-        installation_id="0000aabbbbaa0000aabb0000bbaa0000",
-        user_code="1111ffeeeeff1111ffee1111eeff1111",
+        installation_id="0000aabb-bbaa-0000-aabb-0000bbaa0000",
+        user_code="1111ffee-eeff-1111-ffee-1111eeff1111",
     )
     # telemetry is enabled in `update_user_data`
     t.set_metrics(Args(needs_repo=True))
