@@ -90,15 +90,13 @@ def test_update_commits_for_uplift_sets_relman_review():
 
     reviewers = commits[0]["reviewers"]
 
-    assert (
-        "#release-managers!" in reviewers["request"]
-    ), "release-managers review group not present in reviewers"
+    assert not reviewers[
+        "request"
+    ], "Uplifted patch should have no requested reviewers initially."
 
-    assert (
-        len(reviewers["request"]) == 1
-    ), "Non-release manager review requested in `request`"
-
-    assert not reviewers["granted"], "Non-release manager review requested in `granted`"
+    assert not reviewers[
+        "granted"
+    ], "Uplifted patch should have no granted reviewers initially."
 
 
 def test_update_commits_for_uplift_sets_original_revision():

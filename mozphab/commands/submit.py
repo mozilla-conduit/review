@@ -394,10 +394,10 @@ def update_commits_for_uplift(commits):
             commit["rev-id"],
         )
 
-        # Clear all reviewers, setting only `#release-managers` as blocking.
+        # Clear all reviewers from the revision.
         commit["reviewers"] = {
             "granted": [],
-            "request": ["#release-managers!"],
+            "request": [],
         }
 
 
