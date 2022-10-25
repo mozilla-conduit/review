@@ -11,14 +11,10 @@ from pathlib import Path
 DEBUG = bool(os.getenv("DEBUG"))
 HTTP_ALLOWED = bool(os.getenv("HTTP_ALLOWED"))
 IS_WINDOWS = sys.platform == "win32"
-HAS_ANSI = (
-    not IS_WINDOWS
-    and not os.getenv("NO_ANSI")
-    and (
-        (hasattr(sys.stdout, "isatty") and sys.stdout.isatty())
-        or os.getenv("TERM", "") == "ANSI"
-        or os.getenv("PYCHARM_HOSTED", "") == "1"
-    )
+HAS_ANSI = not os.getenv("NO_ANSI") and (
+    (hasattr(sys.stdout, "isatty") and sys.stdout.isatty())
+    or os.getenv("TERM", "") == "ANSI"
+    or os.getenv("PYCHARM_HOSTED", "") == "1"
 )
 
 GIT_COMMAND = ["git.exe" if IS_WINDOWS else "git"]
