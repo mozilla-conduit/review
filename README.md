@@ -276,7 +276,7 @@ using the default settings.
    - `source venv/bin/activate`
    - `pip3 install -r dev/requirements/python3.9.txt`
    - `pip3 install -e .`
-3. To run moz-phab after making modifications use `moz-phab-dev`
+3. To run moz-phab after making modifications use `moz-phab`
 4. To run tests use `pytest -vv`
 5. To exit the virtual environment, use `deactivate`
 
@@ -291,7 +291,7 @@ using the default settings.
    - `python3 -m venv venv`
    - `venv\Scripts\pip3 install -r dev-requirements.txt`
    - `venv\Scripts\pip3 install -e .`
-3. To run moz-phab after making modifications use `venv\Scripts\moz-phab-dev`
+3. To run moz-phab after making modifications use `venv\Scripts\moz-phab`
 4. To run tests use `venv\Scripts\pytest -vv`
 
 ### Regenerating requirements files
@@ -374,13 +374,7 @@ docker-compose -f docker-compose.yml -f docker-compose.review.yml run local-dev
 
 To cut a new release of `moz-phab`:
 
-1. Increase the version number in `setup.py` and push the change to GitHub.
-
-    ```shell
-    git push origin main
-    ```
-
-2. Create a tag matching the version number. This will kick off CircleCI jobs
+1. Create a tag matching the version number. This will kick off CircleCI jobs
    to generate the release and push it to PyPI.
 
     ```shell
@@ -388,7 +382,7 @@ To cut a new release of `moz-phab`:
     git push origin 1.2.0
     ```
 
-3. Post about the new release in the following channels:
+2. Post about the new release in the following channels:
 
     - [MozPhab on Mozilla Wiki](https://wiki.mozilla.org/MozPhab/Changelog)
     - [Firefox Tooling Announcements on Discourse](https://discourse.mozilla.org/c/firefox-tooling-announcements)

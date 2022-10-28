@@ -29,6 +29,8 @@ from .sentry import init_sentry, report_to_sentry
 from .telemetry import telemetry, configure_telemetry
 from .updater import check_for_updates, self_upgrade
 
+from packaging.version import Version
+
 # Known Issues
 # - commits with a description already modified by arc (ie. the follow the arc commit
 #   description template with 'test plan', subscribers, etc) are not handled by this
@@ -156,11 +158,8 @@ def main(argv, *, is_development):
 
 
 def run():
-    main(sys.argv[1:], is_development=False)
-
-
-def run_dev():
-    main(sys.argv[1:], is_development=True)
+    is_development = Version(environment.MOZPHAB_VERSION).is_prerelease
+    main(sys.argv[1:], is_development=is_development)
 
 
 if __name__ == "__main__":

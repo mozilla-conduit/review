@@ -1,0 +1,50 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+[project]
+name = "MozPhab"
+description = "Phabricator review submission/management tool."
+license = {file = "LICENSE"}
+authors = [{name = "Mozilla", email = "conduit-team@mozilla.com"}]
+readme = "README.md"
+
+dependencies = [
+    "distro",
+    "glean-sdk>=50.0.1,==50.*",
+    "packaging",
+    "python-hglib>=2.6.2",
+    # `importlib.metadata` is in stdlib since Python 3.8.
+    "importlib-metadata; python_version < '3.8'",
+    "sentry-sdk>=0.14.3",
+    "setuptools",
+]
+
+# Note: please change the `updater.py::check_for_updates` method if the format
+# would be different than `>=x.y`.
+requires-python = ">=3.7"
+
+# Required for `setuptools_scm` when using only `pyproject.toml` (ie no `setup.cfg`).
+dynamic = ["version"]
+
+# Derive version number from version control.
+[tool.setuptools_scm]
+
+# NOTE: using setting this here instead of `setup.cfg` is a beta feature.
+[tool.setuptools]
+packages = ["mozphab", "mozphab.commands"]
+
+[project.urls]
+"Repository" = "https://github.com/mozilla-conduit/review"
+"Bug Tracker" = "https://bugzilla.mozilla.org"
+
+[project.scripts]
+moz-phab = "mozphab.mozphab:run"
+
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = [
+    "setuptools>=45",
+    "setuptools_scm[toml]>=7.0.5",
+]
+

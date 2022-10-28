@@ -3,8 +3,13 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import os
-import pkg_resources
 import sys
+
+try:
+    from importlib.metadata import version, PackageNotFoundError
+except ImportError:
+    # We can remove this once we drop support for Python 3.7.
+    from importlib_metadata import version, PackageNotFoundError
 
 from pathlib import Path
 
@@ -48,10 +53,10 @@ MOZPHAB_NAME = "MozPhab"  # PyPi package name
 
 
 def _get_mozphab_version():
-    # Currently installed version of MozPhab
     try:
-        return pkg_resources.get_distribution(MOZPHAB_NAME).version
-    except pkg_resources.DistributionNotFound:
+        return version("mozphab")
+    except PackageNotFoundError:
+        # package is not installed
         return "0.0.0"
 
 

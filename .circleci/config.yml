@@ -163,8 +163,9 @@ jobs:
       - run:
           name: setup
           command: |
+            python3 -m pip install --upgrade build pip
             python3 -m venv venv
-            python3 setup.py sdist
+            python3 -m build
             ./venv/bin/pip --disable-pip-version-check install dist/MozPhab*.tar.gz
       - run:
           name: run tests
@@ -181,8 +182,8 @@ jobs:
         name: build-and-publish
         # Generate packages and upload to PyPI via `twine`.
         command: |
-            python3 -m pip install --upgrade pip
+            python3 -m pip install --upgrade build pip
             python3 -m pip install pipenv
             python3 -m pipenv install twine
-            python3 setup.py sdist bdist_wheel
+            python3 -m build
             python3 -m pipenv run twine upload --repository pypi dist/*
