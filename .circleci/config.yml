@@ -181,7 +181,8 @@ jobs:
         name: build-and-publish
         # Generate packages and upload to PyPI via `twine`.
         command: |
-            python setup.py sdist bdist_wheel
-            sudo pip install pipenv
-            pipenv install twine
-            pipenv run twine upload --repository pypi dist/*
+            python3 -m pip install --upgrade pip
+            python3 -m pip install pipenv
+            python3 -m pipenv install twine
+            python3 setup.py sdist bdist_wheel
+            python3 -m pipenv run twine upload --repository pypi dist/*
