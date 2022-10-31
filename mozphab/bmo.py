@@ -69,7 +69,7 @@ class BMOAPI:
 
             time.sleep(1.0 * attempt)
         else:
-            raise Error(f"Reached maximum retries for BMO API (/{endpoint}).")
+            raise BMOAPIError(f"Reached maximum retries for BMO API (/{endpoint}).")
 
         return result
 
