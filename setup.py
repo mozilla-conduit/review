@@ -7,7 +7,7 @@ entry_points = {"console_scripts": ["moz-phab = mozphab.mozphab:run"]}
 if "develop" in sys.argv:
     entry_points["console_scripts"].append("moz-phab-dev = mozphab.mozphab:run_dev")
 
-VERSION = "1.2.0"
+VERSION = "1.2.1rc0"
 
 # Validate that `CIRCLE_TAG` matches the current version.
 circle_tag = os.getenv("CIRCLE_TAG")
