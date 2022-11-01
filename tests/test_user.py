@@ -205,6 +205,18 @@ def test_whoami(m_conduit, m_bmo, user_data):
     m_conduit.whoami.return_value = dict(primaryEmail="someemail@mozilla.com")
     assert user_data.whoami() == dict(email="someemail@mozilla.com", is_employee=True)
 
+    # An employee based on @getpocket.com email
+    m_conduit.whoami.side_effect = None
+    m_conduit.whoami.return_value = dict(primaryEmail="someemail@getpocket.com")
+    assert user_data.whoami() == dict(email="someemail@getpocket.com", is_employee=True)
+
+    # An employee based on @mozillafoundation.com email
+    m_conduit.whoami.side_effect = None
+    m_conduit.whoami.return_value = dict(primaryEmail="someemail@mozillafoundation.org")
+    assert user_data.whoami() == dict(
+        email="someemail@mozillafoundation.org", is_employee=True
+    )
+
     # Not employee as BMO.whoami failed
     m_conduit.whoami.return_value = dict(primaryEmail="some@email.com")
     m_bmo.whoami.return_value = None

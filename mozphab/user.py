@@ -18,6 +18,11 @@ from .logger import logger
 
 USER_INFO_FILE = Path(environment.MOZBUILD_PATH) / "user_info.json"
 EMPLOYEE_CHECK_FREQUENCY = 24 * 7 * 60 * 60  # week
+MOZILLA_EMPLOYEE_EMAIL_ENDINGS = {
+    "@getpocket.com",
+    "@mozilla.com",
+    "@mozillafoundation.org",
+}
 
 
 def is_bad_uuid(key: str, value: Optional[str]) -> bool:
@@ -106,7 +111,10 @@ class UserData:
             response["is_employee"] = False
             return response
 
-        if response["email"].lower().endswith("@mozilla.com"):
+        lower_email = response["email"].lower()
+        if any(
+            lower_email.endswith(domain) for domain in MOZILLA_EMPLOYEE_EMAIL_ENDINGS
+        ):
             response["is_employee"] = True
             return response
 
