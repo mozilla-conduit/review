@@ -1,6 +1,7 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+import copy
 import json
 import time
 import urllib.parse as url_parse
@@ -54,7 +55,7 @@ class BMOAPI:
 
     @staticmethod
     def _sanitise_req(req_args):
-        sanitised = req_args.copy()
+        sanitised = copy.deepcopy(req_args)
         if "X-PHABRICATOR-TOKEN" in sanitised.get("headers"):
             sanitised["headers"]["X-PHABRICATOR-TOKEN"] = "cli-XXXX"
         return sanitised
