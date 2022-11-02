@@ -2,13 +2,18 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from mozphab.updater import self_upgrade
+from mozphab.spinner import wait_message
+from mozphab.updater import check_for_updates, self_upgrade
 
 
 def self_update(_):
     """`self-update` command, updates this package"""
-    # Upgrade self
-    self_upgrade()
+    new_version = check_for_updates(force_check=True)
+    if not new_version:
+        return
+
+    with wait_message(f"Upgrading to version {new_version}"):
+        self_upgrade()
 
 
 def add_parser(parser):

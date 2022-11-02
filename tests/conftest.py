@@ -333,7 +333,7 @@ def in_process(monkeypatch, safe_environ, request, config):
     # Constructing the Mercurial() object modifies os.environ for all tests.
     # Disable update checking.  It modifies the program on disk which we do /not/ want
     # to do during a test run.
-    monkeypatch.setattr(mozphab, "check_for_updates", mock.MagicMock())
+    monkeypatch.setattr(mozphab, "check_for_updates", mock.Mock(return_value=None))
 
     # Disable calls to sys.exit() at the end of the script.  Re-raise errors instead
     # to make test debugging easier.

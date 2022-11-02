@@ -4,10 +4,11 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import json
-import subprocess
 import sys
 import time
 import urllib.request
+
+from typing import Optional
 
 from setuptools import Distribution
 from pathlib import Path
@@ -18,9 +19,8 @@ from mozphab import environment
 from .config import config
 from .environment import MOZPHAB_VERSION
 from .exceptions import Error
-from .logger import logger, stop_logging
+from .logger import logger
 from .subprocess_wrapper import check_call
-from .spinner import wait_message
 
 SELF_UPDATE_FREQUENCY = 24 * 3  # hours
 
@@ -32,61 +32,52 @@ def get_pypi_info():
     return response["info"]
 
 
-def check_for_updates():
-    """Log a message if an update is required/available"""
-    # Update self.
-    if (
-        config.self_last_check >= 0
-        and time.time() - config.self_last_check > SELF_UPDATE_FREQUENCY * 60 * 60
-    ):
-        config.self_last_check = int(time.time())
-        current_version = MOZPHAB_VERSION
-        pypi_info = get_pypi_info()
-        logger.debug(
-            "Versions - local: {}, PyPI: {}".format(
-                current_version, pypi_info["version"]
+def check_for_updates(force_check: bool = False) -> Optional[str]:
+    """Check if an update is available for `moz-phab`.
+
+    Log a message about the new version, return the version as a `str` if it is
+    found or return `None`. Use `force_check` to check for updates even when the
+    usual conditions aren't met.
+    """
+    self_update_disabled = config.self_last_check < 0
+    last_check_before_frequency = (
+        time.time() - config.self_last_check <= SELF_UPDATE_FREQUENCY * 60 * 60
+    )
+
+    # Return if our check conditions aren't met.
+    if not force_check and (self_update_disabled or not last_check_before_frequency):
+        return
+
+    config.self_last_check = int(time.time())
+    current_version = MOZPHAB_VERSION
+    pypi_info = get_pypi_info()
+    logger.debug(f"Versions - local: {current_version}, PyPI: {pypi_info['version']}")
+
+    # convert ">=3.6" to (3, 6)
+    try:
+        required_python_version = tuple(
+            [int(i) for i in pypi_info["requires_python"][2:].split(".")]
+        )
+    except ValueError:
+        required_python_version = ()
+
+    if sys.version_info < required_python_version:
+        raise Error(
+            "Unable to upgrade to version {}.\n"
+            "MozPhab requires Python in version {}".format(
+                pypi_info["version"], pypi_info["requires_python"]
             )
         )
 
-        # convert ">=3.6" to (3, 6)
-        try:
-            required_python_version = tuple(
-                [int(i) for i in pypi_info["requires_python"][2:].split(".")]
-            )
-        except ValueError:
-            required_python_version = ()
+    config.write()
 
-        if sys.version_info < required_python_version:
-            raise Error(
-                "Unable to upgrade to version {}.\n"
-                "MozPhab requires Python in version {}".format(
-                    pypi_info["version"], pypi_info["requires_python"]
-                )
-            )
+    if parse_version(current_version) >= parse_version(pypi_info["version"]):
+        logger.debug("update check not required")
+        return
 
-        config.write()
+    logger.warning(f"Version {pypi_info['version']} of `moz-phab` is now available")
 
-        if parse_version(current_version) >= parse_version(pypi_info["version"]):
-            logger.debug("update check not required")
-            return
-
-        if config.self_auto_update:
-            with wait_message(("Upgrading to version %s", pypi_info["version"])):
-                self_upgrade()
-            logger.info("Restarting...")
-
-            # Explicitly close the log files to avoid issues with processes holding
-            # exclusive logs on the files on Windows.
-            stop_logging()
-
-            # It's best to ignore errors here as they will be reported by the
-            # new moz-phab process.
-            p = subprocess.run(sys.argv)
-            sys.exit(p.returncode)
-
-        logger.warning(
-            "Version %s of `moz-phab` is now available", pypi_info["version"]
-        )
+    return pypi_info["version"]
 
 
 def self_upgrade():

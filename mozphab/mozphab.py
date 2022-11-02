@@ -12,6 +12,7 @@ CLI to support submission of a series of commits to Phabricator. .
 import logging
 import os
 import ssl
+import subprocess
 import sys
 import traceback
 
@@ -22,11 +23,11 @@ from .conduit import conduit, ConduitAPIError
 from .config import config
 from .detect_repository import repo_from_args
 from .exceptions import Error
-from .logger import init_logging, logger
+from .logger import init_logging, logger, stop_logging
 from .spinner import wait_message
 from .sentry import init_sentry, report_to_sentry
 from .telemetry import telemetry, configure_telemetry
-from .updater import check_for_updates
+from .updater import check_for_updates, self_upgrade
 
 # Known Issues
 # - commits with a description already modified by arc (ie. the follow the arc commit
@@ -34,6 +35,20 @@ from .updater import check_for_updates
 #   script.  commits in this format should be detected and result in the commit being
 #   rejected.  ideally this should extract the title, body, reviewers, and bug-id
 #   from the arc template and reformat to the standard mozilla format.
+
+
+def restart_mozphab():
+    """Restart `moz-phab`, re-using the previous command line."""
+    logger.info("Restarting...")
+
+    # Explicitly close the log files to avoid issues with processes holding
+    # exclusive logs on the files on Windows.
+    stop_logging()
+
+    # It's best to ignore errors here as they will be reported by the
+    # new moz-phab process.
+    p = subprocess.run(sys.argv)
+    sys.exit(p.returncode)
 
 
 def main(argv, *, is_development):
@@ -70,7 +85,12 @@ def main(argv, *, is_development):
             logger.setLevel(logging.ERROR)
 
         elif args.command != "self-update":
-            check_for_updates()
+            new_version = check_for_updates()
+
+            if new_version and config.self_auto_update:
+                with wait_message(f"Upgrading to version {new_version}"):
+                    self_upgrade()
+                restart_mozphab()
 
         repo = None
         if args.needs_repo:

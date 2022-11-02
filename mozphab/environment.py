@@ -8,6 +8,7 @@ import sys
 
 from pathlib import Path
 
+
 DEBUG = bool(os.getenv("DEBUG"))
 HTTP_ALLOWED = bool(os.getenv("HTTP_ALLOWED"))
 IS_WINDOWS = sys.platform == "win32"
