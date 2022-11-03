@@ -1,11 +1,11 @@
 import builtins
 import datetime
-import mock
 import pytest
 import subprocess
 import unittest
 
 from pathlib import Path
+from unittest import mock
 
 from mozphab.commands import submit
 from mozphab import (

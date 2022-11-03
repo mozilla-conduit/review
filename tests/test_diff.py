@@ -4,7 +4,7 @@
 
 # coding=utf-8
 
-import mock
+from unittest import mock
 import textwrap
 
 from .conftest import assert_attributes

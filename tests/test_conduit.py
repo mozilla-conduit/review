@@ -4,7 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import json
-import mock
+from unittest import mock
 import pytest
 from contextlib import contextmanager
 from immutabledict import immutabledict

@@ -1,9 +1,10 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
-import mock
 
 from .conftest import hg_out
+
+from unittest import mock
 
 from mozphab import mozphab
 
@@ -93,17 +94,21 @@ o  init
 """,
         wip=True,
     )
-    edit_call = next(
-        call
-        for call in call_conduit.mock_calls
-        if call.args[0] == "differential.revision.edit"
+    # Get the API call arguments for the `differential.revision.edit` call.
+    edit_call_api_call_args = next(
+        args[1]
+        for _name, args, _kwargs in call_conduit.mock_calls
+        if args[0] == "differential.revision.edit"
     )
+    # Get the value of the `plan-changes` transaction.
     wip_transaction = next(
         transaction
-        for transaction in edit_call.args[1]["transactions"]
+        for transaction in edit_call_api_call_args["transactions"]
         if transaction["type"] == "plan-changes"
     )
-    assert wip_transaction["value"]
+    assert (
+        wip_transaction["value"] is True
+    ), "`wip=True` in `submit` should set `plan-changes`."
 
 
 def test_submit_single_1(in_process, hg_repo_path):

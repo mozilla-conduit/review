@@ -4,10 +4,11 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import shutil
 
-import mock
 import os
 import platform
 import pytest
+
+from unittest import mock
 
 from callee import Contains
 from .conftest import git_out, search_diff, search_rev

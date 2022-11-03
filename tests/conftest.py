@@ -3,7 +3,6 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import io
 import json
-import mock
 import os
 import pytest
 import re
@@ -16,6 +15,7 @@ import uuid
 
 from glean import testing
 from pathlib import Path
+from unittest import mock
 
 # NOTE: Set the environment variables before importing any of mozphab modules.
 os.environ["MOZPHAB_NO_USER_CONFIG"] = "1"

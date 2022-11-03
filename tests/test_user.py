@@ -5,10 +5,10 @@
 import hashlib
 import uuid
 
-import mock
 import pytest
 
 from contextlib import contextmanager
+from unittest import mock
 
 from mozphab import user
 

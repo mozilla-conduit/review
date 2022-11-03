@@ -1,8 +1,8 @@
 # coding=utf-8
 
-import mock
 import pytest
 from pathlib import Path
+from unittest import mock
 
 from .conftest import create_temp_fn
 

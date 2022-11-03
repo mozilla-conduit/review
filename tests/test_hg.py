@@ -1,7 +1,8 @@
 import copy
-import mock
 import pytest
 from packaging.version import Version
+
+from unittest import mock
 
 from .conftest import create_temp_fn, assert_attributes
 
@@ -300,7 +301,6 @@ def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
     # Create both a bookmark and a topic. Not a useful thing to do,
     # but it should work. And bookmark names and topic names should not
     # collide when looking for pre-existing names.
-    from mock import call
 
     m_config.create_bookmark = True
     m_hg.reset_mock()  # Clear the calls.
@@ -308,8 +308,8 @@ def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
     hg.before_patch("sha1", "bookmark")
     m_hg.assert_has_calls(
         [
-            call(["bookmark", "bookmark_1"]),
-            call(["topic", "bookmark"]),
+            mock.call(["bookmark", "bookmark_1"]),
+            mock.call(["topic", "bookmark"]),
         ]
     )
 

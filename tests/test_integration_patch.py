@@ -3,7 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import copy
 import os
-import mock
+from unittest import mock
 import time
 
 from .conftest import hg_out, git_out

@@ -4,7 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import copy
-import mock
+from unittest import mock
 import unittest
 import uuid
 

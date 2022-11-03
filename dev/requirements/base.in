@@ -6,7 +6,6 @@ flake8-bugbear==20.1.4
 flake8==3.7.9
 funcsigs==1.0.2
 immutabledict==1.0.0
-mock==3.0.5
 packaging==21.3
 pbr==5.4.3
 pytest==7.1.1

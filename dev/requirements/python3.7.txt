@@ -120,10 +120,6 @@ mercurial==5.7 \
     --hash=sha256:87695ec63e5c11d1411aeed4f4845ff63d0b23f49175c92b11c3565bd6afbccb \
     --hash=sha256:f01518780726c5ff9ac58365fd4e2e0dc96316fbe3bd4f0bf912ce9f730a32ba
     # via -r dev/requirements/base.in
-mock==3.0.5 \
-    --hash=sha256:83657d894c90d5681d62155c82bda9c1187827525880eda8ff5df4ec813437c3 \
-    --hash=sha256:d157e52d4e5b938c550f39eb2fd15610db062441a9c2747d3dbfa9298211d0f8
-    # via -r dev/requirements/base.in
 mypy-extensions==0.4.3 \
     --hash=sha256:090fedd75945a69ae91ce1303b5824f428daf5a028d2f6ab8a299250a846f15d \
     --hash=sha256:2d82818f5bb3e369420cb3c4060a7970edba416647068eb4c5343488a6c604a8
