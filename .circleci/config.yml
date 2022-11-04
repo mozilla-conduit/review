@@ -25,7 +25,7 @@ branches-and-tags-filter: &branches-and-tags-filter
         - /.*/
 
 orbs:
-  win: circleci/windows@2.4.0
+  win: circleci/windows@5.0.0
 
 workflows:
   version: 2
