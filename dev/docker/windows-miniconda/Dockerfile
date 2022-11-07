@@ -1,7 +1,7 @@
 FROM mcr.microsoft.com/windows/servercore:ltsc2019
 WORKDIR C:/Users/Administrator
 RUN powershell -Command " \
-    $url = \"https://repo.anaconda.com/miniconda/Miniconda3-4.6.14-Windows-x86_64.exe\"; \
+    $url = \"https://repo.anaconda.com/miniconda/Miniconda3-py39_4.12.0-Windows-x86_64.exe\"; \
     $client = new-object System.Net.WebClient; \
     $client.DownloadFile( $url, \"miniconda3.exe\"); \
     ./miniconda3.exe /S /D=C:\Users\Administrator\miniconda3 | Write-Output; \
