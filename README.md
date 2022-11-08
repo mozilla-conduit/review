@@ -1,4 +1,4 @@
-# Phabricator CLI from Mozilla to support submission of a series of commits.
+# Phabricator CLI from Mozilla to support submission of a series of commits
 
 ## Installation
 
@@ -10,8 +10,8 @@ For detailed installation instructions please see:
 - [Linux Install Instructions](https://moz-conduit.readthedocs.io/en/latest/mozphab-linux.html)
 - [macOS Install Instructions](https://moz-conduit.readthedocs.io/en/latest/mozphab-macos.html)
 
-`moz-phab` will periodically check for updates and seamlessly install the latest release
-when available. To force update `moz-phab`, run `moz-phab self-update`.
+`moz-phab` will periodically check for updates and seamlessly install the latest
+release when available. To force update `moz-phab`, run `moz-phab self-update`.
 
 ### Changelog
 
@@ -313,8 +313,8 @@ To generate `dev/requirements/python*.*.txt`, run the following commands while i
 
 #### On Windows
 
-To generate `dev/requirements/windows.txt`, make sure you are not running Docker in WSL
-mode then run the following command:
+To generate `dev/requirements/windows.txt`, make sure you are not running Docker
+in WSL mode then run the following command:
 
 - `docker-compose run generate-windows-requirements`
 
@@ -324,7 +324,7 @@ mode then run the following command:
 
 To ensure that your changes work, run `circleci` locally.
 
-1. Ensure you have the `circleci` client installed, see https://circleci.com/docs/2.0/local-cli/
+1. Ensure you have the `circleci` client installed, see the [CircleCI CLI docs](https://circleci.com/docs/2.0/local-cli/)
 2. In your clone of this repository, run:
    `circleci local execute --job test_3_8`
 
@@ -337,11 +337,11 @@ as explained above.
 As of the time of writing, `circleci-cli` on Windows does not allow you to execute
 Windows tests locally. When CircleCI is running your windows tests remotely, it will
 use a Windows Orb that is configured to use a special Windows executor that is preloaded
-with various development packages. The Windows virtual machine will use Miniconda to
-bootstrap the Python environment, which can cause some problems when installing
+with various development packages. The Windows virtual machine will use Miniconda
+to bootstrap the Python environment, which can cause some problems when installing
 additional requirements. The `generate-windows` container that is used to generate
-requirements files for Windows can be used to run your tests, as well as to test package
-installation. To do that, run the following commands:
+requirements files for Windows can be used to run your tests, as well as to test
+package installation. To do that, run the following commands:
 
 - `docker-compose run generate-windows powershell.exe`
 - `cd C:\review`
@@ -353,7 +353,8 @@ installation. To do that, run the following commands:
 Pull Requests are not accepted here; please submit changes to Phabricator using `moz-phab`.
 
 1. Follow the [setup](https://moz-conduit.readthedocs.io/en/latest/phabricator-user.html#setting-up-mozphab)
-2. Once your patch is written and committed locally, run `moz-phab` to send it to Phabricator
+2. Once your patch is written and committed locally, run `moz-phab` to send it to
+   Phabricator.
 
 ### Local environment
 
@@ -365,8 +366,8 @@ production data.
 
 You can order the suite to use your local code by calling:
 
-```
-$ docker-compose -f docker-compose.yml -f docker-compose.review.yml run local-dev
+```shell
+docker-compose -f docker-compose.yml -f docker-compose.review.yml run local-dev
 ````
 
 ### Creating Releases
@@ -389,5 +390,5 @@ To cut a new release of `moz-phab`:
 
 3. Post about the new release in the following channels:
 
-    - https://wiki.mozilla.org/MozPhab/Changelog
-    - https://discourse.mozilla.org/c/firefox-tooling-announcements
+    - [MozPhab on Mozilla Wiki](https://wiki.mozilla.org/MozPhab/Changelog)
+    - [Firefox Tooling Announcements on Discourse](https://discourse.mozilla.org/c/firefox-tooling-announcements)
