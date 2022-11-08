@@ -173,7 +173,7 @@ def configure_telemetry(args):
         except BMOAPIError as err:
             # Error in retrieving user status.
             # We quietly allow to work without enabling Telemetry.
-            logger.debug("BMOAPIErrori: %s", err)
+            logger.debug("BMOAPIError: %s", err)
             _Globals.telemetry = TelemetryDisabled()
             return
 
