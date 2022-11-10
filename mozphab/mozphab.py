@@ -75,12 +75,6 @@ def main(argv, *, is_development):
 
         logger.debug("%s (%s)", environment.MOZPHAB_NAME, environment.MOZPHAB_VERSION)
 
-        if args.fallback:
-            if len(argv) > 1:
-                logger.info(f"command {argv[1]} not found; falling back to submit")
-            else:
-                logger.info("moz-phab called without arguments; falling back to submit")
-
         # Ensure that `patch --raw ..` only outputs the patch
         if args.command == "patch" and getattr(args, "raw", False):
             environment.SHOW_SPINNER = False
