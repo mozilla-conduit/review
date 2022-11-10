@@ -11,6 +11,7 @@ import urllib.request
 from typing import Optional
 
 from setuptools import Distribution
+from packaging.version import Version
 from pathlib import Path
 from pkg_resources import parse_version
 
@@ -25,11 +26,39 @@ from .subprocess_wrapper import check_call
 SELF_UPDATE_FREQUENCY = 24 * 3  # hours
 
 
-def get_pypi_info():
+def get_pypi_json() -> dict:
+    """Get data about `MozPhab` from the JSON API endpoint."""
     url = "https://pypi.org/pypi/MozPhab/json"
     output = urllib.request.urlopen(urllib.request.Request(url), timeout=30).read()
     response = json.loads(output.decode("utf-8"))
-    return response["info"]
+    return response
+
+
+def get_simple_json() -> dict:
+    """Get data about `MozPhab` from the `simple` API endpoint."""
+    url = "https://pypi.org/simple/MozPhab"
+    request = urllib.request.Request(
+        url, headers={"Accept": "application/vnd.pypi.simple.v1+json"}
+    )
+    output = urllib.request.urlopen(request, timeout=30).read()
+    return json.loads(output.decode("utf-8"))
+
+
+def parse_latest_prerelease_version(simple_json: dict) -> str:
+    """Parse PyPI's API response for `moz-phab` to determine the latest version."""
+    # Get all the returned `.tar.gz` file entries.
+    filenames = map(lambda entry: entry["filename"], simple_json["files"])
+
+    # The format is `MozPhab-<version>.tar.gz`, so remove the prefix and
+    # suffix to get the version strings.
+    versions = (
+        filename[len("MozPhab-") :][: -len(".tar.gz")]
+        for filename in filenames
+        if filename.startswith("MozPhab-") and filename.endswith(".tar.gz")
+    )
+
+    # Turn each version string into a `Version`, get the max, then return as `str`.
+    return str(max(Version(version) for version in versions))
 
 
 def check_for_updates(force_check: bool = False) -> Optional[str]:
@@ -50,8 +79,19 @@ def check_for_updates(force_check: bool = False) -> Optional[str]:
 
     config.self_last_check = int(time.time())
     current_version = MOZPHAB_VERSION
-    pypi_info = get_pypi_info()
-    logger.debug(f"Versions - local: {current_version}, PyPI: {pypi_info['version']}")
+    pypi_json = get_pypi_json()
+    pypi_info = pypi_json["info"]
+
+    if not config.get_pre_releases:
+        # Use the latest full release.
+        pypi_version = pypi_info["version"]
+    else:
+        # Find the latest pre-release version manually since the "version" key
+        # only contains the latest full release on PyPI.
+        simple_json = get_simple_json()
+        pypi_version = parse_latest_prerelease_version(simple_json)
+
+    logger.debug(f"Versions - local: {current_version}, PyPI: {pypi_version}")
 
     # convert ">=3.6" to (3, 6)
     try:
@@ -65,19 +105,19 @@ def check_for_updates(force_check: bool = False) -> Optional[str]:
         raise Error(
             "Unable to upgrade to version {}.\n"
             "MozPhab requires Python in version {}".format(
-                pypi_info["version"], pypi_info["requires_python"]
+                pypi_version, pypi_info["requires_python"]
             )
         )
 
     config.write()
 
-    if parse_version(current_version) >= parse_version(pypi_info["version"]):
+    if parse_version(current_version) >= parse_version(pypi_version):
         logger.debug("update check not required")
         return
 
-    logger.warning(f"Version {pypi_info['version']} of `moz-phab` is now available")
+    logger.warning(f"Version {pypi_version} of `moz-phab` is now available")
 
-    return pypi_info["version"]
+    return pypi_version
 
 
 def self_upgrade():
