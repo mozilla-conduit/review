@@ -462,7 +462,7 @@ def local_uplift_if_possible(args, repo, commits) -> bool:
     return False
 
 
-def submit(repo, args):
+def _submit(repo, args):
     telemetry().submission.preparation_time.start()
     with wait_message("Checking connection to Phabricator."):
         # Check if raw Conduit API can be used
@@ -690,6 +690,20 @@ def submit(repo, args):
         commits, validate=False, show_rev_urls=True, show_updated_only=True
     )
     telemetry().submission.process_time.stop()
+
+
+def submit(repo, args):
+    try:
+        _submit(repo, args)
+    except Exception as e:
+        # Check if the `fallback` flag was set and print a warning message.
+        if hasattr(args, "fallback") and args.fallback:
+            logger.warning(
+                "You didn't specify a valid command, so we ran `submit` for you, "
+                "and it failed."
+            )
+
+        raise e
 
 
 def add_parser(parser):
