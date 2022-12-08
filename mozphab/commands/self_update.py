@@ -22,6 +22,8 @@ def self_update(_):
     with wait_message(f"Upgrading to version {new_version}"):
         self_upgrade()
 
+    logger.info(f"Upgraded to version {new_version}")
+
 
 def add_parser(parser):
     update_parser = parser.add_parser("self-update", help="Update review script")
