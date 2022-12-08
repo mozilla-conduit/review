@@ -16,6 +16,8 @@ from glob import glob
 
 from mozphab import environment
 
+from colorama import just_fix_windows_console
+
 logger = logging.getLogger("moz-phab")
 
 
@@ -34,6 +36,8 @@ class ColourFormatter(logging.Formatter):
             fmt = "%(message)s"
         super().__init__(fmt)
         self.log_colours = {"WARNING": 34, "ERROR": 31}  # blue, red
+        # wrap stdout and stderr, so that color codes work in the windows console
+        just_fix_windows_console()
 
     def format(self, record):
         result = super().format(record)
