@@ -53,6 +53,24 @@ def restart_mozphab():
     sys.exit(p.returncode)
 
 
+def assert_api_token_is_present(repo, args):
+    """Assert a local API token is present.
+
+    Prompt for install by running `install-certificate` if missing,
+    unless the user is already running `install-certificate` themselves.
+    """
+    if args.command == "install-certificate":
+        return
+
+    try:
+        conduit.load_api_token()
+    except ConduitAPIError:
+        logger.info("No API token detected, running `install-certificate`...")
+        install = parse_args(["install-certificate"])
+        install.func(repo, install)
+        logger.info("Token installed, resuming original command")
+
+
 def main(argv, *, is_development):
     try:
         if not is_development and config.report_to_sentry:
@@ -99,13 +117,7 @@ def main(argv, *, is_development):
             configure_telemetry(args)
 
         if repo is not None:
-            try:
-                conduit.load_api_token()
-            except ConduitAPIError:
-                logger.info("No API token detected, running `install-certificate`...")
-                install = parse_args(["install-certificate"])
-                install.func(repo, install)
-                logger.info("Token installed, resuming original command")
+            assert_api_token_is_present(repo, args)
 
             telemetry().set_vcs(repo)
             try:
