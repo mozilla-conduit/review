@@ -185,8 +185,9 @@ class Git(Repository):
             commit["name"] = short_node(commit["node"])
         self.revset = (commits[0]["node"], commits[-1]["node"])
 
-    def _cherry(self, command, remotes):
-        """Run command and try all the remotes until success."""
+    def _cherry(self, remotes):
+        """Run `git cherry` and try all the remotes until success."""
+        command = ["cherry", "--abbrev=12"]
         if not remotes:
             return self.git_out(command)
 
@@ -202,7 +203,6 @@ class Git(Repository):
 
     def _get_first_unpublished_node(self):
         """Check which commits should be pushed and return the oldest one."""
-        cherry = ["cherry", "--abbrev=12"]
         remotes = config.git_remote
         if self.args.upstream:
             remotes = self.args.upstream
@@ -211,7 +211,7 @@ class Git(Repository):
             if len(remotes) > 1:
                 logger.warning("!! Found multiple upstreams (%s).", ", ".join(remotes))
 
-        unpublished = self._cherry(cherry, remotes)
+        unpublished = self._cherry(remotes)
         if unpublished is None:
             raise Error(
                 "Unable to detect the start commit. Please provide its SHA-1 or\n"

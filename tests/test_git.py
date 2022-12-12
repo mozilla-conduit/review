@@ -15,9 +15,12 @@ from mozphab import environment, exceptions, mozphab
 @mock.patch("mozphab.git.Git.git_out")
 def test_cherry(m_git_git_out, git):
     m_git_git_out.side_effect = (exceptions.CommandError, ["output"])
-    assert git._cherry(["cherry"], ["one", "two"]) == ["output"]
+    assert git._cherry(["one", "two"]) == ["output"]
     m_git_git_out.assert_has_calls(
-        [mock.call(["cherry", "one"]), mock.call(["cherry", "two"])]
+        [
+            mock.call(["cherry", "--abbrev=12", "one"]),
+            mock.call(["cherry", "--abbrev=12", "two"]),
+        ]
     )
 
 
@@ -36,7 +39,7 @@ def test_first_unpublished(m_config, m_git_cherry, m_git_git_out, git):
     git.args = Args()
     first = git._get_first_unpublished_node
     assert "sha2" == first()
-    m_git_cherry.assert_called_with(["cherry", "--abbrev=12"], ["a", "b"])
+    m_git_cherry.assert_called_with(["a", "b"])
     assert first() is None
     with pytest.raises(exceptions.Error):
         first()
@@ -44,13 +47,13 @@ def test_first_unpublished(m_config, m_git_cherry, m_git_git_out, git):
     m_git_cherry.side_effect = ([],)
     git.args = Args(upstream=["upstream"])
     first()
-    m_git_cherry.assert_called_with(["cherry", "--abbrev=12"], ["upstream"])
+    m_git_cherry.assert_called_with(["upstream"])
 
     m_git_cherry.side_effect = ([],)
     m_config.git_remote = ["someremote"]
     git.args = Args()
     first()
-    m_git_cherry.assert_called_with(["cherry", "--abbrev=12"], ["someremote"])
+    m_git_cherry.assert_called_with(["someremote"])
     m_config.git_remote = []
 
     m_git_cherry.side_effect = (["+ %s" % i for i in range(101)],)
