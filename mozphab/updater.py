@@ -139,10 +139,11 @@ def self_upgrade():
     if not environment.DEBUG:
         command += ["--quiet"]
 
-    # sys.path[0] is the directory containing the script that was used to
-    # start python. This will be something like:
-    # "<python environment>/bin" or "<python environment>\Scripts" (Windows)
-    script_dir = Path(sys.path[0])
+    # `sys.argv[0]` is the path to the script that was used to start python.
+    # For example: `/home/connor/.virtualenvs/moz-phab-dev/bin/moz-phab`. Run
+    # `.resolve()` to make sure we have a full path, and then the `parent` is
+    # the directory for the script.
+    script_dir = Path(sys.argv[0]).resolve().parent
 
     # If moz-phab was installed with --user, we need to pass it to pip
     # Create "install" setuptools command with --user to find the scripts_path
