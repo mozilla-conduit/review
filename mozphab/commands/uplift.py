@@ -80,9 +80,7 @@ def uplift(repo, args):
 def add_parser(parser):
     uplift_parser = parser.add_parser(
         "uplift",
-        # Hide `moz-phab uplift` from the help for bug 1754057.
-        # TODO: This should be reverted shortly after.
-        # help="Create differential revisions requesting uplift",
+        help="Submit uplift request commit(s) to Phabricator.",
         description=(
             "MozPhab will create a new revision to request patches be uplifted "
             "to stable release trains."
