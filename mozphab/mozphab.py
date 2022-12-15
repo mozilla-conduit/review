@@ -27,7 +27,11 @@ from .logger import init_logging, logger, stop_logging
 from .spinner import wait_message
 from .sentry import init_sentry, report_to_sentry
 from .telemetry import telemetry, configure_telemetry
-from .updater import check_for_updates, self_upgrade
+from .updater import (
+    check_for_updates,
+    log_windows_update_message,
+    self_upgrade,
+)
 
 from packaging.version import Version
 
@@ -94,7 +98,9 @@ def main(argv, *, is_development):
         elif args.command != "self-update":
             new_version = check_for_updates()
 
-            if new_version and config.self_auto_update:
+            if new_version and environment.IS_WINDOWS:
+                log_windows_update_message()
+            elif new_version and config.self_auto_update:
                 with wait_message(f"Upgrading to version {new_version}"):
                     self_upgrade()
                 restart_mozphab()

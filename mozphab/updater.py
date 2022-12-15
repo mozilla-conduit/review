@@ -61,6 +61,13 @@ def parse_latest_prerelease_version(simple_json: dict) -> str:
     return str(max(Version(version) for version in versions))
 
 
+def log_windows_update_message():
+    """Log a message telling users to update `moz-phab` to the latest version."""
+    logger.warning(
+        "Please run `pip install --upgrade MozPhab` to ugprade to the latest version."
+    )
+
+
 def check_for_updates(force_check: bool = False) -> Optional[str]:
     """Check if an update is available for `moz-phab`.
 
