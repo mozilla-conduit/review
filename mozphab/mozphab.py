@@ -31,13 +31,6 @@ from .updater import check_for_updates, self_upgrade
 
 from packaging.version import Version
 
-# Known Issues
-# - commits with a description already modified by arc (ie. the follow the arc commit
-#   description template with 'test plan', subscribers, etc) are not handled by this
-#   script.  commits in this format should be detected and result in the commit being
-#   rejected.  ideally this should extract the title, body, reviewers, and bug-id
-#   from the arc template and reformat to the standard mozilla format.
-
 
 def restart_mozphab():
     """Restart `moz-phab`, re-using the previous command line."""
