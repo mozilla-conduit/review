@@ -1,4 +1,6 @@
-# Phabricator CLI from Mozilla to support submission of a series of commits
+# moz-phab
+
+Phabricator CLI from Mozilla to support submission of a series of commits.
 
 ## Installation
 
@@ -15,7 +17,7 @@ release when available. To force update `moz-phab`, run `moz-phab self-update`.
 
 ### Changelog
 
-https://wiki.mozilla.org/MozPhab#Changelog
+Changelog is available on the [MozPhab page on Mozilla Wiki](https://wiki.mozilla.org/MozPhab/Changelog).
 
 ## Configuration
 
@@ -23,7 +25,7 @@ https://wiki.mozilla.org/MozPhab#Changelog
 
 This file will be created if it doesn't exist.
 
-```
+```ini
 [ui]
 no_ansi = False
 
@@ -76,44 +78,50 @@ report_to_sentry = True
     `moz-phab` will look for the SHA1 in the first commit. If `"here"` - current
     commit/checkout will be used (default: base).
 - `patch.create_bookmark` : Affects only when patching a Mercurial repository. If
-    `True` moz-phab will create a bookmark (based on the last revision number) for the
-    new DAG branch point.
-- `patch.create_topic : Affects only when patching a Mercurial repository.
+    `True` moz-phab will create a bookmark (based on the last revision number)
+    for the new DAG branch point.
+- `patch.create_topic` : Affects only when patching a Mercurial repository.
     Requires the `topic` extension to be enabled. If `True` moz-phab will
     create a topic (based on the last revision number) for the new DAG branch
     point.
 - `patch.always_full_stack` : When `False` and the patched revision has successors,
     moz-phab will ask if the whole stack should be patched instead. If `True`
     moz-phab will do it without without asking.
-- `updater.self_last_check` : Epoch timestamp (local timezone) indicating the last time
-    an update check was performed for this script.  set to `-1` to disable this check.
+- `updater.self_last_check` : Epoch timestamp (local timezone) indicating the last
+   time an update check was performed for this script.  set to `-1` to disable
+   this check.
 - `self_auto_update` : When `True` moz-phab will auto-update if a new version is
     available. If `False` moz-phab will only warn about the new version.
-- `get_pre_releases` : When `True` moz-phab auto-update will fetch pre-releases if they
-    are available, otherwise pre-releases will be ignored (default: `False`).
-- `error_reporting.report_to_sentry` : When `True` moz-phab will submit exceptions to
-    Sentry so moz-phab devs can see unreported errors.
+- `get_pre_releases` : When `True` moz-phab auto-update will fetch pre-releases
+   if they are available, otherwise pre-releases will be ignored (default: `False`).
+- `error_reporting.report_to_sentry` : When `True` moz-phab will submit exceptions
+   to Sentry so moz-phab devs can see unreported errors.
 
-`moz-phab` can also be configured via the following environmental variables:
+### Environment Variables
+
+`moz-phab` can also be configured via the following environment variables:
+
 - `DEBUG` : Enabled debugging output (default: disabled).
-- `MOZPHAB_NO_USER_CONFIG` : Do not read from or write to `~/.moz-phab-config` 
+- `MOZPHAB_NO_USER_CONFIG` : Do not read from or write to `~/.moz-phab-config`
   (default: disabled).
 
 ## Execution
 
 To get information about all available commands run
-```
-  $ moz-phab -h
+
+```shell
+moz-phab -h
 ```
 
 All commands involving VCS (like `submit` and `patch`) might be used with a
 `--safe-mode` switch. It will run the VCS command with only chosen set of extensions.
 
 ### Submitting commits to Phabricator
+
 The simplest invocation is
 
-```
-  $ moz-phab [start_rev] [end_rev]
+```shell
+moz-phab [start_rev] [end_rev]
 ```
 
 If no positional arguments (`start_rev`/`end_rev`) are given, the
@@ -150,14 +158,13 @@ abandoned manually.  See
 planned fixes.  Also note that "fix-up" commits are not yet supported;
 see [bug 1481542](https://bugzilla.mozilla.org/show_bug.cgi?id=1481542).
 
-
 ### Downloading a patch from Phabricator
 
 `moz-phab patch` allows patching an entire stack of revisions. The simplest
 invocation is
 
-```
-  $ moz-phab patch revision_id
+```shell
+moz-phab patch revision_id
 ```
 
 To patch a stack ending with the revision `D123` run `moz-phab patch D123`.
@@ -206,8 +213,8 @@ This behavior can be modified with few options:
 If you've changed the local stack by adding, removing or moving the commits around,
 you need to change the parent/child relation of the revisions in Phabricator.
 
-`moz-phab reorg` command will compare the stack, display what will be changed and 
-ask for permission before taking any action.
+`moz-phab reorg` command will compare the stack, display what will be changed
+and ask for permission before taking any action.
 
 ### Associating a commit to an existing phabricator revision
 
@@ -220,7 +227,7 @@ If that isn't an option for whatever reason, you can associate a new commit to
 the same revision by adding a line similar to the following to the extended
 commit message:
 
-```
+```text
 Differential Revision: https://phabricator.services.mozilla.com/D[revision]
 ```
 
@@ -235,14 +242,14 @@ for more details about uplifts.
 To see which trains can be submitted for an uplift request:
 
 ```shell
-$ moz-phab uplift --list-trains
+moz-phab uplift --list-trains
 ```
 
 `moz-phab uplift` uses the same syntax as `moz-phab submit`. To submit an uplift
 request against mozilla-beta:
 
 ```shell
-$ moz-phab uplift start_rev end_rev --train beta
+moz-phab uplift start_rev end_rev --train beta
 ```
 
 When you submit an uplift within a unified repo (i.e., `mozilla-unified` or `gecko-dev`),
@@ -271,11 +278,16 @@ using the default settings.
 1. Ensure you have Python 3, Git, and Mercurial installed
    - eg. using `homebrew` on macOS, or your Linux distribution's package manager
    - `python3`, `git`, and `hg` executables must be on the system path
-2. In your clone of this repository run the following commands (adjusting to the version of Python):
-   - `python3 -m venv venv`
-   - `source venv/bin/activate`
-   - `pip3 install -r dev/requirements/python3.9.txt`
-   - `pip3 install -e .`
+2. In your clone of this repository run the following commands (adjusting to the
+   version of Python):
+
+   ```shell
+   `python3 -m venv venv`
+   `source venv/bin/activate`
+   `pip3 install -r dev/requirements/python3.9.txt`
+   `pip3 install -e .`
+   ```
+
 3. To run moz-phab after making modifications use `moz-phab`
 4. To run tests use `pytest -vv`
 5. To exit the virtual environment, use `deactivate`
@@ -298,13 +310,13 @@ using the default settings.
 
 Requirements files (those found in the `dev/requirements` directory) are automatically
 generated using pip-tools. These requirement files are used in the CircleCI
-configuration to install requirements that run remotely on CircleCI. You can use Docker
-to regenerate these files.
+configuration to install requirements that run remotely on CircleCI. You can use
+Docker to regenerate these files.
 
 #### On Linux
 
-To generate `dev/requirements/python*.*.txt`, run the following commands while in the
-`dev` directory:
+To generate `dev/requirements/python*.*.txt`, run the following commands while
+in the `dev` directory:
 
 - `docker-compose run generate-python3.7-requirements`
 - `docker-compose run generate-python3.8-requirements`
@@ -368,7 +380,7 @@ You can order the suite to use your local code by calling:
 
 ```shell
 docker-compose -f docker-compose.yml -f docker-compose.review.yml run local-dev
-````
+```
 
 ### Creating Releases
 
@@ -385,5 +397,5 @@ To cut a new release of `moz-phab`:
 2. Post about the new release in the following channels. Run the `dev/release_announcement.py`
    script to generate text for the post.
 
-    - [MozPhab on Mozilla Wiki](https://wiki.mozilla.org/MozPhab/Changelog)
-    - [Firefox Tooling Announcements on Discourse](https://discourse.mozilla.org/c/firefox-tooling-announcements)
+   - [MozPhab on Mozilla Wiki](https://wiki.mozilla.org/MozPhab/Changelog)
+   - [Firefox Tooling Announcements on Discourse](https://discourse.mozilla.org/c/firefox-tooling-announcements)
