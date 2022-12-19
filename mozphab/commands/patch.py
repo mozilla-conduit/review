@@ -259,9 +259,9 @@ def check_revision_id(value):
 
 
 def add_parser(parser):
-    patch_parser = parser.add_parser("patch", help="Patch from Phabricator revision")
+    patch_parser = parser.add_parser("patch", help="Patch from Phabricator revision.")
     patch_parser.add_argument(
-        "revision_id", type=check_revision_id, help="Revision number"
+        "revision_id", type=check_revision_id, help="Revision number."
     )
     patch_group = patch_parser.add_mutually_exclusive_group()
     patch_group.add_argument(
@@ -270,70 +270,70 @@ def add_parser(parser):
         "-a",
         metavar="TARGET",
         dest="apply_to",
-        help="Where to apply the patch? <{NODE}|here|base> (default: %s)"
+        help="Where to apply the patch? <{NODE}|here|base> (default: %s)."
         % config.apply_patch_to,
     )
     patch_group.add_argument(
-        "--raw", action="store_true", help="Prints out the raw diff to the STDOUT"
+        "--raw", action="store_true", help="Prints out the raw diff to the STDOUT."
     )
     patch_parser.add_argument(
         "--name",
         "-n",
         dest="name",
         metavar="NAME",
-        help="Use the given name for the bookmark, topic, or branch",
+        help="Use the given name for the bookmark, topic, or branch.",
     )
     patch_parser.add_argument(
         "--no-commit",
         "--nocommit",
         action="store_true",
         dest="no_commit",
-        help="Do not commit. Applies the changes with the `patch` command",
+        help="Do not commit. Applies the changes with the `patch` command.",
     )
     patch_parser.add_argument(
         "--no-bookmark",
         "--nobookmark",
         action="store_true",
         dest="no_bookmark",
-        help="(Mercurial only) Do not create the bookmark",
+        help="(Mercurial only) Do not create the bookmark.",
     )
     patch_parser.add_argument(
         "--no-topic",
         "--notopic",
         action="store_true",
         dest="no_topic",
-        help="(Mercurial only) Do not create the topic",
+        help="(Mercurial only) Do not create the topic.",
     )
     patch_parser.add_argument(
         "--no-branch",
         "--nobranch",
         action="store_true",
         dest="no_branch",
-        help="(Git only) Do not create the branch",
+        help="(Git only) Do not create the branch.",
     )
     patch_parser.add_argument(
         "--skip-dependencies",
         action="store_true",
-        help="Do not search for dependencies; patch only one revision",
+        help="Do not search for dependencies; patch only one revision.",
     )
     patch_parser.add_argument(
-        "--include-abandoned", action="store_true", help="Apply abandoned revisions"
+        "--include-abandoned", action="store_true", help="Apply abandoned revisions."
     )
     patch_parser.add_argument(
         "--yes",
         "-y",
         action="store_true",
-        help="Patch without confirmation (default: False)",
+        help="Patch without confirmation (default: False).",
     )
     patch_parser.add_argument(
         "--safe-mode",
         dest="safe_mode",
         action="store_true",
-        help="Run VCS with only necessary extensions",
+        help="Run VCS with only necessary extensions.",
     )
     patch_parser.add_argument(
         "--force-vcs",
         action="store_true",
-        help="EXPERIMENTAL: Override VCS compatibility check",
+        help="EXPERIMENTAL: Override VCS compatibility check.",
     )
     patch_parser.set_defaults(func=patch, needs_repo=True)

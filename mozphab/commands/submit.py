@@ -723,76 +723,76 @@ def add_parser(parser):
 def add_submit_arguments(parser):
     """Add `moz-phab submit` command line arguments to a parser."""
     parser.add_argument(
-        "--path", "-p", help="Set path to repository (default: detected)"
+        "--path", "-p", help="Set path to repository (default: detected)."
     )
     parser.add_argument(
         "--yes",
         "-y",
         action="store_true",
-        help="Submit without confirmation (default: %s)" % config.auto_submit,
+        help="Submit without confirmation (default: %s)." % config.auto_submit,
     )
     parser.add_argument(
         "--interactive",
         "-i",
         action="store_true",
-        help="Submit with confirmation (default: %s)" % (not config.auto_submit),
+        help="Submit with confirmation (default: %s)." % (not config.auto_submit),
     )
     parser.add_argument(
         "--message",
         "-m",
-        help="Provide a custom update message (default: none)",
+        help="Provide a custom update message (default: none).",
     )
     parser.add_argument(
         "--force",
         "-f",
         action="store_true",
-        help="Override sanity checks and force submission; a tool of last resort",
+        help="Override sanity checks and force submission; a tool of last resort.",
     )
     parser.add_argument(
         "--force-delete",
         action="store_true",
         help="Mercurial only: Ignore error caused by a DAG branch point without "
-        "evolve installed",
+        "evolve installed.",
     )
     parser.add_argument(
-        "--bug", "-b", help="Set Bug ID for all commits (default: from commit)"
+        "--bug", "-b", help="Set Bug ID for all commits (default: from commit)."
     )
     parser.add_argument(
         "--no-bug",
         action="store_true",
-        help="Continue if a bug number is not provided",
+        help="Continue if a bug number is not provided.",
     )
     parser.add_argument(
         "--reviewer",
         "--reviewers",
         "-r",
         action="append",
-        help="Set review(s) for all commits (default: from commit)",
+        help="Set review(s) for all commits (default: from commit).",
     )
     parser.add_argument(
         "--blocker",
         "--blockers",
         "-R",
         action="append",
-        help="Set blocking review(s) for all commits (default: from commit)",
+        help="Set blocking review(s) for all commits (default: from commit).",
     )
     parser.add_argument(
         "--nolint",
         "--no-lint",
         action="store_true",
-        help="Do not run lint (default: lint changed files if configured)",
+        help="Do not run lint (default: lint changed files if configured).",
     )
     parser.add_argument(
         "--check-in-needed",
         action="store_true",
-        help="Add a `check-in-needed tag to the top most revision",
+        help="Add a `check-in-needed tag to the top most revision.",
     )
     wip_group = parser.add_mutually_exclusive_group()
     wip_group.add_argument(
         "--wip",
         "--plan-changes",
         action="store_true",
-        help="Create or update a revision without requesting a code review",
+        help="Create or update a revision without requesting a code review.",
     )
     wip_group.add_argument(
         "--no-wip",
@@ -817,41 +817,41 @@ def add_submit_arguments(parser):
     parser.add_argument(
         "--no-stack",
         action="store_true",
-        help="Submit multiple commits, but do not mark them as dependent",
+        help="Submit multiple commits, but do not mark them as dependent.",
     )
     parser.add_argument(
         "--upstream",
         "--remote",
         "-u",
         action="append",
-        help='Set upstream branch to detect the starting commit (default: "")',
+        help='Set upstream branch to detect the starting commit (default: "").',
     )
     parser.add_argument(
         "--force-vcs",
         action="store_true",
-        help="EXPERIMENTAL: Override VCS compatibility check",
+        help="EXPERIMENTAL: Override VCS compatibility check.",
     )
     parser.add_argument(
         "--safe-mode",
         dest="safe_mode",
         action="store_true",
-        help="Run VCS with only necessary extensions",
+        help="Run VCS with only necessary extensions.",
     )
     parser.add_argument(
         "--single",
         "-s",
         action="store_true",
-        help="Submit a single commit",
+        help="Submit a single commit.",
     )
     parser.add_argument(
         "start_rev",
         nargs="?",
         default=environment.DEFAULT_START_REV,
-        help="Start revision of range to submit (default: detected)",
+        help="Start revision of range to submit (default: detected).",
     )
     parser.add_argument(
         "end_rev",
         nargs="?",
         default=environment.DEFAULT_END_REV,
-        help="End revision of range to submit (default: current commit)",
+        help="End revision of range to submit (default: current commit).",
     )

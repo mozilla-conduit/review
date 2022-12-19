@@ -38,12 +38,12 @@ def doctor(repo, args):
 
 def add_parser(parser):
     doctor_parser = parser.add_parser(
-        "doctor", help="Ensure your moz-phab installation is valid"
+        "doctor", help="Ensure your moz-phab installation is valid."
     )
     doctor_parser.add_argument(
         "--safe-mode",
         dest="safe_mode",
         action="store_true",
-        help="Run VCS with only necessary extensions",
+        help="Run VCS with only necessary extensions.",
     )
     doctor_parser.set_defaults(func=doctor, needs_repo=True)

@@ -260,36 +260,36 @@ def reorganise(repo, args):
 
 
 def add_parser(parser):
-    reorg_parser = parser.add_parser("reorg", help="Reorganise commits in Phabricator")
+    reorg_parser = parser.add_parser("reorg", help="Reorganise commits in Phabricator.")
     reorg_parser.add_argument(
         "--yes",
         "-y",
         action="store_true",
-        help="Reorganise without confirmation (default: False)",
+        help="Reorganise without confirmation (default: False).",
     )
     reorg_parser.add_argument(
         "--safe-mode",
         dest="safe_mode",
         action="store_true",
-        help="Run VCS with only necessary extensions",
+        help="Run VCS with only necessary extensions.",
     )
     reorg_parser.add_argument(
         "--upstream",
         "--remote",
         "-u",
         action="append",
-        help='Set upstream branch to detect the starting commit (default: "")',
+        help='Set upstream branch to detect the starting commit (default: "").',
     )
     reorg_parser.add_argument(
         "start_rev",
         nargs="?",
         default="(auto)",
-        help="Start revision of range to reorganise (default: detected)",
+        help="Start revision of range to reorganise (default: detected).",
     )
     reorg_parser.add_argument(
         "end_rev",
         nargs="?",
         default=".",
-        help="End revision of range to reorganise (default: current commit)",
+        help="End revision of range to reorganise (default: current commit).",
     )
     reorg_parser.set_defaults(func=reorganise, needs_repo=True)

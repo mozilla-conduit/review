@@ -36,5 +36,5 @@ def self_update(_):
 
 
 def add_parser(parser):
-    update_parser = parser.add_parser("self-update", help="Update review script")
+    update_parser = parser.add_parser("self-update", help="Update review script.")
     update_parser.set_defaults(func=self_update, needs_repo=False)

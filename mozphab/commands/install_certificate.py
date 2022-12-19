@@ -43,12 +43,12 @@ def install_certificate(repo, args):
 
 def add_parser(parser):
     cert_parser = parser.add_parser(
-        "install-certificate", help="Configure your Phabricator API Token"
+        "install-certificate", help="Configure your Phabricator API Token."
     )
     cert_parser.add_argument(
         "--safe-mode",
         dest="safe_mode",
         action="store_true",
-        help="Run VCS with only necessary extensions",
+        help="Run VCS with only necessary extensions.",
     )
     cert_parser.set_defaults(func=install_certificate, needs_repo=True)
