@@ -7,12 +7,38 @@ import os
 import textwrap
 
 from importlib import import_module
+from typing import List, Set
 
 from mozphab import commands
 
 from .config import config
 from .detect_repository import find_repo_root
 from .logger import logger
+
+
+def should_fallback_to_submit(argv: List[str], commands: Set[str]) -> bool:
+    """Return `True` if `moz-phab` should fallback to `submit` command.
+
+    If `moz-phab` is called without a command and from within a repository,
+    default to submit.
+    """
+    # Just running `moz-phab` with no arguments means fallback.
+    if not argv:
+        return True
+
+    # Don't fallback if help args are passed.
+    if any(help_arg in set(argv) for help_arg in {"-h", "--help"}):
+        return False
+
+    # Don't fallback if a known command is passed.
+    if argv[0] in commands:
+        return False
+
+    # Don't fallback when we aren't in a repo.
+    if not find_repo_root(os.getcwd()):
+        return False
+
+    return True
 
 
 def parse_args(argv):
@@ -61,15 +87,10 @@ def parse_args(argv):
     help_parser.add_argument("command", nargs=argparse.OPTIONAL)
     help_parser.set_defaults(print_help=True)
 
-    # if we're called without a command and from within a repository,
-    # default to submit.
-    fallback = False
-    if not argv or (
-        not (set(argv) & {"-h", "--help"})
-        and argv[0] not in [choice for choice in commands_parser.choices]
-        and find_repo_root(os.getcwd())
-    ):
-        fallback = True
+    fallback = should_fallback_to_submit(
+        argv, {command for command in commands_parser.choices}
+    )
+    if fallback:
         argv.insert(0, "submit")
 
     main_args, unknown = main_parser.parse_known_args(argv)
