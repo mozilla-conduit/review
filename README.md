@@ -382,7 +382,8 @@ To cut a new release of `moz-phab`:
     git push origin 1.2.0
     ```
 
-2. Post about the new release in the following channels:
+2. Post about the new release in the following channels. Run the `dev/release_announcement.py`
+   script to generate text for the post.
 
     - [MozPhab on Mozilla Wiki](https://wiki.mozilla.org/MozPhab/Changelog)
     - [Firefox Tooling Announcements on Discourse](https://discourse.mozilla.org/c/firefox-tooling-announcements)
