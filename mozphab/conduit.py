@@ -11,6 +11,7 @@ import urllib.parse as url_parse
 import urllib.request as url_request
 
 from mozphab import environment
+from typing import List, Optional
 
 from .environment import USER_AGENT
 from .exceptions import (
@@ -302,16 +303,27 @@ class ConduitAPI:
         else:
             return [revisions[phid] for phid in phids]
 
-    def get_diffs(self, phids):
+    def get_diffs(
+        self, ids: Optional[List[int]] = None, phids: Optional[List[str]] = None
+    ) -> dict:
         """Get diffs from Phabricator.
 
         Args:
+            ids - a list of diff IDs to pull
             phids - a list of diff PHIDs to pull
 
         Returns a dict of diffs identified by their PHID
         """
+        if (ids and phids) or (ids is None and phids is None):
+            raise ValueError("Internal Error: Invalid args to get_diffs")
+
+        if ids:
+            constraints = {"ids": list(set(ids))}
+        else:
+            constraints = {"phids": list(set(phids))}
+
         api_call_args = {
-            "constraints": {"phids": phids},
+            "constraints": constraints,
             "attachments": {"commits": True},
         }
         response = self.call("differential.diff.search", api_call_args)

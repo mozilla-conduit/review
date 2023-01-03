@@ -24,6 +24,41 @@ def test_check_revision_id():
         check_revision_id("https://example.com/")
 
 
+@mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
+def test_get_diff_by_id(m_get_diffs):
+    args = {}
+    with pytest.raises(exceptions.Error):
+        patch.get_diff_by_id(args.get("diff_id"))
+
+    args = {"diff_id": 1}
+    m_get_diffs.return_value = {"DIFFPHID-1": {"id": 1}}
+    phid, diff = patch.get_diff_by_id(args.get("diff_id"))
+    assert phid == "DIFFPHID-1", "Should return PHID as first element"
+    assert diff["id"] == 1, "Should return diff dict as second element"
+
+    m_get_diffs.return_value = {}
+    with pytest.raises(exceptions.NotFoundError):
+        patch.get_diff_by_id(args.get("diff_id"))
+
+
+def test_update_revision_with_new_diff():
+    revs = [REV_1]
+    patch.update_revision_with_new_diff(revs, DIFF_3)
+    assert (
+        revs[0]["fields"]["diffPHID"] == "DIFFPHID-3"
+    ), "Should update related revision"
+
+    revs = [REV_1, REV_2]
+    patch.update_revision_with_new_diff(revs, DIFF_1)
+    assert (
+        revs[0]["fields"]["diffPHID"] == "DIFFPHID-1"
+    ), "Should update related revision when given multiple revisions"
+
+    # Should raise an error for unrelated diff
+    with pytest.raises(exceptions.Error):
+        patch.update_revision_with_new_diff(revs, DIFF_4)
+
+
 def test_strip_depends_on():
     strip = helpers.strip_depends_on
 
@@ -128,6 +163,7 @@ def test_patch(
             include_abandoned=False,
             force_vcs=False,
             name=None,
+            diff_id=None,
         ):
             self.revision_id = revision_id
             self.no_commit = no_commit
@@ -138,6 +174,7 @@ def test_patch(
             self.include_abandoned = include_abandoned
             self.force_vcs = force_vcs
             self.name = name
+            self.diff_id = diff_id
 
     git.args = Args()
     m_git_check_conduit.return_value = True
@@ -162,25 +199,7 @@ def test_patch(
             fields=dict(diffPHID="DIFFPHID-1", title="title", summary="summary"),
         )
     ]
-    m_get_diffs.return_value = {
-        "DIFFPHID-1": {
-            "id": 1,
-            "fields": dict(dateCreated=1547806078),
-            "attachments": dict(
-                commits=dict(
-                    commits=[
-                        dict(
-                            author=dict(
-                                name="user",
-                                email="author@example.com",
-                                epoch=1547806078,
-                            )
-                        )
-                    ]
-                )
-            ),
-        }
-    }
+    m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
     m_git_check_node.return_value = "sha111"
     m_prepare_body.return_value = "commit message"
     patch.patch(git, git.args)
@@ -195,23 +214,7 @@ def test_patch(
     m_git_before_patch.assert_called_once_with("sha111", "phab-D1")
 
     m_git_apply_patch.reset_mock()
-    m_get_diffs.return_value = {
-        "DIFFPHID-1": {
-            "id": 1,
-            "fields": dict(dateCreated=1547806078),
-            "attachments": dict(
-                commits=dict(
-                    commits=[
-                        dict(
-                            author=dict(
-                                name="user", email="author@example.com", epoch=None
-                            )
-                        )
-                    ]
-                )
-            ),
-        }
-    }
+    m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
     patch.patch(git, git.args)
     m_git_apply_patch.assert_called_once_with(
         "raw",
@@ -220,6 +223,38 @@ def test_patch(
         1547806078,
     )
 
+    # --diff-id
+    m_get_diffs.side_effect = [
+        {"DIFFPHID-1": DIFF_1},
+        {"DIFFPHID-3": DIFF_3},
+    ]
+    git.args = Args(diff_id=3)
+    patch.patch(git, git.args)
+    m_git_apply_patch.assert_called_with(
+        "raw",
+        "commit message",
+        "user 3 <author@example.com>",
+        1547806078,
+    )
+    m_get_diffs.side_effect = None
+
+    # --diff-id raises NotFoundError
+    m_get_diffs.return_value = {}
+    git.args = Args(diff_id=100)
+    with pytest.raises(exceptions.NotFoundError):
+        patch.patch(git, git.args)
+
+    # --diff-id raises Error when belonging to different rev
+    m_get_diffs.side_effect = [
+        {"DIFFPHID-1": DIFF_1},
+        {"DIFFPHID-4": DIFF_4},
+    ]
+    git.args = Args(diff_id=4)
+    with pytest.raises(exceptions.Error):
+        patch.patch(git, git.args)
+    m_get_diffs.side_effect = None
+
+    m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
     m_get_base_ref.return_value = None
     with pytest.raises(exceptions.Error):
         patch.patch(git, git.args)
@@ -368,14 +403,54 @@ REV_2 = dict(
 
 DIFF_1 = dict(
     id=1,
+    phid="DIFFPHID-1",
+    fields=dict(revisionPHID="PHID-1", dateCreated=1547806078),
+    attachments=dict(
+        commits=dict(
+            commits=[
+                dict(
+                    author=dict(
+                        name="user", email="author@example.com", epoch=1547806078
+                    )
+                )
+            ]
+        )
+    ),
+)
+
+DIFF_2 = dict(
+    id=2,
+    phid="DIFFPHID-2",
     attachments=dict(
         commits=dict(
             commits=[dict(author=dict(name="user", email="author@example.com"))]
         )
     ),
 )
-DIFF_2 = dict(
-    id=2,
+
+DIFF_3 = dict(
+    id=3,
+    phid="DIFFPHID-3",
+    fields=dict(revisionPHID="PHID-1", dateCreated=1547806078),
+    attachments=dict(
+        commits=dict(
+            commits=[
+                dict(
+                    author=dict(
+                        name="user 3",
+                        email="author@example.com",
+                        epoch=1547806078,
+                    )
+                )
+            ]
+        )
+    ),
+)
+
+DIFF_4 = dict(
+    id=4,
+    phid="DIFFPHID-4",
+    fields=dict(revisionPHID="PHID-100"),
     attachments=dict(
         commits=dict(
             commits=[dict(author=dict(name="user", email="author@example.com"))]

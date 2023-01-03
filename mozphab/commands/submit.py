@@ -122,7 +122,9 @@ def show_commit_stack(
 
             # preload diffs
             with wait_message("Loading diffs..."):
-                diffs = conduit.get_diffs([r["fields"]["diffPHID"] for r in revisions])
+                diffs = conduit.get_diffs(
+                    phids=[r["fields"]["diffPHID"] for r in revisions]
+                )
 
     for commit in reversed(commits):
         if show_updated_only and not commit["submit"]:

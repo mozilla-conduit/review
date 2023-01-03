@@ -295,20 +295,90 @@ def test_get_revisions_search_by_revids_missing(get_revs, m_call):
     ]
 
 
-@mock.patch("mozphab.conduit.ConduitAPI.call")
-def test_get_diffs(m_call):
-    conduit = mozphab.conduit
-    get_diffs = conduit.get_diffs
+@pytest.fixture
+def get_diffs():
+    mozphab.conduit.set_repo(repository.Repository("", "", "dummy"))
+    return mozphab.conduit.get_diffs
 
-    m_call.return_value = {}
-    m_call.return_value = dict(
-        data=[dict(phid="PHID-1"), dict(phid="PHID-2"), dict(phid="PHID-3")]
+
+def test_get_diffs_both_ids_and_phids_fails(get_diffs, m_call):
+    with pytest.raises(ValueError):
+        get_diffs(ids=[1], phids=["PHID-1"])
+
+
+def test_get_diffs_none_ids_fails(get_diffs, m_call):
+    with pytest.raises(ValueError):
+        get_diffs(ids=None)
+
+
+def test_get_diffs_none_phids_fails(get_diffs, m_call):
+    with pytest.raises(ValueError):
+        get_diffs(phids=None)
+
+
+def test_get_diffs_by_phid(get_diffs, m_call):
+    m_call.return_value = basic_phab_result
+
+    assert (
+        len(get_diffs(phids=["PHID-1"])) == 1
+    ), "Should be a length of 1 when given 1 PHID"
+    m_call.assert_called_with(
+        "differential.diff.search",
+        dict(constraints=dict(phids=["PHID-1"]), attachments=dict(commits=True)),
     )
-    assert get_diffs(["PHID-2", "PHID-1", "PHID-3"]) == {
-        "PHID-1": dict(phid="PHID-1"),
-        "PHID-2": dict(phid="PHID-2"),
-        "PHID-3": dict(phid="PHID-3"),
-    }
+
+
+def test_get_diffs_by_id(get_diffs, m_call):
+    m_call.return_value = basic_phab_result
+
+    assert len(get_diffs(ids=[1])) == 1, "Should be a length of 1 when given 1 ID"
+    m_call.assert_called_with(
+        "differential.diff.search",
+        dict(constraints=dict(ids=[1]), attachments=dict(commits=True)),
+    )
+
+
+def test_get_diffs_search_by_phid_with_dups(get_diffs, m_call):
+    """differential.diff.search by phid with duplicates"""
+    m_call.return_value = basic_phab_result
+
+    assert (
+        len(get_diffs(phids=["PHID-1", "PHID-1"])) == 1
+    ), "Should not include redundant/duplicate diffs via PHID"
+    m_call.assert_called_with(
+        "differential.diff.search",
+        dict(constraints=dict(phids=["PHID-1"]), attachments=dict(commits=True)),
+    )
+
+
+def test_get_diffs_search_by_diffid_with_dups(get_diffs, m_call):
+    """differential.diff.search by diff-id with duplicates"""
+    m_call.return_value = basic_phab_result
+
+    assert (
+        len(get_diffs(ids=[1, 1])) == 1
+    ), "Should not include redundant/duplicate diffs via ID"
+    m_call.assert_called_with(
+        "differential.diff.search",
+        dict(constraints=dict(ids=[1]), attachments=dict(commits=True)),
+    )
+
+
+def test_get_diffs_search_by_diffids_missing(get_diffs, m_call):
+    """phabricator does not return info on all diff ids"""
+    m_call.return_value = multiple_phab_result
+
+    diff_dict = get_diffs(ids=[2, 4, 1, 3])
+    assert diff_dict.get("PHID-1") == dict(
+        id=1, phid="PHID-1"
+    ), "Should return dict of Diff 1"
+    assert diff_dict.get("PHID-2") == dict(
+        id=2, phid="PHID-2"
+    ), "Should return dict of Diff 2"
+    assert diff_dict.get("PHID-3") == dict(
+        id=3, phid="PHID-3"
+    ), "Should return dict of Diff 3"
+    assert not diff_dict.get("PHID-4"), "Should not return dict of non-existent diff"
 
 
 @mock.patch("mozphab.conduit.ConduitAPI.call")

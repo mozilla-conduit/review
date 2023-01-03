@@ -6,6 +6,8 @@ import argparse
 import re
 import subprocess
 
+from typing import List, Tuple
+
 from mozphab.conduit import conduit
 from mozphab.config import config
 from mozphab.exceptions import Error, NonLinearException, NotFoundError
@@ -20,6 +22,49 @@ def get_base_ref(diff):
     for ref in diff["fields"].get("refs", []):
         if ref["type"] == "base":
             return ref["identifier"]
+
+
+def get_diff_by_id(diff_id: int) -> Tuple[str, dict]:
+    """Retrieves a diff from Phabricator
+
+    Args:
+    * diff_id: the ID of the diff to retrieve
+
+    Returns:
+    * a tuple containing:
+        * the PHID of the requested diff
+        * the dictionary returned by Phabricator
+    """
+    diff_dict = conduit.get_diffs(ids=[diff_id])
+    if not diff_dict:
+        raise NotFoundError(f"Could not find diff with ID of {diff_id}.")
+
+    if len(diff_dict) != 1:
+        raise Error(f"Unexpected result received from Phabricator for Diff {diff_id}.")
+
+    requested_diff_phid = list(diff_dict.keys())[0]
+    return requested_diff_phid, diff_dict[requested_diff_phid]
+
+
+def update_revision_with_new_diff(revs: List[dict], diff: dict) -> None:
+    """Updates the revision to point to the given diff if they are related
+
+    Args:
+    * revs: list of revisions
+    * diff: the new diff to point to
+
+    Returns:
+    * None if the diff is related to a revision in the list
+
+    Raises:
+    * Error if no relation is found
+    """
+    for rev in revs:
+        if diff["fields"]["revisionPHID"] == rev["phid"]:
+            rev["fields"]["diffPHID"] = diff["phid"]
+            return
+
+    raise Error(f"Diff {diff['id']} is not related to any revision in the stack.")
 
 
 def patch(repo, args):
@@ -42,6 +87,7 @@ def patch(repo, args):
     * Error if Phabricator revision is not found
     * Error if `--apply-to base` and no base commit found in the first diff
     * Error if base commit not found in repository
+    * Error if `--diff-id` does not belong to any revision in the stack
     """
     # Check if raw Conduit API can be used
     with wait_message("Checking connection to Phabricator."):
@@ -143,7 +189,14 @@ def patch(repo, args):
 
     # Pull diffs
     with wait_message("Downloading patch information.."):
-        diffs = conduit.get_diffs([r["fields"]["diffPHID"] for r in revs])
+        diffs = conduit.get_diffs(phids=[r["fields"]["diffPHID"] for r in revs])
+
+    # If a user specifies a diff ID, retrieve the diff and add it to the diff mapping,
+    # and overwrite the diffPHID for the relevant revision
+    if args.diff_id:
+        requested_diff_phid, requested_diff = get_diff_by_id(args.diff_id)
+        diffs[requested_diff_phid] = requested_diff
+        update_revision_with_new_diff(revs, requested_diff)
 
     if not args.no_commit and not args.raw:
         for rev in revs:
@@ -272,6 +325,13 @@ def add_parser(parser):
         dest="apply_to",
         help="Where to apply the patch? <{NODE}|here|base> (default: %s)."
         % config.apply_patch_to,
+    )
+    patch_group.add_argument(
+        "--diff-id",
+        metavar="DIFF_ID",
+        dest="diff_id",
+        type=int,
+        help="The ID of the diff to apply.",
     )
     patch_group.add_argument(
         "--raw", action="store_true", help="Prints out the raw diff to the STDOUT."

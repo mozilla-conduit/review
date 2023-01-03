@@ -206,6 +206,9 @@ This behavior can be modified with few options:
 
 - `--skip-dependencies` : patch only one revision, ignore dependencies.
 
+- `--diff-id DIFF_ID`: used to specify a specific diff within a revision's
+   history to pull.
+
 ### Reorganizing the stack
 
 `moz-phab reorg [start_rev] [end_rev]` allows you to reorganize the stack in Phabricator.
