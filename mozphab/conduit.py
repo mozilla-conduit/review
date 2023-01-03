@@ -18,7 +18,6 @@ from typing import (
 )
 
 from mozphab import environment
-from typing import List, Optional
 
 from .environment import USER_AGENT
 from .exceptions import (
