@@ -588,10 +588,10 @@ def _submit(repo, args):
         revision_to_update = (
             revisions_to_update[commit["rev-id"]] if is_update else None
         )
-        existing_reviewers = (
-            revision_to_update["attachments"]["reviewers"]["reviewers"]
+        has_existing_reviewers = (
+            bool(revision_to_update["attachments"]["reviewers"]["reviewers"])
             if revision_to_update
-            else None
+            else False
         )
 
         # Let the user know something's happening.
@@ -641,7 +641,7 @@ def _submit(repo, args):
             with wait_message("Updating revision..."):
                 rev = conduit.update_revision(
                     commit,
-                    existing_reviewers,
+                    has_existing_reviewers,
                     diff_phid=diff.phid,
                     comment=args.message,
                     check_in_needed=check_in_needed,

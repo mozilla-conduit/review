@@ -118,7 +118,7 @@ def parse_config(config_list, filter_func=None):
     return result
 
 
-def read_json_field(files, field_path):
+def read_json_field(files: List[str], field_path: List[str]) -> Optional[str]:
     """Parses json files in turn returning value as per field_path, or None."""
     for filename in files:
         try:
@@ -163,10 +163,10 @@ def temporary_binary_file(content):
         os.remove(f.name)
 
 
-def get_arcrc_path():
+def get_arcrc_path() -> str:
     """Return a path to the user's Arcanist configuration file."""
     if "arcrc" in cache:
-        return cache.get("arcrc")
+        return str(cache.get("arcrc"))
 
     if environment.IS_WINDOWS:
         arcrc = os.path.join(os.getenv("APPDATA", ""), ".arcrc")
@@ -349,7 +349,7 @@ def strip_depends_on(body):
     return DEPENDS_ON_RE.sub("", body).rstrip()
 
 
-def revision_title_from_commit(commit):
+def revision_title_from_commit(commit: dict) -> str:
     """Returns a string suitable for a Revision title for the given commit."""
     title = WIP_RE.sub("", commit["title-preview"]).lstrip()
     if commit["wip"]:

@@ -6,6 +6,11 @@
 import sys
 
 from collections import OrderedDict
+from typing import (
+    Dict,
+    List,
+    Optional,
+)
 
 from mozphab.conduit import conduit
 from mozphab.exceptions import Error
@@ -15,7 +20,7 @@ from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
 
 
-def to_llist(revisions):
+def to_llist(revisions: List[str]) -> Dict[str, Optional[str]]:
     """Converts a list to a linked list.
 
     Parameters:
@@ -65,10 +70,12 @@ def walk_llist(llist, allow_multiple_heads=False):
     return nodes
 
 
-def stack_transactions(remote_phids, local_phids):
+def stack_transactions(
+    remote_phids: List[str], local_phids: List[str]
+) -> Dict[str, List[Dict]]:
     """Prepare transactions to set the stack as provided in local_phids.
 
-    Returns (OrderedDict) transactions for PHID as defined in
+    Returns a dict of transactions for PHID as defined in
     `differential.revision.edit`.
     """
     remote_list = to_llist(remote_phids)

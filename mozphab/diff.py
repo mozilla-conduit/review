@@ -6,6 +6,11 @@ import operator
 import re
 import concurrent.futures
 
+from typing import (
+    Any,
+    Dict,
+)
+
 from .conduit import conduit
 
 
@@ -127,7 +132,7 @@ class Diff:
             else:
                 self.file_type = Diff.FileType("BINARY")
 
-        def to_conduit(self, node):
+        def to_conduit(self, node: str) -> Dict[str, Any]:
             # Record upload information
             metadata = {}
             for upload in self.uploads:
