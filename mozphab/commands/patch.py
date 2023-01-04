@@ -316,6 +316,8 @@ def add_parser(parser):
     patch_parser.add_argument(
         "revision_id", type=check_revision_id, help="Revision number."
     )
+
+    # `--apply-to` and `--raw` are mutually exclusive.
     patch_group = patch_parser.add_mutually_exclusive_group()
     patch_group.add_argument(
         "--apply-to",
@@ -327,14 +329,15 @@ def add_parser(parser):
         % config.apply_patch_to,
     )
     patch_group.add_argument(
+        "--raw", action="store_true", help="Prints out the raw diff to the STDOUT."
+    )
+
+    patch_parser.add_argument(
         "--diff-id",
         metavar="DIFF_ID",
         dest="diff_id",
         type=int,
         help="The ID of the diff to apply.",
-    )
-    patch_group.add_argument(
-        "--raw", action="store_true", help="Prints out the raw diff to the STDOUT."
     )
     patch_parser.add_argument(
         "--name",
