@@ -6,13 +6,18 @@ import configparser
 import io
 import os
 
+from typing import (
+    Any,
+    Optional,
+)
+
 from mozphab import environment
 
 from .logger import logger
 
 
 class Config(object):
-    def __init__(self, should_access_file=True, filename=None):
+    def __init__(self, should_access_file: bool = True, filename: Optional[str] = None):
         """Sets default config and overrides it with values from the config file.
 
         Kwargs:
@@ -106,12 +111,12 @@ class Config(object):
 
         self.arc = None
 
-    def _set(self, section, option, value):
+    def _set(self, section: str, option: str, value: Any):
         if not self._config.has_section(section):
             self._config.add_section(section)
         self._config.set(section, option, str(value))
 
-    def _getboolean(self, section, option):
+    def _getboolean(self, section: str, option: str) -> bool:
         try:
             return self._config.getboolean(section, option)
         except ValueError as e:
@@ -119,7 +124,7 @@ class Config(object):
                 f"could not convert {section}.{option} to a boolean: {str(e)}"
             )
 
-    def _getint(self, section, option):
+    def _getint(self, section: str, option: str) -> int:
         try:
             return self._config.getint(section, option)
         except ValueError as e:
