@@ -2,13 +2,16 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
+
 from mozphab.conduit import conduit, ConduitAPIError
 from mozphab.environment import INSTALL_CERT_MSG
 from mozphab.helpers import get_arcrc_path, read_json_field
 from mozphab.logger import logger
+from mozphab.repository import Repository
 
 
-def doctor(repo, args):
+def doctor(repo: Repository, args: argparse.Namespace):
     """Validates the user's installation of moz-phab.
 
     Currently, this only retrieves the user's Phabricator
