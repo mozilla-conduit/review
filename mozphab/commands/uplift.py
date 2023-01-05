@@ -2,6 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
+
 from mozphab.conduit import (
     conduit,
 )
@@ -10,6 +12,9 @@ from mozphab.exceptions import (
 )
 from mozphab.logger import (
     logger,
+)
+from mozphab.repository import (
+    Repository,
 )
 from .submit import (
     add_submit_arguments,
@@ -53,7 +58,7 @@ def list_trains():
         logger.info(f"   - {repository['fields']['callsign']}")
 
 
-def uplift(repo, args):
+def uplift(repo: Repository, args: argparse.Namespace):
     if args.list_trains:
         return list_trains()
 
