@@ -3,6 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 import sys
 
 from collections import OrderedDict
@@ -16,6 +17,7 @@ from mozphab.conduit import conduit
 from mozphab.exceptions import Error
 from mozphab.logger import logger
 from mozphab.helpers import augment_commits_from_body, prompt
+from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
 
@@ -36,36 +38,38 @@ def to_llist(revisions: List[str]) -> Dict[str, Optional[str]]:
     return llist
 
 
-def walk_llist(llist, allow_multiple_heads=False):
+def walk_llist(
+    llist: Dict[str, Optional[str]], allow_multiple_heads: bool = False
+) -> List[str]:
     """Parse the llist for multiple heads and return a unique list of elements.
 
     Parameters:
         llist (dict): A linked list. {A_id: B_id, B_id: None}
         allow_multiple_heads (bool): Fail if multiple heads found.
     """
-    referenced_children = [r for r in llist.values() if r]
+    referenced_children = [child for child in llist.values() if child]
 
     # Find head
-    node = None
-    for n in sorted(llist.keys()):
-        if n not in referenced_children:
-            if node:
+    head = None
+    for parent in sorted(llist.keys()):
+        if parent not in referenced_children:
+            if head:
                 if not allow_multiple_heads:
                     raise Error("Multiple heads found.")
                 break
-            node = n
-    if not node:
+            head = parent
+    if not head:
         raise Error("Failed to find head.")
 
     # Walk list, checking for loops
     nodes = []
-    while node:
-        nodes.append(node)
-        child = llist.get(node)
+    while head:
+        nodes.append(head)
+        child = llist.get(head)
         if child and child in nodes:
             raise Error("Dependency loop")
 
-        node = child
+        head = child
 
     return nodes
 
@@ -146,7 +150,7 @@ def stack_transactions(
     return conduit_transactions
 
 
-def reorganise(repo, args):
+def reorganise(repo: Repository, args: argparse.Namespace):
     telemetry().submission.preparation_time.start()
 
     with wait_message("Checking connection to Phabricator."):
