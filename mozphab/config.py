@@ -169,4 +169,4 @@ should_access_file = True
 if os.environ.get("MOZPHAB_NO_USER_CONFIG", False):
     should_access_file = False
 
-config = Config(should_access_file)
+config = Config(should_access_file=should_access_file)
