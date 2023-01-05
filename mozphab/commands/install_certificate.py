@@ -2,13 +2,16 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
+
 from mozphab.conduit import conduit, ConduitAPIError
 from mozphab.helpers import prompt
 from mozphab.logger import logger
+from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 
 
-def install_certificate(repo, args):
+def install_certificate(repo: Repository, args: argparse.Namespace):
     """Asks user to enter the Phabricator API Token.
 
     Named for parity with arc's corresponding command.
