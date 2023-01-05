@@ -2,6 +2,10 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
+
+from typing import List
+
 from mozphab import environment
 
 from mozphab.conduit import conduit
@@ -18,6 +22,7 @@ from mozphab.helpers import (
     update_commit_title_previews,
 )
 from mozphab.logger import logger
+from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
 
@@ -47,7 +52,7 @@ Bug #: {bug_id}
 """.strip()
 
 
-def morph_blocking_reviewers(commits):
+def morph_blocking_reviewers(commits: List[dict]):
     """Automatically fix common typo by replacing r!user with r=user!"""
 
     def morph_reviewer(matchobj):
@@ -73,8 +78,8 @@ def morph_blocking_reviewers(commits):
         commit["title"] = BLOCKING_REVIEWERS_RE.sub(morph_reviewer, commit["title"])
 
 
-def arc_message(template_vars):
-    """Build arc commit desc message from the template"""
+def arc_message(template_vars: dict) -> str:
+    """Build arc commit desc message from the template."""
 
     # Map `None` to an empty string.
     for name in list(template_vars.keys()):
@@ -90,7 +95,7 @@ def arc_message(template_vars):
     return message
 
 
-def amend_revision_url(body, new_url):
+def amend_revision_url(body: str, new_url: str) -> str:
     """Append or replace the Differential Revision URL in a commit body."""
     body = strip_differential_revision(body)
     if body:
@@ -100,10 +105,10 @@ def amend_revision_url(body, new_url):
 
 
 def show_commit_stack(
-    commits,
-    validate=True,
-    show_rev_urls=False,
-    show_updated_only=False,
+    commits: List[dict],
+    validate: bool = True,
+    show_rev_urls: bool = False,
+    show_updated_only: bool = False,
 ):
     """Log the commit stack in a human readable form."""
 
@@ -258,11 +263,12 @@ def show_commit_stack(
             logger.warning("-> %s/D%s", conduit.repo.phab_url, commit["rev-id"])
 
 
-def make_blocking(reviewers):
+def make_blocking(reviewers: List[str]) -> List[str]:
+    """Convert a list of reviewer strings into a list of blocking reviewer strings."""
     return ["%s!" % r.rstrip("!") for r in reviewers]
 
 
-def remove_duplicates(reviewers):
+def remove_duplicates(reviewers: List[str]) -> List[str]:
     """Remove all duplicate items from the list.
 
     Args:
@@ -287,12 +293,12 @@ def remove_duplicates(reviewers):
     return unique
 
 
-def update_commits_from_args(commits, args):
+def update_commits_from_args(commits: List[dict], args: argparse.Namespace):
     """Modify commit description based on args and configuration.
 
     Args:
         commits: list of dicts representing the commits in commit stack
-        args: argparse.ArgumentParser object. In this function we're using
+        args: argparse.Namespace object. In this function we're using
             following attributes:
             * reviewer - list of strings representing reviewers
             * blocker - list of string representing blocking reviewers
@@ -386,7 +392,7 @@ def update_commits_from_args(commits, args):
     update_commit_title_previews(commits)
 
 
-def update_commits_for_uplift(commits):
+def update_commits_for_uplift(commits: List[dict]):
     """Prepares a set of commits for uplifting."""
     for commit in commits:
         # When uplifting, ensure the `Differential Revision` line is properly
@@ -403,7 +409,7 @@ def update_commits_for_uplift(commits):
         }
 
 
-def update_revision_description(transactions, commit, revision):
+def update_revision_description(transactions: List[dict], commit: dict, revision: dict):
     # Appends differential.revision.edit transaction(s) to `transactions` if
     # updating the commit title and/or summary is required.
 
@@ -418,14 +424,16 @@ def update_revision_description(transactions, commit, revision):
         transactions.append(dict(type="summary", value=local_body))
 
 
-def update_revision_bug_id(transactions, commit, revision):
+def update_revision_bug_id(transactions: List[dict], commit: dict, revision: dict):
     # Appends differential.revision.edit transaction(s) to `transactions` if
     # updating the commit bug-id is required.
     if commit["bug-id"] and commit["bug-id"] != revision["fields"]["bugzilla.bug-id"]:
         transactions.append(dict(type="bugzilla.bug-id", value=commit["bug-id"]))
 
 
-def local_uplift_if_possible(args, repo, commits) -> bool:
+def local_uplift_if_possible(
+    args: argparse.Namespace, repo: Repository, commits: List[dict]
+) -> bool:
     """If possible, rebase local repository commits onto the target uplift train.
 
     Uplifts will be performed if the `--no-rebase` argument is not
@@ -464,7 +472,7 @@ def local_uplift_if_possible(args, repo, commits) -> bool:
     return False
 
 
-def _submit(repo, args):
+def _submit(repo: Repository, args: argparse.Namespace):
     telemetry().submission.preparation_time.start()
     with wait_message("Checking connection to Phabricator."):
         # Check if raw Conduit API can be used
@@ -694,7 +702,7 @@ def _submit(repo, args):
     telemetry().submission.process_time.stop()
 
 
-def submit(repo, args):
+def submit(repo: Repository, args: argparse.Namespace):
     try:
         _submit(repo, args)
     except Exception as e:
