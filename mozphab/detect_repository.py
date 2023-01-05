@@ -2,14 +2,18 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 import os
+
+from typing import Optional
 
 from .exceptions import Error
 from .git import Git
 from .mercurial import Mercurial
+from .repository import Repository
 
 
-def find_repo_root(path):
+def find_repo_root(path: str) -> Optional[str]:
     """Lightweight check for a repo in/under the specified path."""
     path = os.path.abspath(path)
     while os.path.split(path)[1]:
@@ -19,7 +23,8 @@ def find_repo_root(path):
     return None
 
 
-def probe_repo(path):
+def probe_repo(path: str) -> Optional[Repository]:
+    """Attempt to find a repository at `path`."""
     try:
         return Mercurial(path)
     except ValueError:
@@ -33,7 +38,7 @@ def probe_repo(path):
     return None
 
 
-def repo_from_args(args):
+def repo_from_args(args: argparse.Namespace) -> Repository:
     """Returns a Repository object from either args.path or the cwd"""
 
     repo = None
