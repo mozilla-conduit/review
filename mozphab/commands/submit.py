@@ -720,7 +720,7 @@ def add_parser(parser):
     submit_parser = parser.add_parser(
         "submit",
         aliases=["upload"],
-        help="Submit commit(s) to Phabricator",
+        help="Submit commit(s) to Phabricator.",
         description=(
             "MozPhab will change the working directory and amend the commits during "
             "the submission process."
