@@ -658,27 +658,16 @@ class ConduitAPI:
 
     def get_repository(self, call_sign: str) -> dict:
         """Get the repository info from Phabricator."""
-        key = "repo-%s" % call_sign
-        if key in cache:
-            return dict(cache.get(key))
-
         api_call_args = dict(constraints=dict(callsigns=[call_sign]), limit=1)
         data = self.call("diffusion.repository.search", api_call_args)
         if not data.get("data"):
             raise NotFoundError("Repository %s not found" % call_sign)
 
         repo = data["data"][0]
-        cache.set(key, repo)
         return repo
 
     def get_repositories_with_tag(self, tag: str) -> dict:
         """Get repository information for repos associated with the given tag."""
-        key = f"repos-tag-{tag}"
-
-        entry = cache.get(key)
-        if entry:
-            return entry
-
         api_call_args = {
             "constraints": {
                 "projects": [tag],
@@ -689,7 +678,6 @@ class ConduitAPI:
         if not data:
             raise NotFoundError(f"No repositories found with tag {tag}")
 
-        cache.set(key, data)
         return data
 
     def create_diff(self, changes: List[Dict[str, Any]], base_revision: str) -> dict:
