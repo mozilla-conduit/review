@@ -313,7 +313,7 @@ class Repository(object):
         """Representation of the Repository in Phabricator API."""
         if not self._phab_repo:
             with wait_message("Reading repository data"):
-                self._phab_repo = conduit.get_repository(self.call_sign)
+                self._phab_repo = conduit.get_repository_by_callsign(self.call_sign)
 
         return self._phab_repo
 

@@ -24,20 +24,20 @@ from .submit import (
 UPLIFT_REPOSITORY_TAG_SLUG = "uplift"
 
 
-def map_train_arg_to_repo(train: str) -> dict:
+def map_train_arg_to_repo(train_repo_shortname: str) -> dict:
     """Attempt to map the value of `--train` to a Phabricator repo."""
-    repo = conduit.get_repository(train)
+    repo = conduit.get_repository_by_shortname(train_repo_shortname)
     if not repo:
-        raise Error(f"No repo named {train} on Phabricator!")
+        raise Error(f"No repo named {train_repo_shortname} on Phabricator!")
 
     uplift_repos = conduit.get_repositories_with_tag(UPLIFT_REPOSITORY_TAG_SLUG)
     if not uplift_repos:
         raise Error("No uplift repos found on Phabricator! Please file a bug.")
 
-    uplift_repo_callsigns = {uplift["fields"]["callsign"] for uplift in uplift_repos}
+    uplift_repo_shortnames = {uplift["fields"]["shortName"] for uplift in uplift_repos}
 
-    if repo["fields"]["callsign"] not in uplift_repo_callsigns:
-        raise Error(f"Repo {train} is not an uplift repository.")
+    if repo["fields"]["shortName"] not in uplift_repo_shortnames:
+        raise Error(f"Repo {train_repo_shortname} is not an uplift repository.")
 
     return repo
 
@@ -46,7 +46,7 @@ def list_trains():
     """List all uplift repositories on Phabricator.
 
     Queries the Phabricator repository search endpoint for all repositories
-    with the `uplift` tag set on them, and displays their callsigns as a list
+    with the `uplift` tag set on them, and displays their shortnames as a list
     of valid values for `--train`.
     """
     repositories = conduit.get_repositories_with_tag(UPLIFT_REPOSITORY_TAG_SLUG)
@@ -55,7 +55,7 @@ def list_trains():
 
     logger.info("Available trains for uplift:")
     for repository in repositories:
-        logger.info(f"   - {repository['fields']['callsign']}")
+        logger.info(f"   - {repository['fields']['shortName']}")
 
 
 def uplift(repo: Repository, args: argparse.Namespace):
@@ -65,12 +65,12 @@ def uplift(repo: Repository, args: argparse.Namespace):
     if not args.train:
         raise Error("Missing `--train` argument!")
 
-    phab_repo = map_train_arg_to_repo(args.train)
+    phab_repo = map_train_arg_to_repo(train_repo_shortname=args.train)
 
     # When using `moz-phab uplift`, we perform a standard `submit` but with all
     # the in-repo configurations for submit destination overwritten to submit
     # to the uplift target repository instead.
-    repo.call_sign = args.train
+    repo.call_sign = phab_repo["fields"]["callsign"]
     repo._phab_repo = phab_repo
 
     # Run the usual submit comment with our patched arg values.
@@ -99,8 +99,8 @@ def add_parser(parser):
     uplift_parser.add_argument(
         "--train",
         help=(
-            "Indicate Phabricator callsign of the release train this stack "
-            "should be uplifted to."
+            "Indicate Phabricator shortname of the release train this stack "
+            "should be uplifted to (see `--list-trains`)."
         ),
     )
     uplift_parser.add_argument(

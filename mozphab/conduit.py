@@ -656,12 +656,25 @@ class ConduitAPI:
 
         return revision
 
-    def get_repository(self, call_sign: str) -> dict:
-        """Get the repository info from Phabricator."""
-        api_call_args = dict(constraints=dict(callsigns=[call_sign]), limit=1)
+    def get_repository_by_callsign(self, call_sign: str) -> dict:
+        """Get repository info for a repo on Phabricator by callsign."""
+        return self.repository_search_single("callsigns", call_sign)
+
+    def get_repository_by_shortname(self, short_name: str) -> dict:
+        """Get repository info for a repo on Phabricator by shortname."""
+        return self.repository_search_single("shortNames", short_name)
+
+    def repository_search_single(self, constraint: str, value: str) -> dict:
+        """Get the information about a single repository from Phabricator.
+
+        Takes a `constraint` to be passed to `diffusion.repository.search`
+        and a `value` to be passed as the value of `constraint`. `value`
+        must be a single element and will be passed in a list to Conduit.
+        """
+        api_call_args = dict(constraints={constraint: [value]}, limit=1)
         data = self.call("diffusion.repository.search", api_call_args)
         if not data.get("data"):
-            raise NotFoundError("Repository %s not found" % call_sign)
+            raise NotFoundError("Repository %s not found" % value)
 
         repo = data["data"][0]
         return repo
