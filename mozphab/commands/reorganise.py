@@ -174,7 +174,7 @@ def reorganise(repo: Repository, args: argparse.Namespace):
         plural = len(names) > 1
         raise Error(
             "Found new commit{plural} in the local stack: {names}.\n"
-            "Please submit {them} separately and call the `reorg` again.".format(
+            "Please submit {them} separately and call `moz-phab reorg` again.".format(
                 plural="s" if plural else "",
                 them="them" if plural else "it",
                 names=", ".join(names),
