@@ -169,7 +169,7 @@ def reorganise(repo: Repository, args: argparse.Namespace):
         augment_commits_from_body(commits)
 
     localstack_ids = [c["rev-id"] for c in commits]
-    if None in localstack_ids:
+    if not all(localstack_ids):
         names = [c["name"] for c in commits if c["rev-id"] is None]
         plural = len(names) > 1
         raise Error(
