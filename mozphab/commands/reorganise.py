@@ -151,6 +151,7 @@ def stack_transactions(
 
 
 def reorganise(repo: Repository, args: argparse.Namespace):
+    """Reorganise the stack on Phabricator to match the stack in the local VCS."""
     telemetry().submission.preparation_time.start()
 
     with wait_message("Checking connection to Phabricator."):
