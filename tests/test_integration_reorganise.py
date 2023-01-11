@@ -16,9 +16,9 @@ def test_no_need_to_reorganise(in_process, git_repo_path, init_sha):
     # One commit
     call_conduit.side_effect = (
         dict(),  # ping
-        dict(data=[dict(phid="PHID-1", id=1)]),  # differential.get_revision
+        # differential.revision.search
         # Revision is not related to any other revision. There is no stack.
-        dict(data=[]),  # edge.search
+        dict(data=[dict(phid="PHID-1", id=1, fields=dict(stackGraph={"PHID-1": []}))]),
     )
 
     f = git_repo_path / "X"
@@ -40,15 +40,18 @@ Differential Revision: http://example.test/D1
 
     # Stack of commits
     call_conduit.side_effect = (
-        dict(data=[dict(phid="PHID-1", id=1), dict(phid="PHID-2", id=2)]),
-        # PHID-2 is the only child of PHID-1.
         dict(
             data=[
                 dict(
-                    sourcePHID="PHID-1",
-                    destinationPHID="PHID-2",
-                    edgeType="revision.child",
-                )
+                    phid="PHID-1",
+                    id=1,
+                    fields=dict(stackGraph={"PHID-2": ["PHID-1"], "PHID-1": []}),
+                ),
+                dict(
+                    phid="PHID-2",
+                    id=2,
+                    fields=dict(stackGraph={"PHID-2": ["PHID-1"], "PHID-1": []}),
+                ),
             ]
         ),
     )
@@ -80,18 +83,20 @@ def test_new_separate_revisions_to_stack(in_process, git_repo_path, init_sha):
                 dict(
                     phid="PHID-1",
                     id=1,
-                    fields=dict(status=dict(value="needs-review")),
+                    fields=dict(
+                        stackGraph={"PHID-1": []}, status=dict(value="needs-review")
+                    ),
                 ),
                 dict(
                     phid="PHID-2",
                     id=2,
-                    fields=dict(status=dict(value="needs-review")),
+                    fields=dict(
+                        stackGraph={"PHID-2": []}, status=dict(value="needs-review")
+                    ),
                 ),
             ]
         ),
-        # edge search
-        dict(data=[]),
-        # differential.edit_revision
+        # differential.revision.edit
         dict(data=[dict(phid="PHID-1", id=1)]),
     )
 
@@ -141,39 +146,28 @@ def test_add_revision_existing_stack(in_process, git_repo_path, init_sha):
                 dict(
                     phid="PHID-1",
                     id=1,
-                    fields=dict(status=dict(value="needs-review")),
+                    fields=dict(
+                        stackGraph={"PHID-2": ["PHID-1"], "PHID-1": []},
+                        status=dict(value="needs-review"),
+                    ),
                 ),
                 dict(
                     phid="PHID-2",
                     id=2,
-                    fields=dict(status=dict(value="needs-review")),
+                    fields=dict(
+                        stackGraph={"PHID-2": ["PHID-1"], "PHID-1": []},
+                        status=dict(value="needs-review"),
+                    ),
                 ),
                 dict(
                     phid="PHID-3",
                     id=3,
-                    fields=dict(status=dict(value="needs-review")),
+                    fields=dict(
+                        stackGraph={"PHID-3": []}, status=dict(value="needs-review")
+                    ),
                 ),
             ]
         ),
-        # edge search
-        dict(
-            data=[
-                dict(
-                    sourcePHID="PHID-1",
-                    destinationPHID="PHID-2",
-                    edgeType="revision.child",
-                )
-            ]
-        ),  # differential.edge.search
-        dict(
-            data=[
-                dict(
-                    sourcePHID="PHID-1",
-                    destinationPHID="PHID-2",
-                    edgeType="revision.parent",
-                )
-            ]
-        ),  # differential.edge.search
         # differential.edit_revision
         dict(data=[dict(phid="PHID-1", id=1)]),
         dict(data=[dict(phid="PHID-3", id=1)]),
@@ -248,53 +242,41 @@ def test_add_revision_existing_stack_hg(in_process, hg_repo_path):
                 dict(
                     phid="PHID-1",
                     id=1,
-                    fields=dict(status=dict(value="needs-review")),
+                    fields=dict(
+                        stackGraph={
+                            "PHID-1": [],
+                            "PHID-2": ["PHID-1"],
+                            "PHID-3": ["PHID-1"],
+                        },
+                        status=dict(value="needs-review"),
+                    ),
                 ),
                 dict(
                     phid="PHID-2",
                     id=2,
-                    fields=dict(status=dict(value="needs-review")),
+                    fields=dict(
+                        stackGraph={
+                            "PHID-1": [],
+                            "PHID-2": ["PHID-1"],
+                            "PHID-3": ["PHID-1"],
+                        },
+                        status=dict(value="needs-review"),
+                    ),
                 ),
                 dict(
                     phid="PHID-3",
                     id=3,
-                    fields=dict(status=dict(value="needs-review")),
+                    fields=dict(
+                        stackGraph={
+                            "PHID-1": [],
+                            "PHID-2": ["PHID-1"],
+                            "PHID-3": ["PHID-1"],
+                        },
+                        status=dict(value="needs-review"),
+                    ),
                 ),
             ]
         ),
-        # edge search
-        dict(
-            data=[
-                dict(
-                    sourcePHID="PHID-1",
-                    destinationPHID="PHID-2",
-                    edgeType="revision.child",
-                ),
-                dict(
-                    sourcePHID="PHID-1",
-                    destinationPHID="PHID-3",
-                    edgeType="revision.child",
-                ),
-            ]
-        ),  # differential.edge.search
-        dict(
-            data=[
-                dict(
-                    sourcePHID="PHID-1",
-                    destinationPHID="PHID-2",
-                    edgeType="revision.parent",
-                )
-            ]
-        ),  # differential.edge.search
-        dict(
-            data=[
-                dict(
-                    sourcePHID="PHID-1",
-                    destinationPHID="PHID-3",
-                    edgeType="revision.parent",
-                )
-            ]
-        ),  # differential.edge.search
     )
 
     f = hg_repo_path / "X"
@@ -346,34 +328,22 @@ def test_abandon_a_revision(in_process, git_repo_path, init_sha):
                 dict(
                     phid="PHID-1",
                     id=1,
-                    fields=dict(status=dict(value="needs-review")),
+                    fields=dict(
+                        stackGraph={"PHID-2": ["PHID-1"], "PHID-1": []},
+                        status=dict(value="needs-review"),
+                    ),
                 )
             ]
         ),  # differential.revision.search
         dict(
             data=[
                 dict(
-                    sourcePHID="PHID-1",
-                    destinationPHID="PHID-2",
-                    edgeType="revision.child",
-                )
-            ]
-        ),  # differential.edge.search
-        dict(
-            data=[
-                dict(
-                    sourcePHID="PHID-1",
-                    destinationPHID="PHID-2",
-                    edgeType="revision.parent",
-                )
-            ]
-        ),  # differential.edge.search
-        dict(
-            data=[
-                dict(
                     phid="PHID-2",
                     id=2,
-                    fields=dict(status=dict(value="needs-review")),
+                    fields=dict(
+                        stackGraph={"PHID-2": ["PHID-1"], "PHID-1": []},
+                        status=dict(value="needs-review"),
+                    ),
                 )
             ]
         ),  # differential.revision.search
@@ -399,38 +369,20 @@ Differential Revision: http://example.test/D1
         "differential.revision.search",
         {"constraints": {"ids": [1]}, "attachments": {"reviewers": True}},
     )
-    # Search for direct related revisions of PHID-2
-    assert call_conduit.call_args_list[2] == mock.call(
-        "edge.search",
-        {
-            "sourcePHIDs": ["PHID-1"],
-            "types": ["revision.parent", "revision.child"],
-            "limit": 10000,
-        },
-    )
-    # Search for direct related revisions of PHID-1
-    assert call_conduit.call_args_list[3] == mock.call(
-        "edge.search",
-        {
-            "sourcePHIDs": ["PHID-2"],
-            "types": ["revision.parent", "revision.child"],
-            "limit": 10000,
-        },
-    )
     # Search for revisions in the stack
-    assert call_conduit.call_args_list[4] == mock.call(
+    assert call_conduit.call_args_list[2] == mock.call(
         "differential.revision.search",
         {"constraints": {"phids": ["PHID-2"]}, "attachments": {"reviewers": True}},
     )
     # Remove the child from PHID-1 and abandon PHID-1
-    assert call_conduit.call_args_list[5] == mock.call(
+    assert call_conduit.call_args_list[3] == mock.call(
         "differential.revision.edit",
         {
             "transactions": [{"type": "children.remove", "value": ["PHID-2"]}],
             "objectIdentifier": "PHID-1",
         },
     )
-    assert call_conduit.call_args_list[6] == mock.call(
+    assert call_conduit.call_args_list[4] == mock.call(
         "differential.revision.edit",
         {
             "transactions": [{"type": "abandon", "value": True}],

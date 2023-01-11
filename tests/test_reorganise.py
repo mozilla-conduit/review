@@ -186,7 +186,7 @@ def test_prepare_transactions(phids, transactions):
 @mock.patch("mozphab.commands.reorganise.stack_transactions")
 @mock.patch("mozphab.conduit.ConduitAPI.check")
 @mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
-@mock.patch("mozphab.conduit.ConduitAPI.get_stack")
+@mock.patch("mozphab.commands.reorganise.convert_stackgraph_to_linear")
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
 @mock.patch("mozphab.conduit.ConduitAPI.ids_to_phids")
 @mock.patch("mozphab.conduit.ConduitAPI.phids_to_ids")
@@ -196,7 +196,7 @@ def test_reorg_calling_stack_transactions(
     _phid2id,
     m_id2phid,
     _get_revs,
-    m_remote_stack,
+    m_convert_stackgraph_to_linear,
     _augment_commits,
     _check,
     m_trans,
@@ -208,7 +208,7 @@ def test_reorg_calling_stack_transactions(
         yes = True
 
     phabstack, commits = stacks
-    m_remote_stack.return_value = phabstack
+    m_convert_stackgraph_to_linear.return_value = phabstack
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()
     mozphab.conduit.repo.commit_stack.return_value = commits
@@ -248,7 +248,7 @@ def test_commits_invalid(_augment, _check, git):
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
 @mock.patch("mozphab.conduit.ConduitAPI.check")
 @mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
-@mock.patch("mozphab.conduit.ConduitAPI.get_stack")
+@mock.patch("mozphab.commands.reorganise.convert_stackgraph_to_linear")
 @mock.patch("mozphab.conduit.ConduitAPI.phids_to_ids")
 @mock.patch("mozphab.commands.reorganise.walk_llist")
 @mock.patch("mozphab.commands.reorganise.logger")
@@ -314,3 +314,52 @@ def test_walk_llist(llist, nodes):
 )
 def test_to_llist(params, result):
     assert reorganise.to_llist(params) == result
+
+
+@pytest.mark.parametrize(
+    "stack_graph,phabstack,message",
+    (
+        ({"1": []}, {}, "Single node should produce no stack."),
+        ({"1": [], "2": []}, {}, "Multiple single nodes should produce no stack."),
+        (
+            {"1": ["2"], "2": []},
+            {"2": "1", "1": None},
+            "Two elements should be linked together.",
+        ),
+        (
+            {"1": ["2"], "2": [], "3": []},
+            {"2": "1", "1": None},
+            "Two elements should be linked together and extra single node is ignored.",
+        ),
+        # Multiple parents.
+        (
+            {"1": ["2", "3"], "2": [], "3": []},
+            {"3": "1", "2": "1", "1": None},
+            "Multiple parents should be allowed.",
+        ),
+        (
+            {"1": ["2", "3"], "2": ["5"], "3": ["4"], "4": [], "5": []},
+            {"4": "3", "5": "2", "3": "1", "2": "1", "1": None},
+            "Multiple parents should be allowed.",
+        ),
+    ),
+)
+def test_convert_stackgraph_to_linear_pass(stack_graph, phabstack, message):
+    phids_to_ids = {phid: int(phid) for phid in stack_graph}
+    assert (
+        reorganise.convert_stackgraph_to_linear(stack_graph, phids_to_ids) == phabstack
+    ), message
+
+
+@pytest.mark.parametrize(
+    "stack_graph",
+    (
+        # Multiple children.
+        {"1": ["2"], "2": [], "3": ["2"]},
+        ({"1": ["2", "3"], "2": [], "3": ["2"]}),
+    ),
+)
+def test_convert_stackgraph_to_linear_fail(stack_graph):
+    phids_to_ids = {phid: int(phid) for phid in stack_graph}
+    with pytest.raises(exceptions.Error):
+        reorganise.convert_stackgraph_to_linear(stack_graph, phids_to_ids)

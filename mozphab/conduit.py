@@ -389,51 +389,6 @@ class ConduitAPI:
             if r["fields"]["status"]["value"] != "abandoned"
         ]
 
-    def get_stack(self, rev_ids: List[int]) -> Dict[str, Any]:
-        """Returns a dict of PHIDs."""
-        phids = set()
-        if not rev_ids:
-            return {}
-        revisions = self.get_revisions(ids=rev_ids)
-        new_phids = set([rev["phid"] for rev in revisions])
-        stack = {}
-
-        while new_phids:
-            phids.update(new_phids)
-
-            edges = self.call(
-                "edge.search",
-                dict(
-                    sourcePHIDs=list(new_phids),
-                    types=["revision.parent", "revision.child"],
-                    limit=10000,
-                ),
-            )["data"]
-
-            new_phids = set()
-            for edge in edges:
-                new_phids.add(edge["sourcePHID"])
-                new_phids.add(edge["destinationPHID"])
-
-                if edge["edgeType"] == "revision.child":
-                    if edge["sourcePHID"] in stack:
-                        source_id = next(
-                            r["id"]
-                            for r in revisions
-                            if r["phid"] == edge["sourcePHID"]
-                        )
-                        raise Error("Revision D%s has multiple children." % source_id)
-
-                    stack[edge["sourcePHID"]] = edge["destinationPHID"]
-
-            new_phids = new_phids - phids
-
-        for child in list(stack.values()):
-            # set the last child (not a parent)
-            stack.setdefault(child)
-
-        return stack
-
     def get_users(self, usernames: List[str]) -> List[dict]:
         """Get users using the user.query API.
 

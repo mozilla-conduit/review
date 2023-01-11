@@ -150,6 +150,43 @@ def stack_transactions(
     return conduit_transactions
 
 
+def convert_stackgraph_to_linear(
+    stack_graph: Dict[str, List[str]],
+    phid_to_id: Dict[str, int],
+) -> Dict[str, Optional[str]]:
+    """Converts the `stackGraph` data from Phabricator to a linear format.
+
+    Ensures each revision has only a single successor revision.
+    """
+    linear_stackgraph = {}
+
+    for successor_phid, predecessor_phid_list in stack_graph.items():
+        for predecessor_phid in predecessor_phid_list:
+            # If we find a predecessor node in our linear stackgraph then
+            # that node has multiple children.
+            if predecessor_phid in linear_stackgraph:
+                # Get the ID of the revision with multiple children.
+                rev_id = phid_to_id[predecessor_phid]
+
+                raise Error(f"Revision D{rev_id} has multiple children.")
+
+            linear_stackgraph[predecessor_phid] = successor_phid
+
+    # Set any heads as having no successor. Heads are in the values of
+    # `linear_stackgraph` but not yet added as keys.
+    heads = (
+        successor
+        # Use `list` here to avoid inspecting the list while we iterate over it,
+        # causing a `RuntimeError: dictionary changed size during iteration`.
+        for successor in list(linear_stackgraph.values())
+        if successor not in linear_stackgraph
+    )
+    for head in heads:
+        linear_stackgraph[head] = None
+
+    return linear_stackgraph
+
+
 def reorganise(repo: Repository, args: argparse.Namespace):
     """Reorganise the stack on Phabricator to match the stack in the local VCS."""
     telemetry().submission.preparation_time.start()
@@ -189,18 +226,28 @@ def reorganise(repo: Repository, args: argparse.Namespace):
         )
     )
 
-    # Get PhabricatorStack
-    # Errors will be raised later in the `walk_llist` method
-    with wait_message("Detecting the remote stack..."):
-        try:
-            phabstack = conduit.get_stack(localstack_ids)
-        except Error:
-            logger.error("Remote stack is not linear.")
-            raise
-
     # Preload the phabricator stack
     with wait_message("Preloading Phabricator stack revisions..."):
-        conduit.get_revisions(phids=list(phabstack.keys()))
+        revisions = conduit.get_revisions(ids=localstack_ids)
+
+    if not revisions:
+        raise Error("Could not find revisions on Phabricator.")
+
+    # Merge all the existing stackgraph's into one. Any repeated keys
+    # will have the same values.
+    stack_graph = {
+        predecessor: successors
+        for revision in revisions
+        for predecessor, successors in revision["fields"]["stackGraph"].items()
+    }
+    phid_to_id = {revision["phid"]: revision["id"] for revision in revisions}
+
+    try:
+        # Validate the `stackGraph` field from our remote revisions.
+        phabstack = convert_stackgraph_to_linear(stack_graph, phid_to_id)
+    except Error:
+        logger.error("Remote stack is not linear.")
+        raise
 
     if phabstack:
         try:
