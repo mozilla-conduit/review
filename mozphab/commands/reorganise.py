@@ -90,7 +90,10 @@ def stack_transactions(
         transactions[revision] = []
 
     # Remote child no longer in stack
-    for revision in [r for r in remote_phids if r not in local_phids]:
+    remote_revisions_missing_from_local = [
+        r for r in remote_phids if r not in local_phids
+    ]
+    for revision in remote_revisions_missing_from_local:
         child = remote_list[revision]
         if child is not None:
             transactions[revision].append(("children.remove", [child]))
@@ -99,7 +102,10 @@ def stack_transactions(
         walk_llist(remote_list, allow_multiple_heads=True)
 
     # New revisions
-    for revision in [r for r in local_phids if r not in remote_phids]:
+    local_revisions_missing_from_remote = [
+        r for r in local_phids if r not in remote_phids
+    ]
+    for revision in local_revisions_missing_from_remote:
         child = local_list[revision]
         if child is None:
             if revision in remote_list and remote_list[revision] is not None:
@@ -113,7 +119,8 @@ def stack_transactions(
         walk_llist(remote_list, allow_multiple_heads=True)
 
     # Modify child
-    for revision in [r for r in remote_phids if r in local_phids]:
+    remote_revisions_found_in_local = [r for r in remote_phids if r in local_phids]
+    for revision in remote_revisions_found_in_local:
         if local_list[revision] != remote_list[revision]:
             child = local_list[revision]
             if child is None:
@@ -129,7 +136,7 @@ def stack_transactions(
             walk_llist(remote_list, allow_multiple_heads=True)
 
     # Abandon
-    for revision in [r for r in remote_phids if r not in local_phids]:
+    for revision in remote_revisions_missing_from_local:
         transactions[revision].append(("abandon", True))
         del remote_list[revision]
         walk_llist(remote_list, allow_multiple_heads=True)
