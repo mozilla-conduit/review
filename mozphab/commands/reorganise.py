@@ -141,11 +141,11 @@ def stack_transactions(
         if not transaction_list:
             continue
         conduit_transactions.setdefault(revision, [])
-        for transaction in transaction_list:
-            k, v = transaction
-            if k == "children.set" and v:
-                v = v
-            conduit_transactions[revision].append({"type": k, "value": v})
+
+        for trans_type, trans_value in transaction_list:
+            conduit_transactions[revision].append(
+                {"type": trans_type, "value": trans_value}
+            )
 
     return conduit_transactions
 
