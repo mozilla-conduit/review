@@ -38,15 +38,6 @@ from .simplecache import cache
 
 CHECK_IN_NEEDED = "check-in_needed"
 
-REVISION_STATUS_TO_TRANSACTION = {
-    "abandoned": "abandon",
-    "accepted": "accept",
-    "changes-planned": "plan-changes",
-    "draft": "draft",
-    "needs-review": "request-review",
-    "needs-revision": "reject",
-}
-
 
 def normalise_reviewer(reviewer: str, strip_group: bool = True) -> str:
     """This provide a canonical form of the reviewer for comparison."""
@@ -527,7 +518,6 @@ class ConduitAPI:
         rev_id: Optional[str] = None,
         wip: bool = False,
         check_in_needed: bool = False,
-        preserve_status: bool = False,
     ) -> dict:
         """Edit (create or update) a revision."""
         trans = transactions or []
@@ -545,17 +535,6 @@ class ConduitAPI:
                 args = dict(phids=[rev_id])
             existing_revision = conduit.get_revisions(**args)[0]
             existing_status = existing_revision["fields"]["status"]["value"]
-
-            if preserve_status and not wip and existing_status != "needs-review":
-                # Add a post-update transaction to set the status back to its
-                # pre-update value. We don't need to do this for `needs-review`
-                # since that is the status we are correcting from.
-                post_trans.append(
-                    dict(
-                        type=REVISION_STATUS_TO_TRANSACTION[existing_status],
-                        value=True,
-                    )
-                )
 
         # Set revision for changes-planned or needs-review as required.
         # Phabricator will throw an error if we attempt to set a status to the same
