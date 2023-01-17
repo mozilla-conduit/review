@@ -18,7 +18,18 @@ def test_no_need_to_reorganise(in_process, git_repo_path, init_sha):
         dict(),  # ping
         # differential.revision.search
         # Revision is not related to any other revision. There is no stack.
-        dict(data=[dict(phid="PHID-1", id=1, fields=dict(stackGraph={"PHID-1": []}))]),
+        dict(
+            data=[
+                dict(
+                    phid="PHID-1",
+                    id=1,
+                    fields=dict(
+                        stackGraph={"PHID-1": []},
+                        status={"value": "needs-review"},
+                    ),
+                )
+            ]
+        ),
     )
 
     f = git_repo_path / "X"
@@ -45,12 +56,18 @@ Differential Revision: http://example.test/D1
                 dict(
                     phid="PHID-1",
                     id=1,
-                    fields=dict(stackGraph={"PHID-2": ["PHID-1"], "PHID-1": []}),
+                    fields=dict(
+                        stackGraph={"PHID-2": ["PHID-1"], "PHID-1": []},
+                        status={"value": "needs-review"},
+                    ),
                 ),
                 dict(
                     phid="PHID-2",
                     id=2,
-                    fields=dict(stackGraph={"PHID-2": ["PHID-1"], "PHID-1": []}),
+                    fields=dict(
+                        stackGraph={"PHID-2": ["PHID-1"], "PHID-1": []},
+                        status={"value": "needs-review"},
+                    ),
                 ),
             ]
         ),

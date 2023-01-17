@@ -8,6 +8,7 @@ import sys
 
 from collections import OrderedDict
 from typing import (
+    Container,
     Dict,
     List,
     Optional,
@@ -75,7 +76,7 @@ def walk_llist(
 
 
 def stack_transactions(
-    remote_phids: List[str], local_phids: List[str]
+    remote_phids: List[str], local_phids: List[str], abandoned_revisions: Container[str]
 ) -> Dict[str, List[Dict]]:
     """Prepare transactions to set the stack as provided in local_phids.
 
@@ -137,7 +138,10 @@ def stack_transactions(
 
     # Abandon
     for revision in remote_revisions_missing_from_local:
-        transactions[revision].append(("abandon", True))
+        # Avoid abandoning a revision if it is already in `abandoned` state.
+        if revision not in abandoned_revisions:
+            transactions[revision].append(("abandon", True))
+
         del remote_list[revision]
         walk_llist(remote_list, allow_multiple_heads=True)
 
@@ -240,13 +244,17 @@ def reorganise(repo: Repository, args: argparse.Namespace):
     if not revisions:
         raise Error("Could not find revisions on Phabricator.")
 
-    # Merge all the existing stackgraph's into one. Any repeated keys
+    # Merge all the existing stackgraphs into one. Any repeated keys
     # will have the same values.
     stack_graph = {
         predecessor: successors
         for revision in revisions
         for predecessor, successors in revision["fields"]["stackGraph"].items()
     }
+
+    # Fetch data about any revisions that are missing from local stack.
+    revisions = conduit.get_revisions(phids=list(stack_graph.keys()))
+
     phid_to_id = {revision["phid"]: revision["id"] for revision in revisions}
 
     try:
@@ -271,8 +279,15 @@ def reorganise(repo: Repository, args: argparse.Namespace):
         phabstack_phids = []
 
     localstack_phids = conduit.ids_to_phids(localstack_ids)
+    abandoned_revisions = {
+        revision["phid"]
+        for revision in revisions
+        if revision["fields"]["status"]["value"] == "abandoned"
+    }
     try:
-        transactions = stack_transactions(phabstack_phids, localstack_phids)
+        transactions = stack_transactions(
+            phabstack_phids, localstack_phids, abandoned_revisions
+        )
     except Error:
         logger.error("Unable to prepare stack transactions.")
         raise

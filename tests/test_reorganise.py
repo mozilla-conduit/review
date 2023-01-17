@@ -11,12 +11,12 @@ from mozphab.commands import reorganise
 
 
 @pytest.mark.parametrize(
-    "phids,transactions",
+    "phids,transactions,abandoned",
     [
         # No change
-        (("A", "A"), {}),
-        (("ABC", "ABC"), {}),
-        (([], ["A"]), {}),
+        (("A", "A"), {}, set()),
+        (("ABC", "ABC"), {}, set()),
+        (([], ["A"]), {}, set()),
         # Abandon
         (
             ("ABC", "A"),
@@ -28,6 +28,7 @@ from mozphab.commands import reorganise
                 ],
                 "C": [{"type": "abandon", "value": True}],
             },
+            set(),
         ),
         (
             ("ABC", "B"),
@@ -39,6 +40,7 @@ from mozphab.commands import reorganise
                 "B": [{"type": "children.remove", "value": ["C"]}],
                 "C": [{"type": "abandon", "value": True}],
             },
+            set(),
         ),
         (
             ("ABC", "C"),
@@ -52,6 +54,20 @@ from mozphab.commands import reorganise
                     {"type": "abandon", "value": True},
                 ],
             },
+            set(),
+        ),
+        (
+            ("ABC", "C"),
+            {
+                "A": [
+                    {"type": "children.remove", "value": ["B"]},
+                ],
+                "B": [
+                    {"type": "children.remove", "value": ["C"]},
+                    {"type": "abandon", "value": True},
+                ],
+            },
+            {"A"},
         ),
         # Reorder
         (
@@ -60,6 +76,7 @@ from mozphab.commands import reorganise
                 "A": [{"type": "children.remove", "value": ["B"]}],
                 "B": [{"type": "children.set", "value": ["A"]}],
             },
+            set(),
         ),
         (
             ("ABC", "BC"),
@@ -69,6 +86,7 @@ from mozphab.commands import reorganise
                     {"type": "abandon", "value": True},
                 ]
             },
+            set(),
         ),
         (
             ("ABC", "ACB"),
@@ -77,6 +95,7 @@ from mozphab.commands import reorganise
                 "B": [{"type": "children.remove", "value": ["C"]}],
                 "C": [{"type": "children.set", "value": ["B"]}],
             },
+            set(),
         ),
         (
             ("ABC", "BAC"),
@@ -84,6 +103,7 @@ from mozphab.commands import reorganise
                 "A": [{"type": "children.set", "value": ["C"]}],
                 "B": [{"type": "children.set", "value": ["A"]}],
             },
+            set(),
         ),
         (
             ("ABC", "CAB"),
@@ -91,6 +111,7 @@ from mozphab.commands import reorganise
                 "B": [{"type": "children.remove", "value": ["C"]}],
                 "C": [{"type": "children.set", "value": ["A"]}],
             },
+            set(),
         ),
         (
             ("ABC", "CBA"),
@@ -99,15 +120,17 @@ from mozphab.commands import reorganise
                 "B": [{"type": "children.set", "value": ["A"]}],
                 "C": [{"type": "children.set", "value": ["B"]}],
             },
+            set(),
         ),
         # Insert
-        (("ABC", "DABC"), {"D": [{"type": "children.set", "value": ["A"]}]}),
+        (("ABC", "DABC"), {"D": [{"type": "children.set", "value": ["A"]}]}, set()),
         (
             ("ABC", "ADBC"),
             {
                 "A": [{"type": "children.set", "value": ["D"]}],
                 "D": [{"type": "children.set", "value": ["B"]}],
             },
+            set(),
         ),
         (
             ("ABC", "ABDC"),
@@ -115,6 +138,7 @@ from mozphab.commands import reorganise
                 "B": [{"type": "children.set", "value": ["D"]}],
                 "D": [{"type": "children.set", "value": ["C"]}],
             },
+            set(),
         ),
         (
             ("ABC", "BCAD"),
@@ -122,8 +146,9 @@ from mozphab.commands import reorganise
                 "A": [{"type": "children.set", "value": ["D"]}],
                 "C": [{"type": "children.set", "value": ["A"]}],
             },
+            set(),
         ),
-        (([], ["A", "B"]), {"A": [{"type": "children.set", "value": ["B"]}]}),
+        (([], ["A", "B"]), {"A": [{"type": "children.set", "value": ["B"]}]}, set()),
         # Insert and reorder
         (
             ("ABC", "DCAB"),
@@ -132,6 +157,7 @@ from mozphab.commands import reorganise
                 "C": [{"type": "children.set", "value": ["A"]}],
                 "D": [{"type": "children.set", "value": ["C"]}],
             },
+            set(),
         ),
         (
             ("ABC", "CDAB"),
@@ -140,6 +166,7 @@ from mozphab.commands import reorganise
                 "C": [{"type": "children.set", "value": ["D"]}],
                 "D": [{"type": "children.set", "value": ["A"]}],
             },
+            set(),
         ),
         (
             ("ABC", "CADB"),
@@ -149,6 +176,7 @@ from mozphab.commands import reorganise
                 "C": [{"type": "children.set", "value": ["A"]}],
                 "D": [{"type": "children.set", "value": ["B"]}],
             },
+            set(),
         ),
         (
             ("ABC", "CABD"),
@@ -156,30 +184,35 @@ from mozphab.commands import reorganise
                 "B": [{"type": "children.set", "value": ["D"]}],
                 "C": [{"type": "children.set", "value": ["A"]}],
             },
+            set(),
         ),
         # Nothing in common
-        (("A", "B"), {"A": [{"type": "abandon", "value": True}]}),
+        (("A", "B"), {"A": [{"type": "abandon", "value": True}]}, set()),
     ],
 )
-def test_prepare_transactions(phids, transactions):
-    assert reorganise.stack_transactions(*phids) == transactions
+def test_prepare_transactions(phids, transactions, abandoned):
+    remote_phids, local_phids = phids
+    assert (
+        reorganise.stack_transactions(remote_phids, local_phids, abandoned)
+        == transactions
+    )
 
 
 @pytest.mark.parametrize(
     "stacks,expected",
     [
-        (({"A": None}, [{"rev-id": 1, "rev-phid": "A"}]), (["A"], ["A"])),
-        (({"B": None}, [{"rev-id": 1, "rev-phid": "A"}]), (["B"], ["A"])),
+        (({"A": None}, [{"rev-id": 1, "rev-phid": "A"}]), (["A"], ["A"], set())),
+        (({"B": None}, [{"rev-id": 1, "rev-phid": "A"}]), (["B"], ["A"], set())),
         (
             ({"A": "B", "B": None}, [{"rev-id": 1, "rev-phid": "A"}]),
-            (["A", "B"], ["A"]),
+            (["A", "B"], ["A"], set()),
         ),
         (
             (
                 {"A": None},
                 [{"rev-id": 1, "rev-phid": "A"}, {"rev-id": 2, "rev-phid": "B"}],
             ),
-            (["A"], ["A", "B"]),
+            (["A"], ["A", "B"], set()),
         ),
     ],
 )
