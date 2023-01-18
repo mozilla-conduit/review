@@ -273,9 +273,7 @@ class Diff:
 
             change.old_path = a_path
             old = self.change_for(change.old_path)
-            if old.kind.name in ["MOVE_AWAY", "COPY_AWAY"]:
-                old.kind = self.Kind("COPY_AWAY")
-            elif old.kind.name != "MULTICOPY":
+            if old.kind.name != "MULTICOPY":
                 old.kind = self.Kind("COPY_AWAY")
 
             old.away_paths.append(change.cur_path)
