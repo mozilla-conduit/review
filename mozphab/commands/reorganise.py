@@ -283,7 +283,7 @@ def reorganise(repo: Repository, args: argparse.Namespace):
     logger.warning("Stack will be reorganised:")
     for phid, rev_transactions in transactions.items():
         node_id = conduit.phid_to_id(phid)
-        if "abandon" in [t["type"] for t in rev_transactions]:
+        if any(transaction["type"] == "abandon" for transaction in rev_transactions):
             logger.info(" * {} will be abandoned".format(node_id))
         else:
             for t in rev_transactions:
