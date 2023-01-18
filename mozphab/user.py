@@ -59,9 +59,8 @@ class UserData:
 
     @property
     def is_data_collected(self):
-        """True if all user info data are collected."""
-        # All values are set (not None)
-        return None not in [getattr(self, k) for k in self.keys]
+        """True if all user info data is collected."""
+        return all(getattr(self, k) is not None for k in self.keys)
 
     def to_dict(self):
         return {k: getattr(self, k) for k in self.keys}
