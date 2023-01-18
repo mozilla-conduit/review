@@ -78,10 +78,12 @@ class UserData:
 
     def set_from_file(self):
         """Read user info from file."""
-        if USER_INFO_FILE.exists():
-            with USER_INFO_FILE.open("r", encoding="utf-8") as f:
-                user_info = json.load(f)
-                self.update_from_dict(user_info)
+        if not USER_INFO_FILE.exists():
+            return
+
+        with USER_INFO_FILE.open("r", encoding="utf-8") as f:
+            user_info = json.load(f)
+            self.update_from_dict(user_info)
 
     def save_user_info(self, **kwargs):
         """Save any fields provided as kwargs into the user_info file."""
