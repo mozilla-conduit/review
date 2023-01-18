@@ -785,7 +785,7 @@ class Mercurial(Repository):
     def check_commits_for_submit(self, commits, require_bug=True):
         # 'Greatest Common Ancestor'/'Merge Base' should be included in the revset.
         ancestor = self.hg_log("ancestor(%s)" % self.revset, split=False)
-        if ancestor not in [c["node"] for c in commits]:
+        if not any(commit["node"] == ancestor for commit in commits):
             raise Error(
                 "Non-linear commit stack (common ancestor %s missing from stack)"
                 % short_node(ancestor)
