@@ -76,7 +76,10 @@ def walk_llist(
 
 
 def stack_transactions(
-    remote_phids: List[str], local_phids: List[str], abandoned_revisions: Container[str]
+    remote_phids: List[str],
+    local_phids: List[str],
+    abandoned_revisions: Container[str],
+    no_abandon: bool = False,
 ) -> Dict[str, List[Dict]]:
     """Prepare transactions to set the stack as provided in local_phids.
 
@@ -138,8 +141,13 @@ def stack_transactions(
 
     # Abandon
     for revision in remote_revisions_missing_from_local:
-        # Avoid abandoning a revision if it is already in `abandoned` state.
-        if revision not in abandoned_revisions:
+        if no_abandon:
+            # `--no-abandon` should cause revisions to never be abandoned.
+            logger.debug(
+                f"Skipping abandon transaction for {revision} due to `--no-abandon`."
+            )
+        elif revision not in abandoned_revisions:
+            # Avoid abandoning a revision if it is already in `abandoned` state.
             transactions[revision].append(("abandon", True))
 
         del remote_list[revision]
@@ -286,7 +294,10 @@ def reorganise(repo: Repository, args: argparse.Namespace):
     }
     try:
         transactions = stack_transactions(
-            phabstack_phids, localstack_phids, abandoned_revisions
+            phabstack_phids,
+            localstack_phids,
+            abandoned_revisions,
+            no_abandon=args.no_abandon,
         )
     except Error:
         logger.error("Unable to prepare stack transactions.")
@@ -371,5 +382,11 @@ def add_parser(parser):
         nargs="?",
         default=".",
         help="End revision of range to reorganise (default: current commit).",
+    )
+    reorg_parser.add_argument(
+        "--no-abandon",
+        action="store_true",
+        dest="no_abandon",
+        help="Do not abandon revisions during reorg.",
     )
     reorg_parser.set_defaults(func=reorganise, needs_repo=True)

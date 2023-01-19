@@ -219,6 +219,12 @@ you need to change the parent/child relation of the revisions in Phabricator.
 `moz-phab reorg` command will compare the stack, display what will be changed
 and ask for permission before taking any action.
 
+This behavior can be modified with few options:
+
+- `--no-abandon` Avoid abandoning revisions on Phabricator when they have been
+  removed from the local stack. Only change the dependency relationships between
+  revisions.
+
 ### Associating a commit to an existing phabricator revision
 
 `moz-phab` tracks which revision is associated with a commit using a line in the

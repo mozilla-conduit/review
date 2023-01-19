@@ -190,7 +190,7 @@ from mozphab.commands import reorganise
         (("A", "B"), {"A": [{"type": "abandon", "value": True}]}, set()),
     ],
 )
-def test_prepare_transactions(phids, transactions, abandoned):
+def test_stack_transactions_with_abandon(phids, transactions, abandoned):
     remote_phids, local_phids = phids
     assert (
         reorganise.stack_transactions(remote_phids, local_phids, abandoned)
@@ -199,20 +199,103 @@ def test_prepare_transactions(phids, transactions, abandoned):
 
 
 @pytest.mark.parametrize(
+    "phids,transactions,abandoned",
+    [
+        (
+            ("ABC", "A"),
+            {
+                "A": [{"type": "children.remove", "value": ["B"]}],
+                "B": [
+                    {"type": "children.remove", "value": ["C"]},
+                ],
+            },
+            set(),
+        ),
+        (
+            ("ABC", "B"),
+            {
+                "A": [
+                    {"type": "children.remove", "value": ["B"]},
+                ],
+                "B": [{"type": "children.remove", "value": ["C"]}],
+            },
+            set(),
+        ),
+        (
+            ("ABC", "C"),
+            {
+                "A": [
+                    {"type": "children.remove", "value": ["B"]},
+                ],
+                "B": [
+                    {"type": "children.remove", "value": ["C"]},
+                ],
+            },
+            set(),
+        ),
+        (
+            ("ABC", "C"),
+            {
+                "A": [
+                    {"type": "children.remove", "value": ["B"]},
+                ],
+                "B": [
+                    {"type": "children.remove", "value": ["C"]},
+                ],
+            },
+            {"A"},
+        ),
+        (
+            ("ABC", "BC"),
+            {
+                "A": [
+                    {"type": "children.remove", "value": ["B"]},
+                ]
+            },
+            set(),
+        ),
+        # Nothing in common
+        (("A", "B"), {}, set()),
+    ],
+)
+def test_stack_transactions_no_abandon(phids, transactions, abandoned):
+    remote_phids, local_phids = phids
+    assert (
+        reorganise.stack_transactions(
+            remote_phids, local_phids, abandoned, no_abandon=True
+        )
+        == transactions
+    )
+
+
+@pytest.mark.parametrize(
     "stacks,expected",
     [
-        (({"A": None}, [{"rev-id": 1, "rev-phid": "A"}]), (["A"], ["A"], set())),
-        (({"B": None}, [{"rev-id": 1, "rev-phid": "A"}]), (["B"], ["A"], set())),
+        (
+            ({"A": None}, [{"rev-id": 1, "rev-phid": "A"}]),
+            (["A"], ["A"], set(), {"no_abandon": False}),
+        ),
+        (
+            ({"B": None}, [{"rev-id": 1, "rev-phid": "A"}]),
+            (["B"], ["A"], set(), {"no_abandon": False}),
+        ),
         (
             ({"A": "B", "B": None}, [{"rev-id": 1, "rev-phid": "A"}]),
-            (["A", "B"], ["A"], set()),
+            (["A", "B"], ["A"], set(), {"no_abandon": False}),
         ),
         (
             (
                 {"A": None},
                 [{"rev-id": 1, "rev-phid": "A"}, {"rev-id": 2, "rev-phid": "B"}],
             ),
-            (["A"], ["A", "B"], set()),
+            (["A"], ["A", "B"], set(), {"no_abandon": False}),
+        ),
+        (
+            (
+                {"A": None},
+                [{"rev-id": 1, "rev-phid": "A"}, {"rev-id": 2, "rev-phid": "B"}],
+            ),
+            (["A"], ["A", "B"], set(), {"no_abandon": True}),
         ),
     ],
 )
@@ -237,8 +320,11 @@ def test_reorg_calling_stack_transactions(
     stacks,
     expected,
 ):
+    *args, kwargs = expected
+
     class Args:
         yes = True
+        no_abandon = kwargs["no_abandon"]
 
     phabstack, commits = stacks
     m_convert_stackgraph_to_linear.return_value = phabstack
@@ -247,7 +333,7 @@ def test_reorg_calling_stack_transactions(
     mozphab.conduit.repo.commit_stack.return_value = commits
     m_id2phid.return_value = [c["rev-phid"] for c in commits]
     reorganise.reorganise(git, Args())
-    m_trans.assert_called_once_with(*expected)
+    m_trans.assert_called_once_with(*args, **kwargs)
 
 
 @mock.patch("mozphab.conduit.ConduitAPI.check")
