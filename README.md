@@ -172,7 +172,7 @@ Diffs will be downloaded from Phabricator and applied using the underlying
 VCS (`import` for Mercurial or `apply` for Git). A commit for each revision will
 be created in a new bookmark or topic (Mercurial) or branch (Git).
 
-This behavior can be modified with few options:
+This behavior can be modified with the following options:
 
 - `--apply-to TARGET` Define the commit to which apply the patch:
   - `base` (default) find the base commit in the first ancestor of the revision,
@@ -219,7 +219,7 @@ you need to change the parent/child relation of the revisions in Phabricator.
 `moz-phab reorg` command will compare the stack, display what will be changed
 and ask for permission before taking any action.
 
-This behavior can be modified with few options:
+This behavior can be modified with the following options:
 
 - `--no-abandon` Avoid abandoning revisions on Phabricator when they have been
   removed from the local stack. Only change the dependency relationships between
