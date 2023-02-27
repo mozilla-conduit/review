@@ -279,7 +279,7 @@ class Diff:
             old.away_paths.append(change.cur_path)
 
         else:
-            raise "unsupported change type %s" % kind
+            raise Exception(f"unsupported change type {kind} for {a_path}")
 
     def _upload_file(self, change, upload):
         path = change.cur_path if upload["type"] == "new" else change.old_path
