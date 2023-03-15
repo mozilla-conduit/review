@@ -218,21 +218,21 @@ def test_whoami(m_conduit, m_bmo, user_data):
     )
 
     # Not employee as BMO.whoami failed
-    m_conduit.whoami.return_value = dict(primaryEmail="some@email.com")
+    m_conduit.whoami.return_value = dict(primaryEmail="someone@example.com")
     m_bmo.whoami.return_value = None
-    assert user_data.whoami() == dict(email="some@email.com", is_employee=False)
+    assert user_data.whoami() == dict(email="someone@example.com", is_employee=False)
     m_bmo.whoami.assert_called_once()
 
     # Not employee as not in mozilla-employee-confidential group
-    m_conduit.whoami.return_value = dict(primaryEmail="some@email.com")
-    m_bmo.whoami.return_value = dict(name="nvm@email.com", groups=["some-group"])
-    assert user_data.whoami() == dict(email="some@email.com", is_employee=False)
+    m_conduit.whoami.return_value = dict(primaryEmail="someone@example.com")
+    m_bmo.whoami.return_value = dict(name="nvm@example.com", groups=["some-group"])
+    assert user_data.whoami() == dict(email="someone@example.com", is_employee=False)
 
     # An employee as in mozilla-employee-confidential group
     m_bmo.whoami.return_value = dict(
         name="someemail", groups=["mozilla-employee-confidential"]
     )
-    assert user_data.whoami() == dict(email="some@email.com", is_employee=True)
+    assert user_data.whoami() == dict(email="someone@example.com", is_employee=True)
 
     m_conduit.whoami.return_value = dict(primaryEmail=None)
     assert user_data.whoami() == dict(
@@ -240,7 +240,7 @@ def test_whoami(m_conduit, m_bmo, user_data):
     ), "When `primaryEmail` is empty, `is_employee` is False and doesn't fail."
 
     # whoami raises an error if BMO.whoami raises Error
-    m_conduit.whoami.return_value = dict(primaryEmail="some@email.com")
+    m_conduit.whoami.return_value = dict(primaryEmail="someone@example.com")
     m_bmo.whoami.side_effect = Error
     with pytest.raises(Error):
         user_data.whoami()
@@ -250,10 +250,10 @@ def test_whoami(m_conduit, m_bmo, user_data):
 @mock.patch("mozphab.user.conduit")
 def test_whoami_without_bmo(m_conduit, m_bmo, user_data):
     # When there is no bmo_url, bmo.whoami() is not called
-    m_conduit.whoami.return_value = dict(primaryEmail="some@email.com")
+    m_conduit.whoami.return_value = dict(primaryEmail="someone@example.com")
     m_conduit.repo.bmo_url = None
     m_bmo.whoami.return_value = None
-    assert user_data.whoami() == dict(email="some@email.com", is_employee=False)
+    assert user_data.whoami() == dict(email="someone@example.com", is_employee=False)
     m_bmo.whoami.assert_not_called()
 
 

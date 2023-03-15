@@ -865,8 +865,11 @@ class Git(Repository):
         if not is_valid_email(self.git.email):
             raise Error(
                 f"Your email configured with git ({self.git.email}) is not a valid "
-                f"format.\nPlease run `git config user.email some@email.com` to set "
-                f"the correct value.\n\nYou can also run `git commit --amend "
-                f'--author="Author Name <some@email.com>" --no-edit` to amend '
+                f"format.\n"
+                f"Please run `git config user.email someone@example.com` to set "
+                f"the correct value.\n"
+                "\n"
+                "You can also run `git commit --amend "
+                f'--author="Author Name <someone@example.com>" --no-edit` to amend '
                 f"the most recent commit."
             )

@@ -733,5 +733,5 @@ def test_hg_extract_email_from_username(hg):
     assert hg.extract_email_from_username() == "test user"
 
     # Username with email
-    hg.username = "test user <test@email.com>"
-    assert hg.extract_email_from_username() == "test@email.com"
+    hg.username = "test user <test@example.com>"
+    assert hg.extract_email_from_username() == "test@example.com"

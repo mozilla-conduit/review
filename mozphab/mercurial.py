@@ -1141,7 +1141,7 @@ class Mercurial(Repository):
                 f"Please see https://www.mercurial-scm.org/doc/hgrc.5.html "
                 f"for more information on editing your Mercurial configuration."
                 f"\n\nYou can also amend a commit via "
-                f'`hg commit --amend --user "username <some@email.com>"'
+                f'`hg commit --amend --user "username <someone@example.com>"'
             )
 
     def extract_email_from_username(self) -> str:
