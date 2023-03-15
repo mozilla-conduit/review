@@ -119,10 +119,14 @@ class UserData:
             response["is_employee"] = True
             return response
 
-        bmo_who = bmo.whoami()
-        response["is_employee"] = (
-            bmo_who is not None and "mozilla-employee-confidential" in bmo_who["groups"]
-        )
+        if conduit.repo.bmo_url:
+            bmo_who = bmo.whoami()
+            response["is_employee"] = (
+                bmo_who is not None
+                and "mozilla-employee-confidential" in bmo_who["groups"]
+            )
+        else:
+            response["is_employee"] = False
         return response
 
     def set_user_data(self, from_file_only=False):

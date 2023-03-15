@@ -13,8 +13,6 @@ from .environment import USER_AGENT
 from .exceptions import Error
 from .logger import logger
 
-DEFAULT_BMO_HOST = "https://bugzilla.mozilla.org"
-
 
 class BMOAPIError(Error):
     """Raised when the Bugzilla API returns an error response."""
@@ -45,7 +43,7 @@ class BMOAPI:
     @staticmethod
     def _build_request(*, method, headers=None):
         """Return dict with Request args for calling the specified BMO method."""
-        bmo_url = conduit.repo.bmo_url or DEFAULT_BMO_HOST
+        bmo_url = conduit.repo.bmo_url
         headers = headers or {}
         return dict(
             url=url_parse.urljoin(bmo_url, "rest/%s" % method),

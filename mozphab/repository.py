@@ -23,6 +23,20 @@ from .helpers import (
 from .logger import logger
 from .spinner import wait_message
 
+MOZILLA_DOMAINS = {
+    ".mozilla.org",
+    ".mozilla.com",
+    ".allizom.org",
+}
+
+
+def is_mozilla_phabricator(url):
+    """Return `True` if the `url` is a Mozilla owned domain."""
+    phab_host = urllib.parse.urlparse(url).hostname
+    if not phab_host:
+        return False
+    return any(phab_host.endswith(domain) for domain in MOZILLA_DOMAINS)
+
 
 class Repository(object):
     def __init__(self, path, dot_path, phab_url=None):
@@ -42,11 +56,14 @@ class Repository(object):
         self.call_sign = self._get_setting("repository.callsign")
         self.bmo_url = self._get_setting("bmo_url")
 
-        if self.bmo_url and not (
-            urllib.parse.urlparse(self.bmo_url).scheme == "https"
-            or environment.HTTP_ALLOWED
-        ):
-            raise Error("Only https connections are allowed.")
+        if self.bmo_url:
+            if not (
+                urllib.parse.urlparse(self.bmo_url).scheme == "https"
+                or environment.HTTP_ALLOWED
+            ):
+                raise Error("Only https connections are allowed.")
+        elif is_mozilla_phabricator(self.phab_url):
+            self.bmo_url = "https://bugzilla.mozilla.org"
 
     def is_worktree_clean(self):
         """Check if the working tree is clean."""

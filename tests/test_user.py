@@ -221,6 +221,7 @@ def test_whoami(m_conduit, m_bmo, user_data):
     m_conduit.whoami.return_value = dict(primaryEmail="some@email.com")
     m_bmo.whoami.return_value = None
     assert user_data.whoami() == dict(email="some@email.com", is_employee=False)
+    m_bmo.whoami.assert_called_once()
 
     # Not employee as not in mozilla-employee-confidential group
     m_conduit.whoami.return_value = dict(primaryEmail="some@email.com")
@@ -243,6 +244,17 @@ def test_whoami(m_conduit, m_bmo, user_data):
     m_bmo.whoami.side_effect = Error
     with pytest.raises(Error):
         user_data.whoami()
+
+
+@mock.patch("mozphab.user.bmo")
+@mock.patch("mozphab.user.conduit")
+def test_whoami_without_bmo(m_conduit, m_bmo, user_data):
+    # When there is no bmo_url, bmo.whoami() is not called
+    m_conduit.whoami.return_value = dict(primaryEmail="some@email.com")
+    m_conduit.repo.bmo_url = None
+    m_bmo.whoami.return_value = None
+    assert user_data.whoami() == dict(email="some@email.com", is_employee=False)
+    m_bmo.whoami.assert_not_called()
 
 
 def test_is_bad_uuid():
