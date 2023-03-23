@@ -88,8 +88,13 @@ def add_parser(parser):
         help="Submit uplift request commit(s) to Phabricator.",
         description=(
             "MozPhab will create a new revision to request patches be uplifted "
-            "to stable release trains."
+            "to stable release trains.\n"
+            "\n"
+            "See https://wiki.mozilla.org/index.php?title="
+            "Release_Management/Requesting_an_Uplift\n"
+            "for more information."
         ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     # Add all the same arguments as `moz-phab submit`.
