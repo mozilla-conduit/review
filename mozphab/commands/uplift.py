@@ -92,10 +92,10 @@ def add_parser(parser):
         ),
     )
 
-    # Add all the same arguments as `moz-phab submit`
+    # Add all the same arguments as `moz-phab submit`.
     add_submit_arguments(uplift_parser)
 
-    # Add uplift-specific arguments
+    # Add uplift-specific arguments.
     uplift_parser.add_argument(
         "--train",
         help=(
