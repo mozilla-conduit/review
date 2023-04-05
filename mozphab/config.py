@@ -57,6 +57,7 @@ class Config(object):
             create_bookmark = True
             create_topic = False
             always_full_stack = False
+            branch_name_template = phab-D{rev_id}
 
             [updater]
             self_last_check = 0
@@ -90,6 +91,7 @@ class Config(object):
         self.create_bookmark = self._getboolean("patch", "create_bookmark")
         self.create_topic = self._getboolean("patch", "create_topic")
         self.always_full_stack = self._getboolean("patch", "always_full_stack")
+        self.branch_name_template = self._config.get("patch", "branch_name_template")
         self.self_last_check = self._getint("updater", "self_last_check")
         self.self_auto_update = self._getboolean("updater", "self_auto_update")
         self.get_pre_releases = self._getboolean("updater", "get_pre_releases")

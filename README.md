@@ -49,6 +49,7 @@ apply_to = base
 create_bookmark = True
 create_topic = False
 always_full_stack = False
+branch_name_template = phab-D{rev_id}
 
 [updater]
 self_last_check = 0
@@ -87,6 +88,9 @@ report_to_sentry = True
 - `patch.always_full_stack` : When `False` and the patched revision has successors,
     moz-phab will ask if the whole stack should be patched instead. If `True`
     moz-phab will do it without without asking.
+- `patch.branch_name_template` : The template string to use for naming the new branch,
+    topic or bookmark. The string takes a single format string input, `rev_id`, which
+    is the ID of the revision being patched.
 - `updater.self_last_check` : Epoch timestamp (local timezone) indicating the last
    time an update check was performed for this script.  set to `-1` to disable
    this check.

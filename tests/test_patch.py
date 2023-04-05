@@ -2,13 +2,52 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from unittest import mock
 import argparse
+
+from typing import Optional
+from unittest import mock
 
 import pytest
 
+from mozphab.config import Config
 from mozphab.commands import patch
 from mozphab import exceptions, helpers, mozphab
+
+
+def test_resolve_branch_name():
+    class Args:
+        def __init__(self, name: Optional[str] = None, no_commit: bool = False):
+            self.name = name
+            self.no_commit = no_commit
+
+    rev_id = "123"
+
+    args = Args(name="branch")
+    config = Config(should_access_file=False)
+
+    assert (
+        patch.resolve_branch_name(args, config, rev_id) == "branch"
+    ), "Branch name passed via args should take precedent."
+
+    args = Args(no_commit=True)
+    assert (
+        patch.resolve_branch_name(args, config, rev_id) is None
+    ), "No branch name should be used when `no_commit` is `True`."
+
+    args = Args()
+    assert (
+        patch.resolve_branch_name(args, config, rev_id) == "phab-D123"
+    ), "Branch name should match the default when not changed."
+
+    config.branch_name_template = "phab/D{rev_id}"
+    assert (
+        patch.resolve_branch_name(args, config, rev_id) == "phab/D123"
+    ), "Branch name should change based on the configuration."
+
+    config.branch_name_template = "phabrev"
+    assert (
+        patch.resolve_branch_name(args, config, rev_id) == "phabrev"
+    ), "Using template strings should be optional."
 
 
 def test_check_revision_id():
@@ -148,6 +187,7 @@ def test_patch(
 
     m_git_check_conduit.return_value = False
     m_config.arc_command = "arc"
+    m_config.branch_name_template = "phab-D{rev_id}"
     with pytest.raises(exceptions.Error):
         patch.patch(git, None)
 

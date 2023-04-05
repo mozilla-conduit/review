@@ -6,10 +6,17 @@ import argparse
 import re
 import subprocess
 
-from typing import List, Tuple
+from typing import (
+    List,
+    Optional,
+    Tuple,
+)
 
 from mozphab.conduit import conduit
-from mozphab.config import config
+from mozphab.config import (
+    Config,
+    config,
+)
 from mozphab.exceptions import Error, NonLinearException, NotFoundError
 from mozphab.helpers import prepare_body, prompt, short_node
 from mozphab.logger import logger
@@ -65,6 +72,30 @@ def update_revision_with_new_diff(revs: List[dict], diff: dict) -> None:
             return
 
     raise Error(f"Diff {diff['id']} is not related to any revision in the stack.")
+
+
+def resolve_branch_name(
+    args: argparse.Namespace, config: Config, rev_id: str
+) -> Optional[str]:
+    """Resolve the branch name for the resulting patch.
+
+    Use the value passed from `--name` on the CLI if possible. If
+    `--no-commit` is passed, we don't need a branch name since we won't
+    be committing to the VCS. Otherwise, format the patch from the
+    `patch.branch_name_template` config knob.
+
+    `patch.branch_name_template` supports a single format string, `rev_id`.
+    """
+    if args.name:
+        # Return the value passed from the CLI.
+        return args.name
+
+    if args.no_commit:
+        # `no_commit` implies no branch name.
+        return None
+
+    # Build the branch name from the configured template.
+    return config.branch_name_template.format(rev_id=rev_id)
 
 
 def patch(repo, args):
@@ -236,12 +267,7 @@ def patch(repo, args):
 
                 raise Error(msg)
 
-        if args.name:
-            branch_name = args.name
-        elif args.no_commit:
-            branch_name = None
-        else:
-            branch_name = "phab-D%s" % rev_id
+        branch_name = resolve_branch_name(args, config, rev_id)
         repo.before_patch(base_node, branch_name)
 
     parent = None
