@@ -39,8 +39,6 @@ workflows:
           <<: *branches-and-tags-filter
       - test_3_10:
           <<: *branches-and-tags-filter
-      - test_win:
-          <<: *branches-and-tags-filter
       - test_package:
           <<: *branches-and-tags-filter
       - publish:
@@ -50,7 +48,6 @@ workflows:
             - test_3_8
             - test_3_9
             - test_3_10
-            - test_win
             - test_package
 
 jobs:
