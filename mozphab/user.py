@@ -69,7 +69,6 @@ class UserData:
         """Assign attributes from a dict."""
         for key in self.keys:
             if key in dictionary:
-
                 # See bug 1788719.
                 if is_bad_uuid(key, dictionary[key]):
                     dictionary[key] = format_uuid(dictionary[key])
