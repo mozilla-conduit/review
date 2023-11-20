@@ -5,11 +5,7 @@
 import os
 import sys
 
-try:
-    from importlib.metadata import version, PackageNotFoundError
-except ImportError:
-    # We can remove this once we drop support for Python 3.7.
-    from importlib_metadata import version, PackageNotFoundError
+from importlib.metadata import version, PackageNotFoundError
 
 from pathlib import Path
 

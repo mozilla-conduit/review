@@ -14,8 +14,6 @@ dependencies = [
     "glean-sdk>=50.0.1,==50.*",
     "packaging",
     "python-hglib>=2.6.2",
-    # `importlib.metadata` is in stdlib since Python 3.8.
-    "importlib-metadata; python_version < '3.8'",
     "sentry-sdk>=0.14.3",
     "setuptools",
     "colorama>=0.4.6",
