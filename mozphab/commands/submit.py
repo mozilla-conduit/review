@@ -461,6 +461,10 @@ def local_uplift_if_possible(
     if not unified_head:
         # If we didn't find a unified head, we intend to submit an uplift without
         # modifying the local repo state via a rebase.
+        logger.warning(
+            f"Couldn't find a head for {args.train} in version control, "
+            "submitting without rebase."
+        )
         return True
 
     if not repo.is_descendant(unified_head):
