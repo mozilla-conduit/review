@@ -8,7 +8,7 @@ from .helpers import temporary_binary_file
 from .logger import logger
 
 
-def apply_patch(diff, cwd):
+def apply_patch(diff: str, cwd: str):
     """Apply a patch provided in the `diff`."""
     try:
         git = GitCommand()
