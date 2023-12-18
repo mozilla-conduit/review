@@ -21,6 +21,6 @@ class CommandError(Exception):
 
     status: int
 
-    def __init__(self, msg="", status=1):
+    def __init__(self, msg: str = "", status: int = 1):
         self.status = status
         super().__init__(msg)
