@@ -72,7 +72,7 @@ class Config(object):
 
         self._config = configparser.ConfigParser()
         self._config.read_file(
-            io.StringIO("\n".join([l.strip() for l in defaults.splitlines()]))
+            io.StringIO("\n".join([line.strip() for line in defaults.splitlines()]))
         )
 
         if self._config.has_section("arc"):

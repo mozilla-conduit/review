@@ -108,7 +108,9 @@ class Git(Repository):
         return bool(self.git.output(["diff-index", "HEAD"]))
 
     def is_worktree_clean(self) -> bool:
-        return all(l.startswith("?? ") for l in self.git_out(["status", "--porcelain"]))
+        return all(
+            line.startswith("?? ") for line in self.git_out(["status", "--porcelain"])
+        )
 
     def before_submit(self):
         self.validate_email()
