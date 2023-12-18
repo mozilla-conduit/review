@@ -83,7 +83,7 @@ class Git(Repository):
 
         return self.git_out(["cinnabar", "hg2git", node], split=False)
 
-    @lru_cache(maxsize=None)
+    @lru_cache(maxsize=None)  # noqa: B019
     def _git_to_hg(self, node: str) -> Optional[str]:
         """Convert Git hashtag to Mercurial."""
         if not self.is_cinnabar_required:
@@ -92,7 +92,7 @@ class Git(Repository):
         hg_node = self.git_out(["cinnabar", "git2hg", node], split=False)
         return hg_node if hg_node != NULL_SHA1 else None
 
-    @lru_cache(maxsize=128)
+    @lru_cache(maxsize=128)  # noqa: B019
     def get_public_node(self, node: str) -> str:
         """Return a Mercurial node if Cinnabar is required."""
         public_node = node
@@ -702,11 +702,11 @@ class Git(Repository):
     def _rebase(self, newbase: str, upstream: str):
         self.git_call(["rebase", "--quiet", "--onto", newbase, upstream])
 
-    @lru_cache(maxsize=128)
+    @lru_cache(maxsize=128)  # noqa: B019
     def _file_size(self, blob: str) -> int:
         return int(self.git_out(["cat-file", "-s", blob], split=False))
 
-    @lru_cache(maxsize=128)
+    @lru_cache(maxsize=128)  # noqa: B019
     def _cat_file(self, blob: str) -> str:
         return self.git_out(["cat-file", "blob", blob], split=False, expect_binary=True)
 

@@ -984,13 +984,13 @@ class Mercurial(Repository):
 
         return diff
 
-    @lru_cache(maxsize=None)
+    @lru_cache(maxsize=None)  # noqa: B019
     def hg_cat(self, filename: str, node: str) -> Optional[bytes]:
         return self.hg_out(
             ["cat", "-r", node, filename], split=False, expect_binary=True
         )
 
-    @lru_cache(maxsize=None)
+    @lru_cache(maxsize=None)  # noqa: B019
     def _file_size(self, filename: str, rev: str) -> int:
         """Get the file size of the file."""
         return int(
@@ -1008,7 +1008,7 @@ class Mercurial(Repository):
             )
         )
 
-    @lru_cache(maxsize=128)
+    @lru_cache(maxsize=128)  # noqa: B019
     def _get_file_meta(self, filename: str, rev: str) -> dict:
         """Collect information about the file."""
         binary = False
