@@ -26,7 +26,7 @@ signal.signal(signal.SIGINT, signal_sigint)
 
 
 class Spinner(threading.Thread):
-    def __init__(self, message):
+    def __init__(self, message: str):
         super().__init__()
         self.message = message
         self.daemon = True
@@ -57,7 +57,7 @@ class Spinner(threading.Thread):
 
 
 @contextmanager
-def wait_message(message):
+def wait_message(message: str):
     if not environment.SHOW_SPINNER:
         yield
         return
