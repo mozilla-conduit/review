@@ -4,6 +4,8 @@
 import copy
 import json
 import time
+
+from typing import Optional
 import urllib.parse as url_parse
 import urllib.error as url_error
 import urllib.request as url_request
@@ -17,12 +19,12 @@ from .logger import logger
 class BMOAPIError(Error):
     """Raised when the Bugzilla API returns an error response."""
 
-    def __init__(self, msg=None):
+    def __init__(self, msg: Optional[str] = None):
         super().__init__(f"Bugzilla Error: {msg if msg else 'Unknown Error'}")
 
 
 class BMOAPI:
-    def get(self, method, headers=None):
+    def get(self, method: str, headers: Optional[dict] = None) -> dict:
         req_args = self._build_request(method=method, headers=headers)
         logger.debug("%s %s", req_args["url"], self._sanitise_req(req_args))
 
@@ -41,7 +43,7 @@ class BMOAPI:
         return res
 
     @staticmethod
-    def _build_request(*, method, headers=None):
+    def _build_request(*, method: str, headers: Optional[dict] = None) -> dict:
         """Return dict with Request args for calling the specified BMO method."""
         bmo_url = conduit.repo.bmo_url
         headers = headers or {}
@@ -52,13 +54,15 @@ class BMOAPI:
         )
 
     @staticmethod
-    def _sanitise_req(req_args):
+    def _sanitise_req(req_args: dict):
         sanitised = copy.deepcopy(req_args)
         if "X-PHABRICATOR-TOKEN" in sanitised.get("headers"):
             sanitised["headers"]["X-PHABRICATOR-TOKEN"] = "cli-XXXX"
         return sanitised
 
-    def _req_with_retries(self, endpoint, headers=None, retries=3):
+    def _req_with_retries(
+        self, endpoint: str, headers: Optional[dict] = None, retries: int = 3
+    ) -> dict:
         for attempt in range(retries):
             try:
                 result = self.get(endpoint, headers)
@@ -72,7 +76,7 @@ class BMOAPI:
 
         return result
 
-    def whoami(self):
+    def whoami(self) -> dict:
         return self._req_with_retries(
             "whoami", headers={"X-PHABRICATOR-TOKEN": conduit.load_api_token()}
         )
