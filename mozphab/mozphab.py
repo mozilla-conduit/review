@@ -9,12 +9,14 @@
 CLI to support submission of a series of commits to Phabricator. .
 """
 
+import argparse
 import logging
 import os
 import ssl
 import subprocess
 import sys
 import traceback
+from typing import List
 
 from mozphab import environment
 
@@ -24,6 +26,7 @@ from .config import config
 from .detect_repository import repo_from_args
 from .exceptions import Error
 from .logger import init_logging, logger, stop_logging
+from .repository import Repository
 from .spinner import wait_message
 from .sentry import init_sentry, report_to_sentry
 from .telemetry import telemetry, configure_telemetry
@@ -50,7 +53,7 @@ def restart_mozphab():
     sys.exit(p.returncode)
 
 
-def assert_api_token_is_present(repo, args):
+def assert_api_token_is_present(repo: Repository, args: argparse.Namespace):
     """Assert a local API token is present.
 
     Prompt for install by running `install-certificate` if missing,
@@ -68,7 +71,7 @@ def assert_api_token_is_present(repo, args):
         logger.info("Token installed, resuming original command")
 
 
-def main(argv, *, is_development):
+def main(argv: List[str], *, is_development: bool):
     try:
         if not is_development and config.report_to_sentry:
             init_sentry()
