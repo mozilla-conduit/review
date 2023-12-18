@@ -3,6 +3,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+from __future__ import annotations
+
 import json
 import os
 import re
@@ -10,6 +12,7 @@ import stat
 import sys
 import tempfile
 from typing import (
+    Callable,
     List,
     Optional,
     Tuple,
@@ -72,7 +75,7 @@ WIP_RE = re.compile(r"^(?:WIP[: ]|WIP$)", flags=re.IGNORECASE)
 VALID_EMAIL_RE = re.compile(r"[^@ \t\r\n]+@[^@ \t\r\n]+\.[^@ \t\r\n]+")
 
 
-def which_path(path):
+def which_path(path: str) -> Optional[str]:
     """Check if an executable is provided. Fall back to which if not.
 
     Args:
@@ -92,7 +95,9 @@ def which_path(path):
     return which(path)
 
 
-def parse_config(config_list, filter_func=None):
+def parse_config(
+    config_list: List[str], filter_func: Optional[Callable] = None
+) -> dict:
     """Parses list with "name=value" strings.
 
     Args:
@@ -140,7 +145,7 @@ def read_json_field(files: List[str], field_path: List[str]) -> Optional[str]:
 
 
 @contextmanager
-def temporary_file(content, encoding="utf-8"):
+def temporary_file(content: str, encoding: str = "utf-8"):
     f = tempfile.NamedTemporaryFile(delete=False, mode="w+", encoding=encoding)
     try:
         f.write(content)
@@ -152,7 +157,7 @@ def temporary_file(content, encoding="utf-8"):
 
 
 @contextmanager
-def temporary_binary_file(content):
+def temporary_binary_file(content: bytes):
     f = tempfile.NamedTemporaryFile(delete=False, mode="wb+")
     try:
         f.write(content)
@@ -180,12 +185,12 @@ def get_arcrc_path() -> str:
     return arcrc
 
 
-def parse_arc_diff_rev(body):
+def parse_arc_diff_rev(body: str) -> Optional[str]:
     m = ARC_DIFF_REV_RE.search(body)
     return m.group("rev") if m else None
 
 
-def strip_differential_revision(body):
+def strip_differential_revision(body: str) -> str:
     return ARC_DIFF_REV_RE.sub("", body).rstrip()
 
 
@@ -227,7 +232,7 @@ def move_drev_to_original(
     return ARC_DIFF_REV_RE.sub(repl, body), None
 
 
-def parse_api_error(api_response):
+def parse_api_error(api_response: str) -> Optional[str]:
     """Parse the string output from 'arc call-conduit' and return any errors found.
 
     Args:
@@ -251,7 +256,7 @@ def parse_api_error(api_response):
         return response["errorMessage"]
 
 
-def prompt(question, options=None):
+def prompt(question: str, options: Optional[List[str]] = None):
     if environment.HAS_ANSI:
         question = "\033[33m%s\033[0m" % question
     prompt_str = question
@@ -279,15 +284,15 @@ def prompt(question, options=None):
             return options_map[res]
 
 
-def has_arc_rejections(body):
+def has_arc_rejections(body: str) -> bool:
     return all(r.search(body) for r in ARC_REJECT_RE_LIST)
 
 
-def wip_in_commit_title(title):
+def wip_in_commit_title(title: str) -> bool:
     return WIP_RE.search(title) is not None
 
 
-def augment_commits_from_body(commits):
+def augment_commits_from_body(commits: List[dict]):
     """Extract metadata from commit body as fields.
 
     Adds: rev-id, bug-id, reviewers, wip
@@ -315,11 +320,11 @@ def augment_commits_from_body(commits):
     update_commit_title_previews(commits)
 
 
-def parse_bugs(title):
+def parse_bugs(title: str) -> List[str]:
     return BUG_ID_RE.findall(title)
 
 
-def parse_reviewers(title):
+def parse_reviewers(title: str) -> dict:
     """Extract reviewers information from first line of the commit message.
 
     Returns a dictionary containing reviewers divided by the type:
@@ -327,10 +332,10 @@ def parse_reviewers(title):
         "r=" reviewers under the "granted" key
     """
 
-    def extend_matches(match_re, matches):
+    def extend_matches(match_re: re.Pattern, matches: List[str]):
         """Extends `matches` with any matches found using `match_re`.
         Args:
-            match_re (str): a regular expression string to search with
+            match_re (re.Pattern): a regular expression object to search with
             matches (list of str): a list of strings of reviewers captured
         Returns:
             dict (str, list of str): a dictionary of requested and granted reviewers
@@ -345,7 +350,7 @@ def parse_reviewers(title):
     return reviewers
 
 
-def strip_depends_on(body):
+def strip_depends_on(body: str) -> str:
     return DEPENDS_ON_RE.sub("", body).rstrip()
 
 
@@ -357,13 +362,13 @@ def revision_title_from_commit(commit: dict) -> str:
     return title
 
 
-def update_commit_title_previews(commits):
+def update_commit_title_previews(commits: List[dict]):
     """Update title-preview from commit metadata for all commits in stack"""
     for commit in commits:
         commit["title-preview"] = build_commit_title(commit)
 
 
-def build_commit_title(commit):
+def build_commit_title(commit: dict) -> str:
     """Build/update title from commit metadata"""
     # Reviewers.
     title = replace_reviewers(commit["title"], commit["reviewers"])
@@ -381,7 +386,7 @@ def build_commit_title(commit):
     return title
 
 
-def replace_reviewers(commit_description, reviewers):
+def replace_reviewers(commit_description: str, reviewers: dict) -> str:
     """From vct's commitparser"""
     reviewers_lst = []
     if reviewers["request"]:
@@ -431,7 +436,13 @@ def replace_reviewers(commit_description, reviewers):
         return commit_title.strip() + "\n" + commit_description
 
 
-def prepare_body(title, summary, rev_id, phab_url, depends_on=None):
+def prepare_body(
+    title: str,
+    summary: str,
+    rev_id: str,
+    phab_url: str,
+    depends_on: Optional[str] = None,
+) -> str:
     """Prepare the body using title and summary."""
     summary = strip_differential_revision(summary)
     summary = strip_depends_on(summary)
@@ -448,7 +459,7 @@ def prepare_body(title, summary, rev_id, phab_url, depends_on=None):
     return body
 
 
-def short_node(text):
+def short_node(text: str) -> str:
     """Return a shortened version of a node name."""
     if len(text) == 40:
         try:
@@ -517,7 +528,7 @@ def create_hunk_lines(
     return lines, eof_missing_newline if check_eof else None
 
 
-def split_lines(body):
+def split_lines(body: bytes | str) -> List[bytes | str]:
     """Split a string on line separators, and keep line endings.
 
     This method behaves the same as `str.splitlines(True)`, but only splits on POSIX
@@ -542,7 +553,7 @@ def split_lines(body):
     return re.split(pattern, body)
 
 
-def join_lineseps(lines):
+def join_lineseps(lines: List[str]) -> List[str]:
     """Given a list of strings, join every two entries together where possible.
 
     NOTE: If the list length is odd, then the last entry is joined with an empty string.
