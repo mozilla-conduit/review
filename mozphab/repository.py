@@ -14,6 +14,7 @@ from typing import (
 from mozphab import environment
 
 from .conduit import conduit, normalise_reviewer
+from .diff import Diff
 from .exceptions import Error
 from .helpers import (
     get_arcrc_path,
@@ -147,6 +148,9 @@ class Repository(object):
             author-name
             author-email
         """
+
+    def get_diff(self, commit: Commit) -> Diff:
+        """Create a Diff object with changes."""
 
     def refresh_commit_stack(self, commits):
         """Update the stack following an altering change (eg rebase)."""
