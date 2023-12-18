@@ -58,14 +58,14 @@ class UserData:
         self.set_from_file()
 
     @property
-    def is_data_collected(self):
+    def is_data_collected(self) -> bool:
         """True if all user info data is collected."""
         return all(getattr(self, k) is not None for k in self.keys)
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {k: getattr(self, k) for k in self.keys}
 
-    def update_from_dict(self, dictionary):
+    def update_from_dict(self, dictionary: dict):
         """Assign attributes from a dict."""
         for key in self.keys:
             if key in dictionary:
@@ -91,7 +91,7 @@ class UserData:
         with USER_INFO_FILE.open("w", encoding="utf-8") as f:
             json.dump(user_info, f, sort_keys=True, indent=2)
 
-    def whoami(self):
+    def whoami(self) -> Optional[dict]:
         """Returns a dict with email and employee status."""
         # Check user in Phabricator.
         try:
@@ -128,7 +128,7 @@ class UserData:
             response["is_employee"] = False
         return response
 
-    def set_user_data(self, from_file_only=False):
+    def set_user_data(self, from_file_only: bool = False) -> bool:
         """Sets user data if needed.
 
         Returns a bool value indicating if status is updated.
