@@ -41,7 +41,7 @@ def should_fallback_to_submit(argv: List[str], commands: Set[str]) -> bool:
     return True
 
 
-def parse_args(argv):
+def parse_args(argv: List[str]) -> argparse.Namespace:
     main_parser = argparse.ArgumentParser(add_help=False)
     main_parser.add_argument("--version", action="store_true", help=argparse.SUPPRESS)
     main_parser.add_argument(
