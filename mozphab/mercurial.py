@@ -2,6 +2,9 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+from __future__ import annotations
+
+import argparse
 import json
 import mimetypes
 import os
@@ -14,8 +17,10 @@ from contextlib import suppress
 from packaging.version import Version
 from functools import lru_cache
 from typing import (
+    Dict,
     List,
     Optional,
+    Tuple,
 )
 
 import hglib
@@ -43,7 +48,7 @@ MINIMUM_MERCURIAL_VERSION = Version("4.3.3")
 
 
 class Mercurial(Repository):
-    def __init__(self, path):
+    def __init__(self, path: str):
         dot_path = os.path.join(path, ".hg")
         if not os.path.isdir(dot_path):
             raise ValueError("%s: not a hg repository" % path)
@@ -91,7 +96,7 @@ class Mercurial(Repository):
         os.chdir(self._repo_path)
 
     @property
-    def repository(self):
+    def repository(self) -> hglib.hgclient:
         """Returns the hglib.hgclient instance.
 
         If the config has changed, recreate the instance.
@@ -109,7 +114,7 @@ class Mercurial(Repository):
         self._repo = hglib.open(self._repo_path, encoding="UTF-8", configs=configs)
         return self._repo
 
-    def _get_config_options(self):
+    def _get_config_options(self) -> List[tuple]:
         """Returns the --config options for hg
 
         Updated with the safe ones when safe mode is used.
@@ -120,12 +125,12 @@ class Mercurial(Repository):
         return list(options.items())
 
     @classmethod
-    def is_repo(cls, path):
+    def is_repo(cls, path: str) -> bool:
         """Quick check for repository at specified path."""
         return os.path.exists(os.path.join(path, ".hg"))
 
     @staticmethod
-    def _get_extension(extension, hg_config):
+    def _get_extension(extension: str, hg_config: dict) -> Optional[str]:
         for prefix in ("extensions.%s", "extensions.hgext.%s"):
             field = prefix % extension
             if field in hg_config:
@@ -133,7 +138,11 @@ class Mercurial(Repository):
         return None
 
     @staticmethod
-    def _get_extensions(*, from_config=None, from_args=None):
+    def _get_extensions(
+        *,
+        from_config: Optional[List[str]] = None,
+        from_args: Optional[List[str]] = None,
+    ) -> List[str]:
         assert from_config or from_args
 
         extensions = []
@@ -155,23 +164,23 @@ class Mercurial(Repository):
 
         return sorted(extensions)
 
-    def is_worktree_clean(self):
+    def is_worktree_clean(self) -> bool:
         status = self._status()
         return not status["T"]
 
-    def hg(self, command, **kwargs):
+    def hg(self, command: List[str], **kwargs):
         self.hg_out(command, capture=False, **kwargs)
 
     def hg_out(
         self,
-        command,
-        capture=True,
-        expect_binary=False,
-        strip=True,
-        keep_ends=False,
-        split=True,
-        never_log=False,
-    ):
+        command: List[str],
+        capture: bool = True,
+        expect_binary: bool = False,
+        strip: bool = True,
+        keep_ends: bool = False,
+        split: bool = True,
+        never_log: bool = False,
+    ) -> Optional[bytes | str]:
         def error_handler(exit_code, stdout, stderr):
             if not capture:
                 clear_terminal_line()
@@ -187,7 +196,8 @@ class Mercurial(Repository):
                     logger.debug(stdout.decode().rstrip())
 
             raise CommandError(
-                "command '%s' failed to complete successfully" % command[0].decode(),
+                "command '%s' failed to complete successfully"
+                % command_bytes[0].decode(),
                 exit_code,
             )
 
@@ -195,8 +205,8 @@ class Mercurial(Repository):
             command.extend([arg, value])
 
         debug_log_command(["hg"] + command)
-        command = [c.encode() for c in command]
-        out = self.repository.rawcommand(command, eh=error_handler)
+        command_bytes = [c.encode() for c in command]
+        out = self.repository.rawcommand(command_bytes, eh=error_handler)
 
         if expect_binary:
             logger.debug("%s bytes of data received", len(out))
@@ -215,7 +225,9 @@ class Mercurial(Repository):
         print(out, end="")
         return None
 
-    def hg_log(self, revset, split=True, select="node"):
+    def hg_log(
+        self, revset: str, split: bool = True, select: str = "node"
+    ) -> Optional[str]:
         return self.hg_out(["log", "-T", "{%s}\n" % select, "-r", revset], split=split)
 
     def before_submit(self):
@@ -264,7 +276,7 @@ class Mercurial(Repository):
             self.previous_bookmark = None
             self.has_temporary_bookmark = False
 
-    def _status(self):
+    def _status(self) -> Dict[str, List[str]]:
         # `hg status` is slow on large repos.  As we'll need both uncommitted changes
         # and untracked files separately, run it once and cache results.
         if self.status is None:
@@ -277,20 +289,21 @@ class Mercurial(Repository):
                 self.status["U" if status == "?" else "T"].append(path)
         return self.status
 
-    def untracked(self):
+    def untracked(self) -> List[str]:
         return self._status()["U"]
 
-    def _refresh_commit(self, commit, node, rev=None):
+    def _refresh_commit(self, commit: dict, node: str, rev: Optional[str] = None):
         """Update commit's node and name from node and rev."""
         if not rev:
             rev = self.hg_log(node, select="rev", split=False)
         commit["node"] = node
         commit["name"] = "%s:%s" % (rev, short_node(node))
 
-    def _get_successor(self, node):
+    def _get_successor(self, node: str) -> Tuple[Optional[str], Optional[str]]:
         """Get the successor of the commit represented by its node.
 
-        Returns: a tuple containing rev and node"""
+        Returns: a tuple containing rev and node.
+        """
         hg_log = self.hg_out(
             ["log"]
             + ["-T", "{rev} {node}\n"]
@@ -306,7 +319,7 @@ class Mercurial(Repository):
 
         return hg_log[0].split(" ", 1)
 
-    def refresh_commit_stack(self, commits):
+    def refresh_commit_stack(self, commits: List[dict]):
         """Update all commits to point to their superseded commit."""
         for commit in commits:
             (rev, node) = self._get_successor(commit["node"])
@@ -315,7 +328,7 @@ class Mercurial(Repository):
 
         self.revset = "%s::%s" % (commits[0]["node"], commits[-1]["node"])
 
-    def set_args(self, args):
+    def set_args(self, args: argparse.Namespace):
         """Sets up the right environment for hg, prior to running it.
 
         Sets:
@@ -445,7 +458,7 @@ class Mercurial(Repository):
 
             self.revset = "%s::%s" % (short_node(start), short_node(end))
 
-    def commit_stack(self, **kwargs):
+    def commit_stack(self, **kwargs) -> List[dict]:
         # Grab all the info we need about the commits, using randomness as a delimiter.
         boundary = "--%s--\n" % uuid.uuid4().hex
         hg_log = self.hg_out(
@@ -513,7 +526,7 @@ class Mercurial(Repository):
 
         return commits
 
-    def is_node(self, node):
+    def is_node(self, node: str) -> bool:
         try:
             self.hg_out(["identify", "-q", "-r", node])
         except CommandError:
@@ -521,21 +534,21 @@ class Mercurial(Repository):
 
         return True
 
-    def check_node(self, node):
+    def check_node(self, node: str) -> str:
         if not self.is_node(node):
             raise NotFoundError()
 
         return node
 
-    def checkout(self, node):
+    def checkout(self, node: str):
         self.hg(["update", "--quiet", node])
 
-    def commit(self, body):
+    def commit(self, body: str):
         """Commit the changes in the working directory."""
         with temporary_file(body) as temp_f:
             self.hg(["commit", "--logfile", temp_f])
 
-    def before_patch(self, node, name):
+    def before_patch(self, node: str, name: str):
         """Prepare repository to apply the patches.
 
         Args:
@@ -571,12 +584,12 @@ class Mercurial(Repository):
 
             self.hg(["topic", topic_name])
 
-    def apply_patch(self, diff, body, author, author_date):
+    def apply_patch(self, diff: str, body: str, author: str, author_date: str):
         changeset_str = self.format_patch(diff, body, author, author_date)
         with temporary_binary_file(changeset_str.encode("utf8")) as changeset_file:
             self.hg(["import", changeset_file, "--quiet"])
 
-    def format_patch(self, diff, body, author, author_date):
+    def format_patch(self, diff: str, body: str, author: str, author_date: str) -> str:
         changeset = ["# HG changeset patch"]
         if author:
             changeset.append("# User {}".format(author))
@@ -585,17 +598,17 @@ class Mercurial(Repository):
         changeset.extend([body, diff])
         return "\n".join(changeset)
 
-    def _amend_commit_body(self, node, body):
+    def _amend_commit_body(self, node: str, body: str):
         with temporary_file(body) as body_file:
             self.checkout(node)
             self.hg(["commit", "--amend", "--logfile", body_file])
 
-    def _get_parent(self, node):
+    def _get_parent(self, node: str) -> Optional[str]:
         return self.hg_out(
             ["log", "-T", "{node}", "-r", "parents(%s)" % node], split=False
         )
 
-    def finalize(self, commits):
+    def finalize(self, commits: List[dict]):
         """Rebase stack children commits if needed."""
         # Currently we do all rebases in `amend_commit` if the evolve extension
         # is not installed.
@@ -614,14 +627,14 @@ class Mercurial(Repository):
 
             parent = commit
 
-    def amend_commit(self, commit, commits):
+    def amend_commit(self, commit: dict, commits: List[dict]):
         updated_body = "%s\n%s" % (commit["title"], commit["body"])
         current_body = self.hg_out(
             ["log", "-T", "{desc}", "-r", commit["node"]], split=False
         )
         if current_body == updated_body:
             logger.debug("not amending commit %s, unchanged", commit["name"])
-            return False
+            return
 
         # Find our position in the stack.
         parent_node = None
@@ -729,7 +742,7 @@ class Mercurial(Repository):
 
         return callsign
 
-    def rebase_commit(self, source_commit, dest_commit):
+    def rebase_commit(self, source_commit: dict, dest_commit: dict):
         self.hg(
             ["rebase"]
             + ["--source", source_commit["node"]]
@@ -782,7 +795,7 @@ class Mercurial(Repository):
 
         return commits
 
-    def check_commits_for_submit(self, commits, require_bug=True):
+    def check_commits_for_submit(self, commits: List[dict], require_bug: bool = True):
         # 'Greatest Common Ancestor'/'Merge Base' should be included in the revset.
         ancestor = self.hg_log("ancestor(%s)" % self.revset, split=False)
         if not any(commit["node"] == ancestor for commit in commits):
@@ -831,7 +844,7 @@ class Mercurial(Repository):
 
         super().check_commits_for_submit(commits, require_bug=require_bug)
 
-    def _get_file_modes(self, commit):
+    def _get_file_modes(self, commit: dict) -> dict:
         """Get modes of the modified files."""
 
         # build list of modified files
@@ -890,7 +903,7 @@ class Mercurial(Repository):
 
         return file_modes
 
-    def get_diff(self, commit):
+    def get_diff(self, commit: dict) -> Diff:
         """Create a Diff object containing all changes for this commit."""
         commit["parent"] = self._get_parent(commit["node"])
         file_modes = self._get_file_modes(commit)
@@ -970,27 +983,37 @@ class Mercurial(Repository):
         return diff
 
     @lru_cache(maxsize=None)
-    def hg_cat(self, fn, node):
-        return self.hg_out(["cat", "-r", node, fn], split=False, expect_binary=True)
+    def hg_cat(self, filename: str, node: str) -> Optional[bytes]:
+        return self.hg_out(
+            ["cat", "-r", node, filename], split=False, expect_binary=True
+        )
 
     @lru_cache(maxsize=None)
-    def _file_size(self, fn, rev):
+    def _file_size(self, filename: str, rev: str) -> int:
         """Get the file size of the file."""
         return int(
             self.hg_out(
-                ["files", "-v", "-r", rev, os.path.join(self.path, fn), "-T", "{size}"],
+                [
+                    "files",
+                    "-v",
+                    "-r",
+                    rev,
+                    os.path.join(self.path, filename),
+                    "-T",
+                    "{size}",
+                ],
                 split=False,
             )
         )
 
     @lru_cache(maxsize=128)
-    def _get_file_meta(self, fn, rev):
+    def _get_file_meta(self, filename: str, rev: str) -> dict:
         """Collect information about the file."""
         binary = False
-        body = self.hg_cat(fn, rev)
+        body = self.hg_cat(filename, rev)
         meta = dict(mime="TEXT", bin_body=body)
 
-        meta["file_size"] = self._file_size(fn, rev)
+        meta["file_size"] = self._file_size(filename, rev)
         if meta["file_size"] > environment.MAX_TEXT_SIZE:
             binary = True
 
@@ -1008,13 +1031,20 @@ class Mercurial(Repository):
         meta["binary"] = binary
 
         if binary:
-            meta["mime"] = mimetypes.guess_type(fn)[0] or ""
+            meta["mime"] = mimetypes.guess_type(filename)[0] or ""
 
         return meta
 
-    def _change_add(self, change, fn, _old_fn, _parent, node):
+    def _change_add(
+        self,
+        change: Diff.Change,
+        filename: str,
+        _old_filename: str,
+        _parent: str,
+        node: str,
+    ):
         """Create a change about adding a file to the commit."""
-        meta = self._get_file_meta(fn, node)
+        meta = self._get_file_meta(filename, node)
         telemetry().submission.files_size.accumulate(meta["file_size"])
 
         if meta["binary"]:
@@ -1045,9 +1075,16 @@ class Mercurial(Repository):
             )
         )
 
-    def _change_del(self, change, fn, _old_fn, parent, _node):
+    def _change_del(
+        self,
+        change: Diff.Change,
+        filename: str,
+        _old_filename: str,
+        parent: str,
+        _node: str,
+    ):
         """Create a change about deleting a file from the commit."""
-        meta = self._get_file_meta(fn, parent)
+        meta = self._get_file_meta(filename, parent)
         telemetry().submission.files_size.accumulate(meta["file_size"])
 
         if meta["binary"]:
@@ -1076,10 +1113,17 @@ class Mercurial(Repository):
             )
         )
 
-    def _change_mod(self, change, fn, old_fn, parent, node):
+    def _change_mod(
+        self,
+        change: Diff.Change,
+        filename: str,
+        old_filename: str,
+        parent: str,
+        node: str,
+    ):
         """Create a change about modified file in the commit."""
-        a_meta = self._get_file_meta(old_fn, parent)
-        b_meta = self._get_file_meta(fn, node)
+        a_meta = self._get_file_meta(old_filename, parent)
+        b_meta = self._get_file_meta(filename, node)
         file_size = max(a_meta["file_size"], b_meta["file_size"])
         telemetry().submission.files_size.accumulate(file_size)
 
@@ -1120,7 +1164,15 @@ class Mercurial(Repository):
 
         # Using binary here to ensure we avoid converting newlines
         git_diff = self.hg_out(
-            ["diff", "--git", "--unified", str(context_size), "--rev", parent, fn],
+            [
+                "diff",
+                "--git",
+                "--unified",
+                str(context_size),
+                "--rev",
+                parent,
+                filename,
+            ],
             expect_binary=True,
         ).decode("utf-8")
         change.from_git_diff(git_diff)
