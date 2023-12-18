@@ -48,7 +48,7 @@ MAX_CONTEXT_SIZE = 4 * 1024 * 1024
 MOZPHAB_NAME = "MozPhab"  # PyPi package name
 
 
-def _get_mozphab_version():
+def _get_mozphab_version() -> str:
     try:
         return version("mozphab")
     except PackageNotFoundError:
