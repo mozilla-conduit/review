@@ -6,6 +6,7 @@ import unittest
 
 from mozphab import helpers
 from mozphab.commands import submit
+from mozphab.commits import Commit
 
 
 class CommitParsing(unittest.TestCase):
@@ -201,9 +202,9 @@ class CommitParsing(unittest.TestCase):
 
     def test_morph_blocking_reviewers(self):
         def morph(title):
-            commits = [dict(title=title)]
+            commits = [Commit(title=title)]
             submit.morph_blocking_reviewers(commits)
-            return commits[0]["title"]
+            return commits[0].title
 
         self.assertEqual("stuff", morph("stuff"))
         self.assertEqual("stuff; r=romulus!", morph("stuff; r!romulus"))
@@ -227,20 +228,16 @@ class CommitParsing(unittest.TestCase):
     def test_arc_diff_rev(self):
         parse = helpers.parse_arc_diff_rev
 
-        self.assertEqual("1", parse("Differential Revision: https://example.com/D1"))
-        self.assertEqual("22", parse("Differential Revision: https://example.com/D22"))
-        self.assertEqual("1", parse("Differential Revision:https://example.com/D1"))
-        self.assertEqual("1", parse("Differential Revision:   https://example.com/D1"))
-        self.assertEqual(
-            "22", parse("   Differential Revision: https://example.com/D22")
-        )
-        self.assertEqual("1", parse("Differential Revision: https://example.com/D1  "))
-        self.assertEqual(
-            "1", parse("\n  Differential Revision: https://example.com/D1")
-        )
-        self.assertEqual("1", parse("Differential Revision: https://example.com/D1\n"))
+        self.assertEqual(1, parse("Differential Revision: https://example.com/D1"))
+        self.assertEqual(22, parse("Differential Revision: https://example.com/D22"))
+        self.assertEqual(1, parse("Differential Revision:https://example.com/D1"))
+        self.assertEqual(1, parse("Differential Revision:   https://example.com/D1"))
+        self.assertEqual(22, parse("   Differential Revision: https://example.com/D22"))
+        self.assertEqual(1, parse("Differential Revision: https://example.com/D1  "))
+        self.assertEqual(1, parse("\n  Differential Revision: https://example.com/D1"))
+        self.assertEqual(1, parse("Differential Revision: https://example.com/D1\n"))
         self.assertIsNone(parse("Differential Revision: https://example.com/D1 1"))
-        self.assertEqual("1", parse("Differential Revision: http://example.com/D1"))
+        self.assertEqual(1, parse("Differential Revision: http://example.com/D1"))
         self.assertIsNone(parse("\n  Differential Revision: http://example.com/Q1"))
 
     def test_arc_reject(self):

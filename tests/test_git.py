@@ -10,6 +10,7 @@ from unittest import mock
 from .conftest import create_temp_fn
 
 from mozphab import environment, exceptions, mozphab
+from mozphab.commits import Commit
 
 
 @mock.patch("mozphab.git.Git.git_out")
@@ -68,22 +69,22 @@ def test_branches_to_rebase(m_git_git_out, git):
 
     # No branch returned - not a real case - we don't work without branches
     m_git_git_out.return_value = []
-    assert dict() == git_find([{"orig-node": "_aaa", "node": "aaa"}])
+    assert dict() == git_find([Commit(orig_node="_aaa", node="aaa")])
 
     # No amend, no branches to rebase
     m_git_git_out.return_value = ["branch"]
-    assert dict() == git_find([{"orig-node": "aaa", "node": "aaa"}])
+    assert dict() == git_find([Commit(orig_node="aaa", node="aaa")])
 
     # One commit, one branch
     m_git_git_out.return_value = ["branch"]
     assert dict(branch=["aaa", "_aaa"]) == git_find(
-        [{"orig-node": "_aaa", "node": "aaa"}]
+        [Commit(orig_node="_aaa", node="aaa")]
     )
 
     # Two commits one branch
     m_git_git_out.return_value = ["branch"]
     assert dict(branch=["bbb", "_bbb"]) == git_find(
-        [{"orig-node": "_aaa", "node": "aaa"}, {"orig-node": "_bbb", "node": "bbb"}]
+        [Commit(orig_node="_aaa", node="aaa"), Commit(orig_node="_bbb", node="bbb")]
     )
 
     # Two branches one commit
@@ -94,7 +95,7 @@ def test_branches_to_rebase(m_git_git_out, git):
     # More realistic output from the git command
     m_git_git_out.return_value = ["*  branch1", "  branch2"]
     assert dict(branch1=["aaa", "_aaa"], branch2=["aaa", "_aaa"]) == git_find(
-        [{"orig-node": "_aaa", "node": "aaa"}]
+        [Commit(orig_node="_aaa", node="aaa")]
     )
 
     # ... (branch1)
@@ -103,7 +104,7 @@ def test_branches_to_rebase(m_git_git_out, git):
     # * aaa
     m_git_git_out.side_effect = (["branch1", "branch2"], ["branch2"])
     assert dict(branch1=["aaa", "_aaa"], branch2=["bbb", "_bbb"]) == git_find(
-        [{"orig-node": "_aaa", "node": "aaa"}, {"orig-node": "_bbb", "node": "bbb"}]
+        [Commit(orig_node="_aaa", node="aaa"), Commit(orig_node="_bbb", node="bbb")]
     )
 
     # * ... (master)
@@ -131,10 +132,10 @@ def test_branches_to_rebase(m_git_git_out, git):
         feature1_1=["ddd", "_ddd"],
     ) == git_find(
         [
-            {"orig-node": "_aaa", "node": "aaa"},
-            {"orig-node": "_bbb", "node": "bbb"},
-            {"orig-node": "_ccc", "node": "ccc"},
-            {"orig-node": "_ddd", "node": "ddd"},
+            Commit(orig_node="_aaa", node="aaa"),
+            Commit(orig_node="_bbb", node="bbb"),
+            Commit(orig_node="_ccc", node="ccc"),
+            Commit(orig_node="_ddd", node="ddd"),
         ]
     )
 

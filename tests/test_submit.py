@@ -11,6 +11,7 @@ import uuid
 from callee import Contains
 
 from mozphab.commands import submit
+from mozphab.commits import Commit
 from mozphab import environment, exceptions, helpers, mozphab, repository
 
 from .conftest import search_diff, search_rev
@@ -26,18 +27,17 @@ def reviewers_dict(reviewers=None):
 def commit(
     bug_id=None, reviewers=None, body="", name="", title="", rev_id=None, wip=False
 ):
-    return {
-        "name": name,
-        "title": title,
-        "bug-id": bug_id,
-        "reviewers": reviewers_dict(reviewers),
-        "has-reviewers": bool(reviewers),
-        "body": body,
-        "rev-id": rev_id,
-        "node": uuid.uuid4().hex,
-        "submit": True,
-        "wip": wip,
-    }
+    return Commit(
+        name=name,
+        title=title,
+        bug_id=bug_id,
+        reviewers=reviewers_dict(reviewers),
+        body=body,
+        rev_id=rev_id,
+        node=uuid.uuid4().hex,
+        submit=True,
+        wip=wip,
+    )
 
 
 # noinspection PyPep8Naming,PyBroadException
@@ -262,13 +262,13 @@ class Commits(unittest.TestCase):
 
     @mock.patch("mozphab.helpers.build_commit_title")
     def test_update_commit_title_previews(self, m_build_commit_title):
-        m_build_commit_title.side_effect = lambda x: x["title"] + " preview"
-        commits = [dict(title="a"), dict(title="b")]
+        m_build_commit_title.side_effect = lambda x: x.title + " preview"
+        commits = [Commit(title="a"), Commit(title="b")]
         helpers.update_commit_title_previews(commits)
         self.assertEqual(
             [
-                {"title": "a", "title-preview": "a preview"},
-                {"title": "b", "title-preview": "b preview"},
+                Commit(title="a", title_preview="a preview"),
+                Commit(title="b", title_preview="b preview"),
             ],
             commits,
         )
@@ -524,18 +524,17 @@ class Commits(unittest.TestCase):
         ):
             granted = granted or []
             request = request or []
-            return {
-                "name": name,
-                "node": node,
-                "submit": True,
-                "title-preview": title,
-                "rev-id": rev,
-                "bug-id-orig": bug_orig,
-                "bug-id": bug,
-                "reviewers": {"granted": granted, "request": request},
-                "has-reviewers": len(granted + request) > 0,
-                "wip": wip,
-            }
+            return Commit(
+                name=name,
+                node=node,
+                submit=True,
+                title_preview=title,
+                rev_id=rev,
+                bug_id_orig=bug_orig,
+                bug_id=bug,
+                reviewers={"granted": granted, "request": request},
+                wip=wip,
+            )
 
         repo = Repository()
         submit.conduit.set_repo(repo)
@@ -551,7 +550,7 @@ class Commits(unittest.TestCase):
         )
 
         submit.show_commit_stack(
-            [{"name": "aaa000", "title-preview": "A"}], validate=False
+            [Commit(name="aaa000", title_preview="A")], validate=False
         )
         mock_logger.info.assert_called_with("%s %s %s", "(New)", "aaa000", "A")
         self.assertFalse(
@@ -559,7 +558,7 @@ class Commits(unittest.TestCase):
         )
         mock_logger.reset_mock()
 
-        submit.show_commit_stack([_commit(rev="12")], validate=False)
+        submit.show_commit_stack([_commit(rev=12)], validate=False)
         mock_logger.info.assert_called_with("%s %s %s", "(D12)", "aaa000", "A")
         self.assertFalse(
             mock_logger.warning.called, "logger.warning() shouldn't be called"
@@ -581,53 +580,51 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
 
         submit.show_commit_stack(
-            [_commit(bug_orig="2", bug="1", granted=["alice"])], validate=True
+            [_commit(bug_orig=2, bug=1, granted=["alice"])], validate=True
         )
         mock_logger.info.assert_called_with("%s %s %s", "(New)", "aaa000", "A")
-        mock_logger.warning.assert_called_with(
-            "!! Bug ID changed from %s to %s", "2", "1"
-        )
+        mock_logger.warning.assert_called_with("!! Bug ID changed from %s to %s", 2, 1)
         mock_logger.reset_mock()
         submit.show_commit_stack([_commit()], validate=True)
         mock_logger.warning.assert_called_with(Contains("Missing reviewers"))
         mock_logger.reset_mock()
 
         submit.show_commit_stack(
-            [_commit(rev="123")],
+            [_commit(rev=123)],
             validate=False,
             show_rev_urls=True,
         )
-        mock_logger.warning.assert_called_with("-> %s/D%s", "http://phab", "123")
+        mock_logger.warning.assert_called_with("-> %s/D%s", "http://phab", 123)
 
         # Do not update not changed commits
         m_get_revisions.reset_mock()
         m_get_revisions.return_value = [
             search_rev(),
-            search_rev(rev="2", phid="PHID-REV-2", diff="PHID-DIFF-2"),
+            search_rev(rev=2, phid="PHID-REV-2", diff="PHID-DIFF-2"),
         ]
         # we're changing bug id in the first revision to 2
         submit.show_commit_stack(
             [
-                _commit(rev="1", bug="2", bug_orig="1", granted=["alice"]),
+                _commit(rev=1, bug=2, bug_orig=1, granted=["alice"]),
                 _commit(
                     name="bbb000",
                     node="bbb000bbb000",
                     title="B",
-                    rev="2",
+                    rev=2,
                     granted=["alice"],
                 ),
             ],
             validate=True,
         )
         assert mock_logger.warning.call_args_list[1] == mock.call(
-            "!! Bug ID in Phabricator revision will change from %s to %s", "1", "2"
+            "!! Bug ID in Phabricator revision will change from %s to %s", "1", 2
         )
         assert m_get_revisions.call_count == 3
         mock_logger.reset_mock()
 
         m_whoami.return_value = dict(phid="PHID-USER-2")
         submit.show_commit_stack(
-            [_commit(rev="1", granted=["alice"])],
+            [_commit(rev=1, granted=["alice"])],
             validate=True,
         )
         mock_logger.warning.assert_called_once_with(Contains("Commandeer"))
@@ -638,7 +635,7 @@ class Commits(unittest.TestCase):
         m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
         m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
 
-        submit.show_commit_stack([_commit(rev="1", granted=["alice"])], validate=True)
+        submit.show_commit_stack([_commit(rev=1, granted=["alice"])], validate=True)
         assert mock_logger.info.call_args_list[1] == mock.call(
             Contains("revision has not changed")
         )
@@ -687,52 +684,50 @@ class Commits(unittest.TestCase):
                 self.command = command
 
         _commits = [
-            {"title": "A", "reviewers": dict(granted=[], request=[]), "bug-id": None},
-            {
-                "title": "B",
-                "reviewers": dict(granted=[], request=["one"]),
-                "bug-id": "1",
-            },
+            Commit(title="A", reviewers=dict(granted=[], request=[]), bug_id=None),
+            Commit(
+                title="B",
+                reviewers=dict(granted=[], request=["one"]),
+                bug_id="1",
+            ),
         ]
 
         # No change if noreviewer  args provided
         commits = copy.deepcopy(_commits)
-        commits[1]["reviewers"]["granted"].append("two")
+        commits[1].reviewers["granted"].append("two")
         with mock.patch("mozphab.commands.submit.config") as m_config:
             m_config.always_blocking = False
             update(commits, Args())
             self.assertEqual(
                 commits,
                 [
-                    {
-                        "title": "A",
-                        "reviewers": dict(granted=[], request=[]),
-                        "bug-id": None,
-                        "has-reviewers": False,
-                        "wip": True,
-                    },
-                    {
-                        "title": "B",
-                        "reviewers": dict(granted=["two"], request=["one"]),
-                        "bug-id": "1",
-                        "has-reviewers": True,
-                        "wip": False,
-                    },
+                    Commit(
+                        title="A",
+                        reviewers=dict(granted=[], request=[]),
+                        bug_id=None,
+                        wip=True,
+                    ),
+                    Commit(
+                        title="B",
+                        reviewers=dict(granted=["two"], request=["one"]),
+                        bug_id="1",
+                        wip=False,
+                    ),
                 ],
             )
 
         # Adding and removing reviewers, forcing the bug ID
         commits = copy.deepcopy(_commits)
         update(commits, Args(reviewer=["two", "three"], bug="2"))
-        assert commits[0]["title"] == "A"
-        assert commits[0]["bug-id"] == "2"
-        assert "two" in commits[0]["reviewers"]["granted"]
-        assert "three" in commits[0]["reviewers"]["granted"]
+        assert commits[0].title == "A"
+        assert commits[0].bug_id == "2"
+        assert "two" in commits[0].reviewers["granted"]
+        assert "three" in commits[0].reviewers["granted"]
 
-        assert commits[1]["title"] == "B"
-        assert commits[1]["bug-id"] == "2"
-        assert "two" in commits[1]["reviewers"]["granted"]
-        assert "three" in commits[1]["reviewers"]["granted"]
+        assert commits[1].title == "B"
+        assert commits[1].bug_id == "2"
+        assert "two" in commits[1].reviewers["granted"]
+        assert "three" in commits[1].reviewers["granted"]
 
         # Removing duplicates
         commits = copy.deepcopy(_commits)
@@ -743,21 +738,21 @@ class Commits(unittest.TestCase):
                 blocker=["Two", "THREE!", "three", "two", "three"],
             ),
         )
-        assert commits[0]["title"] == "A"
-        assert commits[0]["bug-id"] is None
-        assert "two!" in lwr(commits[0]["reviewers"]["granted"])
-        assert "three!" in lwr(commits[0]["reviewers"]["granted"])
+        assert commits[0].title == "A"
+        assert commits[0].bug_id is None
+        assert "two!" in lwr(commits[0].reviewers["granted"])
+        assert "three!" in lwr(commits[0].reviewers["granted"])
 
-        assert commits[1]["title"] == "B"
-        assert commits[1]["bug-id"] == "1"
-        assert "two!" in lwr(commits[1]["reviewers"]["granted"])
-        assert "three!" in lwr(commits[1]["reviewers"]["granted"])
+        assert commits[1].title == "B"
+        assert commits[1].bug_id == "1"
+        assert "two!" in lwr(commits[1].reviewers["granted"])
+        assert "three!" in lwr(commits[1].reviewers["granted"])
 
         # Adding blocking reviewers via args
         commits = copy.deepcopy(_commits)
-        commits[1]["reviewers"]["request"].append("three")
-        commits[1]["reviewers"]["granted"].append("four")
-        commits[1]["reviewers"]["granted"].append("five")
+        commits[1].reviewers["request"].append("three")
+        commits[1].reviewers["granted"].append("four")
+        commits[1].reviewers["granted"].append("five")
         update(
             commits,
             Args(
@@ -765,61 +760,59 @@ class Commits(unittest.TestCase):
                 blocker=["three", "four!"],
             ),
         )
-        assert commits[0]["title"] == "A"
-        assert commits[0]["bug-id"] is None
-        assert "one" in lwr(commits[0]["reviewers"]["granted"])
-        assert "two!" in lwr(commits[0]["reviewers"]["granted"])
-        assert "three!" in lwr(commits[0]["reviewers"]["granted"])
-        assert "four!" in lwr(commits[0]["reviewers"]["granted"])
+        assert commits[0].title == "A"
+        assert commits[0].bug_id is None
+        assert "one" in lwr(commits[0].reviewers["granted"])
+        assert "two!" in lwr(commits[0].reviewers["granted"])
+        assert "three!" in lwr(commits[0].reviewers["granted"])
+        assert "four!" in lwr(commits[0].reviewers["granted"])
 
-        assert commits[1]["title"] == "B"
-        assert commits[1]["bug-id"] == "1"
-        assert "four!" in commits[1]["reviewers"]["granted"]
-        assert "two!" in commits[1]["reviewers"]["granted"]
-        assert "one" in commits[1]["reviewers"]["request"]
-        assert "three!" in commits[1]["reviewers"]["request"]
+        assert commits[1].title == "B"
+        assert commits[1].bug_id == "1"
+        assert "four!" in commits[1].reviewers["granted"]
+        assert "two!" in commits[1].reviewers["granted"]
+        assert "one" in commits[1].reviewers["request"]
+        assert "three!" in commits[1].reviewers["request"]
 
         # reviewerless should result in WIP commits
         commits = copy.deepcopy(_commits)
         update(commits, Args())
-        assert commits[0]["wip"]
-        assert not commits[1]["wip"]
+        assert commits[0].wip
+        assert not commits[1].wip
 
         # Force WIP
         commits = copy.deepcopy(_commits)
         update(commits, Args(wip=True))
-        assert commits[0]["wip"]
-        assert commits[1]["wip"]
+        assert commits[0].wip
+        assert commits[1].wip
 
         # reviewerless with --no-wip shouldn't be WIP
         commits = copy.deepcopy(_commits)
         update(commits, Args(no_wip=True))
-        assert not commits[0]["wip"]
-        assert not commits[1]["wip"]
+        assert not commits[0].wip
+        assert not commits[1].wip
 
         # Forcing blocking reviewers
         commits = copy.deepcopy(_commits)
-        commits[1]["reviewers"]["granted"].append("two")
+        commits[1].reviewers["granted"].append("two")
         with mock.patch("mozphab.commands.submit.config") as m_config:
             m_config.always_blocking = True
             update(commits, Args())
             self.assertEqual(
                 commits,
                 [
-                    {
-                        "title": "A",
-                        "reviewers": dict(granted=[], request=[]),
-                        "bug-id": None,
-                        "has-reviewers": False,
-                        "wip": True,
-                    },
-                    {
-                        "title": "B",
-                        "reviewers": dict(granted=["two!"], request=["one!"]),
-                        "bug-id": "1",
-                        "has-reviewers": True,
-                        "wip": False,
-                    },
+                    Commit(
+                        title="A",
+                        reviewers=dict(granted=[], request=[]),
+                        bug_id=None,
+                        wip=True,
+                    ),
+                    Commit(
+                        title="B",
+                        reviewers=dict(granted=["two!"], request=["one!"]),
+                        bug_id="1",
+                        wip=False,
+                    ),
                 ],
             )
 
@@ -950,7 +943,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
         # bug ID. We should not explicitly update the bug-id if our bug id is "None".
         transactions = []
         submit.update_revision_bug_id(
-            transactions, {"bug-id": None}, {"fields": {"bugzilla.bug-id": ""}}
+            transactions, Commit(bug_id=None), {"fields": {"bugzilla.bug-id": ""}}
         )
         self.assertEqual([], transactions)
 

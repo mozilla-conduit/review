@@ -422,11 +422,11 @@ def test_submit_update(in_process, git_repo_path, init_sha):
         # whoami
         dict(phid="PHID-USER-1"),
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        dict(dict(phid="PHID-DIFF-1", diffid=1)),
         # differential.setdiffproperty
         dict(),
         # differential.revision.edit
-        dict(object=dict(id="123")),
+        dict(object=dict(id=123)),
         # differential.setdiffproperty
         dict(),
     )

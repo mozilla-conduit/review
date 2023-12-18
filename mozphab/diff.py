@@ -14,6 +14,7 @@ from typing import (
     Tuple,
 )
 
+from .commits import Commit
 from .conduit import conduit
 
 
@@ -322,24 +323,22 @@ class Diff:
             for upload in futures:
                 upload.result()
 
-    def submit(self, commit: dict, message: str) -> str:
+    def submit(self, commit: Commit, message: str) -> str:
         files_changed = sorted(
             self.changes.values(), key=operator.attrgetter("cur_path")
         )
         changes = [
-            change.to_conduit(conduit.repo.get_public_node(commit["node"]))
+            change.to_conduit(conduit.repo.get_public_node(commit.node))
             for change in files_changed
         ]
-        diff = conduit.create_diff(
-            changes, conduit.repo.get_public_node(commit["parent"])
-        )
+        diff = conduit.create_diff(changes, conduit.repo.get_public_node(commit.parent))
 
         self.phid = diff["phid"]
         self.id = diff["diffid"]
         self.set_property(commit, message)
         return diff["phid"]
 
-    def set_property(self, commit: dict, message: str):
+    def set_property(self, commit: Commit, message: str):
         """Add information about our local commit to the patch."""
         conduit.set_diff_property(self.id, commit, message)
 

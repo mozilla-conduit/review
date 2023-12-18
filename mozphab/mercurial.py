@@ -27,6 +27,7 @@ import hglib
 from mozphab import environment
 
 from .config import config
+from .commits import Commit
 from .diff import Diff
 from .exceptions import CommandError, Error, NotFoundError
 from .helpers import (
@@ -292,12 +293,12 @@ class Mercurial(Repository):
     def untracked(self) -> List[str]:
         return self._status()["U"]
 
-    def _refresh_commit(self, commit: dict, node: str, rev: Optional[str] = None):
+    def _refresh_commit(self, commit: Commit, node: str, rev: Optional[str] = None):
         """Update commit's node and name from node and rev."""
         if not rev:
             rev = self.hg_log(node, select="rev", split=False)
-        commit["node"] = node
-        commit["name"] = "%s:%s" % (rev, short_node(node))
+        commit.node = node
+        commit.name = f"{rev}:{short_node(node)}"
 
     def _get_successor(self, node: str) -> Tuple[Optional[str], Optional[str]]:
         """Get the successor of the commit represented by its node.
@@ -319,14 +320,14 @@ class Mercurial(Repository):
 
         return hg_log[0].split(" ", 1)
 
-    def refresh_commit_stack(self, commits: List[dict]):
+    def refresh_commit_stack(self, commits: List[Commit]):
         """Update all commits to point to their superseded commit."""
         for commit in commits:
-            (rev, node) = self._get_successor(commit["node"])
+            (rev, node) = self._get_successor(commit.node)
             if rev and node:
                 self._refresh_commit(commit, node, rev)
 
-        self.revset = "%s::%s" % (commits[0]["node"], commits[-1]["node"])
+        self.revset = "%s::%s" % (commits[0].node, commits[-1].node)
 
     def set_args(self, args: argparse.Namespace):
         """Sets up the right environment for hg, prior to running it.
@@ -458,7 +459,7 @@ class Mercurial(Repository):
 
             self.revset = "%s::%s" % (short_node(start), short_node(end))
 
-    def commit_stack(self, **kwargs) -> List[dict]:
+    def commit_stack(self, **kwargs) -> List[Commit]:
         # Grab all the info we need about the commits, using randomness as a delimiter.
         boundary = "--%s--\n" % uuid.uuid4().hex
         hg_log = self.hg_out(
@@ -491,22 +492,21 @@ class Mercurial(Repository):
                 branching_children.extend(children)
 
             commits.append(
-                {
-                    "name": "%s:%s" % (rev, short_node(node)),
-                    "node": node,
-                    "submit": True,
-                    "public-node": node,
-                    "orig-node": node,
-                    "title": desc[0],
-                    "title-preview": desc[0],
-                    "body": "\n".join(desc[1:]).rstrip(),
-                    "bug-id": None,
-                    "reviewers": dict(request=[], granted=[]),
-                    "rev-id": None,
-                    "author-date-epoch": int(author_date.split(" ")[0]),
-                    "author-name": author_name,
-                    "author-email": author_email,
-                }
+                Commit(
+                    name=f"{rev}:{short_node(node)}",
+                    node=node,
+                    submit=True,
+                    orig_node=node,
+                    title=desc[0],
+                    title_preview=desc[0],
+                    body="\n".join(desc[1:]).rstrip(),
+                    bug_id=None,
+                    reviewers=dict(request=[], granted=[]),
+                    rev_id=None,
+                    author_date_epoch=int(author_date.split(" ")[0]),
+                    author_name=author_name,
+                    author_email=author_email,
+                )
             )
             nodes.append(node)
 
@@ -608,7 +608,7 @@ class Mercurial(Repository):
             ["log", "-T", "{node}", "-r", "parents(%s)" % node], split=False
         )
 
-    def finalize(self, commits: List[dict]):
+    def finalize(self, commits: List[Commit]):
         """Rebase stack children commits if needed."""
         # Currently we do all rebases in `amend_commit` if the evolve extension
         # is not installed.
@@ -618,60 +618,58 @@ class Mercurial(Repository):
 
         parent = None
         for commit in commits:
-            commit_parent = self._get_parent(commit["node"])
-            if parent and parent["node"] not in commit_parent:
+            commit_parent = self._get_parent(commit.node)
+            if parent and parent.node not in commit_parent:
                 self.rebase_commit(commit, parent)
-                (rev, node) = self._get_successor(commit["node"])
+                (rev, node) = self._get_successor(commit.node)
                 if rev and node:
                     self._refresh_commit(commit, node, rev)
 
             parent = commit
 
-    def amend_commit(self, commit: dict, commits: List[dict]):
-        updated_body = "%s\n%s" % (commit["title"], commit["body"])
+    def amend_commit(self, commit: Commit, commits: List[Commit]):
+        updated_body = "%s\n%s" % (commit.title, commit.body)
         current_body = self.hg_out(
-            ["log", "-T", "{desc}", "-r", commit["node"]], split=False
+            ["log", "-T", "{desc}", "-r", commit.node], split=False
         )
         if current_body == updated_body:
-            logger.debug("not amending commit %s, unchanged", commit["name"])
+            logger.debug("not amending commit %s, unchanged", commit.name)
             return
 
         # Find our position in the stack.
         parent_node = None
         first_child = None
         is_parent = True
-        for c in commits:
-            if c["node"] == commit["node"]:
+        for stack_commit in commits:
+            if stack_commit.node == commit.node:
                 is_parent = False
             elif is_parent:
-                parent_node = c["node"]
+                parent_node = stack_commit.node
             elif not first_child:
-                first_child = c
+                first_child = stack_commit
                 break
 
         # Track children of this commit which aren't part of the stack.
-        stack_nodes = [c["node"] for c in commits]
+        stack_nodes = [stack_commit.node for stack_commit in commits]
         non_stack_children = [
-            n
-            for n in self.hg_log("children(%s)" % commit["node"])
-            if n not in stack_nodes
+            n for n in self.hg_log(f"children({commit.node})") if n not in stack_nodes
         ]
 
         if self.use_evolve:
             # If evolve is installed this is trivial.
-            self._amend_commit_body(commit["node"], updated_body)
+            self._amend_commit_body(commit.node, updated_body)
 
         elif not first_child and not non_stack_children:
             # Without evolve things are much more exciting.
 
             # If there's no children we can just amend.
-            self._amend_commit_body(commit["node"], updated_body)
+            self._amend_commit_body(commit.node, updated_body)
 
             # This should always result in an amended node, but we need to be
             # extra careful not to strip the original node.
             amended_node = self.hg_log(".", split=False)
-            if amended_node != commit["node"]:
-                self.strip_nodes.append(commit["node"])
+            if amended_node != commit.node:
+                self.strip_nodes.append(commit.node)
 
         else:
             # Brace yourself.  We need to create a dummy commit with the same parent as
@@ -681,7 +679,7 @@ class Mercurial(Repository):
 
             # Find a parent for the first commit in the stack
             if not parent_node:
-                parent_node = self.hg_log("parents(%s)" % commit["node"])[0]
+                parent_node = self.hg_log(f"parents({commit.node})")[0]
 
             # Create the dummy commit.
             self.checkout(parent_node)
@@ -693,7 +691,7 @@ class Mercurial(Repository):
             dummy_node = self.hg_log(".", split=False)
 
             # Rebase a copy of this commit onto the dummy.
-            self.hg(["rebase", "--keep", "--rev", commit["node"], "--dest", dummy_node])
+            self.hg(["rebase", "--keep", "--rev", commit.node, "--dest", dummy_node])
             rebased_node = self.hg_log("children(.)", split=False)
 
             # Amend.
@@ -705,7 +703,7 @@ class Mercurial(Repository):
             rebased_amended_node = self.hg_log(".", split=False)
 
             # Update the commit object now.
-            original_node = commit["node"]
+            original_node = commit.node
             self._refresh_commit(commit, rebased_amended_node)
 
             # Note what nodes need to be stripped when we're all done.
@@ -720,7 +718,7 @@ class Mercurial(Repository):
 
         # Commits that aren't part of the stack need to be re-parented.
         for node in non_stack_children:
-            self.hg(["rebase", "--source", node, "--dest", commit["node"]])
+            self.hg(["rebase", "--source", node, "--dest", commit.node])
 
     def is_descendant(self, node: str) -> bool:
         # Query the log for all commits that are both in the revset and descendants of
@@ -742,14 +740,12 @@ class Mercurial(Repository):
 
         return callsign
 
-    def rebase_commit(self, source_commit: dict, dest_commit: dict):
+    def rebase_commit(self, source_commit: Commit, dest_commit: Commit):
         self.hg(
-            ["rebase"]
-            + ["--source", source_commit["node"]]
-            + ["--dest", dest_commit["node"]]
+            ["rebase"] + ["--source", source_commit.node] + ["--dest", dest_commit.node]
         )
 
-    def uplift_commits(self, dest: str, commits: List[dict]) -> List[dict]:
+    def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
         out = self.hg_out(
             [
                 # Send messages to `stderr` so `stdout` is pure JSON.
@@ -784,21 +780,21 @@ class Mercurial(Repository):
             # We should have a single new commit for each commit we want to uplift.
             # Error out if we don't as progressing with an inconsistent stack might
             # cause behaviour we can't handle.
-            new = nodechanges.get(commit["node"])
+            new = nodechanges.get(commit.node)
             if len(new) != 1:
                 raise ValueError(f"Should only have a single new item, got {new}")
 
             self._refresh_commit(commit, new[0])
 
         # Set revset to the new range of commits.
-        self.revset = "%s::%s" % (commits[0]["node"], commits[-1]["node"])
+        self.revset = f"{commits[0].node}::{commits[-1].node}"
 
         return commits
 
-    def check_commits_for_submit(self, commits: List[dict], require_bug: bool = True):
+    def check_commits_for_submit(self, commits: List[Commit], require_bug: bool = True):
         # 'Greatest Common Ancestor'/'Merge Base' should be included in the revset.
         ancestor = self.hg_log("ancestor(%s)" % self.revset, split=False)
-        if not any(commit["node"] == ancestor for commit in commits):
+        if not any(commit.node == ancestor for commit in commits):
             raise Error(
                 "Non-linear commit stack (common ancestor %s missing from stack)"
                 % short_node(ancestor)
@@ -844,7 +840,7 @@ class Mercurial(Repository):
 
         super().check_commits_for_submit(commits, require_bug=require_bug)
 
-    def _get_file_modes(self, commit: dict) -> dict:
+    def _get_file_modes(self, commit: Commit) -> dict:
         """Get modes of the modified files."""
 
         # build list of modified files
@@ -852,7 +848,7 @@ class Mercurial(Repository):
         # a copy operation are skipped), so we have to parse the default output
         modified_files = [
             line[2:].replace("\\", "/")  # strip leading status char and space
-            for line in self.hg_out(["status", "--change", commit["node"], "--copies"])
+            for line in self.hg_out(["status", "--change", commit.node, "--copies"])
         ]
 
         def _to_mode_dict(mode_list):
@@ -869,7 +865,7 @@ class Mercurial(Repository):
             old_modes = _to_mode_dict(
                 self.hg_out(
                     ["files"]
-                    + ["--rev", commit["parent"]]
+                    + ["--rev", commit.parent]
                     + ["-T", "{flags}:{path}\n"]
                     + ["-I%s" % f for f in modified_files]
                     + ["-I.arcconfig"]
@@ -884,7 +880,7 @@ class Mercurial(Repository):
         new_modes = _to_mode_dict(
             self.hg_out(
                 ["files"]
-                + ["--rev", commit["node"]]
+                + ["--rev", commit.node]
                 + ["-T", "{flags}:{path}\n"]
                 + ["-I%s" % f for f in modified_files]
                 + ["-I.arcconfig"]
@@ -903,9 +899,9 @@ class Mercurial(Repository):
 
         return file_modes
 
-    def get_diff(self, commit: dict) -> Diff:
+    def get_diff(self, commit: Commit) -> Diff:
         """Create a Diff object containing all changes for this commit."""
-        commit["parent"] = self._get_parent(commit["node"])
+        commit.parent = self._get_parent(commit.node)
         file_modes = self._get_file_modes(commit)
 
         # Get changed files.
@@ -913,7 +909,7 @@ class Mercurial(Repository):
         type_divider = "--%s--" % uuid.uuid4().hex
         all_files = self.hg_out(
             ["log"]
-            + ["-r", commit["node"]]
+            + ["-r", commit.node]
             + [
                 "-T",
                 "{{join(file_adds, '{file_divider}')}}{type_divider}"
@@ -967,7 +963,7 @@ class Mercurial(Repository):
         for c in changes:
             change = diff.change_for(c["fn"])
             old_fn = c["old_fn"] if "old_fn" in c else c["fn"]
-            c["func"](change, c["fn"], old_fn, commit["parent"], commit["node"])
+            c["func"](change, c["fn"], old_fn, commit.parent, commit.node)
             a_mode = (
                 file_modes[old_fn]["old_mode"]
                 if old_fn in file_modes and "old_mode" in file_modes[old_fn]

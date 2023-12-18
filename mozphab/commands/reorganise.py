@@ -225,9 +225,9 @@ def reorganise(repo: Repository, args: argparse.Namespace):
     with wait_message("Loading commits.."):
         augment_commits_from_body(commits)
 
-    localstack_ids = [c["rev-id"] for c in commits]
+    localstack_ids = [commit.rev_id for commit in commits]
     if not all(localstack_ids):
-        names = [c["name"] for c in commits if c["rev-id"] is None]
+        names = [commit.name for commit in commits if commit.rev_id is None]
         plural = len(names) > 1
         raise Error(
             "Found new commit{plural} in the local stack: {names}.\n"

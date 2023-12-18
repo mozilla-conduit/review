@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from mozphab.commands import submit
+from mozphab.commits import Commit
 from mozphab import (
     conduit,
     detect_repository,
@@ -727,32 +728,32 @@ def test_augment_commits_from_body():
     # structure is updated correctly.
 
     commits = [
-        {
-            "title": "Bug 1 - test r?reviewer",
-            "body": "Differential Revision: https://example.com/D101",
-        },
-        {
-            "title": "WIP: Bug 2 - blah r=blocker!",
-            "body": "Differential Revision: https://example.com/D102",
-        },
+        Commit(
+            title="Bug 1 - test r?reviewer",
+            body="Differential Revision: https://example.com/D101",
+        ),
+        Commit(
+            title="WIP: Bug 2 - blah r=blocker!",
+            body="Differential Revision: https://example.com/D102",
+        ),
     ]
     helpers.augment_commits_from_body(commits)
 
-    assert commits[0]["rev-id"] == "101"
-    assert commits[0]["bug-id"] == "1"
-    assert commits[0]["bug-id-orig"] == "1"
-    assert commits[0]["reviewers"]["request"] == ["reviewer"]
-    assert commits[0]["reviewers"]["granted"] == []
-    assert commits[0]["title-preview"] == "Bug 1 - test r?reviewer"
-    assert not commits[0]["wip"]
+    assert commits[0].rev_id == 101
+    assert commits[0].bug_id == "1"
+    assert commits[0].bug_id_orig == "1"
+    assert commits[0].reviewers["request"] == ["reviewer"]
+    assert commits[0].reviewers["granted"] == []
+    assert commits[0].title_preview == "Bug 1 - test r?reviewer"
+    assert not commits[0].wip
 
-    assert commits[1]["rev-id"] == "102"
-    assert commits[1]["bug-id"] == "2"
-    assert commits[1]["bug-id-orig"] == "2"
-    assert commits[1]["reviewers"]["request"] == []
-    assert commits[1]["reviewers"]["granted"] == ["blocker!"]
-    assert commits[1]["title-preview"] == "WIP: Bug 2 - blah r=blocker!"
-    assert commits[1]["wip"]
+    assert commits[1].rev_id == 102
+    assert commits[1].bug_id == "2"
+    assert commits[1].bug_id_orig == "2"
+    assert commits[1].reviewers["request"] == []
+    assert commits[1].reviewers["granted"] == ["blocker!"]
+    assert commits[1].title_preview == "WIP: Bug 2 - blah r=blocker!"
+    assert commits[1].wip
 
 
 def test_move_drev_to_original():

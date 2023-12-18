@@ -19,6 +19,7 @@ from typing import (
 
 from mozphab import environment
 
+from .commits import Commit
 from .environment import USER_AGENT
 from .exceptions import (
     CommandError,
@@ -449,7 +450,7 @@ class ConduitAPI:
 
     def create_revision(
         self,
-        commit: dict,
+        commit: Commit,
         summary: str,
         diff_phid: str,
         check_in_needed: bool = False,
@@ -459,21 +460,21 @@ class ConduitAPI:
             dict(type="title", value=revision_title_from_commit(commit)),
             dict(type="summary", value=summary),
         ]
-        if commit["has-reviewers"] and not commit["wip"]:
+        if commit.has_reviewers and not commit.wip:
             self.update_revision_reviewers(transactions, commit)
 
-        if commit["bug-id"]:
-            transactions.append(dict(type="bugzilla.bug-id", value=commit["bug-id"]))
+        if commit.bug_id:
+            transactions.append(dict(type="bugzilla.bug-id", value=commit.bug_id))
         return self.edit_revision(
             transactions=transactions,
             diff_phid=diff_phid,
-            wip=commit["wip"],
+            wip=commit.wip,
             check_in_needed=check_in_needed,
         )
 
     def update_revision(
         self,
-        commit: dict,
+        commit: Commit,
         has_existing_reviewers: bool,
         diff_phid: Optional[str] = None,
         comment: Optional[str] = None,
@@ -483,7 +484,7 @@ class ConduitAPI:
         # Update the title and summary
         transactions = [
             dict(type="title", value=revision_title_from_commit(commit)),
-            dict(type="summary", value=strip_differential_revision(commit["body"])),
+            dict(type="summary", value=strip_differential_revision(commit.body)),
         ]
 
         # Add update comment
@@ -491,23 +492,21 @@ class ConduitAPI:
             transactions.append(dict(type="comment", value=comment))
 
         # Add reviewers only if revision lacks them
-        if commit["has-reviewers"] and not commit["wip"]:
+        if commit.has_reviewers and not commit.wip:
             if not has_existing_reviewers:
                 self.update_revision_reviewers(transactions, commit)
 
         # Update bug id if different
-        if commit["bug-id"]:
-            revision = conduit.get_revisions(ids=[int(commit["rev-id"])])[0]
-            if revision["fields"]["bugzilla.bug-id"] != commit["bug-id"]:
-                transactions.append(
-                    dict(type="bugzilla.bug-id", value=commit["bug-id"])
-                )
+        if commit.bug_id:
+            revision = conduit.get_revisions(ids=[commit.rev_id])[0]
+            if revision["fields"]["bugzilla.bug-id"] != commit.bug_id:
+                transactions.append(dict(type="bugzilla.bug-id", value=commit.bug_id))
 
         return self.edit_revision(
             transactions=transactions,
             diff_phid=diff_phid,
-            rev_id=commit["rev-id"],
-            wip=commit["wip"],
+            rev_id=commit.rev_id,
+            wip=commit.wip,
             check_in_needed=check_in_needed,
         )
 
@@ -654,23 +653,23 @@ class ConduitAPI:
         )
         return self.call("differential.creatediff", api_call_args)
 
-    def set_diff_property(self, diff_id: str, commit: dict, message: str):
+    def set_diff_property(self, diff_id: str, commit: Commit, message: str):
         data = {
-            commit["node"]: {
-                "author": commit["author-name"],
-                "authorEmail": commit["author-email"],
-                "time": commit["author-date-epoch"],
+            commit.node: {
+                "author": commit.author_name,
+                "authorEmail": commit.author_email,
+                "time": commit.author_date_epoch,
                 "summary": revision_title_from_commit(commit),
                 "message": message,
-                "commit": conduit.repo.get_public_node(commit["node"]),
-                "parents": [conduit.repo.get_public_node(commit["parent"])],
+                "commit": conduit.repo.get_public_node(commit.node),
+                "parents": [conduit.repo.get_public_node(commit.parent)],
             }
         }
-        if "tree-hash" in commit:
-            data[commit["node"]]["tree"] = commit["tree-hash"]
+        if commit.tree_hash is not None:
+            data[commit.node]["tree"] = commit.tree_hash
 
         if self.repo.phab_vcs == "hg":
-            data[commit["node"]]["rev"] = commit["node"]
+            data[commit.node]["rev"] = commit.node
 
         api_call_args = dict(
             diff_id=diff_id, name="local:commits", data=json.dumps(data)
@@ -725,12 +724,12 @@ class ConduitAPI:
         return who
 
     def update_revision_reviewers(
-        self, transactions: List[Dict[str, Any]], commit: dict
+        self, transactions: List[Dict[str, Any]], commit: Commit
     ):
         # Appends differential.revision.edit transaction(s) to `transactions` to
         # set the reviewers.
 
-        all_reviewing = commit["reviewers"]["request"] + commit["reviewers"]["granted"]
+        all_reviewing = commit.reviewers["request"] + commit.reviewers["granted"]
 
         # Find reviewers PHIDs
         all_reviewers = [r for r in all_reviewing if not r.startswith("#")]

@@ -13,6 +13,7 @@ from typing import (
 
 from mozphab import environment
 
+from .commits import Commit
 from .conduit import conduit, normalise_reviewer
 from .diff import Diff
 from .exceptions import Error
@@ -128,10 +129,10 @@ class Repository(object):
     def untracked(self):
         """Return a list of untracked files."""
 
-    def commit_stack(self, **kwargs):
+    def commit_stack(self, **kwargs) -> Optional[List[Commit]]:
         """Return list of commits.
 
-        List of dicts with the following keys:
+        List of `Commit`s:
             name          human readable identifier of commit (eg. short sha)
             node          SHA1 in stack
             orig-node     an original SHA1 of the commit
@@ -188,7 +189,7 @@ class Repository(object):
         callsign. Confirms the identified head exists in the repository.
         """
 
-    def uplift_commits(self, dest: str, commits: List[dict]) -> List[dict]:
+    def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
         """Uplift the repo's revset onto `dest` and returns the refreshed `commits`."""
 
     def rebase_commit(self, source_commit, dest_commit):
@@ -203,7 +204,7 @@ class Repository(object):
     def format_patch(self, diff, body, author, author_date):
         """Format a patch appropriate for importing."""
 
-    def check_commits_for_submit(self, commits, *, require_bug=True):
+    def check_commits_for_submit(self, commits: List[Commit], *, require_bug=True):
         """Validate the list of commits (from commit_stack) are ok to submit"""
         errors = []
         warnings = []
@@ -215,12 +216,12 @@ class Repository(object):
         commit_invalid_reviewers = {}
         rev_ids_to_names = dict()
         for commit in commits:
-            commit_invalid_reviewers[commit["node"]] = []
+            commit_invalid_reviewers[commit.node] = []
 
-            if not commit["rev-id"]:
+            if not commit.rev_id:
                 continue
-            names = rev_ids_to_names.setdefault(commit["rev-id"], [])
-            names.append(commit["name"])
+            names = rev_ids_to_names.setdefault(commit.rev_id, [])
+            names.append(commit.name)
 
         for rev_id, names in rev_ids_to_names.items():
             if len(names) < 2:
@@ -238,17 +239,17 @@ class Repository(object):
         # associated commit
         for commit in commits:
             # We can ignore reviewers on WIP commits, as they won't be passed to Phab
-            if commit["wip"]:
+            if commit.wip:
                 continue
 
-            for group in list(commit["reviewers"].keys()):
-                for reviewer in commit["reviewers"][group]:
+            for group in list(commit.reviewers.keys()):
+                for reviewer in commit.reviewers[group]:
                     all_reviewers.setdefault(group, set())
                     all_reviewers[group].add(reviewer)
 
                     reviewer = normalise_reviewer(reviewer)
                     reviewer_commit_map.setdefault(reviewer, [])
-                    reviewer_commit_map[reviewer].append(commit["node"])
+                    reviewer_commit_map[reviewer].append(commit.node)
 
         # Verify all reviewers in a single call
         for invalid_reviewer in conduit.check_for_invalid_reviewers(all_reviewers):
@@ -262,18 +263,18 @@ class Repository(object):
             commit_errors = []
             commit_warnings = []
 
-            if require_bug and not commit["bug-id"]:
+            if require_bug and not commit.bug_id:
                 commit_errors.append("missing bug-id")
-            if has_arc_rejections(commit["body"]):
+            if has_arc_rejections(commit.body):
                 commit_errors.append("contains arc fields")
 
-            if commit["rev-id"]:
-                revisions = conduit.get_revisions(ids=[int(commit["rev-id"])])
+            if commit.rev_id:
+                revisions = conduit.get_revisions(ids=[commit.rev_id])
                 if len(revisions) == 0:
                     commit_errors.append(
                         "Phabricator did not return a query result for revision D%s"
                         " (it might be inaccessible or not exist at all)"
-                        % commit["rev-id"]
+                        % commit.rev_id
                     )
 
             # commit_issues identified below this are commit_errors unless
@@ -282,7 +283,7 @@ class Repository(object):
                 commit_warnings if self.args and self.args.force else commit_errors
             )
 
-            for reviewer in commit_invalid_reviewers[commit["node"]]:
+            for reviewer in commit_invalid_reviewers[commit.node]:
                 if "disabled" in reviewer:
                     commit_errors.append("User %s is disabled" % reviewer["name"])
                 elif "until" in reviewer:
@@ -300,13 +301,13 @@ class Repository(object):
             if commit_errors:
                 errors.append(
                     "%s %s\n- %s"
-                    % (commit["name"], commit["title"], "\n- ".join(commit_errors))
+                    % (commit.name, commit.title, "\n- ".join(commit_errors))
                 )
 
             if commit_warnings:
                 warnings.append(
                     "%s %s\n- %s"
-                    % (commit["name"], commit["title"], "\n- ".join(commit_warnings))
+                    % (commit.name, commit.title, "\n- ".join(commit_warnings))
                 )
 
         if errors:

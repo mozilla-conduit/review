@@ -6,6 +6,7 @@ from mozphab.commands.submit import (
     update_commits_for_uplift,
     local_uplift_if_possible,
 )
+from mozphab.commits import Commit
 
 
 def test_local_uplift_if_possible():
@@ -30,13 +31,13 @@ def test_local_uplift_if_possible():
             self.uplift_called = True
 
     commits = [
-        {
-            "title": "A",
-            "reviewers": dict(granted=["john"], request=[]),
-            "bug-id": None,
-            "body": "",
-            "rev-id": 1,
-        },
+        Commit(
+            title="A",
+            reviewers=dict(granted=["john"], request=[]),
+            bug_id=None,
+            body="",
+            rev_id=1,
+        ),
     ]
 
     repo = Repo()
@@ -77,18 +78,18 @@ def test_local_uplift_if_possible():
 
 def test_update_commits_for_uplift_sets_relman_review():
     commits = [
-        {
-            "title": "A",
-            "reviewers": dict(granted=["john"], request=[]),
-            "bug-id": None,
-            "body": "",
-            "rev-id": 1,
-        },
+        Commit(
+            title="A",
+            reviewers=dict(granted=["john"], request=[]),
+            bug_id=None,
+            body="",
+            rev_id=1,
+        ),
     ]
 
     update_commits_for_uplift(commits)
 
-    reviewers = commits[0]["reviewers"]
+    reviewers = commits[0].reviewers
 
     assert not reviewers[
         "request"
@@ -102,46 +103,46 @@ def test_update_commits_for_uplift_sets_relman_review():
 def test_update_commits_for_uplift_sets_original_revision():
     commits = [
         # Check initial submission.
-        {
-            "title": "bug 1: firstline r?reviewer",
-            "reviewers": dict(granted=["john"], request=[]),
-            "bug-id": 1,
-            "body": (
+        Commit(
+            title="bug 1: firstline r?reviewer",
+            reviewers=dict(granted=["john"], request=[]),
+            bug_id="1",
+            body=(
                 "bug 1: firstline r?reviewer\n"
                 "\n"
                 "Differential Revision: https://phabricator.services.mozila.com/D1\n"
             ),
-            "rev-id": 1,
-        },
+            rev_id=1,
+        ),
         # Check update of existing uplift revision.
-        {
-            "title": "bug 1: firstline r?reviewer",
-            "reviewers": dict(granted=["john"], request=[]),
-            "bug-id": 1,
-            "body": (
+        Commit(
+            title="bug 1: firstline r?reviewer",
+            reviewers=dict(granted=["john"], request=[]),
+            bug_id="1",
+            body=(
                 "bug 1: firstline r?reviewer\n"
                 "\n"
                 "Original Revision: https://phabricator.services.mozila.com/D1\n"
                 "\n"
                 "Differential Revision: https://phabricator.services.mozila.com/D2\n"
             ),
-            "rev-id": 2,
-        },
+            rev_id=2,
+        ),
     ]
 
     update_commits_for_uplift(commits)
 
     # Initial submission.
-    body = commits[0]["body"]
-    rev_id = commits[0]["rev-id"]
+    body = commits[0].body
+    rev_id = commits[0].rev_id
 
     assert "Differential Revision:" not in body
     assert "Original Revision:" in body
     assert rev_id is None
 
     # Update of existing uplift.
-    body = commits[1]["body"]
-    rev_id = commits[1]["rev-id"]
+    body = commits[1].body
+    rev_id = commits[1].rev_id
 
     assert "Differential Revision:" in body
     assert "Original Revision:" in body

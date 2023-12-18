@@ -11,6 +11,7 @@ from immutabledict import immutabledict
 
 from mozphab import diff, exceptions, mozphab, repository, simplecache
 
+from mozphab.commits import Commit
 from mozphab.conduit import conduit, ConduitAPIError
 
 
@@ -479,16 +480,16 @@ def test_diff_property(m_call, git, hg):
     git.get_public_node = lambda x: x
     git._phab_vcs = "git"
     conduit.set_repo(git)
-    commit = {
-        "name": "abc-name",
-        "author-name": "Author Name",
-        "author-email": "auth@or.email",
-        "author-date-epoch": 1234567,
-        "title-preview": "Title Preview",
-        "node": "abc",
-        "parent": "def",
-        "wip": False,
-    }
+    commit = Commit(
+        name="abc-name",
+        author_name="Author Name",
+        author_email="auth@or.email",
+        author_date_epoch=1234567,
+        title_preview="Title Preview",
+        node="abc",
+        parent="def",
+        wip=False,
+    )
     mozphab.conduit.set_diff_property("1", commit, "message")
     m_call.assert_called_once_with(
         "differential.setdiffproperty",

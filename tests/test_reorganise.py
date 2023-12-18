@@ -8,6 +8,7 @@ import pytest
 
 from mozphab import exceptions, mozphab
 from mozphab.commands import reorganise
+from mozphab.commits import Commit
 
 
 @pytest.mark.parametrize(
@@ -272,29 +273,27 @@ def test_stack_transactions_no_abandon(phids, transactions, abandoned):
     "stacks,expected",
     [
         (
-            ({"A": None}, [{"rev-id": 1, "rev-phid": "A"}]),
+            ({"A": None}, [Commit(rev_id=1)], ["A"]),
             (["A"], ["A"], set(), {"no_abandon": False}),
         ),
         (
-            ({"B": None}, [{"rev-id": 1, "rev-phid": "A"}]),
+            ({"B": None}, [Commit(rev_id=1)], ["A"]),
             (["B"], ["A"], set(), {"no_abandon": False}),
         ),
         (
-            ({"A": "B", "B": None}, [{"rev-id": 1, "rev-phid": "A"}]),
+            ({"A": "B", "B": None}, [Commit(rev_id=1)], ["A"]),
             (["A", "B"], ["A"], set(), {"no_abandon": False}),
         ),
         (
             (
                 {"A": None},
-                [{"rev-id": 1, "rev-phid": "A"}, {"rev-id": 2, "rev-phid": "B"}],
+                [Commit(rev_id=1), Commit(rev_id=2)],
+                ["A", "B"],
             ),
             (["A"], ["A", "B"], set(), {"no_abandon": False}),
         ),
         (
-            (
-                {"A": None},
-                [{"rev-id": 1, "rev-phid": "A"}, {"rev-id": 2, "rev-phid": "B"}],
-            ),
+            ({"A": None}, [Commit(rev_id=1), Commit(rev_id=2)], ["A", "B"]),
             (["A"], ["A", "B"], set(), {"no_abandon": True}),
         ),
     ],
@@ -326,12 +325,12 @@ def test_reorg_calling_stack_transactions(
         yes = True
         no_abandon = kwargs["no_abandon"]
 
-    phabstack, commits = stacks
+    phabstack, commits, rev_ids = stacks
     m_convert_stackgraph_to_linear.return_value = phabstack
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()
     mozphab.conduit.repo.commit_stack.return_value = commits
-    m_id2phid.return_value = [c["rev-phid"] for c in commits]
+    m_id2phid.return_value = rev_ids
     reorganise.reorganise(git, Args())
     m_trans.assert_called_once_with(*args, **kwargs)
 
@@ -356,7 +355,7 @@ def test_commits_invalid(_augment, _check, git):
 
     assert str(e.value) == "Failed to find any commits to reorganise."
 
-    mozphab.conduit.repo.commit_stack.return_value = [{"rev-id": None, "name": "A"}]
+    mozphab.conduit.repo.commit_stack.return_value = [Commit(rev_id=None, name="A")]
     with pytest.raises(exceptions.Error) as e:
         reorganise.reorganise(git, None)
 
@@ -379,7 +378,7 @@ def test_remote_stack_invalid(
 
     m_stack.return_value = {"A": "B"}
     m_ids.return_value = ["A", "B", "C"]
-    mozphab.conduit.repo.commit_stack.return_value = [{"rev-id": 1, "name": "A"}]
+    mozphab.conduit.repo.commit_stack.return_value = [Commit(rev_id=1, name="A")]
     m_walk.side_effect = exceptions.Error("TEST")
     with pytest.raises(exceptions.Error) as e:
         reorganise.reorganise(git, None)

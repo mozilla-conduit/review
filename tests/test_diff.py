@@ -10,6 +10,7 @@ import textwrap
 from .conftest import assert_attributes
 
 from mozphab import environment
+from mozphab.commits import Commit
 from mozphab.diff import Diff
 
 
@@ -172,14 +173,14 @@ def test_change_empty(m_git_out, m_cat_file, m_file_size, git):
 def test_change_empty_hg(
     m_uuid4, m_get_file_modes, m_get_parent, m_get_file_meta, m_hg_out, hg
 ):
-    commit = {
-        "name": "78981922613b",
-        "node": "78981922613b2afb6025042ff6bd878ac1994e85",
-        "orig-node": "78981922613b2afb6025042ff6bd878ac1994e85",
-        "parent": "422c2b7ab3b3",
-        "title": "test",
-        "body": "test",
-    }
+    commit = Commit(
+        name="78981922613b",
+        node="78981922613b2afb6025042ff6bd878ac1994e85",
+        orig_node="78981922613b2afb6025042ff6bd878ac1994e85",
+        parent="422c2b7ab3b3",
+        title="test",
+        body="test",
+    )
     m_get_parent.return_value = "422c2b7ab3b3c668038da977e4e93a5fc623169c"
     m_get_file_modes.return_value = {
         "fn": {

@@ -11,6 +11,7 @@ from unittest import mock
 from .conftest import create_temp_fn, assert_attributes
 
 from mozphab import environment, exceptions, mozphab, diff
+from mozphab.commits import Commit
 from mozphab.diff import Diff
 from mozphab.mercurial import Mercurial
 
@@ -33,9 +34,9 @@ def test_get_successor(m_hg_hg_out, hg):
 @mock.patch("mozphab.mercurial.Mercurial._get_parent")
 def test_finalize(m_get_parent, m_hg_rebase, m_hg_get_successor, hg):
     commits = [
-        {"rev": "1", "node": "aaa", "orig-node": "aaa"},
-        {"rev": "2", "node": "bbb", "orig-node": "bbb"},
-        {"rev": "3", "node": "ccc", "orig-node": "ccc"},
+        Commit(node="aaa", orig_node="aaa"),
+        Commit(node="bbb", orig_node="bbb"),
+        Commit(node="ccc", orig_node="ccc"),
     ]
 
     m_get_parent.return_value = "different:than_others"
@@ -44,12 +45,12 @@ def test_finalize(m_get_parent, m_hg_rebase, m_hg_get_successor, hg):
     assert m_hg_rebase.call_count == 2
     assert m_hg_rebase.call_args_list == [
         mock.call(
-            {"rev": "2", "node": "bbb", "orig-node": "bbb"},
-            {"rev": "1", "node": "aaa", "orig-node": "aaa"},
+            Commit(node="bbb", orig_node="bbb"),
+            Commit(node="aaa", orig_node="aaa"),
         ),
         mock.call(
-            {"rev": "3", "node": "ccc", "orig-node": "ccc"},
-            {"rev": "2", "node": "bbb", "orig-node": "bbb"},
+            Commit(node="ccc", orig_node="ccc"),
+            Commit(node="bbb", orig_node="bbb"),
         ),
     ]
 
@@ -57,8 +58,8 @@ def test_finalize(m_get_parent, m_hg_rebase, m_hg_get_successor, hg):
     m_hg_rebase.reset_mock()
     hg.finalize(commits)
     m_hg_rebase.assert_called_once_with(
-        {"rev": "3", "node": "ccc", "orig-node": "ccc"},
-        {"rev": "2", "node": "bbb", "orig-node": "bbb"},
+        Commit(node="ccc", orig_node="ccc"),
+        Commit(node="bbb", orig_node="bbb"),
     )
 
     m_hg_get_successor.reset_mock()
@@ -70,16 +71,16 @@ def test_finalize(m_get_parent, m_hg_rebase, m_hg_get_successor, hg):
     assert m_hg_get_successor.call_count == 2
     assert m_hg_get_successor.call_args_list == [mock.call("bbb"), mock.call("ccc")]
     assert _commits == [
-        {"rev": "1", "node": "aaa", "orig-node": "aaa"},
-        {"rev": "2", "node": "bbb", "orig-node": "bbb"},
-        {"rev": "3", "node": "ddd", "orig-node": "ccc", "name": "4:ddd"},
+        Commit(node="aaa", orig_node="aaa"),
+        Commit(node="bbb", orig_node="bbb"),
+        Commit(node="ddd", orig_node="ccc", name="4:ddd"),
     ]
 
     m_hg_rebase.reset_mock()
     m_hg_get_successor.side_effect = None
     m_hg_get_successor.return_value = (None, None)
     _commits = commits[:]
-    _commits[0]["node"] = "AAA"  # node has been amended
+    _commits[0].node = "AAA"  # node has been amended
     hg.finalize(_commits)
     assert m_hg_rebase.call_count == 2
 
@@ -613,7 +614,7 @@ def test_get_file_modes(m_hg, hg):
         [" :file name"],  # files - parent
         [" :file name"],  # files - node
     )
-    actual = hg._get_file_modes(dict(node="aaa", parent="bbb"))
+    actual = hg._get_file_modes(Commit(node="aaa", parent="bbb"))
     expected = {"file name": dict(old_mode="100644", new_mode="100644")}
     assert actual == expected
 
@@ -622,7 +623,7 @@ def test_get_file_modes(m_hg, hg):
         [" :file name"],  # files - parent
         ["x:file name"],  # files - node
     )
-    actual = hg._get_file_modes(dict(node="aaa", parent="bbb"))
+    actual = hg._get_file_modes(Commit(node="aaa", parent="bbb"))
     expected = {"file name": dict(old_mode="100644", new_mode="100755")}
     assert actual == expected
 
@@ -631,7 +632,7 @@ def test_get_file_modes(m_hg, hg):
         [],  # files - parent
         ["x:file name"],  # files - node
     )
-    actual = hg._get_file_modes(dict(node="aaa", parent="bbb"))
+    actual = hg._get_file_modes(Commit(node="aaa", parent="bbb"))
     expected = {"file name": dict(new_mode="100755")}
     assert actual == expected
 
@@ -640,7 +641,7 @@ def test_get_file_modes(m_hg, hg):
         [" :file name"],  # files - parent
         [],  # files - node
     )
-    actual = hg._get_file_modes(dict(node="aaa", parent="bbb"))
+    actual = hg._get_file_modes(Commit(node="aaa", parent="bbb"))
     expected = {"file name": dict(old_mode="100644")}
     assert actual == expected
 

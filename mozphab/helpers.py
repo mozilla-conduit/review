@@ -24,6 +24,7 @@ from shutil import which
 
 from mozphab import environment
 
+from .commits import Commit
 from .logger import logger
 from .simplecache import cache
 
@@ -185,9 +186,9 @@ def get_arcrc_path() -> str:
     return arcrc
 
 
-def parse_arc_diff_rev(body: str) -> Optional[str]:
+def parse_arc_diff_rev(body: str) -> Optional[int]:
     m = ARC_DIFF_REV_RE.search(body)
-    return m.group("rev") if m else None
+    return int(m.group("rev")) if m else None
 
 
 def strip_differential_revision(body: str) -> str:
@@ -292,36 +293,37 @@ def wip_in_commit_title(title: str) -> bool:
     return WIP_RE.search(title) is not None
 
 
-def augment_commits_from_body(commits: List[dict]):
+def augment_commits_from_body(commits: List[Commit]):
     """Extract metadata from commit body as fields.
 
     Adds: rev-id, bug-id, reviewers, wip
     """
     for commit in commits:
-        commit["rev-id"] = parse_arc_diff_rev(commit["body"])
+        commit.rev_id = parse_arc_diff_rev(commit.body)
 
         # bug-id
-        bug_ids = parse_bugs(commit["title"])
+        bug_ids = parse_bugs(commit.title)
         if bug_ids:
             if len(bug_ids) > 1:
                 logger.warning("Multiple bug-IDs found, using %s", bug_ids[0])
-            commit["bug-id"] = bug_ids[0]
+            commit.bug_id = bug_ids[0]
         else:
-            commit["bug-id"] = None
-        if "bug-id-orig" not in commit:
-            commit["bug-id-orig"] = commit["bug-id"]
+            commit.bug_id = None
+
+        if not commit.bug_id_orig:
+            commit.bug_id_orig = commit.bug_id
 
         # reviewers
-        commit["reviewers"] = parse_reviewers(commit["title"])
+        commit.reviewers = parse_reviewers(commit.title)
 
         # mark commit as WIP if commit desc starts with "WIP:"
-        commit["wip"] = wip_in_commit_title(commit["title"])
+        commit.wip = wip_in_commit_title(commit.title)
 
     update_commit_title_previews(commits)
 
 
 def parse_bugs(title: str) -> List[str]:
-    return BUG_ID_RE.findall(title)
+    return [bug for bug in BUG_ID_RE.findall(title)]
 
 
 def parse_reviewers(title: str) -> dict:
@@ -354,31 +356,31 @@ def strip_depends_on(body: str) -> str:
     return DEPENDS_ON_RE.sub("", body).rstrip()
 
 
-def revision_title_from_commit(commit: dict) -> str:
+def revision_title_from_commit(commit: Commit) -> str:
     """Returns a string suitable for a Revision title for the given commit."""
-    title = WIP_RE.sub("", commit["title-preview"]).lstrip()
-    if commit["wip"]:
-        title = "WIP: %s" % title
+    title = WIP_RE.sub("", commit.title_preview).lstrip()
+    if commit.wip:
+        title = f"WIP: {title}"
     return title
 
 
-def update_commit_title_previews(commits: List[dict]):
+def update_commit_title_previews(commits: List[Commit]):
     """Update title-preview from commit metadata for all commits in stack"""
     for commit in commits:
-        commit["title-preview"] = build_commit_title(commit)
+        commit.title_preview = build_commit_title(commit)
 
 
-def build_commit_title(commit: dict) -> str:
+def build_commit_title(commit: Commit) -> str:
     """Build/update title from commit metadata"""
     # Reviewers.
-    title = replace_reviewers(commit["title"], commit["reviewers"])
+    title = replace_reviewers(commit.title, commit.reviewers)
 
     # Bug-ID.
-    if commit["bug-id"]:
+    if commit.bug_id:
         if BUG_ID_RE.search(title):
-            title = BUG_ID_RE.sub("Bug %s" % commit["bug-id"], title, count=1)
+            title = BUG_ID_RE.sub(f"Bug {commit.bug_id}", title, count=1)
         else:
-            title = "Bug %s - %s" % (commit["bug-id"], title)
+            title = f"Bug {commit.bug_id} - {commit.title}"
     else:
         # This is likely to result in unappealing results.
         title = BUG_ID_RE.sub("", title)

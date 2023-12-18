@@ -21,6 +21,7 @@ from functools import lru_cache
 from mozphab import environment
 
 from .config import config
+from .commits import Commit
 from .diff import Diff
 from .exceptions import CommandError, Error, NotFoundError
 from .gitcommand import GitCommand
@@ -158,13 +159,13 @@ class Git(Repository):
         if self.branch:
             self.checkout(self.branch)
 
-    def _find_branches_to_rebase(self, commits: List[dict]) -> dict:
+    def _find_branches_to_rebase(self, commits: List[Commit]) -> dict:
         """Create a list of branches to rebase."""
         branches_to_rebase = dict()
         for commit in commits:
-            if commit["node"] == commit["orig-node"]:
+            if commit.node == commit.orig_node:
                 continue
-            branches = self.git_out(["branch", "--contains", commit["orig-node"]])
+            branches = self.git_out(["branch", "--contains", commit.orig_node])
             for branch in branches:
                 if branch.startswith("* ("):
                     # Omit `* (detached from {SHA1})`
@@ -172,11 +173,11 @@ class Git(Repository):
 
                 branch = branch.lstrip("* ")
                 # Rebase the branch to the last commit from the stack .
-                branches_to_rebase[branch] = [commit["node"], commit["orig-node"]]
+                branches_to_rebase[branch] = [commit.node, commit.orig_node]
 
         return branches_to_rebase
 
-    def finalize(self, commits: List[dict]):
+    def finalize(self, commits: List[Commit]):
         """Rebase all branches based on changed commits from the stack."""
         branches_to_rebase = self._find_branches_to_rebase(commits)
 
@@ -186,11 +187,11 @@ class Git(Repository):
 
         self.checkout(self.branch)
 
-    def refresh_commit_stack(self, commits: List[dict]):
+    def refresh_commit_stack(self, commits: List[Commit]):
         """Update revset and names of the commits."""
         for commit in commits:
-            commit["name"] = short_node(commit["node"])
-        self.revset = (commits[0]["node"], commits[-1]["node"])
+            commit.name = short_node(commit.node)
+        self.revset = (commits[0].node, commits[-1].node)
 
     def _cherry(self, remotes: List[str]):
         """Run `git cherry` and try all the remotes until success."""
@@ -364,7 +365,7 @@ class Git(Repository):
 
         return False
 
-    def commit_stack(self, single: bool = False) -> Optional[List[dict]]:
+    def commit_stack(self, single: bool = False) -> Optional[List[Commit]]:
         """Collect all the info about commits."""
         if not self.revset:
             # No commits found to submit
@@ -413,24 +414,24 @@ class Git(Repository):
                 author_date, "%a, %d %b %Y %H:%M:%S %z"
             ).timestamp()
             commits.append(
-                {
-                    "name": short_node(node),
-                    "node": node,
-                    "orig-node": node,
-                    "submit": True,
-                    "title": desc[0],
-                    "title-preview": desc[0],
-                    "body": "\n".join(desc[1:]).rstrip(),
-                    "bug-id": None,
-                    "reviewers": dict(request=[], granted=[]),
-                    "rev-id": None,
-                    "parent": parents[0],
-                    "tree-hash": tree_hash,
-                    "author-date": author_date,
-                    "author-date-epoch": commit_epoch,
-                    "author-name": author_name,
-                    "author-email": author_email,
-                }
+                Commit(
+                    name=short_node(node),
+                    node=node,
+                    orig_node=node,
+                    submit=True,
+                    title=desc[0],
+                    title_preview=desc[0],
+                    body="\n".join(desc[1:]).rstrip(),
+                    bug_id=None,
+                    reviewers=dict(request=[], granted=[]),
+                    rev_id=None,
+                    parent=parents[0],
+                    tree_hash=tree_hash,
+                    author_date=author_date,
+                    author_date_epoch=commit_epoch,
+                    author_name=author_name,
+                    author_email=author_email,
+                )
             )
 
         return commits
@@ -590,7 +591,7 @@ class Git(Repository):
                 },
             )
 
-    def amend_commit(self, commit: dict, commits: List[dict]):
+    def amend_commit(self, commit: Commit, commits: List[Commit]):
         """Amend the commit with an updated message.
 
         Changing commit's message changes also its SHA1.
@@ -601,47 +602,47 @@ class Git(Repository):
             commit: Information about the commit to be amended
             commits: List of commits within the stack
         """
-        updated_body = "%s\n%s" % (commit["title"], commit["body"])
+        updated_body = f"{commit.title}\n{commit.body}"
 
         current_body = self.git_out(
-            ["show", "-s", "--format=%s%n%b", commit["node"]], split=False
+            ["show", "-s", "--format=%s%n%b", commit.node], split=False
         )
         if current_body == updated_body:
-            logger.debug("not amending commit %s, unchanged", commit["name"])
+            logger.debug("not amending commit %s, unchanged", commit.name)
             return
 
         # Create a new commit with the updated body.
         new_parent_sha = self._commit_tree(
-            commit["parent"],
-            commit["tree-hash"],
+            commit.parent,
+            commit.tree_hash,
             updated_body,
-            commit["author-name"],
-            commit["author-email"],
-            commit["author-date"],
+            commit.author_name,
+            commit.author_email,
+            commit.author_date,
         )
 
         # Update commit info
-        commit["node"] = new_parent_sha
+        commit.node = new_parent_sha
         # Update parent for all the children of the `commit` within the stack
         has_children = False
-        for c in commits:
+        for commit in commits:
             if not has_children:
                 # Find the amended commit info in the list of all commits in the stack.
                 # Next commits are children of this one.
-                has_children = c == commit
+                has_children = commit == commit
                 continue
 
             # Update parent information and create a new commit
-            c["parent"] = new_parent_sha
+            commit.parent = new_parent_sha
             new_parent_sha = self._commit_tree(
                 new_parent_sha,
-                c["tree-hash"],
-                "%s\n%s" % (c["title"], c["body"]),
-                c["author-name"],
-                c["author-email"],
-                c["author-date"],
+                commit.tree_hash,
+                f"{commit.title}\n{commit.body}",
+                commit.author_name,
+                commit.author_email,
+                commit.author_date,
             )
-            c["node"] = new_parent_sha
+            commit.node = new_parent_sha
 
     def rebase_commit(self, source_commit: dict, dest_commit: dict):
         self._rebase(dest_commit["node"], source_commit["node"])
@@ -676,7 +677,7 @@ class Git(Repository):
 
         return unified_head
 
-    def uplift_commits(self, dest: str, commits: List[dict]) -> List[dict]:
+    def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
         # Branch name for the uplift.
         mozphab_uplift_branch = f"{self.branch}_uplift"
 
@@ -842,7 +843,7 @@ class Git(Repository):
 
         return change
 
-    def get_diff(self, commit: dict) -> Diff:
+    def get_diff(self, commit: Commit) -> Diff:
         """Create a Diff object with changes."""
         raw = self.git_out(
             [
@@ -853,7 +854,7 @@ class Git(Repository):
                 "-M",
                 "-C",
                 "--no-abbrev",
-                commit["node"],
+                commit.node,
             ],
             split=False,
         )
