@@ -21,11 +21,18 @@ def test_black():
     subprocess.check_call([find_script_path("black"), "--check"] + PY_FILES)
 
 
-def test_flake8():
+def test_ruff():
+    """Run ruff on the codebase.
+
+    Use the project root as the directory to lint, and define appropriate lint
+    paths in the `ruff.toml` file.
+    """
     subprocess.check_call(
-        [find_script_path("flake8")]
-        + ["--max-line-length=88"]
-        + ["--ignore=E203,W503"]
-        + ["--disable-noqa"]
-        + PY_FILES
+        (
+            find_script_path("ruff"),
+            "check",
+            "--target-version",
+            "py38",
+            ROOT,
+        )
     )

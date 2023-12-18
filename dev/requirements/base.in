@@ -1,8 +1,6 @@
 black==23.11.0
 callee==0.3.1
 distro==1.8.0
-flake8-bugbear==20.1.4
-flake8==3.7.9
 immutabledict==3.0.0
 packaging==23.2
 pytest==7.4.3
@@ -10,3 +8,4 @@ python-hglib>=2.6.2
 scandir==1.10.0
 hg-evolve==11.1.0
 mercurial==6.5.2
+ruff==0.1.8

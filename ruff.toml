@@ -1,0 +1,20 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+line-length = 88
+
+[lint]
+select = ["C", "E", "F", "W", "B", "B9", "I"]
+ignore = ["B006", "B904", "C901", "E203", "E501"]
+exclude = [
+    ".hg",
+    ".git",
+    "__pycache__",
+    ".cache",
+    # Ignore test data, which is annoying to properly format.
+    "tests/data/",
+]
+
+[isort]
+split-on-trailing-comma = true
