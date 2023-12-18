@@ -3,10 +3,15 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 import os
 import re
 from pathlib import Path
 from shutil import which
+from typing import (
+    Optional,
+    List,
+)
 
 from .config import config
 from .exceptions import Error
@@ -29,7 +34,7 @@ class GitCommand:
         self.safe_mode = config.safe_mode
         self.email = ""
 
-    def call(self, git_args, **kwargs):
+    def call(self, git_args: List[str], **kwargs):
         unicode_args = [
             "-c",
             "i18n.logOutputEncoding=UTF-8",
@@ -38,7 +43,9 @@ class GitCommand:
         ]
         check_call(self.command + unicode_args + git_args, env=self._env, **kwargs)
 
-    def output(self, git_args, extra_env=None, **kwargs):
+    def output(
+        self, git_args: List[str], extra_env: Optional[dict] = None, **kwargs
+    ) -> str:
         env = dict(self._env)
         if extra_env:
             env.update(extra_env)
@@ -51,7 +58,7 @@ class GitCommand:
         ]
         return check_output(self.command + unicode_args + git_args, env=env, **kwargs)
 
-    def set_args(self, args):
+    def set_args(self, args: argparse.Namespace):
         """Read and set the configuration."""
         git_config = parse_config(self.output(["config", "--list"], never_log=True))
 
@@ -82,7 +89,7 @@ class GitCommand:
             self.command.extend(safe_options)
 
     @property
-    def is_cinnabar_installed(self):
+    def is_cinnabar_installed(self) -> bool:
         """Check if Cinnabar extension is callable."""
         if self._cinnabar_installed is None:
             # Unfortunately we cannot use --list-cmds as it requires git v2.18+
