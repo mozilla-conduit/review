@@ -6,8 +6,8 @@ import signal
 import sys
 import threading
 import time
-
 from contextlib import contextmanager
+
 from mozphab import environment
 
 

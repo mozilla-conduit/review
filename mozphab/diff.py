@@ -2,10 +2,9 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import concurrent.futures
 import operator
 import re
-import concurrent.futures
-
 from typing import (
     Any,
     Dict,
@@ -117,13 +116,13 @@ class Diff:
 
                     # Start a new collection
                     (old_off, new_off, old_len, new_len) = Diff.parse_git_diff(line)
-                    hunk = dict(
-                        old_off=old_off,
-                        new_off=new_off,
-                        old_len=old_len,
-                        new_len=new_len,
-                        lines=[],
-                    )
+                    hunk = {
+                        "old_off": old_off,
+                        "new_off": new_off,
+                        "old_len": old_len,
+                        "new_len": new_len,
+                        "lines": [],
+                    }
 
                 else:
                     hunk["lines"].append(line)
@@ -185,16 +184,16 @@ class Diff:
             }
 
     class Kind:
-        values = dict(
-            ADD=1,
-            CHANGE=2,
-            DELETE=3,
-            MOVE_AWAY=4,
-            COPY_AWAY=5,
-            MOVE_HERE=6,
-            COPY_HERE=7,
-            MULTICOPY=8,
-        )
+        values = {
+            "ADD": 1,
+            "CHANGE": 2,
+            "DELETE": 3,
+            "MOVE_AWAY": 4,
+            "COPY_AWAY": 5,
+            "MOVE_HERE": 6,
+            "COPY_HERE": 7,
+            "MULTICOPY": 8,
+        }
 
         def __init__(self, name: str):
             self.value = self.values[name]
@@ -219,15 +218,15 @@ class Diff:
                 return "C*"
 
     class FileType:
-        values = dict(
-            TEXT=1,
-            IMAGE=2,
-            BINARY=3,
-            DIRECTORY=4,  # Should never show up...
-            SYMLINK=5,  # Support symlinks (do we care?)
-            DELETED=6,
-            NORMAL=7,
-        )
+        values = {
+            "TEXT": 1,
+            "IMAGE": 2,
+            "BINARY": 3,
+            "DIRECTORY": 4,  # Should never show up...
+            "SYMLINK": 5,  # Support symlinks (do we care?)
+            "DELETED": 6,
+            "NORMAL": 7,
+        }
 
         def __init__(self, name: str):
             self.value = self.values[name]

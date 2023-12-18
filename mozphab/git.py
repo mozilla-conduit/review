@@ -9,29 +9,27 @@ import re
 import subprocess
 import sys
 import uuid
-
+from datetime import datetime
+from functools import lru_cache
 from typing import (
     List,
     Optional,
 )
 
-from datetime import datetime
-from functools import lru_cache
-
 from mozphab import environment
 
-from .config import config
 from .commits import Commit
+from .config import config
 from .diff import Diff
 from .exceptions import CommandError, Error, NotFoundError
 from .gitcommand import GitCommand
 from .helpers import (
+    create_hunk_lines,
+    is_valid_email,
     prompt,
     short_node,
     temporary_binary_file,
     temporary_file,
-    create_hunk_lines,
-    is_valid_email,
 )
 from .logger import logger
 from .repository import Repository
@@ -110,9 +108,7 @@ class Git(Repository):
         return bool(self.git.output(["diff-index", "HEAD"]))
 
     def is_worktree_clean(self) -> bool:
-        return all(
-            [l.startswith("?? ") for l in self.git_out(["status", "--porcelain"])]
-        )
+        return all(l.startswith("?? ") for l in self.git_out(["status", "--porcelain"]))
 
     def before_submit(self):
         self.validate_email()
@@ -161,7 +157,7 @@ class Git(Repository):
 
     def _find_branches_to_rebase(self, commits: List[Commit]) -> dict:
         """Create a list of branches to rebase."""
-        branches_to_rebase = dict()
+        branches_to_rebase = {}
         for commit in commits:
             if commit.node == commit.orig_node:
                 continue
@@ -423,7 +419,7 @@ class Git(Repository):
                     title_preview=desc[0],
                     body="\n".join(desc[1:]).rstrip(),
                     bug_id=None,
-                    reviewers=dict(request=[], granted=[]),
+                    reviewers={"request": [], "granted": []},
                     rev_id=None,
                     parent=parents[0],
                     tree_hash=tree_hash,

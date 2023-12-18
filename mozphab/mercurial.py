@@ -12,9 +12,7 @@ import re
 import sys
 import time
 import uuid
-
 from contextlib import suppress
-from packaging.version import Version
 from functools import lru_cache
 from typing import (
     Dict,
@@ -24,24 +22,26 @@ from typing import (
 )
 
 import hglib
+from packaging.version import Version
+
 from mozphab import environment
 
-from .config import config
 from .commits import Commit
+from .config import config
 from .diff import Diff
 from .exceptions import CommandError, Error, NotFoundError
 from .helpers import (
     create_hunk_lines,
+    is_valid_email,
     parse_config,
     short_node,
     temporary_binary_file,
     temporary_file,
     which_path,
-    is_valid_email,
 )
 from .logger import logger
 from .repository import Repository
-from .spinner import wait_message, clear_terminal_line
+from .spinner import clear_terminal_line, wait_message
 from .subprocess_wrapper import debug_log_command
 from .telemetry import telemetry
 
@@ -281,7 +281,7 @@ class Mercurial(Repository):
         # `hg status` is slow on large repos.  As we'll need both uncommitted changes
         # and untracked files separately, run it once and cache results.
         if self.status is None:
-            self.status = dict(T=[], U=[])
+            self.status = {"T": [], "U": []}
             for line in self.hg_out(
                 ["status", "--added", "--deleted", "--modified", "--unknown"],
                 split=True,
@@ -501,7 +501,7 @@ class Mercurial(Repository):
                     title_preview=desc[0],
                     body="\n".join(desc[1:]).rstrip(),
                     bug_id=None,
-                    reviewers=dict(request=[], granted=[]),
+                    reviewers={"request": [], "granted": []},
                     rev_id=None,
                     author_date_epoch=int(author_date.split(" ")[0]),
                     author_name=author_name,
@@ -937,12 +937,12 @@ class Mercurial(Repository):
                 # A file can be mved only once.
                 is_move = old_fn in fn_dels and old_fn not in fn_renamed
                 changes.append(
-                    dict(
-                        fn=new_fn,
-                        old_fn=old_fn,
-                        kind="R" if is_move else "C",
-                        func=self._change_mod,
-                    )
+                    {
+                        "fn": new_fn,
+                        "old_fn": old_fn,
+                        "kind": "R" if is_move else "C",
+                        "func": self._change_mod,
+                    }
                 )
                 fn_renames.append((new_fn, old_fn))
                 fn_renamed.append(old_fn)
@@ -954,9 +954,15 @@ class Mercurial(Repository):
         # remove empty string from mods
         fn_mods = [fn for fn in fn_mods if fn]
 
-        changes.extend([dict(fn=fn, kind="A", func=self._change_add) for fn in fn_adds])
-        changes.extend([dict(fn=fn, kind="D", func=self._change_del) for fn in fn_dels])
-        changes.extend([dict(fn=fn, kind="M", func=self._change_mod) for fn in fn_mods])
+        changes.extend(
+            [{"fn": fn, "kind": "A", "func": self._change_add} for fn in fn_adds]
+        )
+        changes.extend(
+            [{"fn": fn, "kind": "D", "func": self._change_del} for fn in fn_dels]
+        )
+        changes.extend(
+            [{"fn": fn, "kind": "M", "func": self._change_mod} for fn in fn_mods]
+        )
 
         # Create changes.
         diff = Diff()
@@ -1007,7 +1013,7 @@ class Mercurial(Repository):
         """Collect information about the file."""
         binary = False
         body = self.hg_cat(filename, rev)
-        meta = dict(mime="TEXT", bin_body=body)
+        meta = {"mime": "TEXT", "bin_body": body}
 
         meta["file_size"] = self._file_size(filename, rev)
         if meta["file_size"] > environment.MAX_TEXT_SIZE:

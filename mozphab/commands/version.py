@@ -2,8 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from mozphab.logger import logger
 from mozphab.environment import MOZPHAB_NAME, MOZPHAB_VERSION
+from mozphab.logger import logger
 
 
 def log_current_version(_):

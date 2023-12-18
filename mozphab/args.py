@@ -5,7 +5,6 @@
 import argparse
 import os
 import textwrap
-
 from importlib import import_module
 from typing import List, Set
 
@@ -87,9 +86,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     help_parser.add_argument("command", nargs=argparse.OPTIONAL)
     help_parser.set_defaults(print_help=True)
 
-    fallback = should_fallback_to_submit(
-        argv, {command for command in commands_parser.choices}
-    )
+    fallback = should_fallback_to_submit(argv, set(commands_parser.choices))
     if fallback:
         argv.insert(0, "submit")
 

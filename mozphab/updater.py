@@ -7,13 +7,12 @@ import json
 import sys
 import time
 import urllib.request
-
+from pathlib import Path
 from typing import Optional
 
-from setuptools import Distribution
 from packaging.version import Version
-from pathlib import Path
 from pkg_resources import parse_version
+from setuptools import Distribution
 
 from mozphab import environment
 
@@ -47,7 +46,7 @@ def get_simple_json() -> dict:
 def parse_latest_prerelease_version(simple_json: dict) -> str:
     """Parse PyPI's API response for `moz-phab` to determine the latest version."""
     # Get all the returned `.tar.gz` file entries.
-    filenames = map(lambda entry: entry["filename"], simple_json["files"])
+    filenames = (entry["filename"] for entry in simple_json["files"])
 
     # The format is `MozPhab-<version>.tar.gz`, so remove the prefix and
     # suffix to get the version strings.

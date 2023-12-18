@@ -4,7 +4,6 @@
 
 import argparse
 import os
-
 from typing import Optional
 
 from .exceptions import Error

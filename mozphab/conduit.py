@@ -9,7 +9,6 @@ import json
 import os
 import urllib.parse as url_parse
 import urllib.request as url_request
-
 from typing import (
     Any,
     Dict,
@@ -35,7 +34,6 @@ from .helpers import (
 )
 from .logger import logger
 from .simplecache import cache
-
 
 CHECK_IN_NEEDED = "check-in_needed"
 
@@ -137,11 +135,11 @@ class ConduitAPI:
         self, *, method: str, args: dict, token: Optional[str]
     ) -> Dict[str, Any]:
         """Return dict with Request args for calling the specified conduit method."""
-        return dict(
-            url=url_parse.urljoin(self.repo.api_url, method),
-            method="POST",
-            headers={"User-Agent": USER_AGENT},
-            data=url_parse.urlencode(
+        return {
+            "url": url_parse.urljoin(self.repo.api_url, method),
+            "method": "POST",
+            "headers": {"User-Agent": USER_AGENT},
+            "data": url_parse.urlencode(
                 {
                     "params": json.dumps(
                         {
@@ -154,7 +152,7 @@ class ConduitAPI:
                     "__conduit__": True,
                 }
             ).encode(),
-        )
+        }
 
     def ping(self) -> bool:
         """Sends a ping to the Phabricator server using `conduit.ping` API.
@@ -188,7 +186,7 @@ class ConduitAPI:
 
     def get_projects(self, slugs: List[str]) -> List[dict]:
         """Search for tags by hashtags."""
-        response = self.call("project.search", dict(constraints=dict(slugs=slugs)))
+        response = self.call("project.search", {"constraints": {"slugs": slugs}})
         return response.get("data")
 
     def get_project_phid(self, slug: str) -> Optional[str]:
@@ -253,13 +251,11 @@ class ConduitAPI:
         # Initialise depending on if we're passed revision IDs or PHIDs.
         if ids:
             ids = [str(rev_id) for rev_id in ids]
-            phids_by_id = dict(
-                [
-                    (rev_id, cache.get("rev-id-%s" % rev_id))
-                    for rev_id in ids
-                    if "rev-id-%s" % rev_id in cache
-                ]
-            )
+            phids_by_id = {
+                rev_id: cache.get("rev-id-%s" % rev_id)
+                for rev_id in ids
+                if "rev-id-%s" % rev_id in cache
+            }
             found_phids = list(phids_by_id.values())
             query_field = "ids"
             query_values = [
@@ -270,16 +266,14 @@ class ConduitAPI:
             phids_by_id = {}
             found_phids = phids.copy()
             query_field = "phids"
-            query_values = set([phid for phid in phids if "rev-%s" % phid not in cache])
+            query_values = {phid for phid in phids if "rev-%s" % phid not in cache}
 
         # Revisions metadata keyed by PHID.
-        revisions = dict(
-            [
-                (phid, cache.get("rev-%s" % phid))
-                for phid in found_phids
-                if "rev-%s" % phid in cache
-            ]
-        )
+        revisions = {
+            phid: cache.get("rev-%s" % phid)
+            for phid in found_phids
+            if "rev-%s" % phid in cache
+        }
 
         # Query Phabricator if we don't have cached values for revisions.
         if query_values:
@@ -431,7 +425,7 @@ class ConduitAPI:
         api_call_args = {"queryKey": "active", "constraints": {"slugs": to_collect}}
         response = self.call("project.search", api_call_args)
         for data in response.get("data"):
-            group = dict(name=data["fields"]["slug"], phid=data["phid"])
+            group = {"name": data["fields"]["slug"], "phid": data["phid"]}
             groups.append(group)
             key = "group-%s" % group["name"]
             cache.set(key, group)
@@ -440,7 +434,7 @@ class ConduitAPI:
         maps = response["maps"]["slugMap"]
         for alias in maps.keys():
             name = normalise_reviewer(alias)
-            group = dict(name=name, phid=maps[alias]["projectPHID"])
+            group = {"name": name, "phid": maps[alias]["projectPHID"]}
             key = "group-%s" % alias
             if key not in cache:
                 groups.append(group)
@@ -457,14 +451,14 @@ class ConduitAPI:
     ) -> dict:
         """Create a new revision in Phabricator."""
         transactions = [
-            dict(type="title", value=revision_title_from_commit(commit)),
-            dict(type="summary", value=summary),
+            {"type": "title", "value": revision_title_from_commit(commit)},
+            {"type": "summary", "value": summary},
         ]
         if commit.has_reviewers and not commit.wip:
             self.update_revision_reviewers(transactions, commit)
 
         if commit.bug_id:
-            transactions.append(dict(type="bugzilla.bug-id", value=commit.bug_id))
+            transactions.append({"type": "bugzilla.bug-id", "value": commit.bug_id})
         return self.edit_revision(
             transactions=transactions,
             diff_phid=diff_phid,
@@ -483,13 +477,13 @@ class ConduitAPI:
         """Update an existing revision in Phabricator."""
         # Update the title and summary
         transactions = [
-            dict(type="title", value=revision_title_from_commit(commit)),
-            dict(type="summary", value=strip_differential_revision(commit.body)),
+            {"type": "title", "value": revision_title_from_commit(commit)},
+            {"type": "summary", "value": strip_differential_revision(commit.body)},
         ]
 
         # Add update comment
         if comment:
-            transactions.append(dict(type="comment", value=comment))
+            transactions.append({"type": "comment", "value": comment})
 
         # Add reviewers only if revision lacks them
         if commit.has_reviewers and not commit.wip:
@@ -500,7 +494,7 @@ class ConduitAPI:
         if commit.bug_id:
             revision = conduit.get_revisions(ids=[commit.rev_id])[0]
             if revision["fields"]["bugzilla.bug-id"] != commit.bug_id:
-                transactions.append(dict(type="bugzilla.bug-id", value=commit.bug_id))
+                transactions.append({"type": "bugzilla.bug-id", "value": commit.bug_id})
 
         return self.edit_revision(
             transactions=transactions,
@@ -524,14 +518,14 @@ class ConduitAPI:
 
         # diff_phid is not present for changes in revision settings (like WIP)
         if diff_phid:
-            trans.append(dict(type="update", value=diff_phid))
+            trans.append({"type": "update", "value": diff_phid})
 
         existing_status = None
         if rev_id:
             try:
-                args = dict(ids=[int(rev_id)])
+                args = {"ids": [int(rev_id)]}
             except ValueError:
-                args = dict(phids=[rev_id])
+                args = {"phids": [rev_id]}
             existing_revision = conduit.get_revisions(**args)[0]
             existing_status = existing_revision["fields"]["status"]["value"]
 
@@ -544,7 +538,7 @@ class ConduitAPI:
             # revision, we can add the `plan-changes` transaction to our create call.
             # Existing revisions must make a subsequent API call to set the status to
             # `changes-planned` to match our WIP state.
-            plan_changes_transaction = dict(type="plan-changes", value=True)
+            plan_changes_transaction = {"type": "plan-changes", "value": True}
             if existing_status == "changes-planned":
                 post_trans.append(plan_changes_transaction)
             else:
@@ -555,14 +549,14 @@ class ConduitAPI:
         # Updates to existing reviews that have been accepted shouldn't be triggered
         # for re-review.
         elif existing_status and existing_status not in ("needs-review", "accepted"):
-            trans.append(dict(type="request-review", value=True))
+            trans.append({"type": "request-review", "value": True})
 
         # Add the check-in-needed tag if required.
         if check_in_needed:
             logger.info(f"Adding #{CHECK_IN_NEEDED} to revision.")
             check_in_needed_phid = conduit.get_project_phid(CHECK_IN_NEEDED)
             if check_in_needed_phid is not None:
-                trans.append(dict(type="projects.add", value=[check_in_needed_phid]))
+                trans.append({"type": "projects.add", "value": [check_in_needed_phid]})
             else:
                 logger.error(
                     f"Could not add #{CHECK_IN_NEEDED} to revision. "
@@ -570,7 +564,7 @@ class ConduitAPI:
                 )
 
         # Call differential.revision.edit
-        api_call_args = dict(transactions=trans)
+        api_call_args = {"transactions": trans}
         if rev_id:
             api_call_args["objectIdentifier"] = rev_id
         revision = self.call("differential.revision.edit", api_call_args)
@@ -581,10 +575,10 @@ class ConduitAPI:
         if post_trans:
             revision = self.call(
                 "differential.revision.edit",
-                dict(
-                    objectIdentifier=rev_id,
-                    transactions=post_trans,
-                ),
+                {
+                    "objectIdentifier": rev_id,
+                    "transactions": post_trans,
+                },
             )
 
         return revision
@@ -611,7 +605,7 @@ class ConduitAPI:
         and a `value` to be passed as the value of `constraint`. `value`
         must be a single element and will be passed in a list to Conduit.
         """
-        api_call_args = dict(constraints={constraint: [value]}, limit=1)
+        api_call_args = {"constraints": {constraint: [value]}, "limit": 1}
         data = self.call("diffusion.repository.search", api_call_args)
         if not data.get("data"):
             raise NotFoundError("Repository %s not found" % value)
@@ -638,19 +632,19 @@ class ConduitAPI:
         if conduit.repo.vcs == "git" and conduit.repo.is_cinnabar_required:
             creation_method.append("cinnabar")
 
-        api_call_args = dict(
-            changes=changes,
-            sourceMachine=self.repo.phab_url,
-            sourceControlSystem=self.repo.phab_vcs,
-            sourceControlPath="/",
-            sourceControlBaseRevision=base_revision,
-            creationMethod="-".join(creation_method),
-            lintStatus="none",
-            unitStatus="none",
-            repositoryPHID=self.repo.phid,
-            sourcePath=self.repo.path,
-            branch="HEAD" if self.repo.phab_vcs == "git" else "default",
-        )
+        api_call_args = {
+            "changes": changes,
+            "sourceMachine": self.repo.phab_url,
+            "sourceControlSystem": self.repo.phab_vcs,
+            "sourceControlPath": "/",
+            "sourceControlBaseRevision": base_revision,
+            "creationMethod": "-".join(creation_method),
+            "lintStatus": "none",
+            "unitStatus": "none",
+            "repositoryPHID": self.repo.phid,
+            "sourcePath": self.repo.path,
+            "branch": "HEAD" if self.repo.phab_vcs == "git" else "default",
+        }
         return self.call("differential.creatediff", api_call_args)
 
     def set_diff_property(self, diff_id: str, commit: Commit, message: str):
@@ -671,9 +665,11 @@ class ConduitAPI:
         if self.repo.phab_vcs == "hg":
             data[commit.node]["rev"] = commit.node
 
-        api_call_args = dict(
-            diff_id=diff_id, name="local:commits", data=json.dumps(data)
-        )
+        api_call_args = {
+            "diff_id": diff_id,
+            "name": "local:commits",
+            "data": json.dumps(data),
+        }
         self.call("differential.setdiffproperty", api_call_args)
 
     def file_upload(self, path: str, data: bytes) -> Optional[str]:
@@ -682,21 +678,21 @@ class ConduitAPI:
         name = os.path.basename(path)
         allocation = self.call(
             "file.allocate",
-            dict(
-                name=name,
-                contentLength=len(data),
-                contentHash=hashlib.sha256(data).hexdigest(),
-            ),
+            {
+                "name": name,
+                "contentLength": len(data),
+                "contentHash": hashlib.sha256(data).hexdigest(),
+            },
         )
         file_phid = allocation["filePHID"]
         if allocation["upload"]:
             if not file_phid:
                 data_base64 = base64.standard_b64encode(data)
                 file_phid = self.call(
-                    "file.upload", dict(data_base64=data_base64.decode(), name=name)
+                    "file.upload", {"data_base64": data_base64.decode(), "name": name}
                 )
             else:
-                chunks = self.call("file.querychunks", dict(filePHID=file_phid))
+                chunks = self.call("file.querychunks", {"filePHID": file_phid})
                 for chunk in chunks:
                     if chunk["complete"]:
                         continue
@@ -705,12 +701,12 @@ class ConduitAPI:
                     data_base64 = base64.standard_b64encode(data[byte_start:byte_end])
                     self.call(
                         "file.uploadchunk",
-                        dict(
-                            filePHID=file_phid,
-                            byteStart=byte_start,
-                            data=data_base64.decode(),
-                            dataEncoding="base64",
-                        ),
+                        {
+                            "filePHID": file_phid,
+                            "byteStart": byte_start,
+                            "data": data_base64.decode(),
+                            "dataEncoding": "base64",
+                        },
                     )
 
         return str(file_phid)
@@ -756,7 +752,7 @@ class ConduitAPI:
         all_reviewing_phid = (
             reviewers_phid + blocking_phid + groups_phid + bl_groups_phid
         )
-        transactions.extend([dict(type="reviewers.set", value=all_reviewing_phid)])
+        transactions.extend([{"type": "reviewers.set", "value": all_reviewing_phid}])
 
     def check_for_invalid_reviewers(self, reviewers: dict) -> List[Dict[str, Any]]:
         """Return a list of invalid reviewer names.
@@ -809,23 +805,23 @@ class ConduitAPI:
 
         # Find users availability:
         unavailable = [
-            dict(
-                name=r["userName"],
-                until=datetime.datetime.fromtimestamp(r["currentStatusUntil"]).strftime(
-                    "%Y-%m-%d %H:%M"
-                ),
-            )
+            {
+                "name": r["userName"],
+                "until": datetime.datetime.fromtimestamp(
+                    r["currentStatusUntil"]
+                ).strftime("%Y-%m-%d %H:%M"),
+            }
             for r in users
             if r.get("currentStatus") == "away"
         ]
 
         # Find disabled users:
         disabled = [
-            dict(name=r["userName"], disabled=True)
+            {"name": r["userName"], "disabled": True}
             for r in users
             if "disabled" in r.get("roles", [])
         ]
-        return disabled + unavailable + [dict(name=r) for r in invalid]
+        return disabled + unavailable + [{"name": r} for r in invalid]
 
 
 conduit = ConduitAPI()

@@ -3,21 +3,19 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
-
 from typing import List
 
 from mozphab import environment
-
 from mozphab.commits import Commit
 from mozphab.conduit import conduit
 from mozphab.config import config
 from mozphab.exceptions import Error
 from mozphab.helpers import (
-    augment_commits_from_body,
     BLOCKING_REVIEWERS_RE,
+    augment_commits_from_body,
+    move_drev_to_original,
     parse_arc_diff_rev,
     prompt,
-    move_drev_to_original,
     revision_title_from_commit,
     strip_differential_revision,
     update_commit_title_previews,
@@ -364,7 +362,7 @@ def update_commits_from_args(commits: List[Commit], args: argparse.Namespace):
             granted = commit.reviewers.get("granted", [])
             requested = commit.reviewers.get("request", [])
 
-        commit.reviewers = dict(granted=granted, request=requested)
+        commit.reviewers = {"granted": granted, "request": requested}
 
         if args.bug:
             # Bug ID command arg used.
@@ -381,10 +379,10 @@ def update_commits_from_args(commits: List[Commit], args: argparse.Namespace):
     # Honour config setting to always use blockers
     if not reviewers and config.always_blocking:
         for commit in commits:
-            commit.reviewers = dict(
-                request=make_blocking(commit.reviewers["request"]),
-                granted=make_blocking(commit.reviewers["granted"]),
-            )
+            commit.reviewers = {
+                "request": make_blocking(commit.reviewers["request"]),
+                "granted": make_blocking(commit.reviewers["granted"]),
+            }
 
     if args.command == "uplift":
         update_commits_for_uplift(commits)
@@ -416,21 +414,21 @@ def update_revision_description(
     # updating the commit title and/or summary is required.
 
     if commit.title != revision["fields"]["title"]:
-        transactions.append(dict(type="title", value=commit.title))
+        transactions.append({"type": "title", "value": commit.title})
 
     # The Phabricator API will refuse the new summary value if we include the
     # "Differential Revision:" keyword in the summary body.
     local_body = strip_differential_revision(commit.body).strip()
     remote_body = strip_differential_revision(revision["fields"]["summary"]).strip()
     if local_body != remote_body:
-        transactions.append(dict(type="summary", value=local_body))
+        transactions.append({"type": "summary", "value": local_body})
 
 
 def update_revision_bug_id(transactions: List[dict], commit: Commit, revision: dict):
     # Appends differential.revision.edit transaction(s) to `transactions` if
     # updating the commit bug-id is required.
     if commit.bug_id and commit.bug_id != revision["fields"]["bugzilla.bug-id"]:
-        transactions.append(dict(type="bugzilla.bug-id", value=commit.bug_id))
+        transactions.append({"type": "bugzilla.bug-id", "value": commit.bug_id})
 
 
 def local_uplift_if_possible(
@@ -626,12 +624,12 @@ def _submit(repo: Repository, args: argparse.Namespace):
             )
 
         # Create arc-annotated commit description.
-        template_vars = dict(
-            title=revision_title_from_commit(commit),
-            body=commit.body,
-            reviewers=reviewers,
-            bug_id=commit.bug_id,
-        )
+        template_vars = {
+            "title": revision_title_from_commit(commit),
+            "body": commit.body,
+            "reviewers": reviewers,
+            "bug_id": commit.bug_id,
+        }
         summary = commit.body
         if previous_commit and not args.no_stack:
             template_vars["depends_on"] = f"Depends on D{previous_commit.rev_id}"

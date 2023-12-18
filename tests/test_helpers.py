@@ -4,15 +4,13 @@
 
 import builtins
 import datetime
-import pytest
 import subprocess
 import unittest
-
 from pathlib import Path
 from unittest import mock
 
-from mozphab.commands import submit
-from mozphab.commits import Commit
+import pytest
+
 from mozphab import (
     conduit,
     detect_repository,
@@ -23,6 +21,8 @@ from mozphab import (
     simplecache,
     subprocess_wrapper,
 )
+from mozphab.commands import submit
+from mozphab.commits import Commit
 
 
 class Helpers(unittest.TestCase):
@@ -40,25 +40,25 @@ class Helpers(unittest.TestCase):
         self.assertEqual(None, helpers.read_json_field(["nofile"], ["not existing"]))
 
         m_open.side_effect = None
-        m_json.load.return_value = dict(a="value A", b=3)
+        m_json.load.return_value = {"a": "value A", "b": 3}
         self.assertEqual(None, helpers.read_json_field(["filename"], ["not existing"]))
         self.assertEqual("value A", helpers.read_json_field(["filename"], ["a"]))
 
         m_json.load.side_effect = (
-            dict(a="value A", b=3),
-            dict(b="value B", c=dict(a="value CA")),
+            {"a": "value A", "b": 3},
+            {"b": "value B", "c": {"a": "value CA"}},
         )
         self.assertEqual(3, helpers.read_json_field(["file_a", "file_b"], ["b"]))
         m_json.load.side_effect = (
-            dict(b="value B", c=dict(a="value CA")),
-            dict(a="value A", b=3),
+            {"b": "value B", "c": {"a": "value CA"}},
+            {"a": "value A", "b": 3},
         )
         self.assertEqual(
             "value B", helpers.read_json_field(["file_b", "file_a"], ["b"])
         )
         m_json.load.side_effect = (
-            dict(a="value A", b=3),
-            dict(b="value B", c=dict(a="value CA")),
+            {"a": "value A", "b": 3},
+            {"b": "value B", "c": {"a": "value CA"}},
         )
         self.assertEqual(
             "value CA", helpers.read_json_field(["file_a", "file_b"], ["c", "a"])
@@ -203,23 +203,26 @@ def test_valid_reviewers_in_phabricator_returns_no_errors(call_conduit):
             },
         },
     )
-    reviewers = dict(granted=[], request=["alice", "#user-group", "#alias1", "#alias2"])
+    reviewers = {
+        "granted": [],
+        "request": ["alice", "#user-group", "#alias1", "#alias2"],
+    }
     assert [] == conduit.conduit.check_for_invalid_reviewers(reviewers)
 
 
 @mock.patch("mozphab.conduit.ConduitAPI.call")
 def test_disabled_reviewers(call_conduit):
-    reviewers = dict(granted=[], request=["alice", "goober"])
+    reviewers = {"granted": [], "request": ["alice", "goober"]}
     call_conduit.side_effect = (
         # user.query
         [
-            dict(userName="alice", phid="PHID-USER-1"),
-            dict(userName="goober", phid="PHID-USER-2", roles=["disabled"]),
+            {"userName": "alice", "phid": "PHID-USER-1"},
+            {"userName": "goober", "phid": "PHID-USER-2", "roles": ["disabled"]},
         ],
         # project.search
         {"data": [], "maps": {"slugMap": {}}},
     )
-    expected_errors = [dict(name="goober", disabled=True)]
+    expected_errors = [{"name": "goober", "disabled": True}]
     assert expected_errors == conduit.conduit.check_for_invalid_reviewers(reviewers)
 
 
@@ -227,9 +230,9 @@ def test_disabled_reviewers(call_conduit):
 def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
     ts = 1543622400
     ts_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
-    reviewers = dict(
-        granted=[],
-        request=[
+    reviewers = {
+        "granted": [],
+        "request": [
             "alice",
             "goober",
             "goozer",
@@ -237,17 +240,17 @@ def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
             "#goo-group",
             "#gon-group",
         ],
-    )
+    }
     call_conduit.side_effect = (
         # user.query
         [
-            dict(userName="alice", phid="PHID-USER-1"),
-            dict(
-                userName="goober",
-                phid="PHID-USER-2",
-                currentStatus="away",
-                currentStatusUntil=ts,
-            ),
+            {"userName": "alice", "phid": "PHID-USER-1"},
+            {
+                "userName": "goober",
+                "phid": "PHID-USER-2",
+                "currentStatus": "away",
+                "currentStatusUntil": ts,
+            },
         ],
         # project.search
         {
@@ -256,10 +259,10 @@ def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
         },
     )
     expected_errors = [
-        dict(name="#gon-group"),
-        dict(name="#goo-group"),
-        dict(name="goober", until=ts_str),
-        dict(name="goozer"),
+        {"name": "#gon-group"},
+        {"name": "#goo-group"},
+        {"name": "goober", "until": ts_str},
+        {"name": "goozer"},
     ]
 
     errors = conduit.conduit.check_for_invalid_reviewers(reviewers)
@@ -269,10 +272,10 @@ def test_non_existent_reviewers_or_groups_generates_error_list(call_conduit):
 
 @mock.patch("mozphab.conduit.ConduitAPI.call")
 def test_reviewer_case_sensitivity(call_conduit):
-    reviewers = dict(granted=[], request=["Alice", "#uSeR-gRoUp"])
+    reviewers = {"granted": [], "request": ["Alice", "#uSeR-gRoUp"]}
     call_conduit.side_effect = (
         # See https://phabricator.services.mozilla.com/conduit/method/user.query/
-        [dict(userName="alice", phid="PHID-USER-1")],
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
         # See https://phabricator.services.mozilla.com/conduit/method/project.search/
         {
             "data": [{"fields": {"slug": "user-group"}, "phid": "PHID-PROJ-1"}],
@@ -410,11 +413,16 @@ def test_parse_config():
     res = helpers.parse_config(
         ["key=value 1", "key2 = value2 ", "key3=", "key4=one=two=three"]
     )
-    assert res == dict(key="value 1", key2="value2", key3="", key4="one=two=three")
+    assert res == {
+        "key": "value 1",
+        "key2": "value2",
+        "key3": "",
+        "key4": "one=two=three",
+    }
 
 
 def test_parse_config_key_only():
-    assert helpers.parse_config(["key"]) == dict()
+    assert helpers.parse_config(["key"]) == {}
 
 
 def test_parse_config_with_filter():
@@ -423,7 +431,7 @@ def test_parse_config_with_filter():
             return True
 
     res = helpers.parse_config(["imin=I'm in", "out=not here"], _filter)
-    assert res == dict(imin="I'm in")
+    assert res == {"imin": "I'm in"}
 
 
 @mock.patch("os.path.expanduser")
@@ -504,7 +512,7 @@ class TestCreateHunkLines:
         )
         if prefix != "+":
             assert lines == [
-                f"\\ No newline at end of file\n",
+                "\\ No newline at end of file\n",
             ]
             assert eof_had_no_newline
         else:
@@ -562,7 +570,7 @@ class TestCreateHunkLines:
         assert lines == [
             f"{prefix}hello{linesep}",
             f"{prefix}world\n",
-            f"\\ No newline at end of file\n",
+            "\\ No newline at end of file\n",
         ]
         assert eof_had_no_newline
 

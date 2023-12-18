@@ -3,8 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from mozphab.commands.submit import (
-    update_commits_for_uplift,
     local_uplift_if_possible,
+    update_commits_for_uplift,
 )
 from mozphab.commits import Commit
 
@@ -33,7 +33,7 @@ def test_local_uplift_if_possible():
     commits = [
         Commit(
             title="A",
-            reviewers=dict(granted=["john"], request=[]),
+            reviewers={"granted": ["john"], "request": []},
             bug_id=None,
             body="",
             rev_id=1,
@@ -80,7 +80,7 @@ def test_update_commits_for_uplift_sets_relman_review():
     commits = [
         Commit(
             title="A",
-            reviewers=dict(granted=["john"], request=[]),
+            reviewers={"granted": ["john"], "request": []},
             bug_id=None,
             body="",
             rev_id=1,
@@ -105,7 +105,7 @@ def test_update_commits_for_uplift_sets_original_revision():
         # Check initial submission.
         Commit(
             title="bug 1: firstline r?reviewer",
-            reviewers=dict(granted=["john"], request=[]),
+            reviewers={"granted": ["john"], "request": []},
             bug_id="1",
             body=(
                 "bug 1: firstline r?reviewer\n"
@@ -117,7 +117,7 @@ def test_update_commits_for_uplift_sets_original_revision():
         # Check update of existing uplift revision.
         Commit(
             title="bug 1: firstline r?reviewer",
-            reviewers=dict(granted=["john"], request=[]),
+            reviewers={"granted": ["john"], "request": []},
             bug_id="1",
             body=(
                 "bug 1: firstline r?reviewer\n"

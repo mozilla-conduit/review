@@ -4,11 +4,8 @@
 
 import os
 import sys
-
-from importlib.metadata import version, PackageNotFoundError
-
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-
 
 DEBUG = bool(os.getenv("DEBUG"))
 HTTP_ALLOWED = bool(os.getenv("HTTP_ALLOWED"))

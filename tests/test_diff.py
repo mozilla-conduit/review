@@ -4,14 +4,14 @@
 
 # coding=utf-8
 
-from unittest import mock
 import textwrap
-
-from .conftest import assert_attributes
+from unittest import mock
 
 from mozphab import environment
 from mozphab.commits import Commit
 from mozphab.diff import Diff
+
+from .conftest import assert_attributes
 
 
 class Args:
@@ -40,17 +40,17 @@ def test_create(m_git_out, m_cat_file, m_file_size, git):
     assert len(change.hunks) == 1
     assert_attributes(
         change.hunks[0],
-        dict(
-            old_off=0,
-            old_len=0,
-            new_off=1,
-            new_len=1,
-            old_eof_newline=True,
-            new_eof_newline=True,
-            added=1,
-            deleted=0,
-            corpus="+a\n",
-        ),
+        {
+            "old_off": 0,
+            "old_len": 0,
+            "new_off": 1,
+            "new_len": 1,
+            "old_eof_newline": True,
+            "new_eof_newline": True,
+            "added": 1,
+            "deleted": 0,
+            "corpus": "+a\n",
+        },
     )
 
 
@@ -98,17 +98,17 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
     assert len(change.hunks) == 1
     assert_attributes(
         change.hunks[0],
-        dict(
-            old_off=1,
-            old_len=1,
-            new_off=1,
-            new_len=2,
-            old_eof_newline=True,
-            new_eof_newline=True,
-            added=1,
-            deleted=0,
-            corpus=" a\n+b",
-        ),
+        {
+            "old_off": 1,
+            "old_len": 1,
+            "new_off": 1,
+            "new_len": 2,
+            "old_eof_newline": True,
+            "new_eof_newline": True,
+            "added": 1,
+            "deleted": 0,
+            "corpus": " a\n+b",
+        },
     )
 
 
@@ -196,18 +196,18 @@ def test_change_empty_hg(
         "--abc123----def456----abc123----def456--fn--abc123----def456----abc123--",
     ]
     m_get_file_meta.side_effect = [
-        dict(
-            binary=False,
-            bin_body=b"",
-            body="",
-            file_size=0,
-        ),
-        dict(
-            binary=False,
-            bin_body=b"",
-            body="",
-            file_size=0,
-        ),
+        {
+            "binary": False,
+            "bin_body": b"",
+            "body": "",
+            "file_size": 0,
+        },
+        {
+            "binary": False,
+            "bin_body": b"",
+            "body": "",
+            "file_size": 0,
+        },
     ]
 
     hg.args = Args()
@@ -246,17 +246,17 @@ def test_delete_file(m_git_out, m_cat_file, m_file_size, git):
     assert change.file_type.name == "TEXT"
     assert_attributes(
         change.hunks[0],
-        dict(
-            old_off=1,
-            old_len=2,
-            new_off=0,
-            new_len=0,
-            old_eof_newline=True,
-            new_eof_newline=True,
-            added=0,
-            deleted=2,
-            corpus="-a\n-b\n",
-        ),
+        {
+            "old_off": 1,
+            "old_len": 2,
+            "new_off": 0,
+            "new_len": 0,
+            "old_eof_newline": True,
+            "new_eof_newline": True,
+            "added": 0,
+            "deleted": 2,
+            "corpus": "-a\n-b\n",
+        },
     )
 
 
@@ -297,8 +297,13 @@ def test_recognize_binary(m_git_out, m_cat_file, m_file_size, git):
     m_git_out.assert_not_called()
     assert change.file_type.name == "BINARY"
     assert change.uploads == [
-        dict(type="old", value=b"", mime="application/octet-stream", phid=None),
-        dict(type="new", value=content, mime="application/octet-stream", phid=None),
+        {"type": "old", "value": b"", "mime": "application/octet-stream", "phid": None},
+        {
+            "type": "new",
+            "value": content,
+            "mime": "application/octet-stream",
+            "phid": None,
+        },
     ]
     assert not change.hunks
 
@@ -321,8 +326,8 @@ def test_recognize_long_text_as_binary(m_git_out, m_cat_file, m_file_size, git):
     m_git_out.assert_not_called()
     assert change.file_type.name == "BINARY"
     assert change.uploads == [
-        dict(type="old", value=b"", mime="", phid=None),
-        dict(type="new", value=content, mime="", phid=None),
+        {"type": "old", "value": b"", "mime": "", "phid": None},
+        {"type": "new", "value": content, "mime": "", "phid": None},
     ]
     assert not change.hunks
 
@@ -411,45 +416,45 @@ def test_multiple_hunks():
     assert len(change.hunks) == 3
     assert_attributes(
         change.hunks[0],
-        dict(
-            old_off=4,
-            old_len=3,
-            new_off=4,
-            new_len=2,
-            old_eof_newline=True,
-            new_eof_newline=True,
-            added=0,
-            deleted=1,
-            corpus="d\n-e\nf\n",
-        ),
+        {
+            "old_off": 4,
+            "old_len": 3,
+            "new_off": 4,
+            "new_len": 2,
+            "old_eof_newline": True,
+            "new_eof_newline": True,
+            "added": 0,
+            "deleted": 1,
+            "corpus": "d\n-e\nf\n",
+        },
     )
     assert_attributes(
         change.hunks[1],
-        dict(
-            old_off=11,
-            old_len=3,
-            new_off=10,
-            new_len=2,
-            old_eof_newline=True,
-            new_eof_newline=True,
-            added=0,
-            deleted=1,
-            corpus="k\n-l\nm\n",
-        ),
+        {
+            "old_off": 11,
+            "old_len": 3,
+            "new_off": 10,
+            "new_len": 2,
+            "old_eof_newline": True,
+            "new_eof_newline": True,
+            "added": 0,
+            "deleted": 1,
+            "corpus": "k\n-l\nm\n",
+        },
     )
     assert_attributes(
         change.hunks[2],
-        dict(
-            old_off=25,
-            old_len=2,
-            new_off=21,
-            new_len=1,
-            old_eof_newline=True,
-            new_eof_newline=True,
-            added=0,
-            deleted=1,
-            corpus="y\n-z\n",
-        ),
+        {
+            "old_off": 25,
+            "old_len": 2,
+            "new_off": 21,
+            "new_len": 1,
+            "old_eof_newline": True,
+            "new_eof_newline": True,
+            "added": 0,
+            "deleted": 1,
+            "corpus": "y\n-z\n",
+        },
     )
 
 

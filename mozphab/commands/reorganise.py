@@ -5,7 +5,6 @@
 
 import argparse
 import sys
-
 from collections import OrderedDict
 from typing import (
     Container,
@@ -16,8 +15,8 @@ from typing import (
 
 from mozphab.conduit import conduit
 from mozphab.exceptions import Error
-from mozphab.logger import logger
 from mozphab.helpers import augment_commits_from_body, prompt
+from mozphab.logger import logger
 from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry

@@ -4,14 +4,12 @@
 
 import hashlib
 import uuid
-
-import pytest
-
 from contextlib import contextmanager
 from unittest import mock
 
-from mozphab import user
+import pytest
 
+from mozphab import user
 from mozphab.conduit import ConduitAPIError
 from mozphab.exceptions import Error
 
@@ -27,12 +25,12 @@ def test_save_user_info(m_json, m_file, user_data):
     # create file
     m_file.exists.return_value = False
     installation_id = str(uuid.uuid4())
-    user_info = dict(
-        is_employee=True,
-        user_code=str(uuid.uuid4()),
-        installation_id=installation_id,
-        last_check=1,
-    )
+    user_info = {
+        "is_employee": True,
+        "user_code": str(uuid.uuid4()),
+        "installation_id": installation_id,
+        "last_check": 1,
+    }
     user_data.save_user_info(**user_info)
     m_json.dump.assert_called_once_with(user_info, None, sort_keys=True, indent=2)
 
@@ -43,12 +41,12 @@ def test_save_user_info(m_json, m_file, user_data):
     new_user_code = str(uuid.uuid4())
     user_data.save_user_info(user_code=new_user_code)
     m_json.dump.assert_called_once_with(
-        dict(
-            is_employee=True,
-            user_code=new_user_code,
-            installation_id=installation_id,
-            last_check=1,
-        ),
+        {
+            "is_employee": True,
+            "user_code": new_user_code,
+            "installation_id": installation_id,
+            "last_check": 1,
+        },
         None,
         sort_keys=True,
         indent=2,
@@ -57,48 +55,48 @@ def test_save_user_info(m_json, m_file, user_data):
 
 def test_is_data_collected(user_data):
     user_data.update_from_dict(
-        dict(
-            is_employee=None,
-            user_code="ff455518-16ae-4a89-b600-f08e30c25ad2",
-            installation_id="5e3c5706-09c2-41a4-8216-e5e463b032b9",
-            last_check=1,
-        )
+        {
+            "is_employee": None,
+            "user_code": "ff455518-16ae-4a89-b600-f08e30c25ad2",
+            "installation_id": "5e3c5706-09c2-41a4-8216-e5e463b032b9",
+            "last_check": 1,
+        }
     )
     assert not user_data.is_data_collected
     user_data.update_from_dict(
-        dict(
-            is_employee=True,
-            user_code=None,
-            installation_id="5e3c5706-09c2-41a4-8216-e5e463b032b9",
-            last_check=1,
-        )
+        {
+            "is_employee": True,
+            "user_code": None,
+            "installation_id": "5e3c5706-09c2-41a4-8216-e5e463b032b9",
+            "last_check": 1,
+        }
     )
     assert not user_data.is_data_collected
     user_data.update_from_dict(
-        dict(
-            is_employee=False,
-            user_code="ff455518-16ae-4a89-b600-f08e30c25ad2",
-            installation_id=None,
-            last_check=1,
-        )
+        {
+            "is_employee": False,
+            "user_code": "ff455518-16ae-4a89-b600-f08e30c25ad2",
+            "installation_id": None,
+            "last_check": 1,
+        }
     )
     assert not user_data.is_data_collected
     user_data.update_from_dict(
-        dict(
-            is_employee=True,
-            user_code="ff455518-16ae-4a89-b600-f08e30c25ad2",
-            installation_id="5e3c5706-09c2-41a4-8216-e5e463b032b9",
-            last_check=None,
-        )
+        {
+            "is_employee": True,
+            "user_code": "ff455518-16ae-4a89-b600-f08e30c25ad2",
+            "installation_id": "5e3c5706-09c2-41a4-8216-e5e463b032b9",
+            "last_check": None,
+        }
     )
     assert not user_data.is_data_collected
     user_data.update_from_dict(
-        dict(
-            is_employee=False,
-            user_code="ff455518-16ae-4a89-b600-f08e30c25ad2",
-            installation_id="5e3c5706-09c2-41a4-8216-e5e463b032b9",
-            last_check=1,
-        )
+        {
+            "is_employee": False,
+            "user_code": "ff455518-16ae-4a89-b600-f08e30c25ad2",
+            "installation_id": "5e3c5706-09c2-41a4-8216-e5e463b032b9",
+            "last_check": 1,
+        }
     )
     assert user_data.is_data_collected
 
@@ -114,7 +112,12 @@ def test_set_user_data(m_time, m_file, m_save, m_whoami, m_hashlib, user_data):
     m_time.time.return_value = user.EMPLOYEE_CHECK_FREQUENCY - 1
     # all data saved in file, no need to update
     user_data.update_from_dict(
-        dict(is_employee=False, user_code="u", installation_id="i", last_check=2)
+        {
+            "is_employee": False,
+            "user_code": "u",
+            "installation_id": "i",
+            "last_check": 2,
+        }
     )
     assert not user_data.set_user_data()
     m_whoami.assert_not_called()
@@ -142,7 +145,7 @@ def test_set_user_data(m_time, m_file, m_save, m_whoami, m_hashlib, user_data):
     ), "Status should not be updated without a valid email."
 
     # Update user_data, not employee
-    m_whoami.side_effect = (dict(email="someemail", is_employee=False),)
+    m_whoami.side_effect = ({"email": "someemail", "is_employee": False},)
     hexdigest = mock.Mock()
     hashed_email = hashlib.md5("someemail".encode("utf-8")).hexdigest()
     user_code = str(uuid.UUID(hashed_email))
@@ -150,19 +153,16 @@ def test_set_user_data(m_time, m_file, m_save, m_whoami, m_hashlib, user_data):
     m_hashlib.md5.return_value = hexdigest
     m_time.time.return_value = 123
     assert user_data.set_user_data()
-    assert (
-        dict(
-            user_code=user_code,
-            is_employee=False,
-            installation_id="installation11111111111111111111",
-            last_check=123,
-        )
-        == user_data.to_dict()
-    )
+    assert {
+        "user_code": user_code,
+        "is_employee": False,
+        "installation_id": "installation11111111111111111111",
+        "last_check": 123,
+    } == user_data.to_dict()
 
     # Create user_data file, employee
     m_file.exists.return_value = False
-    m_whoami.side_effect = (dict(email="someemail", is_employee=True),)
+    m_whoami.side_effect = ({"email": "someemail", "is_employee": True},)
     m_save.return_value = True
     user_data.installation_id = None
     assert user_data.set_user_data()
@@ -202,45 +202,51 @@ def test_whoami(m_conduit, m_bmo, user_data):
 
     # An employee based on @mozilla.com email
     m_conduit.whoami.side_effect = None
-    m_conduit.whoami.return_value = dict(primaryEmail="someemail@mozilla.com")
-    assert user_data.whoami() == dict(email="someemail@mozilla.com", is_employee=True)
+    m_conduit.whoami.return_value = {"primaryEmail": "someemail@mozilla.com"}
+    assert user_data.whoami() == {"email": "someemail@mozilla.com", "is_employee": True}
 
     # An employee based on @getpocket.com email
     m_conduit.whoami.side_effect = None
-    m_conduit.whoami.return_value = dict(primaryEmail="someemail@getpocket.com")
-    assert user_data.whoami() == dict(email="someemail@getpocket.com", is_employee=True)
+    m_conduit.whoami.return_value = {"primaryEmail": "someemail@getpocket.com"}
+    assert user_data.whoami() == {
+        "email": "someemail@getpocket.com",
+        "is_employee": True,
+    }
 
     # An employee based on @mozillafoundation.com email
     m_conduit.whoami.side_effect = None
-    m_conduit.whoami.return_value = dict(primaryEmail="someemail@mozillafoundation.org")
-    assert user_data.whoami() == dict(
-        email="someemail@mozillafoundation.org", is_employee=True
-    )
+    m_conduit.whoami.return_value = {"primaryEmail": "someemail@mozillafoundation.org"}
+    assert user_data.whoami() == {
+        "email": "someemail@mozillafoundation.org",
+        "is_employee": True,
+    }
 
     # Not employee as BMO.whoami failed
-    m_conduit.whoami.return_value = dict(primaryEmail="someone@example.com")
+    m_conduit.whoami.return_value = {"primaryEmail": "someone@example.com"}
     m_bmo.whoami.return_value = None
-    assert user_data.whoami() == dict(email="someone@example.com", is_employee=False)
+    assert user_data.whoami() == {"email": "someone@example.com", "is_employee": False}
     m_bmo.whoami.assert_called_once()
 
     # Not employee as not in mozilla-employee-confidential group
-    m_conduit.whoami.return_value = dict(primaryEmail="someone@example.com")
-    m_bmo.whoami.return_value = dict(name="nvm@example.com", groups=["some-group"])
-    assert user_data.whoami() == dict(email="someone@example.com", is_employee=False)
+    m_conduit.whoami.return_value = {"primaryEmail": "someone@example.com"}
+    m_bmo.whoami.return_value = {"name": "nvm@example.com", "groups": ["some-group"]}
+    assert user_data.whoami() == {"email": "someone@example.com", "is_employee": False}
 
     # An employee as in mozilla-employee-confidential group
-    m_bmo.whoami.return_value = dict(
-        name="someemail", groups=["mozilla-employee-confidential"]
-    )
-    assert user_data.whoami() == dict(email="someone@example.com", is_employee=True)
+    m_bmo.whoami.return_value = {
+        "name": "someemail",
+        "groups": ["mozilla-employee-confidential"],
+    }
+    assert user_data.whoami() == {"email": "someone@example.com", "is_employee": True}
 
-    m_conduit.whoami.return_value = dict(primaryEmail=None)
-    assert user_data.whoami() == dict(
-        email=None, is_employee=False
-    ), "When `primaryEmail` is empty, `is_employee` is False and doesn't fail."
+    m_conduit.whoami.return_value = {"primaryEmail": None}
+    assert user_data.whoami() == {
+        "email": None,
+        "is_employee": False,
+    }, "When `primaryEmail` is empty, `is_employee` is False and doesn't fail."
 
     # whoami raises an error if BMO.whoami raises Error
-    m_conduit.whoami.return_value = dict(primaryEmail="someone@example.com")
+    m_conduit.whoami.return_value = {"primaryEmail": "someone@example.com"}
     m_bmo.whoami.side_effect = Error
     with pytest.raises(Error):
         user_data.whoami()
@@ -250,10 +256,10 @@ def test_whoami(m_conduit, m_bmo, user_data):
 @mock.patch("mozphab.user.conduit")
 def test_whoami_without_bmo(m_conduit, m_bmo, user_data):
     # When there is no bmo_url, bmo.whoami() is not called
-    m_conduit.whoami.return_value = dict(primaryEmail="someone@example.com")
+    m_conduit.whoami.return_value = {"primaryEmail": "someone@example.com"}
     m_conduit.repo.bmo_url = None
     m_bmo.whoami.return_value = None
-    assert user_data.whoami() == dict(email="someone@example.com", is_employee=False)
+    assert user_data.whoami() == {"email": "someone@example.com", "is_employee": False}
     m_bmo.whoami.assert_not_called()
 
 

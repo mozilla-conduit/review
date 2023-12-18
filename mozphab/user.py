@@ -5,16 +5,14 @@ import hashlib
 import json
 import time
 import uuid
-
+from pathlib import Path
 from typing import Optional
 
 from mozphab import environment
-from pathlib import Path
 
 from .bmo import bmo
-from .conduit import conduit, ConduitAPIError
+from .conduit import ConduitAPIError, conduit
 from .logger import logger
-
 
 USER_INFO_FILE = Path(environment.MOZBUILD_PATH) / "user_info.json"
 EMPLOYEE_CHECK_FREQUENCY = 24 * 7 * 60 * 60  # week
@@ -100,7 +98,7 @@ class UserData:
             logger.error(str(e))
             return None
 
-        response = dict(email=who["primaryEmail"])
+        response = {"email": who["primaryEmail"]}
 
         if not response["email"]:
             # If `primaryEmail` is empty we log a warning and return.

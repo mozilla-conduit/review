@@ -11,12 +11,11 @@ import os
 import re
 import sys
 import time
-
 from glob import glob
 
-from mozphab import environment
-
 from colorama import just_fix_windows_console
+
+from mozphab import environment
 
 logger = logging.getLogger("moz-phab")
 
@@ -25,7 +24,7 @@ LOG_MAX_SIZE = 1024 * 1024 * 50
 LOG_BACKUPS = 5
 
 
-_handlers = list()
+_handlers = []
 
 
 class ColourFormatter(logging.Formatter):

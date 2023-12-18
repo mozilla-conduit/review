@@ -4,7 +4,6 @@
 import io
 import json
 import os
-import pytest
 import re
 import shutil
 import subprocess
@@ -12,28 +11,29 @@ import sys
 import tempfile
 import time
 import uuid
-
-from glean import testing
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from glean import testing
 
 # NOTE: Set the environment variables before importing any of mozphab modules.
 os.environ["MOZPHAB_NO_USER_CONFIG"] = "1"
 
-from mozphab.commands import submit  # noqa: E402
-from mozphab.git import Git  # noqa: E402
-from mozphab.mercurial import Mercurial  # noqa: E402
-
 from mozphab import (
     conduit,
-    config as config_module,
     environment,
     mozphab,
     repository,
     simplecache,
     user,
-)  # noqa: E402
-
+)
+from mozphab import (
+    config as config_module,
+)
+from mozphab.commands import submit  # noqa: E402
+from mozphab.git import Git  # noqa: E402
+from mozphab.mercurial import Mercurial  # noqa: E402
 
 environment.SHOW_SPINNER = False
 environment.HTTP_ALLOWED = True
@@ -351,12 +351,12 @@ def in_process(monkeypatch, safe_environ, request, config):
     user.USER_INFO_FILE.exists.return_value = False
     user.user_data = user.UserData()
     user.user_data.update_from_dict(
-        dict(
-            user_code=str(uuid.uuid4()),
-            is_employee=True,
-            installation_id=str(uuid.uuid4()),
-            last_check=time.time(),
-        )
+        {
+            "user_code": str(uuid.uuid4()),
+            "is_employee": True,
+            "installation_id": str(uuid.uuid4()),
+            "last_check": time.time(),
+        }
     )
 
     # Allow to define the check_call_by_line function in the testing module

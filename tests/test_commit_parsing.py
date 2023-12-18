@@ -11,7 +11,7 @@ from mozphab.commits import Commit
 
 class CommitParsing(unittest.TestCase):
     def assertParsed(self, result, parsed):
-        self.assertEqual(dict(request=result[0], granted=result[1]), parsed)
+        self.assertEqual({"request": result[0], "granted": result[1]}, parsed)
 
     def test_bug_id(self):
         parse = helpers.parse_bugs

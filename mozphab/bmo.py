@@ -4,11 +4,10 @@
 import copy
 import json
 import time
-
-from typing import Optional
-import urllib.parse as url_parse
 import urllib.error as url_error
+import urllib.parse as url_parse
 import urllib.request as url_request
+from typing import Optional
 
 from .conduit import conduit
 from .environment import USER_AGENT
@@ -47,11 +46,11 @@ class BMOAPI:
         """Return dict with Request args for calling the specified BMO method."""
         bmo_url = conduit.repo.bmo_url
         headers = headers or {}
-        return dict(
-            url=url_parse.urljoin(bmo_url, "rest/%s" % method),
-            method="GET",
-            headers={**headers, "User-Agent": USER_AGENT},
-        )
+        return {
+            "url": url_parse.urljoin(bmo_url, "rest/%s" % method),
+            "method": "GET",
+            "headers": {**headers, "User-Agent": USER_AGENT},
+        }
 
     @staticmethod
     def _sanitise_req(req_args: dict):

@@ -4,15 +4,15 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import json
-from unittest import mock
-import pytest
 from contextlib import contextmanager
+from unittest import mock
+
+import pytest
 from immutabledict import immutabledict
 
 from mozphab import diff, exceptions, mozphab, repository, simplecache
-
 from mozphab.commits import Commit
-from mozphab.conduit import conduit, ConduitAPIError
+from mozphab.conduit import ConduitAPIError, conduit
 
 
 class Repo:
@@ -49,7 +49,7 @@ def test_build_request(m_load_api_token):
     # default token
     assert mozphab.conduit._build_request(
         method="method",
-        args=dict(call="args"),
+        args={"call": "args"},
         token=None,
     ) == {
         "data": (
@@ -68,7 +68,7 @@ def test_build_request(m_load_api_token):
     # provided token
     assert mozphab.conduit._build_request(
         method="method",
-        args=dict(call="args"),
+        args={"call": "args"},
         token="my-token",
     ) == {
         "data": (
@@ -87,7 +87,7 @@ def test_build_request(m_load_api_token):
     # unicode
     assert mozphab.conduit._build_request(
         method="method",
-        args=dict(call="ćwikła"),
+        args={"call": "ćwikła"},
         token=None,
     ) == {
         "data": (
@@ -106,7 +106,7 @@ def test_build_request(m_load_api_token):
     # empty dict, empty list
     assert mozphab.conduit._build_request(
         method="method",
-        args=dict(empty_dict={}, empty_list=[]),
+        args={"empty_dict": {}, "empty_list": []},
         token=None,
     ) == {
         "data": (
@@ -137,12 +137,12 @@ def test_call(m_load_api_token, m_urlopen):
 
     # success
     cm.read.return_value = json.dumps({"result": "result", "error_code": False})
-    assert mozphab.conduit.call("method", dict(call="args")) == "result"
+    assert mozphab.conduit.call("method", {"call": "args"}) == "result"
 
     # error
     cm.read.return_value = json.dumps({"error_info": "aieee", "error_code": 1})
     with pytest.raises(ConduitAPIError) as conduit_error:
-        mozphab.conduit.call("method", dict(call="args"))
+        mozphab.conduit.call("method", {"call": "args"})
     assert conduit_error.value.args[0].startswith("Phabricator Error: ")
 
 
@@ -208,7 +208,7 @@ def test_get_revisions_none_phids_fails(get_revs, m_call):
         get_revs(phids=None)
 
 
-basic_phab_result = immutabledict({"data": [dict(id=1, phid="PHID-1")]})
+basic_phab_result = immutabledict({"data": [{"id": 1, "phid": "PHID-1"}]})
 
 
 def test_get_revisions_search_by_revid(get_revs, m_call):
@@ -218,7 +218,7 @@ def test_get_revisions_search_by_revid(get_revs, m_call):
     assert len(get_revs(ids=[1])) == 1
     m_call.assert_called_with(
         "differential.revision.search",
-        dict(constraints=dict(ids=[1]), attachments=dict(reviewers=True)),
+        {"constraints": {"ids": [1]}, "attachments": {"reviewers": True}},
     )
 
 
@@ -229,7 +229,7 @@ def test_get_revisions_search_by_phid(get_revs, m_call):
     assert len(get_revs(phids=["PHID-1"])) == 1
     m_call.assert_called_with(
         "differential.revision.search",
-        dict(constraints=dict(phids=["PHID-1"]), attachments=dict(reviewers=True)),
+        {"constraints": {"phids": ["PHID-1"]}, "attachments": {"reviewers": True}},
     )
 
 
@@ -240,7 +240,7 @@ def test_get_revisions_search_by_revid_with_dups(get_revs, m_call):
     assert len(get_revs(ids=[1, 1])) == 2
     m_call.assert_called_with(
         "differential.revision.search",
-        dict(constraints=dict(ids=[1]), attachments=dict(reviewers=True)),
+        {"constraints": {"ids": [1]}, "attachments": {"reviewers": True}},
     )
 
 
@@ -251,16 +251,16 @@ def test_get_revisions_search_by_phid_with_dups(get_revs, m_call):
     assert len(get_revs(phids=["PHID-1", "PHID-1"])) == 2
     m_call.assert_called_with(
         "differential.revision.search",
-        dict(constraints=dict(phids=["PHID-1"]), attachments=dict(reviewers=True)),
+        {"constraints": {"phids": ["PHID-1"]}, "attachments": {"reviewers": True}},
     )
 
 
 multiple_phab_result = immutabledict(
     {
         "data": [
-            dict(id=1, phid="PHID-1"),
-            dict(id=2, phid="PHID-2"),
-            dict(id=3, phid="PHID-3"),
+            {"id": 1, "phid": "PHID-1"},
+            {"id": 2, "phid": "PHID-2"},
+            {"id": 3, "phid": "PHID-3"},
         ]
     }
 )
@@ -270,9 +270,9 @@ def test_get_revisions_search_by_revids_ordering(get_revs, m_call):
     """ordering of results must match input when querying by revids"""
     m_call.return_value = multiple_phab_result
     assert get_revs(ids=[2, 1, 3]) == [
-        dict(id=2, phid="PHID-2"),
-        dict(id=1, phid="PHID-1"),
-        dict(id=3, phid="PHID-3"),
+        {"id": 2, "phid": "PHID-2"},
+        {"id": 1, "phid": "PHID-1"},
+        {"id": 3, "phid": "PHID-3"},
     ]
 
 
@@ -280,9 +280,9 @@ def test_get_revisions_search_by_phids_ordering(get_revs, m_call):
     """ordering of results must match input when querying by phids"""
     m_call.return_value = multiple_phab_result
     assert get_revs(phids=["PHID-2", "PHID-1", "PHID-3"]) == [
-        dict(id=2, phid="PHID-2"),
-        dict(id=1, phid="PHID-1"),
-        dict(id=3, phid="PHID-3"),
+        {"id": 2, "phid": "PHID-2"},
+        {"id": 1, "phid": "PHID-1"},
+        {"id": 3, "phid": "PHID-3"},
     ]
 
 
@@ -290,9 +290,9 @@ def test_get_revisions_search_by_revids_missing(get_revs, m_call):
     """phabricator does not return info on all rev ids"""
     m_call.return_value = multiple_phab_result
     assert get_revs(ids=[2, 4, 1, 3]) == [
-        dict(id=2, phid="PHID-2"),
-        dict(id=1, phid="PHID-1"),
-        dict(id=3, phid="PHID-3"),
+        {"id": 2, "phid": "PHID-2"},
+        {"id": 1, "phid": "PHID-1"},
+        {"id": 3, "phid": "PHID-3"},
     ]
 
 
@@ -325,7 +325,7 @@ def test_get_diffs_by_phid(get_diffs, m_call):
     ), "Should be a length of 1 when given 1 PHID"
     m_call.assert_called_with(
         "differential.diff.search",
-        dict(constraints=dict(phids=["PHID-1"]), attachments=dict(commits=True)),
+        {"constraints": {"phids": ["PHID-1"]}, "attachments": {"commits": True}},
     )
 
 
@@ -335,7 +335,7 @@ def test_get_diffs_by_id(get_diffs, m_call):
     assert len(get_diffs(ids=[1])) == 1, "Should be a length of 1 when given 1 ID"
     m_call.assert_called_with(
         "differential.diff.search",
-        dict(constraints=dict(ids=[1]), attachments=dict(commits=True)),
+        {"constraints": {"ids": [1]}, "attachments": {"commits": True}},
     )
 
 
@@ -348,7 +348,7 @@ def test_get_diffs_search_by_phid_with_dups(get_diffs, m_call):
     ), "Should not include redundant/duplicate diffs via PHID"
     m_call.assert_called_with(
         "differential.diff.search",
-        dict(constraints=dict(phids=["PHID-1"]), attachments=dict(commits=True)),
+        {"constraints": {"phids": ["PHID-1"]}, "attachments": {"commits": True}},
     )
 
 
@@ -361,7 +361,7 @@ def test_get_diffs_search_by_diffid_with_dups(get_diffs, m_call):
     ), "Should not include redundant/duplicate diffs via ID"
     m_call.assert_called_with(
         "differential.diff.search",
-        dict(constraints=dict(ids=[1]), attachments=dict(commits=True)),
+        {"constraints": {"ids": [1]}, "attachments": {"commits": True}},
     )
 
 
@@ -370,15 +370,18 @@ def test_get_diffs_search_by_diffids_missing(get_diffs, m_call):
     m_call.return_value = multiple_phab_result
 
     diff_dict = get_diffs(ids=[2, 4, 1, 3])
-    assert diff_dict.get("PHID-1") == dict(
-        id=1, phid="PHID-1"
-    ), "Should return dict of Diff 1"
-    assert diff_dict.get("PHID-2") == dict(
-        id=2, phid="PHID-2"
-    ), "Should return dict of Diff 2"
-    assert diff_dict.get("PHID-3") == dict(
-        id=3, phid="PHID-3"
-    ), "Should return dict of Diff 3"
+    assert diff_dict.get("PHID-1") == {
+        "id": 1,
+        "phid": "PHID-1",
+    }, "Should return dict of Diff 1"
+    assert diff_dict.get("PHID-2") == {
+        "id": 2,
+        "phid": "PHID-2",
+    }, "Should return dict of Diff 2"
+    assert diff_dict.get("PHID-3") == {
+        "id": 3,
+        "phid": "PHID-3",
+    }, "Should return dict of Diff 3"
     assert not diff_dict.get("PHID-4"), "Should not return dict of non-existent diff"
 
 
@@ -393,22 +396,22 @@ def test_get_related_phids(m_call):
     )
 
     m_call.side_effect = [
-        dict(data=[dict(destinationPHID="bbb")]),
-        dict(data=[dict(destinationPHID="aaa")]),
-        dict(),
+        {"data": [{"destinationPHID": "bbb"}]},
+        {"data": [{"destinationPHID": "aaa"}]},
+        {},
     ]
     assert ["bbb", "aaa"] == get_related_phids("ccc", include_abandoned=True)
 
     m_call.side_effect = [
-        dict(data=[dict(destinationPHID="bbb")]),
-        dict(data=[dict(destinationPHID="aaa")]),
-        dict(),
-        dict(
-            data=[
-                dict(id=1, phid="aaa", fields=dict(status=dict(value="-"))),
-                dict(id=2, phid="bbb", fields=dict(status=dict(value="abandoned"))),
+        {"data": [{"destinationPHID": "bbb"}]},
+        {"data": [{"destinationPHID": "aaa"}]},
+        {},
+        {
+            "data": [
+                {"id": 1, "phid": "aaa", "fields": {"status": {"value": "-"}}},
+                {"id": 2, "phid": "bbb", "fields": {"status": {"value": "abandoned"}}},
             ]
-        ),
+        },
     ]
     assert ["aaa"] == get_related_phids("ccc", include_abandoned=False)
 
@@ -593,7 +596,7 @@ def test_get_projects(m_call):
     )
     projects = mozphab.conduit.get_projects(["a", "b"])
     m_call.assert_called_once_with(
-        "project.search", dict(constraints=dict(slugs=["a", "b"]))
+        "project.search", {"constraints": {"slugs": ["a", "b"]}}
     )
     assert projects == expected_projects
 
@@ -638,29 +641,29 @@ def test_check_in_needed(m_call, m_project_phid):
     m_project_phid.assert_called_once_with("check-in_needed")
     m_call.assert_called_once_with(
         "differential.revision.edit",
-        dict(
-            transactions=[
-                dict(type="projects.add", value=["PHID-PROJ-1"]),
+        {
+            "transactions": [
+                {"type": "projects.add", "value": ["PHID-PROJ-1"]},
             ]
-        ),
+        },
     )
 
 
 class TestEditRevision:
     @staticmethod
     def _get_revisions(status):
-        return [dict(fields=dict(status=dict(value=status)))]
+        return [{"fields": {"status": {"value": status}}}]
 
     @mock.patch("mozphab.repository.conduit.call")
     def test_new_wip(self, m_call):
         conduit.edit_revision(wip=True)
         m_call.assert_called_once_with(
             "differential.revision.edit",
-            dict(
-                transactions=[
-                    dict(type="plan-changes", value=True),
+            {
+                "transactions": [
+                    {"type": "plan-changes", "value": True},
                 ],
-            ),
+            },
         )
 
     @mock.patch("mozphab.repository.conduit.call")
@@ -668,9 +671,9 @@ class TestEditRevision:
         conduit.edit_revision(wip=False)
         m_call.assert_called_once_with(
             "differential.revision.edit",
-            dict(
-                transactions=[],
-            ),
+            {
+                "transactions": [],
+            },
         )
 
     @mock.patch("mozphab.repository.conduit.get_revisions")
@@ -683,19 +686,19 @@ class TestEditRevision:
         assert len(call_args) == 2
         assert call_args[0] == mock.call(
             "differential.revision.edit",
-            dict(
-                transactions=[],
-                objectIdentifier=1,
-            ),
+            {
+                "transactions": [],
+                "objectIdentifier": 1,
+            },
         )
         assert call_args[1] == mock.call(
             "differential.revision.edit",
-            dict(
-                transactions=[
-                    dict(type="plan-changes", value=True),
+            {
+                "transactions": [
+                    {"type": "plan-changes", "value": True},
                 ],
-                objectIdentifier=1,
-            ),
+                "objectIdentifier": 1,
+            },
         )
 
     @mock.patch("mozphab.repository.conduit.get_revisions")
@@ -706,12 +709,12 @@ class TestEditRevision:
         conduit.edit_revision(rev_id=1, wip=True)
         m_call.assert_called_once_with(
             "differential.revision.edit",
-            dict(
-                transactions=[
-                    dict(type="plan-changes", value=True),
+            {
+                "transactions": [
+                    {"type": "plan-changes", "value": True},
                 ],
-                objectIdentifier=1,
-            ),
+                "objectIdentifier": 1,
+            },
         )
 
     @mock.patch("mozphab.repository.conduit.get_revisions")
@@ -722,12 +725,12 @@ class TestEditRevision:
         conduit.edit_revision(rev_id=1, wip=True)
         m_call.assert_called_once_with(
             "differential.revision.edit",
-            dict(
-                transactions=[
-                    dict(type="plan-changes", value=True),
+            {
+                "transactions": [
+                    {"type": "plan-changes", "value": True},
                 ],
-                objectIdentifier=1,
-            ),
+                "objectIdentifier": 1,
+            },
         )
 
     @mock.patch("mozphab.repository.conduit.get_revisions")
@@ -738,12 +741,12 @@ class TestEditRevision:
         conduit.edit_revision(rev_id=1, wip=False)
         m_call.assert_called_once_with(
             "differential.revision.edit",
-            dict(
-                transactions=[
-                    dict(type="request-review", value=True),
+            {
+                "transactions": [
+                    {"type": "request-review", "value": True},
                 ],
-                objectIdentifier=1,
-            ),
+                "objectIdentifier": 1,
+            },
         )
 
     @mock.patch("mozphab.repository.conduit.get_revisions")
@@ -754,10 +757,10 @@ class TestEditRevision:
         conduit.edit_revision(rev_id=1, wip=False)
         m_call.assert_called_once_with(
             "differential.revision.edit",
-            dict(
-                transactions=[],
-                objectIdentifier=1,
-            ),
+            {
+                "transactions": [],
+                "objectIdentifier": 1,
+            },
         )
 
     @mock.patch("mozphab.repository.conduit.get_revisions")
@@ -768,8 +771,8 @@ class TestEditRevision:
         conduit.edit_revision(rev_id=1, wip=False)
         m_call.assert_called_once_with(
             "differential.revision.edit",
-            dict(
-                transactions=[],
-                objectIdentifier=1,
-            ),
+            {
+                "transactions": [],
+                "objectIdentifier": 1,
+            },
         )

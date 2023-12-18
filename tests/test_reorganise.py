@@ -4,6 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from unittest import mock
+
 import pytest
 
 from mozphab import exceptions, mozphab
@@ -392,11 +393,11 @@ def test_remote_stack_invalid(
 @pytest.mark.parametrize(
     "llist,error_text",
     (
-        (dict(a="b", c=None), "Multiple heads"),
-        (dict(a="b", b=None, c="d", d=None), "Multiple heads"),
-        (dict(), "Failed to find head"),
-        (dict(a="b", b="c", c="a"), "Failed to find head"),
-        (dict(a="b", b="c", c="b"), "Dependency loop"),
+        ({"a": "b", "c": None}, "Multiple heads"),
+        ({"a": "b", "b": None, "c": "d", "d": None}, "Multiple heads"),
+        ({}, "Failed to find head"),
+        ({"a": "b", "b": "c", "c": "a"}, "Failed to find head"),
+        ({"a": "b", "b": "c", "c": "b"}, "Dependency loop"),
     ),
 )
 def test_walk_llist_errors(llist, error_text):
@@ -410,11 +411,11 @@ def test_walk_llist_errors(llist, error_text):
 @pytest.mark.parametrize(
     "llist,nodes",
     (
-        (dict(a=None), ["a"]),
-        (dict(a="b", b=None), ["a", "b"]),
-        (dict(a="b"), ["a", "b"]),
-        (dict(b="a", a=None), ["b", "a"]),
-        (dict(a="b", b="c", c=None), ["a", "b", "c"]),
+        ({"a": None}, ["a"]),
+        ({"a": "b", "b": None}, ["a", "b"]),
+        ({"a": "b"}, ["a", "b"]),
+        ({"b": "a", "a": None}, ["b", "a"]),
+        ({"a": "b", "b": "c", "c": None}, ["a", "b", "c"]),
     ),
 )
 def test_walk_llist(llist, nodes):

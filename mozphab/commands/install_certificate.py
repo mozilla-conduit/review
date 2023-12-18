@@ -4,7 +4,7 @@
 
 import argparse
 
-from mozphab.conduit import conduit, ConduitAPIError
+from mozphab.conduit import ConduitAPIError, conduit
 from mozphab.helpers import prompt
 from mozphab.logger import logger
 from mozphab.repository import Repository

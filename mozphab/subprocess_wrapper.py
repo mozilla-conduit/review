@@ -4,12 +4,11 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import subprocess
+from shlex import quote
 from typing import (
     List,
     Optional,
 )
-
-from shlex import quote
 
 from .exceptions import CommandError
 from .logger import logger
@@ -78,7 +77,7 @@ def check_output(
 ) -> List[str]:
     # wrapper around subprocess.check_output with debug output and splitting
     debug_log_command(command)
-    kwargs = dict(cwd=cwd, stdin=stdin, stderr=stderr)
+    kwargs = {"cwd": cwd, "stdin": stdin, "stderr": stderr}
     if not expect_binary:
         kwargs["universal_newlines"] = True
         kwargs["encoding"] = "UTF-8"

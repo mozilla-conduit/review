@@ -9,7 +9,7 @@ class SimpleCache:
     """Simple key/value store with all lowercase keys."""
 
     def __init__(self):
-        self._cache = dict()
+        self._cache = {}
 
     def __contains__(self, key: str) -> bool:
         return key.lower() in self._cache
@@ -25,7 +25,7 @@ class SimpleCache:
             del self._cache[key.lower()]
 
     def reset(self):
-        self._cache = dict()
+        self._cache = {}
 
 
 cache = SimpleCache()

@@ -3,14 +3,15 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import pytest
 from pathlib import Path
 from unittest import mock
 
-from .conftest import create_temp_fn
+import pytest
 
 from mozphab import environment, exceptions, mozphab
 from mozphab.commits import Commit
+
+from .conftest import create_temp_fn
 
 
 @mock.patch("mozphab.git.Git.git_out")
@@ -69,21 +70,21 @@ def test_branches_to_rebase(m_git_git_out, git):
 
     # No branch returned - not a real case - we don't work without branches
     m_git_git_out.return_value = []
-    assert dict() == git_find([Commit(orig_node="_aaa", node="aaa")])
+    assert {} == git_find([Commit(orig_node="_aaa", node="aaa")])
 
     # No amend, no branches to rebase
     m_git_git_out.return_value = ["branch"]
-    assert dict() == git_find([Commit(orig_node="aaa", node="aaa")])
+    assert {} == git_find([Commit(orig_node="aaa", node="aaa")])
 
     # One commit, one branch
     m_git_git_out.return_value = ["branch"]
-    assert dict(branch=["aaa", "_aaa"]) == git_find(
+    assert {"branch": ["aaa", "_aaa"]} == git_find(
         [Commit(orig_node="_aaa", node="aaa")]
     )
 
     # Two commits one branch
     m_git_git_out.return_value = ["branch"]
-    assert dict(branch=["bbb", "_bbb"]) == git_find(
+    assert {"branch": ["bbb", "_bbb"]} == git_find(
         [Commit(orig_node="_aaa", node="aaa"), Commit(orig_node="_bbb", node="bbb")]
     )
 
@@ -94,7 +95,7 @@ def test_branches_to_rebase(m_git_git_out, git):
     # * aaa
     # More realistic output from the git command
     m_git_git_out.return_value = ["*  branch1", "  branch2"]
-    assert dict(branch1=["aaa", "_aaa"], branch2=["aaa", "_aaa"]) == git_find(
+    assert {"branch1": ["aaa", "_aaa"], "branch2": ["aaa", "_aaa"]} == git_find(
         [Commit(orig_node="_aaa", node="aaa")]
     )
 
@@ -103,7 +104,7 @@ def test_branches_to_rebase(m_git_git_out, git):
     # |/
     # * aaa
     m_git_git_out.side_effect = (["branch1", "branch2"], ["branch2"])
-    assert dict(branch1=["aaa", "_aaa"], branch2=["bbb", "_bbb"]) == git_find(
+    assert {"branch1": ["aaa", "_aaa"], "branch2": ["bbb", "_bbb"]} == git_find(
         [Commit(orig_node="_aaa", node="aaa"), Commit(orig_node="_bbb", node="bbb")]
     )
 
@@ -125,12 +126,12 @@ def test_branches_to_rebase(m_git_git_out, git):
         ["feature1", "feature1_1"],  # ccc
         ["feature1_1"],  # ddd
     )
-    assert dict(
-        master=["bbb", "_bbb"],
-        feature1=["ccc", "_ccc"],
-        feature2=["bbb", "_bbb"],
-        feature1_1=["ddd", "_ddd"],
-    ) == git_find(
+    assert {
+        "master": ["bbb", "_bbb"],
+        "feature1": ["ccc", "_ccc"],
+        "feature2": ["bbb", "_bbb"],
+        "feature1_1": ["ddd", "_ddd"],
+    } == git_find(
         [
             Commit(orig_node="_aaa", node="aaa"),
             Commit(orig_node="_bbb", node="bbb"),
@@ -525,9 +526,11 @@ def test_unicode_in_windows_env(m_git_out, git, monkeypatch):
     m_git_out.assert_called_once_with(
         ["commit-tree", "-p", "parent", "-F", mock.ANY, "tree_hash"],
         split=False,
-        extra_env=dict(
-            GIT_AUTHOR_NAME="ćwikła", GIT_AUTHOR_EMAIL="ćwikła", GIT_AUTHOR_DATE="date"
-        ),
+        extra_env={
+            "GIT_AUTHOR_NAME": "ćwikła",
+            "GIT_AUTHOR_EMAIL": "ćwikła",
+            "GIT_AUTHOR_DATE": "date",
+        },
     )
 
 

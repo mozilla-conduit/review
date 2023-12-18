@@ -9,8 +9,8 @@ import re
 from pathlib import Path
 from shutil import which
 from typing import (
-    Optional,
     List,
+    Optional,
 )
 
 from .config import config

@@ -18,25 +18,25 @@ import sys
 import traceback
 from typing import List
 
+from packaging.version import Version
+
 from mozphab import environment
 
 from .args import parse_args
-from .conduit import conduit, ConduitAPIError
+from .conduit import ConduitAPIError, conduit
 from .config import config
 from .detect_repository import repo_from_args
 from .exceptions import Error
 from .logger import init_logging, logger, stop_logging
 from .repository import Repository
-from .spinner import wait_message
 from .sentry import init_sentry, report_to_sentry
-from .telemetry import telemetry, configure_telemetry
+from .spinner import wait_message
+from .telemetry import configure_telemetry, telemetry
 from .updater import (
     check_for_updates,
     log_windows_update_message,
     self_upgrade,
 )
-
-from packaging.version import Version
 
 
 def restart_mozphab():

@@ -3,11 +3,11 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import json
-import pytest
-
 from unittest import mock
 
-from mozphab.bmo import bmo, BMOAPIError
+import pytest
+
+from mozphab.bmo import BMOAPIError, bmo
 from mozphab.exceptions import Error
 
 

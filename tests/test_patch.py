@@ -3,15 +3,14 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
-
 from typing import Optional
 from unittest import mock
 
 import pytest
 
-from mozphab.config import Config
-from mozphab.commands import patch
 from mozphab import exceptions, helpers, mozphab
+from mozphab.commands import patch
+from mozphab.config import Config
 
 
 def test_resolve_branch_name():
@@ -233,11 +232,15 @@ def test_patch(
     m_get_base_ref.return_value = "sha111"
     m_call_conduit.return_value = "raw"  # differential.getrawdiff
     m_get_revisions.return_value = [
-        dict(
-            phid="PHID-1",
-            id=1,
-            fields=dict(diffPHID="DIFFPHID-1", title="title", summary="summary"),
-        )
+        {
+            "phid": "PHID-1",
+            "id": 1,
+            "fields": {
+                "diffPHID": "DIFFPHID-1",
+                "title": "title",
+                "summary": "summary",
+            },
+        }
     ]
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
     m_git_check_node.return_value = "sha111"
@@ -367,7 +370,7 @@ def test_patch(
 
     # ########## no commit info in diffs
     m_get_diffs.return_value = {
-        "DIFFPHID-1": {"id": 1, "attachments": dict(commits=dict(commits=[]))}
+        "DIFFPHID-1": {"id": 1, "attachments": {"commits": {"commits": []}}}
     }
     m_call_conduit.side_effect = ("raw",)
     git.args = Args()
@@ -429,71 +432,73 @@ def test_patch(
     m_get_revisions.assert_called_once_with(ids=[1])
 
 
-REV_1 = dict(
-    phid="PHID-1",
-    id=1,
-    fields=dict(diffPHID="DIFFPHID-1", title="title", summary="summary"),
-)
+REV_1 = {
+    "phid": "PHID-1",
+    "id": 1,
+    "fields": {"diffPHID": "DIFFPHID-1", "title": "title", "summary": "summary"},
+}
 
-REV_2 = dict(
-    phid="PHID-2",
-    id=2,
-    fields=dict(diffPHID="DIFFPHID-2", title="title", summary="summary"),
-)
+REV_2 = {
+    "phid": "PHID-2",
+    "id": 2,
+    "fields": {"diffPHID": "DIFFPHID-2", "title": "title", "summary": "summary"},
+}
 
-DIFF_1 = dict(
-    id=1,
-    phid="DIFFPHID-1",
-    fields=dict(revisionPHID="PHID-1", dateCreated=1547806078),
-    attachments=dict(
-        commits=dict(
-            commits=[
-                dict(
-                    author=dict(
-                        name="user", email="author@example.com", epoch=1547806078
-                    )
-                )
+DIFF_1 = {
+    "id": 1,
+    "phid": "DIFFPHID-1",
+    "fields": {"revisionPHID": "PHID-1", "dateCreated": 1547806078},
+    "attachments": {
+        "commits": {
+            "commits": [
+                {
+                    "author": {
+                        "name": "user",
+                        "email": "author@example.com",
+                        "epoch": 1547806078,
+                    }
+                }
             ]
-        )
-    ),
-)
+        }
+    },
+}
 
-DIFF_2 = dict(
-    id=2,
-    phid="DIFFPHID-2",
-    attachments=dict(
-        commits=dict(
-            commits=[dict(author=dict(name="user", email="author@example.com"))]
-        )
-    ),
-)
+DIFF_2 = {
+    "id": 2,
+    "phid": "DIFFPHID-2",
+    "attachments": {
+        "commits": {
+            "commits": [{"author": {"name": "user", "email": "author@example.com"}}]
+        }
+    },
+}
 
-DIFF_3 = dict(
-    id=3,
-    phid="DIFFPHID-3",
-    fields=dict(revisionPHID="PHID-1", dateCreated=1547806078),
-    attachments=dict(
-        commits=dict(
-            commits=[
-                dict(
-                    author=dict(
-                        name="user 3",
-                        email="author@example.com",
-                        epoch=1547806078,
-                    )
-                )
+DIFF_3 = {
+    "id": 3,
+    "phid": "DIFFPHID-3",
+    "fields": {"revisionPHID": "PHID-1", "dateCreated": 1547806078},
+    "attachments": {
+        "commits": {
+            "commits": [
+                {
+                    "author": {
+                        "name": "user 3",
+                        "email": "author@example.com",
+                        "epoch": 1547806078,
+                    }
+                }
             ]
-        )
-    ),
-)
+        }
+    },
+}
 
-DIFF_4 = dict(
-    id=4,
-    phid="DIFFPHID-4",
-    fields=dict(revisionPHID="PHID-100"),
-    attachments=dict(
-        commits=dict(
-            commits=[dict(author=dict(name="user", email="author@example.com"))]
-        )
-    ),
-)
+DIFF_4 = {
+    "id": 4,
+    "phid": "DIFFPHID-4",
+    "fields": {"revisionPHID": "PHID-100"},
+    "attachments": {
+        "commits": {
+            "commits": [{"author": {"name": "user", "email": "author@example.com"}}]
+        }
+    },
+}

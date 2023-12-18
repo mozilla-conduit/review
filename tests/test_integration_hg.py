@@ -4,15 +4,15 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import os
 import platform
-import pytest
 import shutil
-
 from unittest import mock
 
+import pytest
 from callee import Contains
-from .conftest import hg_out, write_text
 
 from mozphab import environment, mozphab
+
+from .conftest import hg_out, write_text
 
 # Fail if arc ping is called
 arc_ping = mock.Mock()
@@ -26,18 +26,18 @@ def test_submit_create(in_process, hg_repo_path):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
-        dict(),
+        {},
         # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
-        [dict(userName="alice", phid="PHID-USER-1")],
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="123")),
+        {"object": {"id": "123"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     write_text(hg_repo_path / "A to rename", "rename me\nsecond line\n")
     write_text(hg_repo_path / "B to remove", "remove me\n")
@@ -65,13 +65,12 @@ Differential Revision: http://example.test/D123
     assert log.strip() == expected.strip()
     assert mock.call("conduit.ping", {}) in call_conduit.call_args_list
     assert (
-        mock.call("user.query", dict(usernames=["alice"]))
-        in call_conduit.call_args_list
+        mock.call("user.query", {"usernames": ["alice"]}) in call_conduit.call_args_list
     )
     assert (
         mock.call(
             "diffusion.repository.search",
-            dict(limit=1, constraints=dict(callsigns=["TEST"])),
+            {"limit": 1, "constraints": {"callsigns": ["TEST"]}},
         )
         in call_conduit.call_args_list
     )
@@ -258,18 +257,18 @@ def test_submit_create_no_trailing_newline(in_process, hg_repo_path):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
-        dict(),
+        {},
         # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
-        [dict(userName="alice", phid="PHID-USER-1")],
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="123")),
+        {"object": {"id": "123"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     write_text(hg_repo_path / "A to rename", "rename me\nsecond line")
     write_text(hg_repo_path / "B to remove", "remove me")
@@ -297,13 +296,12 @@ Differential Revision: http://example.test/D123
     assert log.strip() == expected.strip()
     assert mock.call("conduit.ping", {}) in call_conduit.call_args_list
     assert (
-        mock.call("user.query", dict(usernames=["alice"]))
-        in call_conduit.call_args_list
+        mock.call("user.query", {"usernames": ["alice"]}) in call_conduit.call_args_list
     )
     assert (
         mock.call(
             "diffusion.repository.search",
-            dict(limit=1, constraints=dict(callsigns=["TEST"])),
+            {"limit": 1, "constraints": {"callsigns": ["TEST"]}},
         )
         in call_conduit.call_args_list
     )
@@ -489,18 +487,18 @@ def test_submit_create_no_bug(in_process, hg_repo_path):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
-        dict(),
+        {},
         # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
-        [dict(userName="alice", phid="PHID-USER-1")],
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="123")),
+        {"object": {"id": "123"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     write_text(hg_repo_path / "x", "a")
     hg_out("add")
@@ -520,21 +518,21 @@ def test_submit_create_binary(in_process, hg_repo_path, data_file):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
-        dict(),
+        {},
         # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
         # file.allocate
-        dict(dict(filePHID=None, upload=True)),
+        {"filePHID": None, "upload": True},
         # file.upload
-        dict(),
+        {},
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="123")),
+        {"object": {"id": "123"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     shutil.copyfile(str(data_file), str(hg_repo_path / "img.png"))
     hg_out("add")
@@ -566,20 +564,20 @@ def test_submit_create_binary_existing(in_process, hg_repo_path, data_file):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
-        dict(),
+        {},
         # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
         # file.allocate
-        dict(dict(filePHID="PHID-FILE-1", upload=False)),
+        {"filePHID": "PHID-FILE-1", "upload": False},
         # no file.upload call
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="123")),
+        {"object": {"id": "123"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     shutil.copyfile(str(data_file), str(hg_repo_path / "img.png"))
     hg_out("add")
@@ -608,31 +606,31 @@ def test_submit_create_binary_chunked(in_process, hg_repo_path, data_file):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
-        dict(),
+        {},
         # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
         # file.allocate
-        dict(dict(filePHID="PHID-FILE-1", upload=True)),
+        {"filePHID": "PHID-FILE-1", "upload": True},
         # file.querychunks
         [
-            dict(byteStart="0", byteEnd="4194304", complete=False),
-            dict(byteStart="4194304", byteEnd="8388608", complete=False),
-            dict(byteStart="8388608", byteEnd="8425160", complete=False),
+            {"byteStart": "0", "byteEnd": "4194304", "complete": False},
+            {"byteStart": "4194304", "byteEnd": "8388608", "complete": False},
+            {"byteStart": "8388608", "byteEnd": "8425160", "complete": False},
         ],
         # file.uploadchunk
-        dict(),
+        {},
         # file.uploadchunk
-        dict(),
+        {},
         # file.uploadchunk
-        dict(),
+        {},
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="123")),
+        {"object": {"id": "123"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     shutil.copyfile(str(data_file), str(hg_repo_path / "img.png"))
     hg_out("add")
@@ -703,31 +701,31 @@ def test_submit_remove_cr(in_process, hg_repo_path):
     call_conduit.side_effect = (
         # CREATE
         # ping
-        dict(),
+        {},
         # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
         # user.search
-        [dict(userName="alice", phid="PHID-USER-1")],
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="123")),
+        {"object": {"id": "123"}},
         # differential.setdiffproperty
-        dict(),
+        {},
         # UPDATE
         # no need to ping (checked)
         # no need to check reviewer
         # no need to search for repository repository data is saved in .hg
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-2", diffid="2")),
+        {"phid": "PHID-DIFF-2", "diffid": "2"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="124")),
+        {"object": {"id": "124"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     (hg_repo_path / "X").write_text("a\r\nb\n")
     hg_out("add")
@@ -808,17 +806,17 @@ def test_submit_remove_cr(in_process, hg_repo_path):
 def test_submit_single_first(in_process, hg_repo_path, hg_sha):
     call_conduit.side_effect = (
         # ping
-        dict(),
+        {},
         # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="123")),
+        {"object": {"id": "123"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     write_text(hg_repo_path / "X", "a\n")
     hg_out("add", "X")
@@ -846,17 +844,17 @@ Differential Revision: http://example.test/D123
 def test_submit_single_last(in_process, hg_repo_path):
     call_conduit.side_effect = (
         # ping
-        dict(),
+        {},
         # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="123")),
+        {"object": {"id": "123"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     write_text(hg_repo_path / "X", "a\n")
     hg_out("add", "X")
@@ -881,17 +879,17 @@ A
 def test_multiple_copy(in_process, hg_repo_path):
     call_conduit.side_effect = (
         # ping
-        dict(),
+        {},
         # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="123")),
+        {"object": {"id": "123"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     write_text(hg_repo_path / "X", "a\n")
     hg_out("add", "X")
@@ -996,17 +994,17 @@ def test_empty_file(in_process, hg_repo_path, hg_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
-        dict(),
+        {},
         # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-1", diffid="1")),
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="123")),
+        {"object": {"id": "123"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     testfile = hg_repo_path / "X"
     testfile.touch()
@@ -1061,13 +1059,13 @@ Differential Revision: http://example.test/D123
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-2", diffid="2")),
+        {"phid": "PHID-DIFF-2", "diffid": "2"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="124")),
+        {"object": {"id": "124"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     os.chmod(testfile, 0o0755)
 
@@ -1121,13 +1119,13 @@ Differential Revision: http://example.test/D124
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # differential.creatediff
-        dict(dict(phid="PHID-DIFF-3", diffid="3")),
+        {"phid": "PHID-DIFF-3", "diffid": "3"},
         # differential.setdiffproperty
-        dict(),
+        {},
         # differential.revision.edit
-        dict(object=dict(id="125")),
+        {"object": {"id": "125"}},
         # differential.setdiffproperty
-        dict(),
+        {},
     )
     testfile.unlink()
     hg_out("addremove")

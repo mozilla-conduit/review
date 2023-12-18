@@ -4,7 +4,7 @@
 
 import argparse
 
-from mozphab.conduit import conduit, ConduitAPIError
+from mozphab.conduit import ConduitAPIError, conduit
 from mozphab.environment import INSTALL_CERT_MSG
 from mozphab.helpers import get_arcrc_path, read_json_field
 from mozphab.logger import logger

@@ -3,12 +3,12 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import copy
 import os
-from unittest import mock
 import time
-
-from .conftest import hg_out, git_out
+from unittest import mock
 
 from mozphab import mozphab
+
+from .conftest import git_out, hg_out
 
 
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
@@ -115,8 +115,8 @@ def test_patch_no_commit(
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
     m_call_conduit.side_effect = [
-        dict(),
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        {},
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
         PATCH_1_DIFF,
     ]
 
@@ -167,8 +167,8 @@ def test_git_patch_with_commit(
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": diff_1}
     m_call_conduit.side_effect = [
-        dict(),
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="git"))]),
+        {},
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
         PATCH_1_DIFF,
     ]
 
@@ -269,8 +269,8 @@ def test_hg_patch_with_commit(
     m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
     m_call_conduit.side_effect = [
-        dict(),
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        {},
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
         PATCH_1_DIFF,
     ]
 
@@ -337,36 +337,41 @@ def test_hg_patch_with_commit(
     assert "|/   bookmark:    phab-D1" in result
 
 
-REV_1 = dict(
-    id=1,
-    phid="PHID-REV-1",
-    fields=dict(title="title R1", summary="\u0105", diffPHID="PHID-DIFF-1"),
-)
+REV_1 = {
+    "id": 1,
+    "phid": "PHID-REV-1",
+    "fields": {"title": "title R1", "summary": "\u0105", "diffPHID": "PHID-DIFF-1"},
+}
 
-REV_2 = dict(
-    id=2,
-    phid="PHID-REV-2",
-    fields=dict(title="title R2", summary="\u0105", diffPHID="PHID-DIFF-2"),
-)
+REV_2 = {
+    "id": 2,
+    "phid": "PHID-REV-2",
+    "fields": {"title": "title R2", "summary": "\u0105", "diffPHID": "PHID-DIFF-2"},
+}
 
-REV_BIN = dict(
-    id=3,
-    phid="PHID-REV-3",
-    fields=dict(title="title BIN", summary="\u0105", diffPHID="PHID-DIFF-3"),
-)
-ATTACHMENTS = dict(
-    commits=dict(
-        commits=[dict(author=dict(name="user", email="author@example.com", epoch=None))]
-    )
-)
+REV_BIN = {
+    "id": 3,
+    "phid": "PHID-REV-3",
+    "fields": {"title": "title BIN", "summary": "\u0105", "diffPHID": "PHID-DIFF-3"},
+}
+ATTACHMENTS = {
+    "commits": {
+        "commits": [
+            {"author": {"name": "user", "email": "author@example.com", "epoch": None}}
+        ]
+    }
+}
 
-DIFF_1 = dict(
-    fields=dict(dateCreated=1547806078, refs=[dict(identifier="0", type="base")]),
-    id=1,
-    attachments=ATTACHMENTS,
-)
+DIFF_1 = {
+    "fields": {
+        "dateCreated": 1547806078,
+        "refs": [{"identifier": "0", "type": "base"}],
+    },
+    "id": 1,
+    "attachments": ATTACHMENTS,
+}
 
-DIFF_2 = dict(fields=dict(dateCreated=1547806078), id=2, attachments=ATTACHMENTS)
+DIFF_2 = {"fields": {"dateCreated": 1547806078}, "id": 2, "attachments": ATTACHMENTS}
 
 PATCH_1_META = """\
 # HG changeset patch

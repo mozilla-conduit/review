@@ -11,23 +11,21 @@ import re
 import stat
 import sys
 import tempfile
+from contextlib import contextmanager
+from itertools import zip_longest
+from shutil import which
 from typing import (
     Callable,
     List,
     Optional,
     Tuple,
 )
-from itertools import zip_longest
-
-from contextlib import contextmanager
-from shutil import which
 
 from mozphab import environment
 
 from .commits import Commit
 from .logger import logger
 from .simplecache import cache
-
 
 # If a commit body matches **all** of these, reject it.  This is to avoid the
 # necessity to merge arc-style fields across an existing commit description
@@ -109,7 +107,7 @@ def parse_config(
 
     Returns: A dict containing parsed data.
     """
-    result = dict()
+    result = {}
     for line in config_list:
         try:
             name, value = line.split("=", 1)
@@ -323,7 +321,7 @@ def augment_commits_from_body(commits: List[Commit]):
 
 
 def parse_bugs(title: str) -> List[str]:
-    return [bug for bug in BUG_ID_RE.findall(title)]
+    return list(BUG_ID_RE.findall(title))
 
 
 def parse_reviewers(title: str) -> dict:

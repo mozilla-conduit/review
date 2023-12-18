@@ -5,7 +5,6 @@
 import json
 import os
 import urllib.parse
-
 from typing import (
     List,
     Optional,
@@ -214,7 +213,7 @@ class Repository(object):
         all_reviewers = {}
         reviewer_commit_map = {}
         commit_invalid_reviewers = {}
-        rev_ids_to_names = dict()
+        rev_ids_to_names = {}
         for commit in commits:
             commit_invalid_reviewers[commit.node] = []
 

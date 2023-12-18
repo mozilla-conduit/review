@@ -3,17 +3,17 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import copy
+from unittest import mock
+
 import pytest
 from packaging.version import Version
 
-from unittest import mock
-
-from .conftest import create_temp_fn, assert_attributes
-
-from mozphab import environment, exceptions, mozphab, diff
+from mozphab import diff, environment, exceptions, mozphab
 from mozphab.commits import Commit
 from mozphab.diff import Diff
 from mozphab.mercurial import Mercurial
+
+from .conftest import assert_attributes, create_temp_fn
 
 
 @mock.patch("mozphab.mercurial.Mercurial.hg_out")
@@ -88,7 +88,7 @@ def test_finalize(m_get_parent, m_hg_rebase, m_hg_get_successor, hg):
 @mock.patch("mozphab.mercurial.Mercurial.rebase_commit")
 def test_finalize_no_evolve(m_hg_rebase, hg):
     hg.use_evolve = False
-    hg.finalize([dict(rev="1", node="aaa"), dict(rev="2", node="bbb")])
+    hg.finalize([{"rev": "1", "node": "aaa"}, {"rev": "2", "node": "bbb"}])
     assert m_hg_rebase.not_called()
 
 
@@ -392,13 +392,13 @@ def test_file_meta(m_cat, m_file_size, hg):
     m_file_size.return_value = size
     m_cat.return_value = b"spam\nham"
     meta = hg._get_file_meta("fn", "rev")
-    assert meta == dict(
-        binary=False,
-        mime="TEXT",
-        bin_body=b"spam\nham",
-        body="spam\nham",
-        file_size=size,
-    )
+    assert meta == {
+        "binary": False,
+        "mime": "TEXT",
+        "bin_body": b"spam\nham",
+        "body": "spam\nham",
+        "file_size": size,
+    }
 
 
 @mock.patch("mozphab.mercurial.mimetypes")
@@ -410,13 +410,13 @@ def test_file_meta_binary(m_cat, m_file_size, m_mime, hg):
     size = environment.MAX_TEXT_SIZE + 1
     m_file_size.return_value = size
     meta = hg._get_file_meta("fn", "rev")
-    assert meta == dict(
-        binary=True,
-        mime="MIMETYPE",
-        bin_body=b"spam\nham",
-        body=b"spam\nham",
-        file_size=size,
-    )
+    assert meta == {
+        "binary": True,
+        "mime": "MIMETYPE",
+        "bin_body": b"spam\nham",
+        "body": b"spam\nham",
+        "file_size": size,
+    }
 
     hg._get_file_meta.cache_clear()
     hg.hg_cat.cache_clear()
@@ -426,49 +426,49 @@ def test_file_meta_binary(m_cat, m_file_size, m_mime, hg):
     m_file_size.return_value = size
     m_cat.return_value = b"\0spam\nham"
     meta = hg._get_file_meta("fn", "rev")
-    assert meta == dict(
-        binary=True,
-        mime="MIMETYPE",
-        bin_body=b"\0spam\nham",
-        body=b"\0spam\nham",
-        file_size=size,
-    )
+    assert meta == {
+        "binary": True,
+        "mime": "MIMETYPE",
+        "bin_body": b"\0spam\nham",
+        "body": b"\0spam\nham",
+        "file_size": size,
+    }
 
 
 @mock.patch("mozphab.mercurial.Mercurial._get_file_meta")
 @mock.patch("mozphab.diff.Diff.Change.set_as_binary")
 def test_change_add(m_set_as_binary, m_get_file_meta, hg):
     change = Diff.Change("x")
-    m_get_file_meta.return_value = dict(
-        binary=False,
-        bin_body=b"abc\n",
-        body="abc\n",
-        file_size=123,
-    )
+    m_get_file_meta.return_value = {
+        "binary": False,
+        "bin_body": b"abc\n",
+        "body": "abc\n",
+        "file_size": 123,
+    }
     hg._change_add(change, "fn", None, "parent", "node")
     m_set_as_binary.assert_not_called()
     assert len(change.hunks) == 1
     assert_attributes(
         change.hunks[0],
-        dict(
-            corpus="+abc\n",
-            old_off=0,
-            new_off=1,
-            old_len=0,
-            new_len=1,
-        ),
+        {
+            "corpus": "+abc\n",
+            "old_off": 0,
+            "new_off": 1,
+            "old_len": 0,
+            "new_len": 1,
+        },
     )
 
     # binary
     change = Diff.Change("x")
     m_set_as_binary.reset_mock()
-    m_get_file_meta.return_value = dict(
-        binary=True,
-        bin_body=b"abc\n",
-        body="abc\n",
-        file_size=123,
-        mime="MIME",
-    )
+    m_get_file_meta.return_value = {
+        "binary": True,
+        "bin_body": b"abc\n",
+        "body": "abc\n",
+        "file_size": 123,
+        "mime": "MIME",
+    }
     hg._change_add(change, "fn", None, "parent", "node")
     assert not change.hunks
     m_set_as_binary.assert_called_once_with(
@@ -481,12 +481,12 @@ def test_change_add(m_set_as_binary, m_get_file_meta, hg):
     # empty
     change = Diff.Change("x")
     m_set_as_binary.reset_mock()
-    m_get_file_meta.return_value = dict(
-        binary=False,
-        bin_body=b"",
-        body="",
-        file_size=0,
-    )
+    m_get_file_meta.return_value = {
+        "binary": False,
+        "bin_body": b"",
+        "body": "",
+        "file_size": 0,
+    }
     hg._change_add(change, "fn", None, "parent", "node")
     assert not change.hunks
     m_set_as_binary.assert_not_called()
@@ -496,36 +496,36 @@ def test_change_add(m_set_as_binary, m_get_file_meta, hg):
 @mock.patch("mozphab.diff.Diff.Change.set_as_binary")
 def test_change_del(m_set_as_binary, m_get_file_meta, hg):
     change = Diff.Change("x")
-    m_get_file_meta.return_value = dict(
-        binary=False,
-        bin_body=b"abc\n",
-        body="abc\n",
-        file_size=123,
-    )
+    m_get_file_meta.return_value = {
+        "binary": False,
+        "bin_body": b"abc\n",
+        "body": "abc\n",
+        "file_size": 123,
+    }
     hg._change_del(change, "fn", None, "parent", "node")
     assert len(change.hunks) == 1
     assert_attributes(
         change.hunks[0],
-        dict(
-            corpus="-abc\n",
-            old_off=1,
-            new_off=0,
-            old_len=1,
-            new_len=0,
-        ),
+        {
+            "corpus": "-abc\n",
+            "old_off": 1,
+            "new_off": 0,
+            "old_len": 1,
+            "new_len": 0,
+        },
     )
     m_set_as_binary.assert_not_called()
 
     # binary
     change = Diff.Change("x")
     m_set_as_binary.reset_mock()
-    m_get_file_meta.return_value = dict(
-        binary=True,
-        bin_body=b"abc\n",
-        body="abc\n",
-        file_size=123,
-        mime="MIME",
-    )
+    m_get_file_meta.return_value = {
+        "binary": True,
+        "bin_body": b"abc\n",
+        "body": "abc\n",
+        "file_size": 123,
+        "mime": "MIME",
+    }
     hg._change_del(change, "fn", None, "parent", "node")
     assert not change.hunks
     m_set_as_binary.assert_called_once_with(
@@ -538,12 +538,12 @@ def test_change_del(m_set_as_binary, m_get_file_meta, hg):
     # empty
     change = Diff.Change("x")
     m_set_as_binary.reset_mock()
-    m_get_file_meta.return_value = dict(
-        binary=False,
-        bin_body=b"",
-        body="",
-        file_size=0,
-    )
+    m_get_file_meta.return_value = {
+        "binary": False,
+        "bin_body": b"",
+        "body": "",
+        "file_size": 0,
+    }
     hg._change_del(change, "fn", None, "parent", "node")
     assert not change.hunks
     m_set_as_binary.assert_not_called()
@@ -561,8 +561,8 @@ def test_change_mod(m_hg_out, m_from_git_diff, m_set_as_binary, m_get_file_meta,
     # file contents changed
     change = diff.Diff.Change(None)
     text_side_effect = (
-        dict(binary=False, bin_body=b"abc\n", body="abc\n", file_size=4),
-        dict(binary=False, bin_body=b"def\n", body="def\n", file_size=4),
+        {"binary": False, "bin_body": b"abc\n", "body": "abc\n", "file_size": 4},
+        {"binary": False, "bin_body": b"def\n", "body": "def\n", "file_size": 4},
     )
     m_get_file_meta.side_effect = text_side_effect
     m_hg_out.return_value = b"""\
@@ -598,8 +598,20 @@ diff --git a/fn b/fn
     # binary
     m_from_git_diff.reset_mock()
     m_get_file_meta.side_effect = (
-        dict(binary=True, bin_body=b"abc\n", body=b"abc\n", file_size=4, mime="MIME"),
-        dict(binary=False, bin_body=b"def\n", body="def\n", file_size=4, mime="TEXT"),
+        {
+            "binary": True,
+            "bin_body": b"abc\n",
+            "body": b"abc\n",
+            "file_size": 4,
+            "mime": "MIME",
+        },
+        {
+            "binary": False,
+            "bin_body": b"def\n",
+            "body": "def\n",
+            "file_size": 4,
+            "mime": "TEXT",
+        },
     )
     hg._change_mod(change, "fn", "old_fn", "parent", "node")
     m_set_as_binary.assert_called_once_with(
@@ -615,7 +627,7 @@ def test_get_file_modes(m_hg, hg):
         [" :file name"],  # files - node
     )
     actual = hg._get_file_modes(Commit(node="aaa", parent="bbb"))
-    expected = {"file name": dict(old_mode="100644", new_mode="100644")}
+    expected = {"file name": {"old_mode": "100644", "new_mode": "100644"}}
     assert actual == expected
 
     m_hg.side_effect = (
@@ -624,7 +636,7 @@ def test_get_file_modes(m_hg, hg):
         ["x:file name"],  # files - node
     )
     actual = hg._get_file_modes(Commit(node="aaa", parent="bbb"))
-    expected = {"file name": dict(old_mode="100644", new_mode="100755")}
+    expected = {"file name": {"old_mode": "100644", "new_mode": "100755"}}
     assert actual == expected
 
     m_hg.side_effect = (
@@ -633,7 +645,7 @@ def test_get_file_modes(m_hg, hg):
         ["x:file name"],  # files - node
     )
     actual = hg._get_file_modes(Commit(node="aaa", parent="bbb"))
-    expected = {"file name": dict(new_mode="100755")}
+    expected = {"file name": {"new_mode": "100755"}}
     assert actual == expected
 
     m_hg.side_effect = (
@@ -642,7 +654,7 @@ def test_get_file_modes(m_hg, hg):
         [],  # files - node
     )
     actual = hg._get_file_modes(Commit(node="aaa", parent="bbb"))
-    expected = {"file name": dict(old_mode="100644")}
+    expected = {"file name": {"old_mode": "100644"}}
     assert actual == expected
 
 

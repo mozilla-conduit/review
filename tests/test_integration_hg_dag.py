@@ -2,12 +2,11 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from .conftest import hg_out
-
 from unittest import mock
 
 from mozphab import mozphab
 
+from .conftest import hg_out
 
 _revision = 100
 
@@ -18,7 +17,7 @@ def _init_repo(hg_repo_path):
     test_file = hg_repo_path / "X"
     test_file.write_text("R0")
     hg_out("commit", "--addremove", "--message", "R0")
-    return dict(test_file=test_file, rev=1, rev_map={"R0": "1"})
+    return {"test_file": test_file, "rev": 1, "rev_map": {"R0": "1"}}
 
 
 def _add_commit(repo, parent, name):
@@ -53,22 +52,22 @@ def _submit(repo, start, end, expected, wip=False):
 def _conduit_side_effect(calls=1):
     side_effect = [
         # ping
-        dict(),
+        {},
         # diffusion.repository.search
-        dict(data=[dict(phid="PHID-REPO-1", fields=dict(vcs="hg"))]),
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
     ]
 
     for i in range(calls):
         side_effect.extend(
             [
                 # differential.creatediff
-                dict(dict(phid="PHID-DIFF-{}".format(i), diffid=str(i))),
+                {"phid": "PHID-DIFF-{}".format(i), "diffid": str(i)},
                 # differential.setdiffproperty
-                dict(),
+                {},
                 # differential.revision.edit
-                dict(object=dict(id=str(123 + i))),
+                {"object": {"id": str(123 + i)}},
                 # differential.setdiffproperty
-                dict(),
+                {},
             ]
         )
 

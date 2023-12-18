@@ -4,24 +4,24 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import copy
-from unittest import mock
 import unittest
 import uuid
+from unittest import mock
 
 from callee import Contains
 
+from mozphab import environment, exceptions, helpers, mozphab, repository
 from mozphab.commands import submit
 from mozphab.commits import Commit
-from mozphab import environment, exceptions, helpers, mozphab, repository
 
 from .conftest import search_diff, search_rev
 
 
 def reviewers_dict(reviewers=None):
-    return dict(
-        request=reviewers[0] if reviewers else [],
-        granted=reviewers[1] if reviewers else [],
-    )
+    return {
+        "request": reviewers[0] if reviewers else [],
+        "granted": reviewers[1] if reviewers else [],
+    }
 
 
 def commit(
@@ -100,10 +100,10 @@ class Commits(unittest.TestCase):
             [commit("1", (["r"], []), body="Summary: blah\nReviewers: r")],
         )
 
-        m_whoami.return_value = dict(phid="PHID-1")
-        m_get_revs.return_value = [dict(fields=dict(authorPHID="PHID-1"))]
+        m_whoami.return_value = {"phid": "PHID-1"}
+        m_get_revs.return_value = [{"fields": {"authorPHID": "PHID-1"}}]
         self._assertNoError(check, [commit(bug_id=1, rev_id=1)])
-        m_whoami.return_value = dict(phid="PHID-2")
+        m_whoami.return_value = {"phid": "PHID-2"}
         self._assertNoError(check, [commit(bug_id=1, rev_id=1)])
 
     @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
@@ -116,9 +116,9 @@ class Commits(unittest.TestCase):
             # Replace the check_for_invalid_reviewers() function with something that
             # fails if "gonzo" is in the reviewers list.
             if "gonzo" in reviewers["request"]:
-                return [dict(name="gonzo")]
+                return [{"name": "gonzo"}]
             elif "goober" in reviewers["request"]:
-                return [dict(name="goober", until="string")]
+                return [{"name": "goober", "until": "string"}]
             else:
                 return []
 
@@ -539,7 +539,7 @@ class Commits(unittest.TestCase):
         repo = Repository()
         submit.conduit.set_repo(repo)
 
-        m_whoami.return_value = dict(phid="PHID-USER-1")
+        m_whoami.return_value = {"phid": "PHID-USER-1"}
         m_get_revisions.return_value = [search_rev()]
         m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
 
@@ -622,7 +622,7 @@ class Commits(unittest.TestCase):
         assert m_get_revisions.call_count == 3
         mock_logger.reset_mock()
 
-        m_whoami.return_value = dict(phid="PHID-USER-2")
+        m_whoami.return_value = {"phid": "PHID-USER-2"}
         submit.show_commit_stack(
             [_commit(rev=1, granted=["alice"])],
             validate=True,
@@ -631,7 +631,7 @@ class Commits(unittest.TestCase):
 
         # Information about not updating the commit if not changed
         mock_logger.reset_mock()
-        m_whoami.return_value = dict(phid="PHID-USER-1")
+        m_whoami.return_value = {"phid": "PHID-USER-1"}
         m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
         m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
 
@@ -684,10 +684,10 @@ class Commits(unittest.TestCase):
                 self.command = command
 
         _commits = [
-            Commit(title="A", reviewers=dict(granted=[], request=[]), bug_id=None),
+            Commit(title="A", reviewers={"granted": [], "request": []}, bug_id=None),
             Commit(
                 title="B",
-                reviewers=dict(granted=[], request=["one"]),
+                reviewers={"granted": [], "request": ["one"]},
                 bug_id="1",
             ),
         ]
@@ -703,13 +703,13 @@ class Commits(unittest.TestCase):
                 [
                     Commit(
                         title="A",
-                        reviewers=dict(granted=[], request=[]),
+                        reviewers={"granted": [], "request": []},
                         bug_id=None,
                         wip=True,
                     ),
                     Commit(
                         title="B",
-                        reviewers=dict(granted=["two"], request=["one"]),
+                        reviewers={"granted": ["two"], "request": ["one"]},
                         bug_id="1",
                         wip=False,
                     ),
@@ -803,13 +803,13 @@ class Commits(unittest.TestCase):
                 [
                     Commit(
                         title="A",
-                        reviewers=dict(granted=[], request=[]),
+                        reviewers={"granted": [], "request": []},
                         bug_id=None,
                         wip=True,
                     ),
                     Commit(
                         title="B",
-                        reviewers=dict(granted=["two!"], request=["one!"]),
+                        reviewers={"granted": ["two!"], "request": ["one!"]},
                         bug_id="1",
                         wip=False,
                     ),
@@ -841,12 +841,12 @@ class TestUpdateCommitSummary(unittest.TestCase):
             body="hello!  µ-benchmarks are a thing.\n\n"
             "Differential Revision: http://phabricator.test/D123",
         )
-        r = dict(fields=dict(title="", summary=""))
+        r = {"fields": {"title": "", "summary": ""}}
         t = []
 
         expected = [
-            dict(type="title", value="hi!"),
-            dict(type="summary", value="hello!  µ-benchmarks are a thing."),
+            {"type": "title", "value": "hi!"},
+            {"type": "summary", "value": "hello!  µ-benchmarks are a thing."},
         ]
         submit.update_revision_description(t, c, r)
 
@@ -858,7 +858,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
             title="hi!",
             body="hello!\n\nDifferential Revision: http://phabricator.test/D123",
         )
-        r = dict(fields=dict(title="hi!", summary="hello!\n\n"))
+        r = {"fields": {"title": "hi!", "summary": "hello!\n\n"}}
         t = []
 
         expected = []
@@ -885,21 +885,25 @@ class TestUpdateCommitSummary(unittest.TestCase):
         #       --conduit-token <conduit-token> differential.revision.edit
         m_get_users.side_effect = (
             [
-                dict(phid="PHID-USER-1"),
-                dict(phid="PHID-USER-2"),
-                dict(phid="PHID-USER-3"),
+                {"phid": "PHID-USER-1"},
+                {"phid": "PHID-USER-2"},
+                {"phid": "PHID-USER-3"},
             ],
-            [dict(phid="PHID-USER-1")],
-            [dict(phid="PHID-USER-2"), dict(phid="PHID-USER-3")],
+            [{"phid": "PHID-USER-1"}],
+            [{"phid": "PHID-USER-2"}, {"phid": "PHID-USER-3"}],
         )
         c = commit(rev_id="123", reviewers=[["alice", "bob!"], ["frankie!"]])
         t = []
 
         expected = [
-            dict(
-                type="reviewers.set",
-                value=["PHID-USER-1", "blocking(PHID-USER-2)", "blocking(PHID-USER-3)"],
-            )
+            {
+                "type": "reviewers.set",
+                "value": [
+                    "PHID-USER-1",
+                    "blocking(PHID-USER-2)",
+                    "blocking(PHID-USER-3)",
+                ],
+            }
         ]
         mozphab.conduit.update_revision_reviewers(t, c)
 
