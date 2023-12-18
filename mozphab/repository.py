@@ -30,7 +30,7 @@ MOZILLA_DOMAINS = {
 }
 
 
-def is_mozilla_phabricator(url):
+def is_mozilla_phabricator(url: str) -> bool:
     """Return `True` if the `url` is a Mozilla owned domain."""
     phab_host = urllib.parse.urlparse(url).hostname
     if not phab_host:
@@ -39,7 +39,7 @@ def is_mozilla_phabricator(url):
 
 
 class Repository(object):
-    def __init__(self, path, dot_path, phab_url=None):
+    def __init__(self, path: str, dot_path: str, phab_url: Optional[str] = None):
         self._phid = None
         self._phab_repo = None
         self._phab_vcs = None
@@ -79,7 +79,7 @@ class Repository(object):
         value = read_json_field(self._arcconfig_files, [key])
         return value
 
-    def _phab_url(self):
+    def _phab_url(self) -> str:
         """Determine the phab/conduit URL."""
 
         # In order of priority as per arc

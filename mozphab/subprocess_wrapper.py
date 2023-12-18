@@ -4,6 +4,10 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import subprocess
+from typing import (
+    List,
+    Optional,
+)
 
 from shlex import quote
 
@@ -11,11 +15,11 @@ from .exceptions import CommandError
 from .logger import logger
 
 
-def debug_log_command(command):
+def debug_log_command(command: List[str]):
     logger.debug("$ %s", " ".join(quote(s.replace("\n", r"\n")) for s in command))
 
 
-def check_call(command, **kwargs):
+def check_call(command: List[str], **kwargs):
     # wrapper around subprocess.check_call with debug output
     debug_log_command(command)
     kwargs["encoding"] = "UTF-8"
@@ -27,7 +31,9 @@ def check_call(command, **kwargs):
         )
 
 
-def check_call_by_line(command, cwd=None, never_log=False):
+def check_call_by_line(
+    command: List[str], cwd: Optional[str] = None, never_log: bool = False
+):
     # similar to check_call, yields for line-by-line processing
     debug_log_command(command)
 
@@ -58,18 +64,18 @@ def check_call_by_line(command, cwd=None, never_log=False):
 
 
 def check_output(
-    command,
-    cwd=None,
-    split=True,
-    keep_ends=False,
-    strip=True,
-    never_log=False,
+    command: List[str],
+    cwd: Optional[str] = None,
+    split: bool = True,
+    keep_ends: bool = False,
+    strip: bool = True,
+    never_log: bool = False,
     stdin=None,
     stderr=None,
-    env=None,
+    env: Optional[dict] = None,
     search_error=None,
-    expect_binary=False,
-):
+    expect_binary: bool = False,
+) -> List[str]:
     # wrapper around subprocess.check_output with debug output and splitting
     debug_log_command(command)
     kwargs = dict(cwd=cwd, stdin=stdin, stderr=stderr)
