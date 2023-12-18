@@ -20,7 +20,7 @@ from glean import testing
 # NOTE: Set the environment variables before importing any of mozphab modules.
 os.environ["MOZPHAB_NO_USER_CONFIG"] = "1"
 
-from mozphab import (
+from mozphab import (  # noqa: E402
     conduit,
     environment,
     mozphab,
@@ -28,7 +28,7 @@ from mozphab import (
     simplecache,
     user,
 )
-from mozphab import (
+from mozphab import (  # noqa: E402
     config as config_module,
 )
 from mozphab.commands import submit  # noqa: E402
