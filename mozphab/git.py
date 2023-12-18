@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 import mimetypes
 import os
 import re
@@ -40,7 +41,7 @@ NULL_SHA1 = "0" * 40
 
 
 class Git(Repository):
-    def __init__(self, path):
+    def __init__(self, path: str):
         dot_path = os.path.join(path, ".git")
         if not os.path.exists(dot_path):
             raise ValueError("%s: not a git repository" % path)
@@ -67,16 +68,16 @@ class Git(Repository):
         self.branch = None
 
     @property
-    def is_cinnabar_installed(self):
+    def is_cinnabar_installed(self) -> bool:
         """Check if Cinnabar extension is callable."""
         return self.git.is_cinnabar_installed
 
     @property
-    def is_cinnabar_required(self):
+    def is_cinnabar_required(self) -> bool:
         """Check if local VCS is different than the remote one."""
         return self.vcs != self.phab_vcs
 
-    def _hg_to_git(self, node):
+    def _hg_to_git(self, node: str) -> Optional[str]:
         """Convert Mercurial hashtag to Git."""
         if not self.is_cinnabar_required:
             return None
@@ -84,7 +85,7 @@ class Git(Repository):
         return self.git_out(["cinnabar", "hg2git", node], split=False)
 
     @lru_cache(maxsize=None)
-    def _git_to_hg(self, node):
+    def _git_to_hg(self, node: str) -> Optional[str]:
         """Convert Git hashtag to Mercurial."""
         if not self.is_cinnabar_required:
             return None
@@ -93,7 +94,7 @@ class Git(Repository):
         return hg_node if hg_node != NULL_SHA1 else None
 
     @lru_cache(maxsize=128)
-    def get_public_node(self, node):
+    def get_public_node(self, node: str) -> str:
         """Return a Mercurial node if Cinnabar is required."""
         public_node = node
         if self.is_cinnabar_required:
@@ -103,11 +104,11 @@ class Git(Repository):
 
         return public_node
 
-    def is_index_modified(self):
+    def is_index_modified(self) -> bool:
         """Are there any changes added to the staging area."""
         return bool(self.git.output(["diff-index", "HEAD"]))
 
-    def is_worktree_clean(self):
+    def is_worktree_clean(self) -> bool:
         return all(
             [l.startswith("?? ") for l in self.git_out(["status", "--porcelain"])]
         )
@@ -132,15 +133,21 @@ class Git(Repository):
             )
 
     @classmethod
-    def is_repo(cls, path):
+    def is_repo(cls, path: str) -> bool:
         """Quick check for repository at specified path."""
         return os.path.exists(os.path.join(path, ".git"))
 
-    def git_call(self, command, **kwargs):
+    def git_call(self, command: List[str], **kwargs):
         """Call git from the repository path."""
         self.git.call(command, cwd=self.path, **kwargs)
 
-    def git_out(self, command, path=None, extra_env=None, **kwargs):
+    def git_out(
+        self,
+        command: List[str],
+        path: Optional[str] = None,
+        extra_env: Optional[dict] = None,
+        **kwargs,
+    ) -> str:
         """Call git from the repository path and return the result."""
         return self.git.output(
             command, cwd=path or self.path, extra_env=extra_env, **kwargs
@@ -151,7 +158,7 @@ class Git(Repository):
         if self.branch:
             self.checkout(self.branch)
 
-    def _find_branches_to_rebase(self, commits):
+    def _find_branches_to_rebase(self, commits: List[dict]) -> dict:
         """Create a list of branches to rebase."""
         branches_to_rebase = dict()
         for commit in commits:
@@ -169,7 +176,7 @@ class Git(Repository):
 
         return branches_to_rebase
 
-    def finalize(self, commits):
+    def finalize(self, commits: List[dict]):
         """Rebase all branches based on changed commits from the stack."""
         branches_to_rebase = self._find_branches_to_rebase(commits)
 
@@ -179,13 +186,13 @@ class Git(Repository):
 
         self.checkout(self.branch)
 
-    def refresh_commit_stack(self, commits):
+    def refresh_commit_stack(self, commits: List[dict]):
         """Update revset and names of the commits."""
         for commit in commits:
             commit["name"] = short_node(commit["node"])
         self.revset = (commits[0]["node"], commits[-1]["node"])
 
-    def _cherry(self, remotes):
+    def _cherry(self, remotes: List[str]):
         """Run `git cherry` and try all the remotes until success."""
         command = ["cherry", "--abbrev=12"]
         if not remotes:
@@ -201,7 +208,7 @@ class Git(Repository):
 
             return response
 
-    def _get_first_unpublished_node(self):
+    def _get_first_unpublished_node(self) -> Optional[str]:
         """Check which commits should be pushed and return the oldest one."""
         remotes = config.git_remote
         if self.args.upstream:
@@ -241,7 +248,7 @@ class Git(Repository):
                     line.split("- ")[1],
                 )
 
-    def set_args(self, args):
+    def set_args(self, args: argparse.Namespace):
         """Store moz-phab command line args and set the revset."""
         super().set_args(args)
 
@@ -268,7 +275,7 @@ class Git(Repository):
             end = start_rev if is_single else self.args.end_rev
             self.revset = (start, end)
 
-    def _git_get_children(self, node):
+    def _git_get_children(self, node: str) -> str:
         """Get commits SHA1 with their children.
 
         Args:
@@ -285,7 +292,7 @@ class Git(Repository):
         )
 
     @staticmethod
-    def _get_direct_children(node, rev_list):
+    def _get_direct_children(node: str, rev_list: List[str]) -> List[str]:
         """Return direct children of the commit.
 
         Args:
@@ -303,7 +310,7 @@ class Git(Repository):
 
         return []
 
-    def _get_commits_info(self, start, end):
+    def _get_commits_info(self, start: int, end: int) -> List[str]:
         """Log useful info about the commits within the desired range.
 
         Returns a list of strings
@@ -335,7 +342,7 @@ class Git(Repository):
         )[: -len(boundary) - 1]
         return log.split("%s\n" % boundary)
 
-    def _is_child(self, parent, node, rev_list):
+    def _is_child(self, parent: str, node: str, rev_list: List[str]) -> bool:
         """Check if `node` is a direct or indirect child of the `parent`.
 
         Args:
@@ -357,7 +364,7 @@ class Git(Repository):
 
         return False
 
-    def commit_stack(self, single=False):
+    def commit_stack(self, single: bool = False) -> Optional[List[dict]]:
         """Collect all the info about commits."""
         if not self.revset:
             # No commits found to submit
@@ -428,7 +435,7 @@ class Git(Repository):
 
         return commits
 
-    def is_node(self, node):
+    def is_node(self, node: str) -> bool:
         try:
             node_type = self.git_out(
                 ["cat-file", "-t", node], split=False, stderr=subprocess.STDOUT
@@ -438,7 +445,7 @@ class Git(Repository):
 
         return node_type == "commit"
 
-    def check_node(self, node):
+    def check_node(self, node: str) -> str:
         """Check if the node exists.
 
         Calls `hg2git` if node is not found and cinnabar extension is installed.
@@ -451,7 +458,7 @@ class Git(Repository):
         if not self.is_node(hashtag):
             if self.is_cinnabar_required and self.is_cinnabar_installed:
                 hashtag = self._hg_to_git(hashtag)
-                if hashtag == "0" * 40:
+                if not hashtag or hashtag == "0" * 40:
                     # hashtag is not found via hg2git
                     raise NotFoundError(
                         "Mercurial SHA1 not found by the cinnabar extension."
@@ -467,10 +474,12 @@ class Git(Repository):
 
         return hashtag
 
-    def checkout(self, node):
+    def checkout(self, node: str):
         self.git_call(["checkout", "--quiet", node])
 
-    def commit(self, body, author=None, author_date=None):
+    def commit(
+        self, body: str, author: Optional[str] = None, author_date: Optional[str] = None
+    ):
         """Commit the changes in the working directory."""
         commands = ["commit", "-a"]
         if author:
@@ -483,7 +492,7 @@ class Git(Repository):
             commands += ["-F", temp_f]
             self.git_call(commands)
 
-    def before_patch(self, node, name):
+    def before_patch(self, node: str, name: str):
         """Prepare repository to apply the patches.
 
         Args:
@@ -526,7 +535,7 @@ class Git(Repository):
             self.git_call(["checkout", "-q", "-b", branch_name])
             logger.info("Created branch %s", branch_name)
 
-    def apply_patch(self, diff, body, author, author_date):
+    def apply_patch(self, diff: str, body: str, author: str, author_date: str):
         # apply the patch as a binary file to ensure the correct line endings
         # is used.
         with temporary_binary_file(diff.encode("utf8")) as patch_file:
@@ -534,25 +543,31 @@ class Git(Repository):
 
         self.commit(body, author, author_date)
 
-    def format_patch(self, diff, body, author, author_date):
+    def format_patch(self, diff: str, body: str, author: str, author_date: str) -> str:
         return diff
 
-    def _get_current_head(self):
+    def _get_current_head(self) -> str:
         """Return current's HEAD symbolic link."""
         symbolic = self.git_out(["symbolic-ref", "HEAD"], split=False)
         return symbolic.split("refs/heads/")[1]
 
-    def _get_current_hash(self):
+    def _get_current_hash(self) -> str:
         """Return the SHA1 of the current commit."""
         return self._revparse("HEAD")
 
-    def _revparse(self, branch):
+    def _revparse(self, branch: str) -> str:
         """Return the SHA1 of given branch."""
         return self.git_out(["rev-parse", branch], split=False)
 
     def _commit_tree(
-        self, parent, tree_hash, message, author_name, author_email, author_date
-    ):
+        self,
+        parent: str,
+        tree_hash: str,
+        message: str,
+        author_name: str,
+        author_email: str,
+        author_date: str,
+    ) -> str:
         """Prepare and run `commit-tree` command.
 
         Creates a new commit for the tree_hash.
@@ -575,7 +590,7 @@ class Git(Repository):
                 },
             )
 
-    def amend_commit(self, commit, commits):
+    def amend_commit(self, commit: dict, commits: List[dict]):
         """Amend the commit with an updated message.
 
         Changing commit's message changes also its SHA1.
@@ -628,7 +643,7 @@ class Git(Repository):
             )
             c["node"] = new_parent_sha
 
-    def rebase_commit(self, source_commit, dest_commit):
+    def rebase_commit(self, source_commit: dict, dest_commit: dict):
         self._rebase(dest_commit["node"], source_commit["node"])
 
     def is_descendant(self, node: str) -> bool:
@@ -685,18 +700,18 @@ class Git(Repository):
         # Get new commit stack and update.
         return new_commits
 
-    def _rebase(self, newbase, upstream):
+    def _rebase(self, newbase: str, upstream: str):
         self.git_call(["rebase", "--quiet", "--onto", newbase, upstream])
 
     @lru_cache(maxsize=128)
-    def _file_size(self, blob):
+    def _file_size(self, blob: str) -> int:
         return int(self.git_out(["cat-file", "-s", blob], split=False))
 
     @lru_cache(maxsize=128)
-    def _cat_file(self, blob):
+    def _cat_file(self, blob: str) -> str:
         return self.git_out(["cat-file", "blob", blob], split=False, expect_binary=True)
 
-    def _parse_diff_change(self, raw, diff):
+    def _parse_diff_change(self, raw: str, diff: Diff) -> Diff.Change:
         """Parse the changes provided in raw `git` response.
 
         Returns a Diff.Change object.
@@ -827,7 +842,7 @@ class Git(Repository):
 
         return change
 
-    def get_diff(self, commit):
+    def get_diff(self, commit: dict) -> Diff:
         """Create a Diff object with changes."""
         raw = self.git_out(
             [
@@ -849,7 +864,7 @@ class Git(Repository):
 
         return diff
 
-    def check_vcs(self):
+    def check_vcs(self) -> bool:
         if self.args.force_vcs:
             return True
 
