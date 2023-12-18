@@ -39,7 +39,7 @@ class ColourFormatter(logging.Formatter):
         # wrap stdout and stderr, so that color codes work in the windows console
         just_fix_windows_console()
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         result = super().format(record)
         if environment.HAS_ANSI and record.levelname in self.log_colours:
             result = "\033[%sm%s\033[0m" % (self.log_colours[record.levelname], result)
