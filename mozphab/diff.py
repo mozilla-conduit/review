@@ -9,6 +9,9 @@ import concurrent.futures
 from typing import (
     Any,
     Dict,
+    List,
+    Optional,
+    Tuple,
 )
 
 from .conduit import conduit
@@ -18,7 +21,15 @@ class Diff:
     """Representation of the Diff used to submit to the Phabricator."""
 
     class Hunk:
-        def __init__(self, *, old_off, old_len, new_off, new_len, lines):
+        def __init__(
+            self,
+            *,
+            old_off: int,
+            old_len: int,
+            new_off: int,
+            new_len: int,
+            lines: List[str],
+        ):
             """
             Hunk object, encapsulates hunk metadata and diff lines.
 
@@ -64,10 +75,10 @@ class Diff:
                 prev_line = line
 
     class Change:
-        def __init__(self, path):
-            self.old_mode = None
-            self.cur_mode = None
-            self.old_path = None
+        def __init__(self, path: str):
+            self.old_mode: Optional[str] = None
+            self.cur_mode: Optional[str] = None
+            self.old_path: Optional[str] = None
             self.cur_path = path
             self.away_paths = []
             self.kind = Diff.Kind("CHANGE")
@@ -77,18 +88,18 @@ class Diff:
             self.hunks = []
 
         @property
-        def added(self):
+        def added(self) -> int:
             return sum(hunk.added for hunk in self.hunks)
 
         @property
-        def deleted(self):
+        def deleted(self) -> int:
             return sum(hunk.deleted for hunk in self.hunks)
 
-        def from_git_diff(self, git_diff):
+        def from_git_diff(self, git_diff: str):
             """Generate hunks from the provided git_diff output."""
 
             # Process each hunk
-            hunk = None
+            hunk = {}
             in_header = True
             for line in git_diff.splitlines(keepends=True):
                 # Skip lines before the start of the first hunk header
@@ -118,7 +129,7 @@ class Diff:
             if hunk and hunk["lines"]:
                 self.hunks.append(Diff.Hunk(**hunk))
 
-        def set_as_binary(self, *, a_body, a_mime, b_body, b_mime):
+        def set_as_binary(self, *, a_body: str, a_mime: str, b_body: str, b_mime: str):
             """Updates Change contents to the provided binary data."""
             self.binary = True
 
@@ -184,7 +195,7 @@ class Diff:
             MULTICOPY=8,
         )
 
-        def __init__(self, name):
+        def __init__(self, name: str):
             self.value = self.values[name]
             self.name = name
 
@@ -217,7 +228,7 @@ class Diff:
             NORMAL=7,
         )
 
-        def __init__(self, name):
+        def __init__(self, name: str):
             self.value = self.values[name]
             self.name = name
 
@@ -226,12 +237,20 @@ class Diff:
         self.phid = None
         self.id = None
 
-    def change_for(self, path):
+    def change_for(self, path: str):
         if path not in self.changes:
             self.changes[path] = self.Change(path)
         return self.changes[path]
 
-    def set_change_kind(self, change, kind, a_mode, b_mode, a_path, _b_path):
+    def set_change_kind(
+        self,
+        change: Change,
+        kind: Kind,
+        a_mode: str,
+        b_mode: str,
+        a_path: str,
+        _b_path: str,
+    ):
         """Determine the correct kind from the letter."""
         if kind == "A":
             change.kind = self.Kind("ADD")
@@ -281,8 +300,9 @@ class Diff:
         else:
             raise Exception(f"unsupported change type {kind} for {a_path}")
 
-    def _upload_file(self, change, upload):
+    def _upload_file(self, change: Change, upload: dict):
         path = change.cur_path if upload["type"] == "new" else change.old_path
+
         upload["phid"] = conduit.file_upload(path, upload["value"])
 
     def upload_files(self):
@@ -302,7 +322,7 @@ class Diff:
             for upload in futures:
                 upload.result()
 
-    def submit(self, commit, message):
+    def submit(self, commit: dict, message: str) -> str:
         files_changed = sorted(
             self.changes.values(), key=operator.attrgetter("cur_path")
         )
@@ -319,12 +339,12 @@ class Diff:
         self.set_property(commit, message)
         return diff["phid"]
 
-    def set_property(self, commit, message):
+    def set_property(self, commit: dict, message: str):
         """Add information about our local commit to the patch."""
         conduit.set_diff_property(self.id, commit, message)
 
     @staticmethod
-    def parse_git_diff(hdr):
+    def parse_git_diff(hdr: str) -> Tuple[int, int, int, int]:
         m = re.match(
             r"@@ -(?P<old_off>\d+)(?:,(?P<old_len>\d+))? "
             r"\+(?P<new_off>\d+)(?:,(?P<new_len>\d+))? @@",
