@@ -42,7 +42,7 @@ def test_submit_create(in_process, git_repo_path, init_sha):
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "123"}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
     )
@@ -172,7 +172,7 @@ def test_submit_create_added_not_commited(in_process, git_repo_path, init_sha):
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "123"}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
     )
@@ -204,7 +204,7 @@ def test_submit_create_no_bug(in_process, git_repo_path, init_sha):
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "123"}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
     )
@@ -242,7 +242,7 @@ def test_submit_create_binary(in_process, git_repo_path, init_sha, data_file):
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "123"}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
     )
@@ -287,7 +287,7 @@ def test_submit_create_binary_existing(in_process, git_repo_path, init_sha, data
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "123"}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
     )
@@ -340,7 +340,7 @@ def test_submit_create_binary_chunked(in_process, git_repo_path, init_sha, data_
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "123"}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
     )
@@ -424,7 +424,7 @@ def test_submit_update(in_process, git_repo_path, init_sha):
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": 123}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
     )
@@ -519,7 +519,7 @@ def test_submit_remove_cr(in_process, git_repo_path, init_sha):
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "123"}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
         # UPDATE
@@ -531,7 +531,7 @@ def test_submit_remove_cr(in_process, git_repo_path, init_sha):
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "124"}},
+        {"object": {"id": "124", "phid": "PHID-DREV-124"}},
         # differential.setdiffproperty
         {},
     )
@@ -600,7 +600,7 @@ def test_submit_remove_cr(in_process, git_repo_path, init_sha):
                 & Contains(
                     '"message": "'
                     "Bug 1 - B r?alice\\n\\n"
-                    "Summary:\\n\\n\\n\\n\\n"
+                    "Summary:\\n\\n\\n"
                     "Test Plan:\\n\\n"
                     "Reviewers: alice\\n\\n"
                     "Subscribers:\\n\\n"
@@ -627,7 +627,7 @@ def test_submit_remove_form_feed(in_process, git_repo_path, init_sha):
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "123"}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
     )
@@ -666,7 +666,7 @@ def test_submit_single_last(in_process, git_repo_path, init_sha):
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "123"}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
     )
@@ -701,7 +701,7 @@ def test_submit_single_first(in_process, git_repo_path, init_sha, git_sha):
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "123"}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
     )
@@ -743,7 +743,7 @@ def test_submit_update_no_message(in_process, git_repo_path, init_sha):
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "123"}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
     )
@@ -835,7 +835,7 @@ def test_empty_file(in_process, git_repo_path, init_sha):
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "123"}},
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
     )
@@ -897,7 +897,7 @@ Differential Revision: http://example.test/D123
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "124"}},
+        {"object": {"id": "124", "phid": "PHID-DREV-124"}},
         # differential.setdiffproperty
         {},
     )
@@ -961,7 +961,7 @@ Differential Revision: http://example.test/D124
         # differential.setdiffproperty
         {},
         # differential.revision.edit
-        {"object": {"id": "125"}},
+        {"object": {"id": "125", "phid": "PHID-DREV-125"}},
         # differential.setdiffproperty
         {},
     )

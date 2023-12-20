@@ -402,8 +402,6 @@ title R2
 ą
 
 Differential Revision: http://example.test/D2
-
-Depends on D1
 """
 PATCH_2_DIFF = """\
 diff --git a/X b/X

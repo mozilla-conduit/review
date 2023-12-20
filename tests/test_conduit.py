@@ -776,3 +776,16 @@ class TestEditRevision:
                 "objectIdentifier": 1,
             },
         )
+
+    @mock.patch("mozphab.repository.conduit.get_revisions")
+    @mock.patch("mozphab.repository.conduit.call")
+    def test_edit_revision_sets_parent(self, m_call, m_get_revisions):
+        m_get_revisions.return_value = self._get_revisions("accepted")
+        conduit.edit_revision(rev_id=1, wip=False, parent_rev_phid="PHID-DREV-123")
+        m_call.assert_called_once_with(
+            "differential.revision.edit",
+            {
+                "transactions": [{"type": "parents.add", "value": ["PHID-DREV-123"]}],
+                "objectIdentifier": 1,
+            },
+        )

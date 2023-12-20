@@ -448,6 +448,7 @@ class ConduitAPI:
         summary: str,
         diff_phid: str,
         check_in_needed: bool = False,
+        parent_rev_phid: Optional[str] = None,
     ) -> dict:
         """Create a new revision in Phabricator."""
         transactions = [
@@ -459,11 +460,13 @@ class ConduitAPI:
 
         if commit.bug_id:
             transactions.append({"type": "bugzilla.bug-id", "value": commit.bug_id})
+
         return self.edit_revision(
             transactions=transactions,
             diff_phid=diff_phid,
             wip=commit.wip,
             check_in_needed=check_in_needed,
+            parent_rev_phid=parent_rev_phid,
         )
 
     def update_revision(
@@ -473,6 +476,7 @@ class ConduitAPI:
         diff_phid: Optional[str] = None,
         comment: Optional[str] = None,
         check_in_needed: bool = False,
+        parent_rev_phid: Optional[str] = None,
     ) -> dict:
         """Update an existing revision in Phabricator."""
         # Update the title and summary
@@ -502,6 +506,7 @@ class ConduitAPI:
             rev_id=commit.rev_id,
             wip=commit.wip,
             check_in_needed=check_in_needed,
+            parent_rev_phid=parent_rev_phid,
         )
 
     def edit_revision(
@@ -511,6 +516,7 @@ class ConduitAPI:
         rev_id: Optional[str] = None,
         wip: bool = False,
         check_in_needed: bool = False,
+        parent_rev_phid: Optional[str] = None,
     ) -> dict:
         """Edit (create or update) a revision."""
         trans = transactions or []
@@ -519,6 +525,10 @@ class ConduitAPI:
         # diff_phid is not present for changes in revision settings (like WIP)
         if diff_phid:
             trans.append({"type": "update", "value": diff_phid})
+
+        # Add revision parents.
+        if parent_rev_phid:
+            trans.append({"type": "parents.add", "value": [parent_rev_phid]})
 
         existing_status = None
         if rev_id:

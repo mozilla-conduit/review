@@ -14,7 +14,6 @@ from mozphab.helpers import (
     BLOCKING_REVIEWERS_RE,
     augment_commits_from_body,
     move_drev_to_original,
-    parse_arc_diff_rev,
     prompt,
     revision_title_from_commit,
     strip_differential_revision,
@@ -38,8 +37,6 @@ ARC_COMMIT_DESC_TEMPLATE = """
 
 Summary:
 {body}
-
-{depends_on}
 
 Test Plan:
 
@@ -84,10 +81,6 @@ def arc_message(template_vars: dict) -> str:
     for name in list(template_vars.keys()):
         if template_vars[name] is None:
             template_vars[name] = ""
-
-    # `depends_on` is optional.
-    if "depends_on" not in template_vars:
-        template_vars["depends_on"] = ""
 
     message = ARC_COMMIT_DESC_TEMPLATE.format(**template_vars)
     logger.debug("--- arc message\n%s\n---" % message)
@@ -576,7 +569,6 @@ def _submit(repo: Repository, args: argparse.Namespace):
 
     # Process.
     telemetry().submission.process_time.start()
-    previous_commit = None
     # Collect all existing revisions to get reviewers info.
     rev_ids_to_update = [
         commit.rev_id for commit in commits if commit.rev_id is not None
@@ -589,6 +581,7 @@ def _submit(repo: Repository, args: argparse.Namespace):
         revisions_to_update = {revision["id"]: revision for revision in list_to_update}
 
     last_node = commits[-1].orig_node
+    previous_commit = None
     for commit in commits:
         diff = None
 
@@ -631,10 +624,6 @@ def _submit(repo: Repository, args: argparse.Namespace):
             "bug_id": commit.bug_id,
         }
         summary = commit.body
-        if previous_commit and not args.no_stack:
-            template_vars["depends_on"] = f"Depends on D{previous_commit.rev_id}"
-            summary = f"{summary}\n\n{template_vars['depends_on']}"
-
         message = arc_message(template_vars)
 
         # Create a diff if needed
@@ -665,9 +654,17 @@ def _submit(repo: Repository, args: argparse.Namespace):
                     summary,
                     diff.phid,
                     check_in_needed=check_in_needed,
+                    # Set the parent revision if one is available.
+                    parent_rev_phid=previous_commit.rev_phid
+                    if previous_commit
+                    else None,
                 )
 
-        revision_url = "%s/D%s" % (repo.phab_url, rev["object"]["id"])
+        # Set revision ID and PHID from the Conduit API response.
+        commit.rev_id = rev["object"]["id"]
+        commit.rev_phid = rev["object"]["phid"]
+
+        revision_url = "%s/D%s" % (repo.phab_url, commit.rev_id)
 
         # Append/replace div rev url to/in commit description.
         body = amend_revision_url(commit.body, revision_url)
@@ -678,7 +675,6 @@ def _submit(repo: Repository, args: argparse.Namespace):
         if commit.title_preview != commit.title or body != commit.body:
             commit.title = commit.title_preview
             commit.body = body
-            commit.rev_id = parse_arc_diff_rev(commit.body)
 
             if not avoid_local_changes:
                 with wait_message("Updating commit.."):

@@ -65,7 +65,7 @@ def _conduit_side_effect(calls=1):
                 # differential.setdiffproperty
                 {},
                 # differential.revision.edit
-                {"object": {"id": str(123 + i)}},
+                {"object": {"id": str(123 + i), "phid": f"PHID-DREV-{str(123 + 1)}"}},
                 # differential.setdiffproperty
                 {},
             ]

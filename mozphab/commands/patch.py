@@ -269,7 +269,6 @@ def patch(repo, args):
         branch_name = resolve_branch_name(args, config, rev_id)
         repo.before_patch(base_node, branch_name)
 
-    parent = None
     for rev in revs:
         # Prepare the body using just the data from Phabricator
         body = prepare_body(
@@ -277,9 +276,7 @@ def patch(repo, args):
             rev["fields"]["summary"],
             rev["id"],
             repo.phab_url,
-            depends_on=parent,
         )
-        parent = rev["id"]
         diff = diffs[rev["fields"]["diffPHID"]]
         with wait_message("Downloading D%s.." % rev["id"]):
             raw = conduit.call("differential.getrawdiff", {"diffID": diff["id"]})

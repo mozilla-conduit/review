@@ -33,6 +33,7 @@ class Commit:
     bug_id: Optional[str] = None
     bug_id_orig: Optional[str] = None
     rev_id: Optional[int] = None
+    rev_phid: Optional[str] = None
     wip: Optional[bool] = None
     tree_hash: Optional[str] = None
     reviewers: Dict[str, List[str]] = field(default_factory=dict)

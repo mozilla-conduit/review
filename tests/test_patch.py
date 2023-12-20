@@ -112,22 +112,18 @@ def test_prepare_body():
     assert "\n\nDifferential Revision: http://phabricator.test/D1" == prep(
         "", "", 1, "http://phabricator.test"
     )
-    assert (
-        "\n\nDifferential Revision: http://phabricator.test/D2\n\nDepends on D1"
-        == prep("", "", 2, "http://phabricator.test", depends_on=1)
+    assert "\n\nDifferential Revision: http://phabricator.test/D2" == prep(
+        "", "", 2, "http://phabricator.test"
     )
-    assert (
-        "title\n\n"
-        "Differential Revision: http://phabricator.test/D2\n\n"
-        "Depends on D1" == prep("title", "", 2, "http://phabricator.test", depends_on=1)
+    assert "title\n\n" "Differential Revision: http://phabricator.test/D2" == prep(
+        "title", "", 2, "http://phabricator.test"
     )
     assert (
         "title\n\n"
         "some\n"
         "summary\n\n"
-        "Differential Revision: http://phabricator.test/D2\n\n"
-        "Depends on D1"
-        == prep("title", "some\nsummary", 2, "http://phabricator.test", depends_on=1)
+        "Differential Revision: http://phabricator.test/D2"
+        == prep("title", "some\nsummary", 2, "http://phabricator.test")
     )
 
 

@@ -439,9 +439,8 @@ def replace_reviewers(commit_description: str, reviewers: dict) -> str:
 def prepare_body(
     title: str,
     summary: str,
-    rev_id: str,
+    rev_id: int,
     phab_url: str,
-    depends_on: Optional[str] = None,
 ) -> str:
     """Prepare the body using title and summary."""
     summary = strip_differential_revision(summary)
@@ -450,11 +449,8 @@ def prepare_body(
     if summary:
         summary += "\n\n"
 
-    summary += "Differential Revision: %s/D%s" % (phab_url, rev_id)
-    if depends_on:
-        summary += "\n\nDepends on D%s" % depends_on
-
-    body = "%s\n\n%s" % (title, summary)
+    summary += f"Differential Revision: {phab_url}/D{rev_id}"
+    body = f"{title}\n\n{summary}"
 
     return body
 
