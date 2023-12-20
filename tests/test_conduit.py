@@ -610,8 +610,8 @@ def test_get_project_phid(m_get_projects):
                 "type": "PROJ",
                 "phid": "PHID-PROJ-1",
                 "fields": {
-                    "name": "Check-in Needed",
-                    "slug": "check-in_needed",
+                    "name": "Release managers",
+                    "slug": "release-managers",
                     "subtype": "default",
                     "milestone": None,
                     "depth": 0,
@@ -628,25 +628,9 @@ def test_get_project_phid(m_get_projects):
             }
         ],
     )
-    phid = mozphab.conduit.get_project_phid("check-in_needed")
-    m_get_projects.assert_called_once_with(["check-in_needed"])
+    phid = mozphab.conduit.get_project_phid("release-managers")
+    m_get_projects.assert_called_once_with(["release-managers"])
     assert phid == "PHID-PROJ-1"
-
-
-@mock.patch("mozphab.repository.conduit.get_project_phid")
-@mock.patch("mozphab.repository.conduit.call")
-def test_check_in_needed(m_call, m_project_phid):
-    m_project_phid.side_effect = ("PHID-PROJ-1",)
-    mozphab.conduit.edit_revision(check_in_needed=True)
-    m_project_phid.assert_called_once_with("check-in_needed")
-    m_call.assert_called_once_with(
-        "differential.revision.edit",
-        {
-            "transactions": [
-                {"type": "projects.add", "value": ["PHID-PROJ-1"]},
-            ]
-        },
-    )
 
 
 class TestEditRevision:

@@ -580,12 +580,10 @@ def _submit(repo: Repository, args: argparse.Namespace):
 
         revisions_to_update = {revision["id"]: revision for revision in list_to_update}
 
-    last_node = commits[-1].orig_node
     previous_commit = None
     for commit in commits:
         diff = None
 
-        check_in_needed = args.check_in_needed and commit.orig_node == last_node
         # Only revisions being updated have an ID.  Newly created ones don't.
         if not commit.submit:
             previous_commit = commit
@@ -645,7 +643,6 @@ def _submit(repo: Repository, args: argparse.Namespace):
                     has_existing_reviewers,
                     diff_phid=diff.phid,
                     comment=args.message,
-                    check_in_needed=check_in_needed,
                 )
         else:
             with wait_message("Creating a new revision..."):
@@ -653,7 +650,6 @@ def _submit(repo: Repository, args: argparse.Namespace):
                     commit,
                     summary,
                     diff.phid,
-                    check_in_needed=check_in_needed,
                     # Set the parent revision if one is available.
                     parent_rev_phid=previous_commit.rev_phid
                     if previous_commit
@@ -794,11 +790,6 @@ def add_submit_arguments(parser):
         "--no-lint",
         action="store_true",
         help="Do not run lint (default: lint changed files if configured).",
-    )
-    parser.add_argument(
-        "--check-in-needed",
-        action="store_true",
-        help="Add a `check-in-needed tag to the top most revision.",
     )
     wip_group = parser.add_mutually_exclusive_group()
     wip_group.add_argument(

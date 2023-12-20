@@ -35,8 +35,6 @@ from .helpers import (
 from .logger import logger
 from .simplecache import cache
 
-CHECK_IN_NEEDED = "check-in_needed"
-
 
 def normalise_reviewer(reviewer: str, strip_group: bool = True) -> str:
     """This provide a canonical form of the reviewer for comparison."""
@@ -447,7 +445,6 @@ class ConduitAPI:
         commit: Commit,
         summary: str,
         diff_phid: str,
-        check_in_needed: bool = False,
         parent_rev_phid: Optional[str] = None,
     ) -> dict:
         """Create a new revision in Phabricator."""
@@ -465,7 +462,6 @@ class ConduitAPI:
             transactions=transactions,
             diff_phid=diff_phid,
             wip=commit.wip,
-            check_in_needed=check_in_needed,
             parent_rev_phid=parent_rev_phid,
         )
 
@@ -475,7 +471,6 @@ class ConduitAPI:
         has_existing_reviewers: bool,
         diff_phid: Optional[str] = None,
         comment: Optional[str] = None,
-        check_in_needed: bool = False,
         parent_rev_phid: Optional[str] = None,
     ) -> dict:
         """Update an existing revision in Phabricator."""
@@ -505,7 +500,6 @@ class ConduitAPI:
             diff_phid=diff_phid,
             rev_id=commit.rev_id,
             wip=commit.wip,
-            check_in_needed=check_in_needed,
             parent_rev_phid=parent_rev_phid,
         )
 
@@ -515,7 +509,6 @@ class ConduitAPI:
         diff_phid: Optional[str] = None,
         rev_id: Optional[str] = None,
         wip: bool = False,
-        check_in_needed: bool = False,
         parent_rev_phid: Optional[str] = None,
     ) -> dict:
         """Edit (create or update) a revision."""
@@ -560,18 +553,6 @@ class ConduitAPI:
         # for re-review.
         elif existing_status and existing_status not in ("needs-review", "accepted"):
             trans.append({"type": "request-review", "value": True})
-
-        # Add the check-in-needed tag if required.
-        if check_in_needed:
-            logger.info(f"Adding #{CHECK_IN_NEEDED} to revision.")
-            check_in_needed_phid = conduit.get_project_phid(CHECK_IN_NEEDED)
-            if check_in_needed_phid is not None:
-                trans.append({"type": "projects.add", "value": [check_in_needed_phid]})
-            else:
-                logger.error(
-                    f"Could not add #{CHECK_IN_NEEDED} to revision. "
-                    f"Project #{CHECK_IN_NEEDED} doesn't exist."
-                )
 
         # Call differential.revision.edit
         api_call_args = {"transactions": trans}
