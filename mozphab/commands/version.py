@@ -2,12 +2,17 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import platform
+
 from mozphab.environment import MOZPHAB_NAME, MOZPHAB_VERSION
 from mozphab.logger import logger
 
 
 def log_current_version(_):
-    logger.info("%s (%s)", MOZPHAB_NAME, MOZPHAB_VERSION)
+    py_version = platform.python_version()
+    system = platform.system()
+
+    logger.info(f"{MOZPHAB_NAME} {MOZPHAB_VERSION} (Python {py_version}, {system})")
 
 
 def add_parser(parser):
