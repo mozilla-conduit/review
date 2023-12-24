@@ -764,7 +764,7 @@ def add_submit_arguments(parser):
         "--bug",
         "-b",
         help="Set Bug ID for all commits (default: from commit).",
-        type=int,
+        type=str,
     )
     parser.add_argument(
         "--no-bug",
