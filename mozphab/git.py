@@ -623,24 +623,24 @@ class Git(Repository):
         commit.node = new_parent_sha
         # Update parent for all the children of the `commit` within the stack
         has_children = False
-        for commit in commits:
+        for stack_commit in commits:
             if not has_children:
                 # Find the amended commit info in the list of all commits in the stack.
                 # Next commits are children of this one.
-                has_children = commit == commit
+                has_children = stack_commit == commit
                 continue
 
             # Update parent information and create a new commit
-            commit.parent = new_parent_sha
+            stack_commit.parent = new_parent_sha
             new_parent_sha = self._commit_tree(
                 new_parent_sha,
-                commit.tree_hash,
-                f"{commit.title}\n{commit.body}",
-                commit.author_name,
-                commit.author_email,
-                commit.author_date,
+                stack_commit.tree_hash,
+                f"{stack_commit.title}\n{stack_commit.body}",
+                stack_commit.author_name,
+                stack_commit.author_email,
+                stack_commit.author_date,
             )
-            commit.node = new_parent_sha
+            stack_commit.node = new_parent_sha
 
     def rebase_commit(self, source_commit: dict, dest_commit: dict):
         self._rebase(dest_commit["node"], source_commit["node"])
