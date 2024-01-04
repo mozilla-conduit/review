@@ -6,6 +6,20 @@
 from mozphab import updater
 
 
+def test_should_self_update():
+    assert (
+        updater.should_self_update(-1, 0) is False
+    ), "Setting last check to a negative value should disable self-update."
+
+    assert (
+        updater.should_self_update(1, 250000) is False
+    ), "Last check within the 3 day frequency should not self-update."
+
+    assert (
+        updater.should_self_update(1, 3000000) is True
+    ), "Last check greater than the 3 day frequency should cause a self-update."
+
+
 def test_parse_latest_prerelease_version():
     # Test data from the `simple` api.
     data = {

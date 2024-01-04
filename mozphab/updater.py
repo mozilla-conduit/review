@@ -22,7 +22,8 @@ from .exceptions import Error
 from .logger import logger
 from .subprocess_wrapper import check_call
 
-SELF_UPDATE_FREQUENCY = 24 * 3  # hours
+# Update every three days.
+SELF_UPDATE_FREQUENCY_SECONDS = 24 * 3 * 60 * 60
 
 
 def get_pypi_json() -> dict:
@@ -67,6 +68,25 @@ def log_windows_update_message():
     )
 
 
+def should_self_update(self_last_check: int, current_time: int) -> bool:
+    """Return `True` if a self-update should be performed."""
+    # Setting `updater.self_last_check` to a negative value disables self-update.
+    if self_last_check < 0:
+        logger.debug("Self-update is disabled, skipping check for new versions.")
+        return False
+
+    # Avoid self-update if our last check was before the frequency interval.
+    time_since_last_check = current_time - self_last_check
+    if time_since_last_check <= SELF_UPDATE_FREQUENCY_SECONDS:
+        logger.debug(
+            f"Time since last check is {round(time_since_last_check)} seconds, "
+            "skipping check for new versions."
+        )
+        return False
+
+    return True
+
+
 def check_for_updates(force_check: bool = False) -> Optional[str]:
     """Check if an update is available for `moz-phab`.
 
@@ -74,16 +94,17 @@ def check_for_updates(force_check: bool = False) -> Optional[str]:
     found or return `None`. Use `force_check` to check for updates even when the
     usual conditions aren't met.
     """
-    self_update_disabled = config.self_last_check < 0
-    last_check_before_frequency = (
-        time.time() - config.self_last_check <= SELF_UPDATE_FREQUENCY * 60 * 60
-    )
+    logger.debug(f"Forced update check: {force_check}.")
 
     # Return if our check conditions aren't met.
-    if not force_check and (self_update_disabled or not last_check_before_frequency):
+    current_time_s = int(time.time())
+    if not force_check and not should_self_update(
+        config.self_last_check, current_time_s
+    ):
+        logger.debug("Not checking for updates.")
         return
 
-    config.self_last_check = int(time.time())
+    config.self_last_check = current_time_s
     current_version = MOZPHAB_VERSION
     pypi_json = get_pypi_json()
     pypi_info = pypi_json["info"]
