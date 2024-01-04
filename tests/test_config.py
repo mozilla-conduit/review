@@ -54,7 +54,7 @@ def test_write(config):
     config.telemetry_enabled = True
     config.write()
 
-    new_config = Config(filename=config._filename)
+    new_config = Config(filename=config.filename)
     git_cmd = ["git.exe"] if platform.system() == "Windows" else ["git"]
 
     assert new_config.no_ansi is True
@@ -81,7 +81,7 @@ def test_invalid_int_field(config):
     config.write()
 
     with pytest.raises(ValueError) as e:
-        Config(filename=config._filename)
+        Config(filename=config.filename)
 
     assert str(e.value) == (
         "could not convert updater.self_last_check to an integer: "
@@ -94,7 +94,7 @@ def test_invalid_bool_field(config):
     config.write()
 
     with pytest.raises(ValueError) as e:
-        Config(filename=config._filename)
+        Config(filename=config.filename)
 
     assert (
         str(e.value) == "could not convert ui.no_ansi to a boolean: Not a boolean: test"

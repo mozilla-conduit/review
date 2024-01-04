@@ -60,7 +60,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         epilog=textwrap.dedent(
             f"""\
                 configuration:
-                    {config.name}
+                    {config.filename}
 
                 documentation:
                     https://github.com/mozilla-conduit/review/blob/master/README.md

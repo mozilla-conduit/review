@@ -5,6 +5,7 @@
 import configparser
 import io
 import os
+from pathlib import Path
 from typing import (
     Any,
     Optional,
@@ -16,7 +17,9 @@ from .logger import logger
 
 
 class Config(object):
-    def __init__(self, should_access_file: bool = True, filename: Optional[str] = None):
+    def __init__(
+        self, should_access_file: bool = True, filename: Optional[Path] = None
+    ):
         """Sets default config and overrides it with values from the config file.
 
         Kwargs:
@@ -25,11 +28,7 @@ class Config(object):
         """
         self._should_access_file = should_access_file
 
-        self._filename = filename or os.path.join(
-            environment.HOME_DIR, ".moz-phab-config"
-        )
-        # human-readable name, will diverge from _filename if initialized with filename
-        self.name = "~/.moz-phab-config"
+        self.filename = filename or (environment.HOME_DIR / ".moz-phab-config")
 
         # Default values.
         defaults = """
@@ -79,7 +78,7 @@ class Config(object):
             self._config.remove_section("arc")
 
         if should_access_file:
-            self._config.read([self._filename])
+            self._config.read([self.filename])
 
         self.no_ansi = self._getboolean("ui", "no_ansi")
         self.safe_mode = self._getboolean("vcs", "safe_mode")
@@ -107,7 +106,7 @@ class Config(object):
             [self._hg_command] if self._hg_command else environment.HG_COMMAND
         )
 
-        if should_access_file and not os.path.exists(self._filename):
+        if should_access_file and not os.path.exists(self.filename):
             self.write()
 
     def _set(self, section: str, option: str, value: Any):
@@ -135,8 +134,8 @@ class Config(object):
         if not self._should_access_file:
             return
 
-        if os.path.exists(self._filename):
-            logger.debug("updating %s", self._filename)
+        if os.path.exists(self.filename):
+            logger.debug("updating %s", self.filename)
             self._set("submit", "auto_submit", self.auto_submit)
             self._set("patch", "always_full_stack", self.always_full_stack)
             self._set("updater", "self_last_check", self.self_last_check)
@@ -145,7 +144,7 @@ class Config(object):
             self._set("telemetry", "enabled", self.telemetry_enabled)
 
         else:
-            logger.debug("creating %s", self._filename)
+            logger.debug("creating %s", self.filename)
             self._set("ui", "no_ansi", self.no_ansi)
             self._set("vcs", "safe_mode", self.safe_mode)
             self._set("git", "remote", ", ".join(self.git_remote))
@@ -160,7 +159,7 @@ class Config(object):
             self._set("patch", "always_full_stack", self.always_full_stack)
             self._set("telemetry", "enabled", self.telemetry_enabled)
 
-        with open(self._filename, "w", encoding="utf-8") as f:
+        with self.filename.open("w", encoding="utf-8") as f:
             self._config.write(f)
 
 

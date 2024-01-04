@@ -317,7 +317,7 @@ def safe_environ(monkeypatch):
 def config():
     """Replace the original config with the fake one."""
     with tempfile.NamedTemporaryFile() as temp:
-        return config_module.Config(filename=temp.name)
+        return config_module.Config(filename=Path(temp.name))
 
 
 @pytest.fixture
