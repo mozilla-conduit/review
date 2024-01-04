@@ -110,8 +110,6 @@ class Config(object):
         if should_access_file and not os.path.exists(self._filename):
             self.write()
 
-        self.arc = None
-
     def _set(self, section: str, option: str, value: Any):
         if not self._config.has_section(section):
             self._config.add_section(section)
