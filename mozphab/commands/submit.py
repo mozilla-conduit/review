@@ -24,9 +24,6 @@ from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
 
-# The DEFAULT_UPDATE_MESSAGE is only required when using arc to submit.
-DEFAULT_UPDATE_MESSAGE = "Revision updated."
-
 PHABRICATOR_URLS = {
     "https://phabricator.services.mozilla.com/": "Phabricator",
     "https://phabricator-dev.allizom.org/": "Phabricator-Dev",
