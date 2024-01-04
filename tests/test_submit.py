@@ -141,7 +141,7 @@ class Commits(unittest.TestCase):
 
         self._assertError(
             repo.check_commits_for_submit,
-            "- goober is not available until string",
+            "- goober is not available until string (submit anyway with `-f`)",
             (
                 # Build a stack with an unavailable reviewer in the middle.
                 [

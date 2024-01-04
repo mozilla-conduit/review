@@ -287,9 +287,9 @@ class Repository(object):
                     commit_errors.append("User %s is disabled" % reviewer["name"])
                 elif "until" in reviewer:
                     unavailable_reviewers_warning = True
-                    msg = "%s is not available until %s" % (
-                        reviewer["name"],
-                        reviewer["until"],
+                    msg = (
+                        f"{reviewer['name']} is not available until "
+                        f"{reviewer['until']} (submit anyway with `-f`)"
                     )
                     commit_issues.append(msg)
                 else:
