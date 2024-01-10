@@ -683,8 +683,9 @@ class Git(Repository):
         self.git_call(["switch", "-c", mozphab_uplift_branch, self.revset[-1]])
 
         # Rebase from the other end of the revset onto our target, specifying
-        # the commit before our revset start rev as the base.
-        self.git_call(["rebase", "--onto", dest, f"{self.revset[0]}^"])
+        # our revset start rev as the base, since moz-phab on Git uses the base
+        # commit as the revset start, unlike Mercurial.
+        self.git_call(["rebase", "--onto", dest, f"{self.revset[0]}"])
 
         # Update revset.
         current = self._get_current_hash()
