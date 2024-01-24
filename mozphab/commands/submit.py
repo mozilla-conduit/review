@@ -551,7 +551,8 @@ def _submit(repo: Repository, args: argparse.Namespace):
         pass
     elif config.auto_submit and not args.interactive:
         logger.info(
-            "Automatically submitting (as per submit.auto_submit in %s)", config.name
+            "Automatically submitting (as per submit.auto_submit in %s)",
+            config.filename,
         )
     else:
         res = prompt(
