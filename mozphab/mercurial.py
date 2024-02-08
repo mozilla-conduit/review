@@ -748,9 +748,6 @@ class Mercurial(Repository):
     def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
         out = self.hg_out(
             [
-                # Send messages to `stderr` so `stdout` is pure JSON.
-                "--config",
-                "ui.message-output=stderr",
                 "rebase",
                 "-r",
                 self.revset,
@@ -760,6 +757,9 @@ class Mercurial(Repository):
                 "--keep",
                 "-T",
                 "json",
+                # Send messages to `stderr` so `stdout` is pure JSON.
+                "--config",
+                "ui.message-output=stderr",
             ],
             split=False,
         )
