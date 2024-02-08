@@ -682,10 +682,19 @@ class Git(Repository):
         # Create a new branch at the location of the tip of the revset.
         self.git_call(["switch", "-c", mozphab_uplift_branch, self.revset[-1]])
 
-        # Rebase from the other end of the revset onto our target, specifying
-        # our revset start rev as the base, since moz-phab on Git uses the base
-        # commit as the revset start, unlike Mercurial.
-        self.git_call(["rebase", "--onto", dest, f"{self.revset[0]}"])
+        try:
+            # Rebase from the other end of the revset onto our target, specifying
+            # our revset start rev as the base, since moz-phab on Git uses the base
+            # commit as the revset start, unlike Mercurial.
+            self.git_call(["rebase", "--onto", dest, f"{self.revset[0]}"])
+        except CommandError as exc:
+            raise Error(
+                f"Rebasing your uplift commits {self.revset} onto {dest} failed.\n\n"
+                "This means your patch will fail to apply on landing due to conflicts "
+                "with your desired uplift train.\n\n"
+                f"Try rebasing the {mozphab_uplift_branch} branch onto {dest} manually, "
+                "resolving merge conflicts, and resubmitting."
+            ) from exc
 
         # Update revset.
         current = self._get_current_hash()

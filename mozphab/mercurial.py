@@ -746,23 +746,32 @@ class Mercurial(Repository):
         )
 
     def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
-        out = self.hg_out(
-            [
-                "rebase",
-                "-r",
-                self.revset,
-                "-d",
-                dest,
-                # Don't obsolete the original changesets.
-                "--keep",
-                "-T",
-                "json",
-                # Send messages to `stderr` so `stdout` is pure JSON.
-                "--config",
-                "ui.message-output=stderr",
-            ],
-            split=False,
-        )
+        try:
+            out = self.hg_out(
+                [
+                    "rebase",
+                    "-r",
+                    self.revset,
+                    "-d",
+                    dest,
+                    # Don't obsolete the original changesets.
+                    "--keep",
+                    "-T",
+                    "json",
+                    # Send messages to `stderr` so `stdout` is pure JSON.
+                    "--config",
+                    "ui.message-output=stderr",
+                ],
+                split=False,
+            )
+        except CommandError as exc:
+            raise Error(
+                f"Rebasing your uplift commits {self.revset} onto {dest} failed.\n\n"
+                "This means your patch will fail to apply on landing due to conflicts "
+                "with your desired uplift train.\n\n"
+                f"Try rebasing with `hg rebase -r {self.revset} -d {dest} --keep`, "
+                "resolving merge conflicts, and resubmitting."
+            ) from exc
 
         # Capture the JSON output from rebase and use it to refresh our commit stack.
         # We need to do this since using `--keep` with rebase causes the newly produced
