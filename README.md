@@ -108,6 +108,8 @@ report_to_sentry = True
 - `DEBUG` : Enabled debugging output (default: disabled).
 - `MOZPHAB_NO_USER_CONFIG` : Do not read from or write to `~/.moz-phab-config`
   (default: disabled).
+- `DISABLE_SPINNER` : Set to any value in the environment to disable the spinner
+  (default: the spinner is enabled).
 
 ## Execution
 

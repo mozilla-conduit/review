@@ -19,7 +19,7 @@ HAS_ANSI = not os.getenv("NO_ANSI") and (
 GIT_COMMAND = ["git.exe" if IS_WINDOWS else "git"]
 HG_COMMAND = ["hg.exe" if IS_WINDOWS else "hg"]
 
-SHOW_SPINNER = True
+SHOW_SPINNER = "DISABLE_SPINNER" not in os.environ
 
 DEFAULT_START_REV = "(auto)"
 DEFAULT_END_REV = "."
