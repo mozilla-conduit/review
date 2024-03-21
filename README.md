@@ -297,10 +297,10 @@ using the default settings.
    version of Python):
 
    ```shell
-   `python3 -m venv venv`
-   `source venv/bin/activate`
-   `pip3 install -r dev/requirements/python3.9.txt`
-   `pip3 install -e .`
+   python3 -m venv venv
+   source venv/bin/activate
+   pip3 install -r dev/requirements/python3.9.txt
+   pip3 install -e .
    ```
 
 3. To run moz-phab after making modifications use `moz-phab`
