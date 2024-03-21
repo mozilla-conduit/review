@@ -649,9 +649,9 @@ def _submit(repo: Repository, args: argparse.Namespace):
                     summary,
                     diff.phid,
                     # Set the parent revision if one is available.
-                    parent_rev_phid=previous_commit.rev_phid
-                    if previous_commit
-                    else None,
+                    parent_rev_phid=(
+                        previous_commit.rev_phid if previous_commit else None
+                    ),
                 )
 
         # Set revision ID and PHID from the Conduit API response.
