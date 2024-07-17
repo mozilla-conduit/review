@@ -165,8 +165,9 @@ class Git(Repository):
                 continue
             branches = self.git_out(["branch", "--contains", commit.orig_node])
             for branch in branches:
-                if branch.startswith("* ("):
+                if branch.startswith(("* (", "+ ")):
                     # Omit `* (detached from {SHA1})`
+                    # and `+ {anything}` (indicating a checkout in another worktree)
                     continue
 
                 branch = branch.lstrip("* ")
