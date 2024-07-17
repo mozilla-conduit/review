@@ -684,7 +684,8 @@ def _submit(repo: Repository, args: argparse.Namespace):
     # Cleanup (eg. strip nodes) and refresh to ensure the stack is right for the
     # final showing.
     with wait_message("Cleaning up.."):
-        repo.finalize(commits)
+        if args.command != "uplift":
+            repo.finalize(commits)
         repo.after_submit()
         repo.cleanup()
         repo.refresh_commit_stack(commits)
