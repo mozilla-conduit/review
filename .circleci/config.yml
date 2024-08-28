@@ -154,7 +154,7 @@ jobs:
             python3 -m pip install --upgrade build pip
             python3 -m venv venv
             python3 -m build
-            ./venv/bin/pip --disable-pip-version-check install dist/MozPhab*.tar.gz
+            ./venv/bin/pip --disable-pip-version-check install dist/mozphab*.tar.gz
       - run:
           name: run tests
           command: |
