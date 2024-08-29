@@ -42,3 +42,21 @@ def test_parse_latest_prerelease_version():
     assert (
         updater.parse_latest_prerelease_version(data) == "1.2.2rc1"
     ), "`get_newest_pypi_version` should detect `1.2.2rc1` as the latest version."
+
+
+def test_parse_latest_version_filename_case():
+    # Test data from the `simple` api.
+    data = {
+        "files": [
+            {
+                "filename": "MozPhab-1.2.0.tar.gz",
+            },
+            {
+                "filename": "mozphab-1.2.1.tar.gz",
+            },
+        ],
+    }
+
+    assert (
+        updater.parse_latest_prerelease_version(data) == "1.2.1"
+    ), "`get_newest_pypi_version` should detect `1.2.1` as the latest version."

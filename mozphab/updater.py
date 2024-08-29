@@ -47,14 +47,14 @@ def get_simple_json() -> dict:
 def parse_latest_prerelease_version(simple_json: dict) -> str:
     """Parse PyPI's API response for `moz-phab` to determine the latest version."""
     # Get all the returned `.tar.gz` file entries.
-    filenames = (entry["filename"] for entry in simple_json["files"])
+    filenames = (entry["filename"].lower() for entry in simple_json["files"])
 
     # The format is `MozPhab-<version>.tar.gz`, so remove the prefix and
     # suffix to get the version strings.
     versions = (
-        filename[len("MozPhab-") :][: -len(".tar.gz")]
+        filename[len("mozphab-") :][: -len(".tar.gz")]
         for filename in filenames
-        if filename.startswith("MozPhab-") and filename.endswith(".tar.gz")
+        if filename.startswith("mozphab-") and filename.endswith(".tar.gz")
     )
 
     # Turn each version string into a `Version`, get the max, then return as `str`.
