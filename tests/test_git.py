@@ -340,7 +340,8 @@ def test_check_node(m_phab_vcs, m_git_is_node, m_hg2git, git):
 @mock.patch("mozphab.git.Git.git_call")
 @mock.patch("mozphab.git.prompt")
 @mock.patch("mozphab.git.logger")
-def test_before_patch(m_logger, m_prompt, m_git, m_checkout, m_git_out, git):
+@mock.patch("mozphab.git.config")
+def test_before_patch(m_config, m_logger, m_prompt, m_git, m_checkout, m_git_out, git):
     class Args:
         def __init__(
             self,
@@ -394,6 +395,18 @@ def test_before_patch(m_logger, m_prompt, m_git, m_checkout, m_git_out, git):
     m_checkout.reset_mock()
     m_logger.reset_mock()
     git.args = Args(no_branch=True)
+    git.before_patch("abcdef", "name")
+    m_checkout.assert_called_once()
+    m_git.assert_not_called()
+    m_prompt.assert_called_once()
+    assert "git checkout -b" in m_logger.warning.call_args_list[0][0][0]
+
+    m_git.reset_mock()
+    m_checkout.reset_mock()
+    m_logger.reset_mock()
+    m_prompt.reset_mock()
+    m_config.create_branch = False
+    git.args = Args()
     git.before_patch("abcdef", "name")
     m_checkout.assert_called_once()
     m_git.assert_not_called()

@@ -48,6 +48,12 @@ def test_resolve_branch_name():
         patch.resolve_branch_name(args, config, rev_id) == "phabrev"
     ), "Using template strings should be optional."
 
+    config.create_commit = False
+    assert (
+        patch.resolve_branch_name(args, config, rev_id) is None
+    ), "When create_commit is False in config no branch should be used."
+    config.create_commit = True
+
 
 def test_check_revision_id():
     check_revision_id = patch.check_revision_id
@@ -324,6 +330,19 @@ def test_patch(
     m_apply_patch.assert_called_once_with("raw", "x")
     m_git_before_patch.assert_called_once_with("sha111", None)
 
+    m_apply_patch.reset_mock()
+    m_git_before_patch.reset_mock()
+    # create_commit=False in config
+    m_config.create_commit = False
+    git.args = Args()
+    patch.patch(git, git.args)
+    m_git_before_patch.assert_called_once()
+    m_git_apply_patch.assert_not_called()
+    m_apply_patch.assert_called_once_with("raw", "x")
+    m_git_before_patch.assert_called_once_with("sha111", None)
+
+    m_apply_patch.reset_mock()
+    m_config.create_commit = True
     m_git_before_patch.reset_mock()
     # --no_commit --applyto head
     git.args = Args(no_commit=True, apply_to="head")

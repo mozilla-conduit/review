@@ -89,7 +89,7 @@ def resolve_branch_name(
         # Return the value passed from the CLI.
         return args.name
 
-    if args.no_commit:
+    if args.no_commit or not config.create_commit:
         # `no_commit` implies no branch name.
         return None
 
@@ -106,7 +106,7 @@ def patch(repo, args):
     * create a new branch/bookmark/topic
     * apply the patches and commit the changes
 
-    args.no_commit is True - no commit will be created after applying diffs
+    args.no_commit or config.create_commit is False - no commit will be created after applying diffs
     args.apply_to - <head|tip|branch> (default: branch)
         branch - find base commit and apply on top of it
         head/tip - apply changes to current commit
@@ -228,7 +228,7 @@ def patch(repo, args):
         diffs[requested_diff_phid] = requested_diff
         update_revision_with_new_diff(revs, requested_diff)
 
-    if not args.no_commit and not args.raw:
+    if not args.no_commit and config.create_commit and not args.raw:
         for rev in revs:
             diff = diffs[rev["fields"]["diffPHID"]]
             if not diff["attachments"]["commits"]["commits"]:
@@ -281,7 +281,7 @@ def patch(repo, args):
         with wait_message("Downloading D%s.." % rev["id"]):
             raw = conduit.call("differential.getrawdiff", {"diffID": diff["id"]})
 
-        if args.no_commit:
+        if args.no_commit or not config.create_commit:
             with wait_message("Applying D%s.." % rev["id"]):
                 apply_patch(raw, repo.path)
         else:

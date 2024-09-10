@@ -48,8 +48,10 @@ warn_untracked = True
 apply_to = base
 create_bookmark = True
 create_topic = False
+create_branch = True
 always_full_stack = False
 branch_name_template = phab-D{rev_id}
+create_commit = True
 
 [updater]
 self_last_check = 0
@@ -85,12 +87,17 @@ report_to_sentry = True
     Requires the `topic` extension to be enabled. If `True` moz-phab will
     create a topic (based on the last revision number) for the new DAG branch
     point.
+- `patch.create_branch` : Affects only when patching a Git repository. If
+    `True` moz-phab will create a branch (based on the last revision number)
+    for the new DAG branch point.
 - `patch.always_full_stack` : When `False` and the patched revision has successors,
     moz-phab will ask if the whole stack should be patched instead. If `True`
     moz-phab will do it without without asking.
 - `patch.branch_name_template` : The template string to use for naming the new branch,
     topic or bookmark. The string takes a single format string input, `rev_id`, which
     is the ID of the revision being patched.
+- `patch.create_commit` : If `True` (the default) a commit will be generated for
+    the patch. Applies the changes with the `patch` command.
 - `updater.self_last_check` : Epoch timestamp (local timezone) indicating the last
    time an update check was performed for this script.  set to `-1` to disable
    this check.

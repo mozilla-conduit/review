@@ -499,7 +499,7 @@ class Git(Repository):
             node - SHA1 of the base commit
             name - name of the branch to be created
         """
-        is_detached_head = self.args.no_branch and node
+        is_detached_head = (self.args.no_branch or not config.create_branch) and node
         if is_detached_head and not self.args.yes:
             res = prompt(
                 "Switching to the 'detached HEAD' state. Do you wish to continue?",
@@ -523,7 +523,7 @@ class Git(Repository):
                 self.checkout(node)
             logger.info("Checked out %s", short_node(node))
 
-        if name and not self.args.no_branch:
+        if name and not self.args.no_branch and config.create_branch:
             branches = self.git_out(["branch", "--list", "%s*" % name])
             branches = [re.sub("[ *]", "", b) for b in branches]
             branch_name = name

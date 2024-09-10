@@ -54,8 +54,10 @@ class Config(object):
             apply_to = base
             create_bookmark = True
             create_topic = False
+            create_branch = True
             always_full_stack = False
             branch_name_template = phab-D{rev_id}
+            create_commit = True
 
             [updater]
             self_last_check = 0
@@ -88,8 +90,10 @@ class Config(object):
         self.apply_patch_to = self._config.get("patch", "apply_to")
         self.create_bookmark = self._getboolean("patch", "create_bookmark")
         self.create_topic = self._getboolean("patch", "create_topic")
+        self.create_branch = self._getboolean("patch", "create_branch")
         self.always_full_stack = self._getboolean("patch", "always_full_stack")
         self.branch_name_template = self._config.get("patch", "branch_name_template")
+        self.create_commit = self._getboolean("patch", "create_commit")
         self.self_last_check = self._getint("updater", "self_last_check")
         self.self_auto_update = self._getboolean("updater", "self_auto_update")
         self.get_pre_releases = self._getboolean("updater", "get_pre_releases")
@@ -156,7 +160,9 @@ class Config(object):
             self._set("patch", "apply_to", self.apply_patch_to)
             self._set("patch", "create_bookmark", self.create_bookmark)
             self._set("patch", "create_topic", self.create_topic)
+            self._set("patch", "create_branch", self.create_branch)
             self._set("patch", "always_full_stack", self.always_full_stack)
+            self._set("patch", "create_commit", self.create_commit)
             self._set("telemetry", "enabled", self.telemetry_enabled)
 
         with self.filename.open("w", encoding="utf-8") as f:

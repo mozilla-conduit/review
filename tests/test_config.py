@@ -24,7 +24,9 @@ def test_defaults(config):
     assert config.apply_patch_to == "base"
     assert config.create_bookmark is True
     assert config.create_topic is False
+    assert config.create_branch is True
     assert config.always_full_stack is False
+    assert config.create_commit is True
     assert config.self_last_check == 0
     assert config.self_auto_update is True
     assert config.get_pre_releases is False
