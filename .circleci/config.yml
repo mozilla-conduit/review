@@ -37,6 +37,10 @@ workflows:
           <<: *branches-and-tags-filter
       - test_3_10:
           <<: *branches-and-tags-filter
+      - test_3_11:
+          <<: *branches-and-tags-filter
+      - test_3_12:
+          <<: *branches-and-tags-filter
       - test_package:
           <<: *branches-and-tags-filter
       - publish:
@@ -111,6 +115,18 @@ jobs:
       - REQUIREMENTS_FILE: dev/requirements/python3.10.txt
     docker:
       - image: cimg/python:3.10
+  test_3_11:
+    <<: *test_template
+    environment:
+      - REQUIREMENTS_FILE: dev/requirements/python3.11.txt
+    docker:
+      - image: cimg/python:3.11
+  test_3_12:
+    <<: *test_template
+    environment:
+      - REQUIREMENTS_FILE: dev/requirements/python3.12.txt
+    docker:
+      - image: cimg/python:3.12
 
   test_win:
     executor:
