@@ -310,7 +310,7 @@ def test_patch(
     # --raw
     git.args = Args(raw=True)
     patch.patch(git, git.args)
-    m_git_before_patch.not_called()
+    m_git_before_patch.assert_not_called()
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_not_called()
     m_print.assert_called_with("raw")
@@ -347,7 +347,6 @@ def test_patch(
     # --no_commit --applyto head
     git.args = Args(no_commit=True, apply_to="head")
     patch.patch(git, git.args)
-    m_git_before_patch.not_called()
 
     m_get_base_ref.reset_mock()
     m_apply_patch.reset_mock()

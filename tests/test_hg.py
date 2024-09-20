@@ -89,7 +89,7 @@ def test_finalize(m_get_parent, m_hg_rebase, m_hg_get_successor, hg):
 def test_finalize_no_evolve(m_hg_rebase, hg):
     hg.use_evolve = False
     hg.finalize([{"rev": "1", "node": "aaa"}, {"rev": "2", "node": "bbb"}])
-    assert m_hg_rebase.not_called()
+    m_hg_rebase.assert_not_called()
 
 
 @mock.patch("mozphab.mercurial.parse_config")
@@ -214,7 +214,7 @@ def test_clean_worktree(m_status, hg):
 @mock.patch("mozphab.mercurial.Mercurial.hg")
 def test_commit(m_hg, hg):
     hg.commit("some body")
-    m_hg.called_once()
+    m_hg.assert_called_once()
 
 
 @mock.patch("mozphab.mercurial.Mercurial.checkout")

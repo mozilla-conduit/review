@@ -298,11 +298,11 @@ def test_worktree_clean(m_git_out, git):
 @mock.patch("mozphab.git.Git.git_call")
 def test_commit(m_git, git):
     git.commit("some body")
-    assert m_git.called_once()
+    m_git.assert_called_once()
 
     m_git.reset_mock()
     git.commit("some body", "user")
-    assert m_git.called_once()
+    m_git.assert_called_once()
 
 
 @mock.patch("mozphab.git.Git._hg_to_git")

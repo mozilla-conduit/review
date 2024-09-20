@@ -499,7 +499,7 @@ Differential Revision: http://example.test/D123
         is_development=True,
     )
     assert call_conduit.call_count == 6
-    assert m_logger_warning.called_once_with("No changes to submit.")
+    m_logger_warning.assert_called_with("No changes to submit.")
 
 
 def test_submit_remove_cr(in_process, git_repo_path, init_sha):
