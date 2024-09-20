@@ -69,22 +69,28 @@ jobs:
             git config --global user.email "moz-phab-tests@example.com"
             git config --global user.name "moz-phab tests"
             # install test dependencies
-            pip install --disable-pip-version-check --requirement $(echo $REQUIREMENTS_FILE)
-            pip install --disable-pip-version-check --editable .
+            python3 -m venv ~/venv
+            source ~/venv/bin/activate
+            python3 -m pip install --disable-pip-version-check --requirement $(echo $REQUIREMENTS_FILE)
+            python3 -m pip install --disable-pip-version-check --editable .
       - run:
           name: versions
           command: |
             set -e
+            source ~/venv/bin/activate
+            pyenv version
             python3 --version
+            which python3
             git --version
-            pip --disable-pip-version-check list --format freeze
+            python3 -m pip --disable-pip-version-check list --format freeze
       - run:
           name: run tests
           command: |
             set -e
+            source ~/venv/bin/activate
             ulimit -c unlimited
             for F in tests/test_*.py; do
-              pytest --junitxml=~/test-reports/junit-$( basename $F .py ).xml -vv $F
+              python3 -m pytest --junitxml=~/test-reports/junit-$( basename $F .py ).xml -vv $F
             done
             cp core.* ~/coredumps || true
       - store_test_results:
@@ -114,6 +120,8 @@ jobs:
       - run:
           name: install dependencies
           command: |
+            python3 -m venv ~/venv
+            source ~/venv/bin/activate
             pip install --disable-pip-version-check --requirement dev/requirements/windows.txt
             pip install --disable-pip-version-check --editable .
             git config --global user.email "moz-phab-tests@example.com"
@@ -121,12 +129,14 @@ jobs:
       - run:
           name: versions
           command: |
+            source ~/venv/bin/activate
             python --version
             git --version
             pip --disable-pip-version-check list --format freeze
       - run:
           name: run tests
           command: |
+            source ~/venv/bin/activate
             mkdir test-reports
             function RunTest {
               & python -m pytest -vv @args
