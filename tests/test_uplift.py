@@ -7,6 +7,24 @@ from mozphab.commands.submit import (
     update_commits_for_uplift,
 )
 from mozphab.commits import Commit
+from mozphab.helpers import ORIGINAL_DIFF_REV_RE
+
+
+class Repo:
+    def __init__(self, unified_head="beta", is_descendant=True, phid="PHID-beta"):
+        self.unified_head = unified_head
+        self._is_descendant = is_descendant
+        self.uplift_called = False
+        self.phid = phid
+
+    def map_callsign_to_unified_head(self, *args, **kwargs):
+        return self.unified_head
+
+    def is_descendant(self, *args, **kwargs):
+        return self._is_descendant
+
+    def uplift_commits(self, *args, **kwargs):
+        self.uplift_called = True
 
 
 def test_local_uplift_if_possible():
@@ -14,21 +32,6 @@ def test_local_uplift_if_possible():
         def __init__(self, no_rebase=False, train="train"):
             self.no_rebase = no_rebase
             self.train = train
-
-    class Repo:
-        def __init__(self, unified_head="beta", is_descendant=True):
-            self.unified_head = unified_head
-            self._is_descendant = is_descendant
-            self.uplift_called = False
-
-        def map_callsign_to_unified_head(self, *args, **kwargs):
-            return self.unified_head
-
-        def is_descendant(self, *args, **kwargs):
-            return self._is_descendant
-
-        def uplift_commits(self, *args, **kwargs):
-            self.uplift_called = True
 
     commits = [
         Commit(
@@ -83,18 +86,34 @@ def test_update_commits_for_uplift_sets_relman_review():
             reviewers={"granted": ["john"], "request": []},
             bug_id=None,
             body="",
-            rev_id=1,
+            rev_id=None,
+        ),
+        Commit(
+            title="B",
+            reviewers={"granted": ["john"], "request": ["doe"]},
+            bug_id=None,
+            body="",
+            rev_id=None,
         ),
     ]
+    repo = Repo()
 
-    update_commits_for_uplift(commits)
+    update_commits_for_uplift(commits, {}, repo)
 
     reviewers = commits[0].reviewers
 
     assert not reviewers[
         "request"
     ], "Uplifted patch should have no requested reviewers initially."
+    assert not reviewers[
+        "granted"
+    ], "Uplifted patch should have no granted reviewers initially."
 
+    reviewers = commits[1].reviewers
+
+    assert not reviewers[
+        "request"
+    ], "Uplifted patch should have no requested reviewers initially."
     assert not reviewers[
         "granted"
     ], "Uplifted patch should have no granted reviewers initially."
@@ -128,9 +147,27 @@ def test_update_commits_for_uplift_sets_original_revision():
             ),
             rev_id=2,
         ),
+        # Check another initial submission.
+        Commit(
+            title="bug 3: commit message",
+            reviewers={"granted": [], "request": []},
+            bug_id="3",
+            body=(
+                "bug 3: commit message\n"
+                "\n"
+                "Differential Revision: https://phabricator.services.mozila.com/D3\n"
+            ),
+            rev_id=3,
+        ),
     ]
+    revisions = {
+        1: {"id": 1, "fields": {"repositoryPHID": "PHID-mc"}},
+        2: {"id": 2, "fields": {"repositoryPHID": "PHID-beta"}},
+        3: {"id": 3, "fields": {"repositoryPHID": "PHID-mc"}},
+    }
+    repo = Repo()
 
-    update_commits_for_uplift(commits)
+    update_commits_for_uplift(commits, revisions, repo)
 
     # Initial submission.
     body = commits[0].body
@@ -147,3 +184,41 @@ def test_update_commits_for_uplift_sets_original_revision():
     assert "Differential Revision:" in body
     assert "Original Revision:" in body
     assert rev_id == 2
+
+    # Another initial submission.
+    body = commits[2].body
+    rev_id = commits[2].rev_id
+
+    assert "Differential Revision:" not in body
+    assert ORIGINAL_DIFF_REV_RE.search(body).group("rev") == "3"
+    assert rev_id is None
+
+
+def test_uplift_beta_commit_to_esr():
+    commit = Commit(
+        title="bug 2: commit message r=john",
+        reviewers={"granted": ["john"], "request": []},
+        bug_id="2",
+        body=(
+            "bug 2: commit message r=john\n"
+            "\n"
+            "Original Revision: https://phabricator.services.mozila.com/D1\n"
+            "\n"
+            "Differential Revision: https://phabricator.services.mozila.com/D2\n"
+        ),
+        rev_id=2,
+    )
+    revisions = {2: {"id": 2, "fields": {"repositoryPHID": "PHID-beta"}}}
+    repo = Repo(phid="PHID-esr")
+
+    update_commits_for_uplift([commit], revisions, repo)
+
+    reviewers = commit.reviewers
+    body = commit.body
+    rev_id = commit.rev_id
+
+    assert not reviewers["request"]
+    assert not reviewers["granted"]
+    assert "Differential Revision:" not in body
+    assert ORIGINAL_DIFF_REV_RE.search(body).group("rev") == "1"
+    assert rev_id is None

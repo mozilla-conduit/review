@@ -746,6 +746,7 @@ def test_augment_commits_from_body():
         ),
     ]
     helpers.augment_commits_from_body(commits)
+    helpers.update_commit_title_previews(commits)
 
     assert commits[0].rev_id == 101
     assert commits[0].bug_id == "1"
@@ -786,7 +787,9 @@ def test_move_drev_to_original():
     ), "`Differential Revision` not re-written to `Original Revision` on uplift."
     assert rev_id is None, "`rev_id` not returned as `None` for new uplift."
 
-    # Ensure `Original` and `Differential` in commit message is recognized as update.
+    # If `Original` and `Differential` are in the commit message, then a previously
+    # uplifted commit is being uplifted to a new repo. This function isn't called when
+    # updating an existing revision.
     commit_message = (
         "bug 1: title r?reviewer\n"
         "\n"
@@ -796,9 +799,9 @@ def test_move_drev_to_original():
     )
     message, rev_id = helpers.move_drev_to_original(commit_message, 2)
     assert (
-        message == commit_message
-    ), "Commit message should not have changed when updating an uplift."
-    assert rev_id == 2, "`rev_id` should not have changed when updating an uplift."
+        message == expected
+    ), "`Original Revision` should be kept and `Differential Revision` cleared."
+    assert rev_id is None, "`rev_id` should be `None` for new uplift."
 
 
 def test_validate_email():

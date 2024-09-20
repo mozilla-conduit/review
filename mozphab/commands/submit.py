@@ -3,7 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
-from typing import List
+from typing import Dict, List
 
 from mozphab import environment
 from mozphab.commits import Commit
@@ -374,27 +374,29 @@ def update_commits_from_args(commits: List[Commit], args: argparse.Namespace):
                 "granted": make_blocking(commit.reviewers["granted"]),
             }
 
-    if args.command == "uplift":
-        update_commits_for_uplift(commits)
 
-    update_commit_title_previews(commits)
-
-
-def update_commits_for_uplift(commits: List[Commit]):
+def update_commits_for_uplift(
+    commits: List[Commit], revisions: Dict[int, dict], repo: Repository
+):
     """Prepares a set of commits for uplifting."""
     for commit in commits:
+        # Clear all reviewers from the revision.
+        commit.reviewers = {
+            "granted": [],
+            "request": [],
+        }
+
+        # Skip when updating an existing revision on the uplift repo.
+        revision = revisions.get(commit.rev_id)
+        if not revision or revision["fields"]["repositoryPHID"] == repo.phid:
+            continue
+
         # When uplifting, ensure the `Differential Revision` line is properly
         # moved, and that `rev-id` is updated to not point at the original revision.
         commit.body, commit.rev_id = move_drev_to_original(
             commit.body,
             commit.rev_id,
         )
-
-        # Clear all reviewers from the revision.
-        commit.reviewers = {
-            "granted": [],
-            "request": [],
-        }
 
 
 def update_revision_description(
@@ -495,6 +497,12 @@ def _submit(repo: Repository, args: argparse.Namespace):
         morph_blocking_reviewers(commits)
         augment_commits_from_body(commits)
         update_commits_from_args(commits, args)
+        rev_ids = [commit.rev_id for commit in commits if commit.rev_id is not None]
+        if args.command == "uplift":
+            revisions = conduit.get_revisions(ids=rev_ids) if rev_ids else []
+            revisions = {revision["id"]: revision for revision in revisions}
+            update_commits_for_uplift(commits, revisions, repo)
+        update_commit_title_previews(commits)
 
     # Display a one-line summary of commit and WIP count.
     commit_count = len(commits)
@@ -568,13 +576,10 @@ def _submit(repo: Repository, args: argparse.Namespace):
     # Process.
     telemetry().submission.process_time.start()
     # Collect all existing revisions to get reviewers info.
-    rev_ids_to_update = [
-        commit.rev_id for commit in commits if commit.rev_id is not None
-    ]
     revisions_to_update = None
-    if rev_ids_to_update:
+    if rev_ids:
         with wait_message("Loading revision data..."):
-            list_to_update = conduit.get_revisions(ids=rev_ids_to_update)
+            list_to_update = conduit.get_revisions(ids=rev_ids)
 
         revisions_to_update = {revision["id"]: revision for revision in list_to_update}
 

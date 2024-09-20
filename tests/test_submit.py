@@ -658,12 +658,10 @@ class Commits(unittest.TestCase):
             Contains('status will change to "Changes Planned"')
         )
 
-    @mock.patch("mozphab.commands.submit.update_commit_title_previews")
-    def test_update_commits_from_args(self, m_update_title):
+    def test_update_commits_from_args(self):
         def lwr(revs):
             return [r.lower() for r in revs]
 
-        m_update_title.side_effect = lambda x: x
         update = submit.update_commits_from_args
 
         class Args:

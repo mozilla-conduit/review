@@ -215,12 +215,9 @@ def move_drev_to_original(
     if not rev_id:
         return body, rev_id
 
-    differential_revision = ARC_DIFF_REV_RE.search(body)
     original_revision = ORIGINAL_DIFF_REV_RE.search(body)
-
-    # If both match, this is an update to an uplift.
-    if differential_revision and original_revision:
-        return body, rev_id
+    if original_revision:
+        return strip_differential_revision(body), None
 
     def repl(match):
         phab_url = match.group("phab_url")
@@ -316,8 +313,6 @@ def augment_commits_from_body(commits: List[Commit]):
 
         # mark commit as WIP if commit desc starts with "WIP:"
         commit.wip = wip_in_commit_title(commit.title)
-
-    update_commit_title_previews(commits)
 
 
 def parse_bugs(title: str) -> List[str]:
