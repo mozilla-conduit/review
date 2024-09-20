@@ -16,5 +16,5 @@ exclude = [
     "tests/data/",
 ]
 
-[isort]
+[lint.isort]
 split-on-trailing-comma = true
