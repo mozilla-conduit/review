@@ -10,9 +10,11 @@ from unittest import mock
 import pytest
 from immutabledict import immutabledict
 
-from mozphab import diff, exceptions, mozphab, repository, simplecache
+from mozphab import exceptions, mozphab, repository, simplecache
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError, conduit
+from mozphab.diff import Diff
+from tests.conftest import search_rev
 
 
 class Repo:
@@ -474,7 +476,7 @@ def test_save_api_token(m_chmod, m_get_arcrc_path, m_json, m_open, git):
 
 
 def test_parse_git_diff():
-    parse = diff.Diff.parse_git_diff
+    parse = Diff.parse_git_diff
     assert parse("@@ -40,9 +50,3 @@ packaging==19.1 \\") == (40, 50, 9, 3)
 
 
@@ -631,6 +633,75 @@ def test_get_project_phid(m_get_projects):
     phid = mozphab.conduit.get_project_phid("release-managers")
     m_get_projects.assert_called_once_with(["release-managers"])
     assert phid == "PHID-PROJ-1"
+
+
+@mock.patch("mozphab.repository.conduit.call")
+def test_submit_diff(m_call, git):
+    mozphab.conduit.set_repo(git)
+    diff = Diff()
+    commit = Commit(
+        name="abc-name",
+        author_name="Author Name",
+        author_email="auth@example.com",
+        author_date_epoch=1234567,
+        title_preview="Title Preview",
+        body="Additional summary.",
+        bug_id="777",
+        rev_id=456,
+        node="abc",
+        parent="def",
+    )
+    m_call.side_effect = [
+        # differential.revision.search
+        {"data": [search_rev(rev=456, repo="PHID-BETA")]},
+        # differential.creatediff
+        {},
+    ]
+    mozphab.conduit.submit_diff(diff, commit)
+    m_call.assert_any_call(
+        "differential.creatediff",
+        {
+            "changes": mock.ANY,
+            "sourceMachine": mock.ANY,
+            "sourceControlSystem": "git",
+            "sourceControlPath": "/",
+            "sourceControlBaseRevision": "def",
+            "creationMethod": "moz-phab-git",
+            "lintStatus": "none",
+            "unitStatus": "none",
+            "repositoryPHID": "PHID-BETA",
+            "sourcePath": mock.ANY,
+            "branch": "HEAD",
+        },
+    )
+
+
+@mock.patch("mozphab.repository.conduit.call")
+def test_create_revision(m_call):
+    commit = Commit(
+        name="abc-name",
+        author_name="Author Name",
+        author_email="auth@example.com",
+        author_date_epoch=1234567,
+        title_preview="Title Preview",
+        body="Additional summary.",
+        bug_id="777",
+        node="abc",
+        parent="def",
+        wip=False,
+    )
+    mozphab.conduit.create_revision(commit, "PHID-DIFF-7")
+    m_call.assert_called_once_with(
+        "differential.revision.edit",
+        {
+            "transactions": [
+                {"type": "title", "value": "Title Preview"},
+                {"type": "summary", "value": "Additional summary."},
+                {"type": "bugzilla.bug-id", "value": "777"},
+                {"type": "update", "value": "PHID-DIFF-7"},
+            ]
+        },
+    )
 
 
 class TestEditRevision:

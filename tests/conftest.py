@@ -65,6 +65,7 @@ def search_rev(
     closed=False,
     author="PHID-USER-1",
     diff="PHID-DIFF-1",
+    repo="PHID-REPO-1",
     reviewers=None,
     is_draft=False,
 ):
@@ -77,6 +78,7 @@ def search_rev(
             "status": {"value": status, "closed": closed},
             "authorPHID": author,
             "diffPHID": diff,
+            "repositoryPHID": repo,
             "isDraft": is_draft,
         },
         "attachments": {

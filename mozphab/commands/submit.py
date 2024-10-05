@@ -585,13 +585,11 @@ def _submit(repo: Repository, args: argparse.Namespace):
 
     previous_commit = None
     for commit in commits:
-        diff = None
-
-        # Only revisions being updated have an ID.  Newly created ones don't.
         if not commit.submit:
             previous_commit = commit
             continue
 
+        # Only revisions being updated have an ID. Newly created ones don't.
         is_update = bool(commit.rev_id)
         revision_to_update = revisions_to_update[commit.rev_id] if is_update else None
         has_existing_reviewers = (
@@ -609,24 +607,6 @@ def _submit(repo: Repository, args: argparse.Namespace):
         logger.info("%s %s", commit.name, revision_title_from_commit(commit))
         repo.checkout(commit.node)
 
-        # WIP submissions shouldn't set reviewers on phabricator.
-        if commit.wip:
-            reviewers = ""
-        else:
-            reviewers = ", ".join(
-                commit.reviewers["granted"] + commit.reviewers["request"]
-            )
-
-        # Create arc-annotated commit description.
-        template_vars = {
-            "title": revision_title_from_commit(commit),
-            "body": commit.body,
-            "reviewers": reviewers,
-            "bug_id": commit.bug_id,
-        }
-        summary = commit.body
-        message = arc_message(template_vars)
-
         # Create a diff if needed
         with wait_message("Creating local diff..."):
             diff = repo.get_diff(commit)
@@ -640,7 +620,6 @@ def _submit(repo: Repository, args: argparse.Namespace):
                 result = conduit.submit_diff(diff, commit)
                 diff.phid = result["phid"]
                 diff.id = result["diffid"]
-                conduit.set_diff_property(diff.id, commit, message)
 
         if is_update:
             with wait_message("Updating revision..."):
@@ -654,7 +633,6 @@ def _submit(repo: Repository, args: argparse.Namespace):
             with wait_message("Creating a new revision..."):
                 rev = conduit.create_revision(
                     commit,
-                    summary,
                     diff.phid,
                     # Set the parent revision if one is available.
                     parent_rev_phid=(
@@ -685,6 +663,21 @@ def _submit(repo: Repository, args: argparse.Namespace):
         # Diff property has to be set after potential SHA1 change.
         if diff:
             with wait_message("Setting diff metadata..."):
+                # WIP submissions shouldn't set reviewers.
+                if commit.wip:
+                    reviewers = ""
+                else:
+                    reviewers = ", ".join(
+                        commit.reviewers["granted"] + commit.reviewers["request"]
+                    )
+                # Create arc-annotated commit description.
+                template_vars = {
+                    "title": revision_title_from_commit(commit),
+                    "body": commit.body,
+                    "reviewers": reviewers,
+                    "bug_id": commit.bug_id,
+                }
+                message = arc_message(template_vars)
                 conduit.set_diff_property(diff.id, commit, message)
 
         previous_commit = commit

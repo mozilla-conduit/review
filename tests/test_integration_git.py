@@ -8,9 +8,9 @@ import shutil
 from unittest import mock
 
 import pytest
-from callee import Contains
+from callee import Contains, Matching
 
-from mozphab import environment, exceptions, mozphab
+from mozphab import exceptions, mozphab
 
 from .conftest import git_out, search_diff, search_rev
 
@@ -39,8 +39,6 @@ def test_submit_create(in_process, git_repo_path, init_sha):
         [{"userName": "alice", "phid": "PHID-USER-1"}],
         # differential.creatediff
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
@@ -151,11 +149,17 @@ Differential Revision: http://example.test/D123
         )
         in call_conduit.call_args_list
     )
-    assert (
-        call_conduit.call_args_list.count(
-            mock.call("differential.setdiffproperty", mock.ANY)
-        )
-        == 2
+    call_conduit.assert_any_call(
+        "differential.revision.edit",
+        {
+            "transactions": [
+                {"type": "title", "value": "Bug 1 - Ą r?alice"},
+                {"type": "summary", "value": ""},
+                {"type": "reviewers.set", "value": ["PHID-USER-1"]},
+                {"type": "bugzilla.bug-id", "value": "1"},
+                {"type": "update", "value": "PHID-DIFF-1"},
+            ]
+        },
     )
 
 
@@ -169,8 +173,6 @@ def test_submit_create_added_not_commited(in_process, git_repo_path, init_sha):
         [{"userName": "alice", "phid": "PHID-USER-1"}],
         # differential.creatediff
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
@@ -201,8 +203,6 @@ def test_submit_create_no_bug(in_process, git_repo_path, init_sha):
         [{"userName": "alice", "phid": "PHID-USER-1"}],
         # differential.creatediff
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
@@ -239,8 +239,6 @@ def test_submit_create_binary(in_process, git_repo_path, init_sha, data_file):
         {},
         # differential.creatediff
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
@@ -284,8 +282,6 @@ def test_submit_create_binary_existing(in_process, git_repo_path, init_sha, data
         # no file.upload call
         # differential.creatediff
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
@@ -337,8 +333,6 @@ def test_submit_create_binary_chunked(in_process, git_repo_path, init_sha, data_
         {},
         # differential.creatediff
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
@@ -408,57 +402,107 @@ Differential Revision: http://example.test/D123
 
 def test_submit_update(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
-    call_conduit.side_effect = (
+    call_conduit.side_effect = [
         # ping
         {},
         # diffusion.repository.search
         {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
         # diffusion.revision.search
-        {"data": [search_rev(rev=123)]},
+        {"data": [search_rev(rev=123, reviewers=["alice"])]},
         # diffusion.diff.search
         {"data": [search_diff()]},
         # whoami
         {"phid": "PHID-USER-1"},
+        # user.query
+        [{"phid": "PHID-USER-2", "userName": "alice"}],
         # differential.creatediff
-        {"phid": "PHID-DIFF-1", "diffid": 1},
-        # differential.setdiffproperty
-        {},
+        {"phid": "PHID-DIFF-2", "diffid": "2"},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
-    )
+    ]
     testfile = git_repo_path / "X"
     testfile.write_text("ą", encoding="utf-8")
-    git_out("add", ".")
+    git_out("add", "X")
     msgfile = git_repo_path / "msg"
     msgfile.write_text(
-        """\
-Bug 1 - Ą
-
-Differential Revision: http://example.test/D123
-""",
+        "Bug 1 - Ą r?alice\n\nDifferential Revision: http://example.test/D123",
         encoding="utf-8",
     )
     git_out("commit", "--file", "msg")
 
     mozphab.main(
-        ["submit", "--yes"]
-        + ["--bug", "1"]
-        + ["--message", "update message ćwikła"]
-        + [init_sha],
+        ["submit", "--yes", "--message", "update message ćwikła", init_sha],
         is_development=True,
     )
 
-    assert call_conduit.call_count == 9
-    log = git_out("log", "--format=%s%n%n%b", "-1")
-    expected = """\
-Bug 1 - Ą
-
-Differential Revision: http://example.test/D123
-
-"""
+    log = git_out("log", "--format=%s%n%n%b", "-1").strip()
+    expected = "Bug 1 - Ą r?alice\n\nDifferential Revision: http://example.test/D123"
     assert log == expected
+    call_conduit.assert_any_call(
+        "differential.creatediff",
+        Matching(lambda x: x.get("repositoryPHID") == "PHID-REPO-1"),
+    )
+    call_conduit.assert_any_call(
+        "differential.revision.edit",
+        {
+            "objectIdentifier": 123,
+            "transactions": [
+                {"type": "title", "value": "Bug 1 - Ą r?alice"},
+                {"type": "summary", "value": ""},
+                {"type": "comment", "value": "update message ćwikła"},
+                {"type": "update", "value": "PHID-DIFF-2"},
+            ],
+        },
+    )
+
+
+def test_submit_update_uplift(in_process, git_repo_path, init_sha):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = [
+        # conduit.ping
+        {},
+        # diffusion.repository.search
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
+        # differential.revision.search
+        {"data": [search_rev(repo="PHID-BETA-2")]},
+        # differential.diff.search
+        {"data": [search_diff()]},
+        # user.whoami
+        {"phid": "PHID-USER-1"},
+        # differential.creatediff
+        {"phid": "PHID-DIFF-2", "diffid": "2"},
+        # differential.revision.edit
+        {"object": {"id": "1", "phid": "PHID-DREV-1"}},
+        # differential.setdiffproperty
+        {},
+    ]
+    testfile = git_repo_path / "X"
+    testfile.write_text("ą", encoding="utf-8")
+    git_out("add", "X")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text(
+        "Bug 1 - Ą\n\n"
+        "Original Revision: http://example.test/D999\n\n"
+        "Differential Revision: http://example.test/D1",
+        encoding="utf-8",
+    )
+    git_out("commit", "--file", "msg")
+
+    mozphab.main(["submit", "-y", init_sha], is_development=True)
+
+    log = git_out("log", "--format=%s%n%n%b", "-1").strip()
+    expected = (
+        "Bug 1 - Ą\n\n"
+        "Original Revision: http://example.test/D999\n\n"
+        "Differential Revision: http://example.test/D1"
+    )
+    assert log == expected
+    call_conduit.assert_any_call(
+        "differential.creatediff",
+        Matching(lambda x: x.get("repositoryPHID") == "PHID-BETA-2"),
+    )
 
 
 @mock.patch("mozphab.commands.submit.logger.warning")
@@ -503,11 +547,8 @@ Differential Revision: http://example.test/D123
 
 
 def test_submit_remove_cr(in_process, git_repo_path, init_sha):
-    if environment.IS_WINDOWS:
-        pytest.skip("Removing CR will not work on Windows.")
-
-    call_conduit.side_effect = (
-        # CREATE
+    call_conduit.reset_mock()
+    call_conduit.side_effect = [
         # ping
         {},
         # diffusion.repository.search
@@ -516,99 +557,27 @@ def test_submit_remove_cr(in_process, git_repo_path, init_sha):
         [{"userName": "alice", "phid": "PHID-USER-1"}],
         # differential.creatediff
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
-        # UPDATE
-        # no need to ping (checked)
-        # no need to check reviewer
-        # no need to search for repository repository data is saved in .hg
-        # differential.creatediff
-        {"phid": "PHID-DIFF-2", "diffid": "2"},
-        # differential.setdiffproperty
-        {},
-        # differential.revision.edit
-        {"object": {"id": "124", "phid": "PHID-DREV-124"}},
-        # differential.setdiffproperty
-        {},
-    )
+    ]
     test_a = git_repo_path / "X"
-    test_a.write_text("a\r\nb\n")
-    git_out("add", "X")
-    git_out("commit", "-am", "A r?alice")
-    mozphab.main(["submit", "--yes", "--bug", "1", init_sha], is_development=True)
-    call_conduit.reset_mock()
+    with open(test_a, "w", newline="") as f:
+        f.write("a\r\nb\n")
+    git_out("-c", "core.autocrlf=false", "add", "X")
+    git_out("-c", "core.autocrlf=false", "commit", "-m", "A r?alice")
     # removing CR, leaving LF
-    test_a.write_text("a\nb\n")
-    git_out("commit", "-am", "B r?alice")
-    mozphab.main(["submit", "--yes", "--bug", "1", "HEAD~"], is_development=True)
+    with open(test_a, "w", newline="") as f:
+        f.write("a\nb\n")
+    git_out("-c", "core.autocrlf=false", "add", "X")
+    git_out("-c", "core.autocrlf=false", "commit", "-m", "B r?alice")
 
-    assert (
-        mock.call(
-            "differential.creatediff",
-            {
-                "changes": [
-                    {
-                        "metadata": {},
-                        "oldPath": "X",
-                        "currentPath": "X",
-                        "awayPaths": [],
-                        "oldProperties": {},
-                        "newProperties": {},
-                        "commitHash": mock.ANY,
-                        "type": 2,
-                        "fileType": 1,
-                        "hunks": [
-                            {
-                                "oldOffset": 1,
-                                "oldLength": 2,
-                                "newOffset": 1,
-                                "newLength": 2,
-                                "addLines": 1,
-                                "delLines": 1,
-                                "isMissingOldNewline": False,
-                                "isMissingNewNewline": False,
-                                "corpus": "-a\r\n+a\n b\n",
-                            }
-                        ],
-                    }
-                ],
-                "sourceMachine": "http://example.test",
-                "sourceControlSystem": "git",
-                "sourceControlPath": "/",
-                "sourceControlBaseRevision": mock.ANY,
-                "creationMethod": "moz-phab-git",
-                "lintStatus": "none",
-                "unitStatus": "none",
-                "repositoryPHID": "PHID-REPO-1",
-                "sourcePath": mock.ANY,
-                "branch": "HEAD",
-            },
-        )
-        in call_conduit.call_args_list
-    )
-    assert (
-        mock.call(
-            "differential.setdiffproperty",
-            {
-                "diff_id": "2",
-                "name": "local:commits",
-                "data": Contains('"summary": "Bug 1 - B r?alice"')
-                & Contains(
-                    '"message": "'
-                    "Bug 1 - B r?alice\\n\\n"
-                    "Summary:\\n\\n\\n"
-                    "Test Plan:\\n\\n"
-                    "Reviewers: alice\\n\\n"
-                    "Subscribers:\\n\\n"
-                    'Bug #: 1"'
-                ),
-            },
-        )
-        in call_conduit.call_args_list
+    mozphab.main(["submit", "--yes", "--bug", "1", "-s"], is_development=True)
+
+    call_conduit.assert_any_call(
+        "differential.creatediff",
+        Matching(lambda x: x["changes"][0]["hunks"][0]["corpus"] == "-a\r\n+a\n b\n"),
     )
 
 
@@ -624,8 +593,6 @@ def test_submit_remove_form_feed(in_process, git_repo_path, init_sha):
         [{"userName": "alice", "phid": "PHID-USER-1"}],
         # differential.creatediff
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
@@ -663,8 +630,6 @@ def test_submit_single_last(in_process, git_repo_path, init_sha):
         {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
         # differential.creatediff
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
@@ -698,8 +663,6 @@ def test_submit_single_first(in_process, git_repo_path, init_sha, git_sha):
         {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
         # differential.creatediff
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
@@ -740,8 +703,6 @@ def test_submit_update_no_message(in_process, git_repo_path, init_sha):
         {"phid": "PHID-USER-1"},
         # differential.creatediff
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
@@ -823,6 +784,76 @@ Differential Revision: http://example.test/D124
     assert "query result for revision D124" in str(excinfo.value)
 
 
+def test_uplift(in_process, git_repo_path, init_sha):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = [
+        # diffusion.repository.search
+        {
+            "data": [
+                {
+                    "phid": "PHID-BETA-2",
+                    "fields": {"shortName": "beta", "callsign": "BETA", "vcs": "git"},
+                }
+            ]
+        },
+        # diffusion.repository.search
+        {"data": [{"fields": {"shortName": "beta"}}]},
+        # conduit.ping
+        {},
+        # differential.revision.search
+        {"data": [search_rev()]},
+        # differential.creatediff
+        {"phid": "PHID-DIFF-2", "diffid": "2"},
+        # differential.revision.edit
+        {"object": {"id": "2", "phid": "PHID-DREV-2"}},
+        # differential.setdiffproperty
+        {},
+    ]
+    testfile = git_repo_path / "X"
+    testfile.write_text("ą", encoding="utf-8")
+    git_out("add", "X")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text(
+        "Bug 1 - Ą r=alice\n\nDifferential Revision: http://example.test/D1",
+        encoding="utf-8",
+    )
+    git_out("commit", "--file", "msg")
+
+    mozphab.main(["uplift", "-y", "--train", "beta", init_sha], is_development=True)
+
+    call_conduit.assert_any_call(
+        "differential.creatediff",
+        Matching(lambda x: x.get("repositoryPHID") == "PHID-BETA-2"),
+    )
+    call_conduit.assert_any_call(
+        "differential.revision.edit",
+        {
+            "transactions": [
+                {"type": "title", "value": "Bug 1 - Ą"},
+                {
+                    "type": "summary",
+                    "value": "\nOriginal Revision: http://example.test/D1",
+                },
+                {"type": "bugzilla.bug-id", "value": "1"},
+                {"type": "update", "value": "PHID-DIFF-2"},
+            ]
+        },
+    )
+    call_conduit.assert_any_call(
+        "differential.setdiffproperty",
+        {
+            "diff_id": "2",
+            "name": "local:commits",
+            "data": Contains('"summary": "Bug 1 - \\u0104"')
+            & Contains(
+                "Summary:\\n\\n"
+                "Original Revision: http://example.test/D1\\n\\n"
+                "Differential Revision: http://example.test/D2"
+            ),
+        },
+    )
+
+
 def test_empty_file(in_process, git_repo_path, init_sha):
     # Add an empty file
     call_conduit.side_effect = (
@@ -832,8 +863,6 @@ def test_empty_file(in_process, git_repo_path, init_sha):
         {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
         # differential.creatediff
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
@@ -894,8 +923,6 @@ Differential Revision: http://example.test/D123
     call_conduit.side_effect = (
         # differential.creatediff
         {"phid": "PHID-DIFF-2", "diffid": "2"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "124", "phid": "PHID-DREV-124"}},
         # differential.setdiffproperty
@@ -958,8 +985,6 @@ Differential Revision: http://example.test/D124
     call_conduit.side_effect = (
         # differential.creatediff
         {"phid": "PHID-DIFF-3", "diffid": "3"},
-        # differential.setdiffproperty
-        {},
         # differential.revision.edit
         {"object": {"id": "125", "phid": "PHID-DREV-125"}},
         # differential.setdiffproperty

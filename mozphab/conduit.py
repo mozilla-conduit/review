@@ -444,14 +444,13 @@ class ConduitAPI:
     def create_revision(
         self,
         commit: Commit,
-        summary: str,
         diff_phid: str,
         parent_rev_phid: Optional[str] = None,
     ) -> dict:
         """Create a new revision in Phabricator."""
         transactions = [
             {"type": "title", "value": revision_title_from_commit(commit)},
-            {"type": "summary", "value": summary},
+            {"type": "summary", "value": commit.body},
         ]
         if commit.has_reviewers and not commit.wip:
             self.update_revision_reviewers(transactions, commit)
@@ -634,6 +633,10 @@ class ConduitAPI:
         if conduit.repo.vcs == "git" and conduit.repo.is_cinnabar_required:
             creation_method.append("cinnabar")
 
+        # Use the repo of the existing revision if this is an update.
+        revs = conduit.get_revisions(ids=[commit.rev_id]) if commit.rev_id else []
+        diff_repo_phid = revs[0]["fields"]["repositoryPHID"] if revs else self.repo_phid
+
         api_call_args = {
             "changes": changes,
             "sourceMachine": self.repo.phab_url,
@@ -643,7 +646,7 @@ class ConduitAPI:
             "creationMethod": "-".join(creation_method),
             "lintStatus": "none",
             "unitStatus": "none",
-            "repositoryPHID": self.repo.phid,
+            "repositoryPHID": diff_repo_phid,
             "sourcePath": self.repo.path,
             "branch": "HEAD" if self.repo.phab_vcs == "git" else "default",
         }
