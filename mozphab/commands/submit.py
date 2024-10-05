@@ -634,10 +634,13 @@ def _submit(repo: Repository, args: argparse.Namespace):
         if diff:
             telemetry().submission.files_count.add(len(diff.changes))
             with wait_message("Uploading binary file(s)..."):
-                diff.upload_files()
+                conduit.upload_files_from_diff(diff)
 
             with wait_message("Submitting the diff..."):
-                diff.submit(commit, message)
+                result = conduit.submit_diff(diff, commit)
+                diff.phid = result["phid"]
+                diff.id = result["diffid"]
+                conduit.set_diff_property(diff.id, commit, message)
 
         if is_update:
             with wait_message("Updating revision..."):
@@ -682,7 +685,7 @@ def _submit(repo: Repository, args: argparse.Namespace):
         # Diff property has to be set after potential SHA1 change.
         if diff:
             with wait_message("Setting diff metadata..."):
-                diff.set_property(commit, message)
+                conduit.set_diff_property(diff.id, commit, message)
 
         previous_commit = commit
 

@@ -3,9 +3,11 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import base64
+import concurrent.futures
 import datetime
 import hashlib
 import json
+import operator
 import os
 import urllib.parse as url_parse
 import urllib.request as url_request
@@ -16,10 +18,9 @@ from typing import (
     Optional,
 )
 
-from mozphab import environment
-
 from .commits import Commit
-from .environment import USER_AGENT
+from .diff import Diff
+from .environment import INSTALL_CERT_MSG, USER_AGENT
 from .exceptions import (
     CommandError,
     Error,
@@ -76,7 +77,7 @@ class ConduitAPI:
             [get_arcrc_path()], ["hosts", self.repo.api_url, "token"]
         )
         if not token:
-            raise ConduitAPIError(environment.INSTALL_CERT_MSG)
+            raise ConduitAPIError(INSTALL_CERT_MSG)
         cache.set("api_token", token)
         return token
 
@@ -618,7 +619,17 @@ class ConduitAPI:
 
         return data
 
-    def create_diff(self, changes: List[Dict[str, Any]], base_revision: str) -> dict:
+    def submit_diff(self, diff: Diff, commit: Commit) -> dict:
+        files_changed = sorted(
+            diff.changes.values(), key=operator.attrgetter("cur_path")
+        )
+        changes = [
+            change.to_conduit(conduit.repo.get_public_node(commit.node))
+            for change in files_changed
+        ]
+
+        base_revision = conduit.repo.get_public_node(commit.parent)
+
         creation_method = ["moz-phab", conduit.repo.vcs]
         if conduit.repo.vcs == "git" and conduit.repo.is_cinnabar_required:
             creation_method.append("cinnabar")
@@ -639,6 +650,7 @@ class ConduitAPI:
         return self.call("differential.creatediff", api_call_args)
 
     def set_diff_property(self, diff_id: str, commit: Commit, message: str):
+        """Add information about our local commit to the diff."""
         data = {
             commit.node: {
                 "author": commit.author_name,
@@ -663,7 +675,27 @@ class ConduitAPI:
         }
         self.call("differential.setdiffproperty", api_call_args)
 
-    def file_upload(self, path: str, data: bytes) -> Optional[str]:
+    def upload_files_from_diff(self, diff: Diff):
+        # Files are uploaded in parallel using a pool of threads.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = []
+            for change in diff.changes.values():
+                for upload in change.uploads:
+                    path = (
+                        change.cur_path if upload["type"] == "new" else change.old_path
+                    )
+                    futures.append(executor.submit(self.upload_file, upload, path))
+
+            # Wait for all uploads to be finished.
+            concurrent.futures.wait(futures)
+
+            # Check that all went well. If not, propagate the first error here
+            # by calling the future's result() method.
+            for upload in futures:
+                upload.result()
+
+    def upload_file(self, upload: dict, path: str):
+        data: bytes = upload["value"]
         if not data:
             return
         name = os.path.basename(path)
@@ -700,7 +732,7 @@ class ConduitAPI:
                         },
                     )
 
-        return str(file_phid)
+        upload["phid"] = str(file_phid)
 
     def whoami(self, *, api_token: Optional[str] = None) -> dict:
         if "whoami" in cache:

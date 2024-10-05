@@ -2,8 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import concurrent.futures
-import operator
 import re
 from typing import (
     Any,
@@ -12,9 +10,6 @@ from typing import (
     Optional,
     Tuple,
 )
-
-from .commits import Commit
-from .conduit import conduit
 
 
 class Diff:
@@ -299,47 +294,6 @@ class Diff:
 
         else:
             raise Exception(f"unsupported change type {kind} for {a_path}")
-
-    def _upload_file(self, change: Change, upload: dict):
-        path = change.cur_path if upload["type"] == "new" else change.old_path
-
-        upload["phid"] = conduit.file_upload(path, upload["value"])
-
-    def upload_files(self):
-        futures = []
-
-        # files are uploaded in parallel, using a pool of threads.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            for change in list(self.changes.values()):
-                for upload in change.uploads:
-                    futures.append(executor.submit(self._upload_file, change, upload))
-
-            # wait for all uploads to be finished
-            concurrent.futures.wait(futures)
-
-            # check that all went well. If not, propagate the first error here
-            # by calling the future's result() method
-            for upload in futures:
-                upload.result()
-
-    def submit(self, commit: Commit, message: str) -> str:
-        files_changed = sorted(
-            self.changes.values(), key=operator.attrgetter("cur_path")
-        )
-        changes = [
-            change.to_conduit(conduit.repo.get_public_node(commit.node))
-            for change in files_changed
-        ]
-        diff = conduit.create_diff(changes, conduit.repo.get_public_node(commit.parent))
-
-        self.phid = diff["phid"]
-        self.id = diff["diffid"]
-        self.set_property(commit, message)
-        return diff["phid"]
-
-    def set_property(self, commit: Commit, message: str):
-        """Add information about our local commit to the patch."""
-        conduit.set_diff_property(self.id, commit, message)
 
     @staticmethod
     def parse_git_diff(hdr: str) -> Tuple[int, int, int, int]:
