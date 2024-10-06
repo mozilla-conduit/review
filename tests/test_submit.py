@@ -511,6 +511,9 @@ class Commits(unittest.TestCase):
             api_url = "x"
             dot_path = "x"
 
+        class Args:
+            command = "submit"
+
         def _commit(
             name="aaa000",
             node="aaa000aaa000",
@@ -539,18 +542,20 @@ class Commits(unittest.TestCase):
         repo = Repository()
         submit.conduit.set_repo(repo)
 
+        args = Args()
+
         m_whoami.return_value = {"phid": "PHID-USER-1"}
         m_get_revisions.return_value = [search_rev()]
         m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
 
-        submit.show_commit_stack([])
+        submit.show_commit_stack([], args)
         self.assertFalse(mock_logger.info.called, "logger.info() shouldn't be called")
         self.assertFalse(
             mock_logger.warning.called, "logger.warning() shouldn't be called"
         )
 
         submit.show_commit_stack(
-            [Commit(name="aaa000", title_preview="A")], validate=False
+            [Commit(name="aaa000", title_preview="A")], args, validate=False
         )
         mock_logger.info.assert_called_with("%s %s %s", "(New)", "aaa000", "A")
         self.assertFalse(
@@ -558,7 +563,7 @@ class Commits(unittest.TestCase):
         )
         mock_logger.reset_mock()
 
-        submit.show_commit_stack([_commit(rev=12)], validate=False)
+        submit.show_commit_stack([_commit(rev=12)], args, validate=False)
         mock_logger.info.assert_called_with("%s %s %s", "(D12)", "aaa000", "A")
         self.assertFalse(
             mock_logger.warning.called, "logger.warning() shouldn't be called"
@@ -567,6 +572,7 @@ class Commits(unittest.TestCase):
 
         submit.show_commit_stack(
             [_commit(), _commit(name="bbb000", title="B")],
+            args,
             validate=False,
         )
         self.assertEqual(2, mock_logger.info.call_count)
@@ -580,17 +586,18 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
 
         submit.show_commit_stack(
-            [_commit(bug_orig=2, bug=1, granted=["alice"])], validate=True
+            [_commit(bug_orig=2, bug=1, granted=["alice"])], args, validate=True
         )
         mock_logger.info.assert_called_with("%s %s %s", "(New)", "aaa000", "A")
         mock_logger.warning.assert_called_with("!! Bug ID changed from %s to %s", 2, 1)
         mock_logger.reset_mock()
-        submit.show_commit_stack([_commit()], validate=True)
+        submit.show_commit_stack([_commit()], args, validate=True)
         mock_logger.warning.assert_called_with(Contains("Missing reviewers"))
         mock_logger.reset_mock()
 
         submit.show_commit_stack(
             [_commit(rev=123)],
+            args,
             validate=False,
             show_rev_urls=True,
         )
@@ -614,6 +621,7 @@ class Commits(unittest.TestCase):
                     granted=["alice"],
                 ),
             ],
+            args,
             validate=True,
         )
         assert mock_logger.warning.call_args_list[1] == mock.call(
@@ -625,6 +633,7 @@ class Commits(unittest.TestCase):
         m_whoami.return_value = {"phid": "PHID-USER-2"}
         submit.show_commit_stack(
             [_commit(rev=1, granted=["alice"])],
+            args,
             validate=True,
         )
         mock_logger.warning.assert_called_once_with(Contains("Commandeer"))
@@ -635,7 +644,9 @@ class Commits(unittest.TestCase):
         m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
         m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
 
-        submit.show_commit_stack([_commit(rev=1, granted=["alice"])], validate=True)
+        submit.show_commit_stack(
+            [_commit(rev=1, granted=["alice"])], args, validate=True
+        )
         assert mock_logger.info.call_args_list[1] == mock.call(
             Contains("revision has not changed")
         )
@@ -643,7 +654,9 @@ class Commits(unittest.TestCase):
         # Removing the WIP state from the revision without changing the commit's SHA1
         mock_logger.reset_mock()
         m_get_revisions.return_value = [search_rev(status="changes-planned")]
-        submit.show_commit_stack([_commit(rev="1", granted=["alice"])], validate=True)
+        submit.show_commit_stack(
+            [_commit(rev="1", granted=["alice"])], args, validate=True
+        )
         mock_logger.warning.assert_called_once_with(
             Contains('"Changes Planned" status will change')
         )
@@ -652,11 +665,34 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
         m_get_revisions.return_value = [search_rev()]
         submit.show_commit_stack(
-            [_commit(rev="1", granted=["alice"], wip=True)], validate=True
+            [_commit(rev="1", granted=["alice"], wip=True)], args, validate=True
         )
         mock_logger.warning.assert_called_with(
             Contains('status will change to "Changes Planned"')
         )
+
+        # Submit a new patch without reviewers.
+        mock_logger.reset_mock()
+        submit.show_commit_stack(
+            [_commit(rev=None, request=[], wip=True)], args, validate=True
+        )
+        mock_logger.warning.assert_any_call(Contains("Missing reviewers"))
+        mock_logger.warning.assert_any_call(Contains('submitted as "Changes Planned"'))
+
+        # Submit a new WIP patch with reviewers.
+        mock_logger.reset_mock()
+        submit.show_commit_stack(
+            [_commit(rev=None, request=["alice"], wip=True)], args, validate=True
+        )
+        mock_logger.warning.assert_not_called()
+
+        # Submitting a new uplift clears reviewers and shouldn't warn.
+        mock_logger.reset_mock()
+        args.command = "uplift"
+        submit.show_commit_stack(
+            [_commit(rev=None, granted=[], wip=False)], args, validate=True
+        )
+        mock_logger.warning.assert_not_called()
 
     def test_update_commits_from_args(self):
         def lwr(revs):

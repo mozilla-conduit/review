@@ -95,6 +95,7 @@ def amend_revision_url(body: str, new_url: str) -> str:
 
 def show_commit_stack(
     commits: List[Commit],
+    args: argparse.Namespace,
     validate: bool = True,
     show_rev_urls: bool = False,
     show_updated_only: bool = False,
@@ -239,7 +240,7 @@ def show_commit_stack(
                     commit.bug_id,
                 )
 
-            if not commit.has_reviewers:
+            if not commit.has_reviewers and args.command != "uplift":
                 logger.warning("!! Missing reviewers")
                 if commit.wip:
                     logger.warning(
@@ -518,7 +519,7 @@ def _submit(repo: Repository, args: argparse.Namespace):
     logger.warning(f"Submitting {commit_count} commit{'s'[:commit_count^1]} {status}")
 
     # Validate commit stack is suitable for review.
-    show_commit_stack(commits, validate=True)
+    show_commit_stack(commits, args, validate=True)
     try:
         with wait_message("Checking commits.."):
             repo.check_commits_for_submit(commits, require_bug=not args.no_bug)
@@ -693,7 +694,7 @@ def _submit(repo: Repository, args: argparse.Namespace):
 
     logger.warning("\nCompleted")
     show_commit_stack(
-        commits, validate=False, show_rev_urls=True, show_updated_only=True
+        commits, args, validate=False, show_rev_urls=True, show_updated_only=True
     )
     telemetry().submission.process_time.stop()
 
