@@ -114,12 +114,12 @@ def show_commit_stack(
         if ids:
             with wait_message("Loading existing revisions..."):
                 revisions = conduit.get_revisions(ids=ids)
+                revisions = {revision["id"]: revision for revision in revisions}
 
             # preload diffs
             with wait_message("Loading diffs..."):
-                diffs = conduit.get_diffs(
-                    phids=[r["fields"]["diffPHID"] for r in revisions]
-                )
+                diff_phids = [r["fields"]["diffPHID"] for r in revisions.values()]
+                diffs = conduit.get_diffs(phids=diff_phids) if diff_phids else {}
 
     for commit in reversed(commits):
         if show_updated_only and not commit.submit:
@@ -134,58 +134,54 @@ def show_commit_stack(
         if commit.rev_id is not None:
             action = action_template % f"D{commit.rev_id}"
 
-            if validate:
-                revisions = conduit.get_revisions(ids=[commit.rev_id])
-                if revisions:
-                    revision = revisions[0]
-                    fields = revision["fields"]
+            if validate and (revision := revisions.get(commit.rev_id)):
+                fields = revision["fields"]
 
-                    # WIP if either in changes-planned state, or if the revision has the
-                    # `draft` flag set.
-                    revision_is_wip = (
-                        fields["status"]["value"] == "changes-planned"
-                        or fields["isDraft"]
-                    )
+                # WIP if either in changes-planned state, or if the revision has the
+                # `draft` flag set.
+                revision_is_wip = bool(
+                    fields["status"]["value"] == "changes-planned" or fields["isDraft"]
+                )
 
-                    # Check if target bug ID is the same as in the Phabricator revision
-                    bug_id_changed = fields.get("bugzilla.bug-id") and (
-                        commit.bug_id != fields["bugzilla.bug-id"]
-                    )
+                # Check if target bug ID is the same as in the Phabricator revision.
+                bug_id_changed = bool(
+                    fields.get("bugzilla.bug-id")
+                    and commit.bug_id != fields["bugzilla.bug-id"]
+                )
 
-                    # Check if revision is closed
-                    revision_is_closed = fields["status"]["closed"]
+                # Check if revision is closed.
+                revision_is_closed = bool(fields["status"]["closed"])
 
-                    # Check if comandeering is required
-                    with wait_message("Figuring out who you are..."):
-                        whoami = conduit.whoami()
-                    if "authorPHID" in fields and (
-                        fields["authorPHID"] != whoami["phid"]
-                    ):
-                        is_author = False
+                # Check if comandeering is required.
+                with wait_message("Figuring out who you are..."):
+                    whoami = conduit.whoami()
+                if "authorPHID" in fields and fields["authorPHID"] != whoami["phid"]:
+                    is_author = False
 
-                    # Any reviewers added to a revision without them?
-                    reviewers_added = bool(
-                        not revision["attachments"]["reviewers"]["reviewers"]
-                        and commit.reviewers["granted"]
-                    )
+                # Any reviewers added to a revision without them?
+                reviewers_added = bool(
+                    not revision["attachments"]["reviewers"]["reviewers"]
+                    and commit.reviewers["granted"]
+                )
 
-                    # if SHA1 hasn't changed
-                    # and we're not changing the WIP or draft status
-                    # and we're not adding reviewers to a revision without reviewers
-                    # and we're not changing the bug-id
-                    diff_phid = fields["diffPHID"]
-                    diff_commits = diffs[diff_phid]["attachments"]["commits"]["commits"]
-                    sha1_changed = (
-                        not diff_commits or commit.node != diff_commits[0]["identifier"]
-                    )
-                    if (
-                        not sha1_changed
-                        and commit.wip == revision_is_wip
-                        and not reviewers_added
-                        and not bug_id_changed
-                        and not revision_is_closed
-                    ):
-                        commit.submit = False
+                # If SHA1 hasn't changed
+                # and we're not changing the WIP or draft status
+                # and we're not adding reviewers to a revision without reviewers
+                # and we're not changing the bug ID
+                # then don't submit.
+                diff_phid = fields["diffPHID"]
+                diff_commits = diffs[diff_phid]["attachments"]["commits"]["commits"]
+                sha1_changed = bool(
+                    not diff_commits or commit.node != diff_commits[0]["identifier"]
+                )
+                if (
+                    not sha1_changed
+                    and commit.wip == revision_is_wip
+                    and not reviewers_added
+                    and not bug_id_changed
+                    and not revision_is_closed
+                ):
+                    commit.submit = False
 
         else:
             action = action_template % "New"

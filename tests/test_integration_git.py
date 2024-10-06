@@ -734,53 +734,36 @@ Differential Revision: http://example.test/D123
 
 def test_submit_update_revision_not_found(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
-    call_conduit.side_effect = (
-        # ping
+    call_conduit.side_effect = [
+        # conduit.ping
         {},
+        # diffusion.repository.search
         {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
-        # response for searching D123 and D124
-        {"data": [search_rev(rev=123)]},
-        {"data": [search_diff()]},
-        # moz-phab asks again for D124
-        {"data": []},
-        # whoami
-        {"phid": "PHID-USER-1"},
-        # moz-phab asks again for D124
+        # differential.revision.search
         {"data": []},
         # moz-phab asks again for D124
         {"data": []},
-    )
+    ]
     testfile = git_repo_path / "X"
     testfile.write_text("ą", encoding="utf-8")
-    git_out("add", ".")
+    git_out("add", "X")
     msgfile = git_repo_path / "msg"
     msgfile.write_text(
-        """\
-Bug 1 - Ą
-
-Differential Revision: http://example.test/D123
-""",
+        "missing revision\n\nDifferential Revision: http://example.test/D124",
         encoding="utf-8",
     )
     git_out("commit", "--file", "msg")
-    testfile.write_text("missing repo")
-    msgfile.write_text(
-        """\
-Bug 1 - missing revision
-
-Differential Revision: http://example.test/D124
-"""
-    )
-    git_out("commit", "--all", "--file", "./msg")
 
     with pytest.raises(exceptions.Error) as excinfo:
         mozphab.main(
             ["submit", "--yes"]
             + ["--bug", "1"]
+            + ["--no-wip"]
             + ["--message", "update message ćwikła"]
             + [init_sha],
             is_development=True,
         )
+
     assert "query result for revision D124" in str(excinfo.value)
 
 

@@ -604,15 +604,19 @@ class Commits(unittest.TestCase):
         mock_logger.warning.assert_called_with("-> %s/D%s", "http://phab", 123)
 
         # Do not update not changed commits
-        m_get_revisions.reset_mock()
+        mock_logger.reset_mock()
         m_get_revisions.return_value = [
             search_rev(),
             search_rev(rev=2, phid="PHID-REV-2", diff="PHID-DIFF-2"),
         ]
+        m_get_diffs.return_value = {
+            "PHID-DIFF-1": search_diff(),
+            "PHID-DIFF-2": search_diff(),
+        }
         # we're changing bug id in the first revision to 2
         submit.show_commit_stack(
             [
-                _commit(rev=1, bug=2, bug_orig=1, granted=["alice"]),
+                _commit(rev=1, bug="2", bug_orig="2", granted=["alice"]),
                 _commit(
                     name="bbb000",
                     node="bbb000bbb000",
@@ -624,12 +628,11 @@ class Commits(unittest.TestCase):
             args,
             validate=True,
         )
-        assert mock_logger.warning.call_args_list[1] == mock.call(
-            "!! Bug ID in Phabricator revision will change from %s to %s", "1", 2
+        mock_logger.warning.assert_called_once_with(
+            "!! Bug ID in Phabricator revision will change from %s to %s", "1", "2"
         )
-        assert m_get_revisions.call_count == 3
-        mock_logger.reset_mock()
 
+        mock_logger.reset_mock()
         m_whoami.return_value = {"phid": "PHID-USER-2"}
         submit.show_commit_stack(
             [_commit(rev=1, granted=["alice"])],
@@ -655,7 +658,7 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
         m_get_revisions.return_value = [search_rev(status="changes-planned")]
         submit.show_commit_stack(
-            [_commit(rev="1", granted=["alice"])], args, validate=True
+            [_commit(rev=1, granted=["alice"])], args, validate=True
         )
         mock_logger.warning.assert_called_once_with(
             Contains('"Changes Planned" status will change')
@@ -665,7 +668,7 @@ class Commits(unittest.TestCase):
         mock_logger.reset_mock()
         m_get_revisions.return_value = [search_rev()]
         submit.show_commit_stack(
-            [_commit(rev="1", granted=["alice"], wip=True)], args, validate=True
+            [_commit(rev=1, granted=["alice"], wip=True)], args, validate=True
         )
         mock_logger.warning.assert_called_with(
             Contains('status will change to "Changes Planned"')
