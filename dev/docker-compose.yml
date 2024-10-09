@@ -30,6 +30,11 @@ services:
         command: sh -c "cd /review && pip install pip-tools && python -m piptools compile dev/requirements/base.in --upgrade --generate-hashes -o dev/requirements/python3.12.txt"
         volumes:
             - ..:/review
+    generate-python3.13-requirements:
+        image: python:3.13
+        command: sh -c "cd /review && pip install pip-tools && python -m piptools compile dev/requirements/base.in --upgrade --generate-hashes -o dev/requirements/python3.13.txt"
+        volumes:
+            - ..:/review
     generate-windows-requirements:
         # NOTE: This container should be run on a Windows machine.
         build:
