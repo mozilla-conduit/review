@@ -359,7 +359,7 @@ To ensure that your changes work, run `circleci` locally.
 
 1. Ensure you have the `circleci` client installed, see the [CircleCI CLI docs](https://circleci.com/docs/2.0/local-cli/)
 2. In your clone of this repository, run:
-   `circleci local execute --job test_3_8`
+   `circleci local execute test_3_8`
 
 This will run all the Python 3.8 tests in a dockerized environment.
 This step takes a while, so you might want to run `pytest` for working on your changes,
