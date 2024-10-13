@@ -4,6 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -183,8 +184,15 @@ def self_upgrade():
     i.finalize_options()
     # Checking if the moz-phab script is installed in user's scripts directory
     user_dir = Path(i.install_scripts).resolve()
+
+    # Replicate the way mach initially installs moz-phab
+    command_env = os.environ.copy()
     if script_dir == user_dir:
+        # mach also set this
         command.append("--user")
+        # prevent self-update from failing when installing over OS-managed installs
+        # see bug 1876182
+        command_env["PIP_BREAK_SYSTEM_PACKAGES"] = "1"
 
     if environment.IS_WINDOWS:
         # Windows does not allow to remove the exe file of the running process.
@@ -209,4 +217,4 @@ def self_upgrade():
             temp_exe.rename(exe)
 
     else:
-        check_call(command)
+        check_call(command, env=command_env)
