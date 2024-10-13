@@ -104,9 +104,16 @@ def main(argv: List[str], *, is_development: bool):
             if new_version and environment.IS_WINDOWS:
                 log_windows_update_message()
             elif new_version and config.self_auto_update:
-                with wait_message(f"Upgrading to version {new_version}"):
-                    self_upgrade()
-                restart_mozphab()
+                try:
+                    with wait_message(f"Upgrading to version {new_version}"):
+                        self_upgrade()
+                    restart_mozphab()
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to upgrade: {e};"
+                        " continuing with current version..."
+                        " Please report a bug if this behaviour persists."
+                    )
 
         repo = None
         if args.needs_repo:
