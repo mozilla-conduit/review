@@ -185,14 +185,13 @@ def self_upgrade():
     # Checking if the moz-phab script is installed in user's scripts directory
     user_dir = Path(i.install_scripts).resolve()
 
-    # Replicate the way mach initially installs moz-phab
+    # Prevent self-update from failing when installing over OS-managed
+    # installs; see bug 1876182.
     command_env = os.environ.copy()
+    command_env["PIP_BREAK_SYSTEM_PACKAGES"] = "1"
+
     if script_dir == user_dir:
-        # mach also set this
         command.append("--user")
-        # prevent self-update from failing when installing over OS-managed installs
-        # see bug 1876182
-        command_env["PIP_BREAK_SYSTEM_PACKAGES"] = "1"
 
     if environment.IS_WINDOWS:
         # Windows does not allow to remove the exe file of the running process.
