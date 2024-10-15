@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import re
 from dataclasses import (
     dataclass,
     field,
@@ -11,6 +12,25 @@ from typing import (
     List,
     Optional,
 )
+
+from mozphab.logger import logger
+
+ARC_COMMIT_DESC_TEMPLATE = """
+{title}
+
+Summary:
+{body}
+
+Test Plan:
+
+Reviewers: {reviewers}
+
+Subscribers:
+
+Bug #: {bug_id}
+""".strip()
+
+WIP_RE = re.compile(r"^(?:WIP[: ]|WIP$)", flags=re.IGNORECASE)
 
 
 @dataclass
@@ -45,3 +65,35 @@ class Commit:
             return False
 
         return bool(self.reviewers.get("granted") or self.reviewers.get("request"))
+
+    def build_commit_message(self) -> str:
+        """Contruct a commit message for this `Commit` object."""
+        # WIP submissions shouldn't set reviewers.
+        if self.wip:
+            reviewers = ""
+        else:
+            reviewers = ", ".join(self.reviewers["granted"] + self.reviewers["request"])
+
+        # Create arc-annotated commit description.
+        template_vars = {
+            "title": self.revision_title(),
+            "body": self.body,
+            "reviewers": reviewers,
+            # Change `None` to an empty string.
+            "bug_id": self.bug_id or "",
+        }
+
+        message = ARC_COMMIT_DESC_TEMPLATE.format(**template_vars)
+        logger.debug("--- arc message\n%s\n---" % message)
+        return message
+
+    def revision_title(self) -> str:
+        """Returns a string suitable for a Revision title for the given commit."""
+        title = WIP_RE.sub("", self.title_preview).lstrip()
+        if self.wip:
+            title = f"WIP: {title}"
+        return title
+
+    def wip_in_commit_title(self) -> bool:
+        """Return `True` if the commit title indicates the revision is a WIP."""
+        return WIP_RE.search(self.title) is not None

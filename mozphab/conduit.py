@@ -30,7 +30,6 @@ from .exceptions import (
 from .helpers import (
     get_arcrc_path,
     read_json_field,
-    revision_title_from_commit,
     strip_differential_revision,
 )
 from .logger import logger
@@ -449,7 +448,7 @@ class ConduitAPI:
     ) -> dict:
         """Create a new revision in Phabricator."""
         transactions = [
-            {"type": "title", "value": revision_title_from_commit(commit)},
+            {"type": "title", "value": commit.revision_title()},
             {"type": "summary", "value": commit.body},
         ]
         if commit.has_reviewers and not commit.wip:
@@ -476,7 +475,7 @@ class ConduitAPI:
         """Update an existing revision in Phabricator."""
         # Update the title and summary
         transactions = [
-            {"type": "title", "value": revision_title_from_commit(commit)},
+            {"type": "title", "value": commit.revision_title()},
             {"type": "summary", "value": strip_differential_revision(commit.body)},
         ]
 
@@ -659,7 +658,7 @@ class ConduitAPI:
                 "author": commit.author_name,
                 "authorEmail": commit.author_email,
                 "time": commit.author_date_epoch,
-                "summary": revision_title_from_commit(commit),
+                "summary": commit.revision_title(),
                 "message": message,
                 "commit": conduit.repo.get_public_node(commit.node),
                 "parents": [conduit.repo.get_public_node(commit.parent)],

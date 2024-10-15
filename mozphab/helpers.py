@@ -69,7 +69,6 @@ BLOCKING_REVIEWERS_RE = re.compile(r"\b(r!)([" + IRC_NICK_CHARS_WITH_PERIOD + ",
 
 DEPENDS_ON_RE = re.compile(r"^\s*Depends on\s*D(\d+)\s*$", flags=re.MULTILINE)
 
-WIP_RE = re.compile(r"^(?:WIP[: ]|WIP$)", flags=re.IGNORECASE)
 
 VALID_EMAIL_RE = re.compile(r"[^@ \t\r\n]+@[^@ \t\r\n]+\.[^@ \t\r\n]+")
 
@@ -284,10 +283,6 @@ def has_arc_rejections(body: str) -> bool:
     return all(r.search(body) for r in ARC_REJECT_RE_LIST)
 
 
-def wip_in_commit_title(title: str) -> bool:
-    return WIP_RE.search(title) is not None
-
-
 def augment_commits_from_body(commits: List[Commit]):
     """Extract metadata from commit body as fields.
 
@@ -308,11 +303,11 @@ def augment_commits_from_body(commits: List[Commit]):
         if not commit.bug_id_orig:
             commit.bug_id_orig = commit.bug_id
 
-        # reviewers
+        # Set reviewers from title.
         commit.reviewers = parse_reviewers(commit.title)
 
-        # mark commit as WIP if commit desc starts with "WIP:"
-        commit.wip = wip_in_commit_title(commit.title)
+        # Mark commit as WIP if commit desc starts with "WIP:".
+        commit.wip = commit.wip_in_commit_title()
 
 
 def parse_bugs(title: str) -> List[str]:
@@ -347,14 +342,6 @@ def parse_reviewers(title: str) -> dict:
 
 def strip_depends_on(body: str) -> str:
     return DEPENDS_ON_RE.sub("", body).rstrip()
-
-
-def revision_title_from_commit(commit: Commit) -> str:
-    """Returns a string suitable for a Revision title for the given commit."""
-    title = WIP_RE.sub("", commit.title_preview).lstrip()
-    if commit.wip:
-        title = f"WIP: {title}"
-    return title
 
 
 def update_commit_title_previews(commits: List[Commit]):

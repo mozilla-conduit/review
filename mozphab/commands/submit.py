@@ -15,7 +15,6 @@ from mozphab.helpers import (
     augment_commits_from_body,
     move_drev_to_original,
     prompt,
-    revision_title_from_commit,
     strip_differential_revision,
     update_commit_title_previews,
 )
@@ -28,21 +27,6 @@ PHABRICATOR_URLS = {
     "https://phabricator.services.mozilla.com/": "Phabricator",
     "https://phabricator-dev.allizom.org/": "Phabricator-Dev",
 }
-
-ARC_COMMIT_DESC_TEMPLATE = """
-{title}
-
-Summary:
-{body}
-
-Test Plan:
-
-Reviewers: {reviewers}
-
-Subscribers:
-
-Bug #: {bug_id}
-""".strip()
 
 
 def morph_blocking_reviewers(commits: List[Commit]):
@@ -69,19 +53,6 @@ def morph_blocking_reviewers(commits: List[Commit]):
 
     for commit in commits:
         commit.title = BLOCKING_REVIEWERS_RE.sub(morph_reviewer, commit.title)
-
-
-def arc_message(template_vars: dict) -> str:
-    """Build arc commit desc message from the template."""
-
-    # Map `None` to an empty string.
-    for name in list(template_vars.keys()):
-        if template_vars[name] is None:
-            template_vars[name] = ""
-
-    message = ARC_COMMIT_DESC_TEMPLATE.format(**template_vars)
-    logger.debug("--- arc message\n%s\n---" % message)
-    return message
 
 
 def amend_revision_url(body: str, new_url: str) -> str:
@@ -601,7 +572,7 @@ def _submit(repo: Repository, args: argparse.Namespace):
         else:
             logger.info("\nCreating new revision:")
 
-        logger.info("%s %s", commit.name, revision_title_from_commit(commit))
+        logger.info("%s %s", commit.name, commit.revision_title())
         repo.checkout(commit.node)
 
         # Create a diff if needed
@@ -660,21 +631,7 @@ def _submit(repo: Repository, args: argparse.Namespace):
         # Diff property has to be set after potential SHA1 change.
         if diff:
             with wait_message("Setting diff metadata..."):
-                # WIP submissions shouldn't set reviewers.
-                if commit.wip:
-                    reviewers = ""
-                else:
-                    reviewers = ", ".join(
-                        commit.reviewers["granted"] + commit.reviewers["request"]
-                    )
-                # Create arc-annotated commit description.
-                template_vars = {
-                    "title": revision_title_from_commit(commit),
-                    "body": commit.body,
-                    "reviewers": reviewers,
-                    "bug_id": commit.bug_id,
-                }
-                message = arc_message(template_vars)
+                message = commit.build_commit_message()
                 conduit.set_diff_property(diff.id, commit, message)
 
         previous_commit = commit
