@@ -513,6 +513,7 @@ class Commits(unittest.TestCase):
 
         class Args:
             command = "submit"
+            force = False
 
         def _commit(
             name="aaa000",
