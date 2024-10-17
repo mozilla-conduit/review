@@ -9,13 +9,13 @@ Generate change log to be pasted in the Mozilla wiki and Discourse:
 """
 
 import argparse
+import json
 import re
 import subprocess
 import time
+import urllib.request
 from pathlib import Path
 from typing import List
-
-import requests
 
 # If we are `moz-phab/dev/release_announcement.py`, then `moz-phab` is the following.
 MOZPHAB_PATH_DEFAULT = Path(__file__).resolve().parent.parent
@@ -29,10 +29,11 @@ def fetch_bugzilla_info(bug: str) -> dict:
         dict: Dictionary containing bug info of the given bug.
     """
     url = f"https://bugzilla.mozilla.org/rest/bug/{bug}"
-    response = requests.get(url)
+    output = urllib.request.urlopen(urllib.request.Request(url), timeout=30).read()
+    response_json = json.loads(output.decode("utf-8"))
 
     # TODO -- is there a better way to query individual bugs, or a list of bugs?
-    return response.json()["bugs"][0]
+    return response_json["bugs"][0]
 
 
 def get_bug_ids(
