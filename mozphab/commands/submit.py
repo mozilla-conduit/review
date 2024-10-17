@@ -151,6 +151,7 @@ def show_commit_stack(
                     and not reviewers_added
                     and not bug_id_changed
                     and not revision_is_closed
+                    and not args.force
                 ):
                     commit.submit = False
 
