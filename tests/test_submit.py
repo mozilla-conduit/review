@@ -514,6 +514,7 @@ class Commits(unittest.TestCase):
         class Args:
             command = "submit"
             force = False
+            wip = False
 
         def _commit(
             name="aaa000",
@@ -591,11 +592,26 @@ class Commits(unittest.TestCase):
         )
         mock_logger.info.assert_called_with("%s %s %s", "(New)", "aaa000", "A")
         mock_logger.warning.assert_called_with("!! Bug ID changed from %s to %s", 2, 1)
+
+        # Submit with missing bug ID.
+        mock_logger.reset_mock()
+        submit.show_commit_stack(
+            [_commit(bug="", bug_orig="", request=["bob"])], args, validate=True
+        )
+        mock_logger.warning.assert_called_with(Contains("Missing Bug ID"))
+
+        # Submit with missing reviewers.
         mock_logger.reset_mock()
         submit.show_commit_stack([_commit()], args, validate=True)
         mock_logger.warning.assert_called_with(Contains("Missing reviewers"))
-        mock_logger.reset_mock()
 
+        # Submit with existing revision reviewers.
+        mock_logger.reset_mock()
+        m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
+        submit.show_commit_stack([_commit(rev=1)], args, validate=True)
+        mock_logger.warning.assert_not_called()
+
+        mock_logger.reset_mock()
         submit.show_commit_stack(
             [_commit(rev=123)],
             args,
@@ -667,6 +683,7 @@ class Commits(unittest.TestCase):
 
         # Adding the WIP state to the revision without changing the commit's SHA1
         mock_logger.reset_mock()
+        args.wip = True
         m_get_revisions.return_value = [search_rev()]
         submit.show_commit_stack(
             [_commit(rev=1, granted=["alice"], wip=True)], args, validate=True
@@ -677,6 +694,7 @@ class Commits(unittest.TestCase):
 
         # Submit a new patch without reviewers.
         mock_logger.reset_mock()
+        args.wip = False
         submit.show_commit_stack(
             [_commit(rev=None, request=[], wip=True)], args, validate=True
         )
@@ -685,10 +703,21 @@ class Commits(unittest.TestCase):
 
         # Submit a new WIP patch with reviewers.
         mock_logger.reset_mock()
+        args.wip = True
         submit.show_commit_stack(
             [_commit(rev=None, request=["alice"], wip=True)], args, validate=True
         )
         mock_logger.warning.assert_not_called()
+
+        # Submit a new patch with the WIP prefix.
+        mock_logger.reset_mock()
+        args.wip = False
+        submit.show_commit_stack(
+            [_commit(title="WIP: A", request=["alice"], wip=True)], args, validate=True
+        )
+        mock_logger.warning.assert_called_with(
+            Contains('submitted as "Changes Planned"')
+        )
 
         # Submitting a new uplift clears reviewers and shouldn't warn.
         mock_logger.reset_mock()
@@ -814,9 +843,17 @@ class Commits(unittest.TestCase):
 
         # reviewerless should result in WIP commits
         commits = copy.deepcopy(_commits)
-        update(commits, Args())
+        commits.append(Commit(title="Bug 2 - A", bug_id="2", rev_id=2))
+        with mock.patch("mozphab.commands.submit.conduit.has_revision_reviewers") as m:
+            m.side_effect = [
+                False,  # First commit doesn't have reviewers.
+                # Function isn't called for second commit since it has reviewers.
+                True,  # For revision ID 2.
+            ]
+            update(commits, Args())
         assert commits[0].wip
         assert not commits[1].wip
+        assert not commits[2].wip
 
         # Force WIP
         commits = copy.deepcopy(_commits)
@@ -826,9 +863,11 @@ class Commits(unittest.TestCase):
 
         # reviewerless with --no-wip shouldn't be WIP
         commits = copy.deepcopy(_commits)
+        commits.append(Commit(title="WIP: Bug 2 - A", bug_id="2", wip=True))
         update(commits, Args(no_wip=True))
         assert not commits[0].wip
         assert not commits[1].wip
+        assert not commits[2].wip
 
         # Forcing blocking reviewers
         commits = copy.deepcopy(_commits)

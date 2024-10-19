@@ -466,7 +466,7 @@ def test_submit_update_uplift(in_process, git_repo_path, init_sha):
         # diffusion.repository.search
         {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
         # differential.revision.search
-        {"data": [search_rev(repo="PHID-BETA-2")]},
+        {"data": [search_rev(rev=1000, repo="PHID-REPO-BETA", reviewers=["#group"])]},
         # differential.diff.search
         {"data": [search_diff()]},
         # user.whoami
@@ -474,7 +474,7 @@ def test_submit_update_uplift(in_process, git_repo_path, init_sha):
         # differential.creatediff
         {"phid": "PHID-DIFF-2", "diffid": "2"},
         # differential.revision.edit
-        {"object": {"id": "1", "phid": "PHID-DREV-1"}},
+        {"object": {"id": "1000", "phid": "PHID-DREV-1"}},
         # differential.setdiffproperty
         {},
     ]
@@ -485,7 +485,7 @@ def test_submit_update_uplift(in_process, git_repo_path, init_sha):
     msgfile.write_text(
         "Bug 1 - Ą\n\n"
         "Original Revision: http://example.test/D999\n\n"
-        "Differential Revision: http://example.test/D1",
+        "Differential Revision: http://example.test/D1000",
         encoding="utf-8",
     )
     git_out("commit", "--file", "msg")
@@ -496,12 +496,26 @@ def test_submit_update_uplift(in_process, git_repo_path, init_sha):
     expected = (
         "Bug 1 - Ą\n\n"
         "Original Revision: http://example.test/D999\n\n"
-        "Differential Revision: http://example.test/D1"
+        "Differential Revision: http://example.test/D1000"
     )
     assert log == expected
     call_conduit.assert_any_call(
         "differential.creatediff",
-        Matching(lambda x: x.get("repositoryPHID") == "PHID-BETA-2"),
+        Matching(lambda x: x.get("repositoryPHID") == "PHID-REPO-BETA"),
+    )
+    call_conduit.assert_any_call(
+        "differential.revision.edit",
+        {
+            "objectIdentifier": 1000,
+            "transactions": [
+                {"type": "title", "value": "Bug 1 - Ą"},
+                {
+                    "type": "summary",
+                    "value": "\nOriginal Revision: http://example.test/D999",
+                },
+                {"type": "update", "value": "PHID-DIFF-2"},
+            ],
+        },
     )
 
 
@@ -767,7 +781,7 @@ def test_submit_update_revision_not_found(in_process, git_repo_path, init_sha):
     assert "query result for revision D124" in str(excinfo.value)
 
 
-def test_uplift(in_process, git_repo_path, init_sha):
+def test_uplift_create(in_process, git_repo_path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = [
         # diffusion.repository.search

@@ -2,6 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+from unittest import mock
+
 from mozphab.commands.submit import (
     local_uplift_if_possible,
     update_commits_for_uplift,
@@ -96,9 +98,8 @@ def test_update_commits_for_uplift_sets_relman_review():
             rev_id=None,
         ),
     ]
-    repo = Repo()
 
-    update_commits_for_uplift(commits, {}, repo)
+    update_commits_for_uplift(commits, Repo())
 
     reviewers = commits[0].reviewers
 
@@ -160,14 +161,14 @@ def test_update_commits_for_uplift_sets_original_revision():
             rev_id=3,
         ),
     ]
-    revisions = {
-        1: {"id": 1, "fields": {"repositoryPHID": "PHID-mc"}},
-        2: {"id": 2, "fields": {"repositoryPHID": "PHID-beta"}},
-        3: {"id": 3, "fields": {"repositoryPHID": "PHID-mc"}},
-    }
-    repo = Repo()
 
-    update_commits_for_uplift(commits, revisions, repo)
+    with mock.patch("mozphab.commands.submit.conduit.get_revisions") as m_get_revs:
+        m_get_revs.return_value = [
+            {"id": 1, "fields": {"repositoryPHID": "PHID-mc"}},
+            {"id": 2, "fields": {"repositoryPHID": "PHID-beta"}},
+            {"id": 3, "fields": {"repositoryPHID": "PHID-mc"}},
+        ]
+        update_commits_for_uplift(commits, Repo())
 
     # Initial submission.
     body = commits[0].body
@@ -208,10 +209,10 @@ def test_uplift_beta_commit_to_esr():
         ),
         rev_id=2,
     )
-    revisions = {2: {"id": 2, "fields": {"repositoryPHID": "PHID-beta"}}}
-    repo = Repo(phid="PHID-esr")
 
-    update_commits_for_uplift([commit], revisions, repo)
+    with mock.patch("mozphab.commands.submit.conduit.get_revisions") as m_get_revs:
+        m_get_revs.return_value = [{"id": 2, "fields": {"repositoryPHID": "PHID-beta"}}]
+        update_commits_for_uplift([commit], Repo(phid="PHID-esr"))
 
     reviewers = commit.reviewers
     body = commit.body

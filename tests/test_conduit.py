@@ -418,6 +418,19 @@ def test_get_related_phids(m_call):
     assert ["aaa"] == get_related_phids("ccc", include_abandoned=False)
 
 
+def test_has_revision_reviewers(m_call):
+    commit = Commit(rev_id=None)
+    assert not conduit.has_revision_reviewers(commit)
+
+    m_call.return_value = {"data": [search_rev(rev=123, reviewers=[])]}
+    commit = Commit(rev_id=123)
+    assert not conduit.has_revision_reviewers(commit)
+
+    m_call.return_value = {"data": [search_rev(rev=456, reviewers=["alice"])]}
+    commit = Commit(rev_id=456)
+    assert conduit.has_revision_reviewers(commit)
+
+
 @mock.patch("builtins.open")
 @mock.patch("mozphab.conduit.json")
 @mock.patch("mozphab.conduit.get_arcrc_path")

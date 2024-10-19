@@ -467,7 +467,6 @@ class ConduitAPI:
     def update_revision(
         self,
         commit: Commit,
-        has_existing_reviewers: bool,
         diff_phid: Optional[str] = None,
         comment: Optional[str] = None,
         parent_rev_phid: Optional[str] = None,
@@ -484,9 +483,12 @@ class ConduitAPI:
             transactions.append({"type": "comment", "value": comment})
 
         # Add reviewers only if revision lacks them
-        if commit.has_reviewers and not commit.wip:
-            if not has_existing_reviewers:
-                self.update_revision_reviewers(transactions, commit)
+        if (
+            commit.has_reviewers
+            and not commit.wip
+            and not conduit.has_revision_reviewers(commit)
+        ):
+            self.update_revision_reviewers(transactions, commit)
 
         # Update bug id if different
         if commit.bug_id:
@@ -743,6 +745,17 @@ class ConduitAPI:
         who = self.call("user.whoami", {}, api_token=api_token)
         cache.set("whoami", who)
         return who
+
+    def has_revision_reviewers(self, commit: Commit) -> bool:
+        """Return True if the commit has a remote revision with reviewers.
+
+        If the commit doesn't have a revision ID or the revision cannot be found, then
+        return False.
+        """
+        if not commit.rev_id:
+            return False
+        revs = self.get_revisions(ids=[commit.rev_id])
+        return bool(revs and revs[0]["attachments"]["reviewers"]["reviewers"])
 
     def update_revision_reviewers(
         self, transactions: List[Dict[str, Any]], commit: Commit

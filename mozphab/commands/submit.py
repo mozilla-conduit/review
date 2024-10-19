@@ -3,7 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
-from typing import Dict, List
+from typing import List
 
 from mozphab import environment
 from mozphab.commits import Commit
@@ -89,7 +89,9 @@ def show_commit_stack(
 
             # preload diffs
             with wait_message("Loading diffs..."):
-                diff_phids = [r["fields"]["diffPHID"] for r in revisions.values()]
+                diff_phids = [
+                    revision["fields"]["diffPHID"] for revision in revisions.values()
+                ]
                 diffs = conduit.get_diffs(phids=diff_phids) if diff_phids else {}
 
     for commit in reversed(commits):
@@ -98,6 +100,7 @@ def show_commit_stack(
 
         revision_is_closed = False
         revision_is_wip = False
+        revision_has_reviewers = False
         bug_id_changed = False
         is_author = True
         revision = None
@@ -130,9 +133,11 @@ def show_commit_stack(
                     is_author = False
 
                 # Any reviewers added to a revision without them?
+                revision_has_reviewers = bool(
+                    revision["attachments"]["reviewers"]["reviewers"]
+                )
                 reviewers_added = bool(
-                    not revision["attachments"]["reviewers"]["reviewers"]
-                    and commit.reviewers["granted"]
+                    commit.reviewers["granted"] and not revision_has_reviewers
                 )
 
                 # If SHA1 hasn't changed
@@ -158,7 +163,7 @@ def show_commit_stack(
         else:
             action = action_template % "New"
 
-        logger.info("%s %s %s", action, commit.name, commit.title_preview)
+        logger.info("%s %s %s", action, commit.name, commit.revision_title())
         if validate:
             if not commit.submit:
                 logger.info(
@@ -175,13 +180,12 @@ def show_commit_stack(
                     logger.warning(
                         '!! "Request Review" status will change to "Changes Planned"'
                     )
-
-            if bug_id_changed:
-                logger.warning(
-                    "!! Bug ID in Phabricator revision will change from %s to %s",
-                    revision["fields"]["bugzilla.bug-id"],
-                    commit.bug_id,
-                )
+                if bug_id_changed:
+                    logger.warning(
+                        "!! Bug ID in Phabricator revision will change from %s to %s",
+                        revision["fields"]["bugzilla.bug-id"],
+                        commit.bug_id,
+                    )
 
             if not is_author:
                 logger.warning(
@@ -208,13 +212,19 @@ def show_commit_stack(
                     commit.bug_id,
                 )
 
-            if not commit.has_reviewers and args.command != "uplift":
+            if (
+                not commit.has_reviewers
+                and not revision_has_reviewers
+                # Submitting a new uplift clears reviewers and shouldn't warn.
+                and args.command != "uplift"
+            ):
                 logger.warning("!! Missing reviewers")
-                if commit.wip:
-                    logger.warning(
-                        '   It will be submitted as "Changes Planned".\n'
-                        "   Run submit again with --no-wip to prevent this."
-                    )
+
+            if commit.wip and not args.wip:
+                logger.warning(
+                    '!! It will be submitted as "Changes Planned".\n'
+                    "   Run submit again with --no-wip to prevent this."
+                )
 
         if show_rev_urls and commit.rev_id:
             logger.warning("-> %s/D%s", conduit.repo.phab_url, commit.rev_id)
@@ -327,10 +337,13 @@ def update_commits_from_args(commits: List[Commit], args: argparse.Namespace):
             # Bug ID command arg used.
             commit.bug_id = args.bug
 
-        # Mark a commit as WIP if --wip is provided, or if the commit does not have
-        # any reviewers.  This is in addition to checking for the WIP: prefix in
-        # helpers.augment_commits_from_body()
-        if not args.no_wip and (args.wip or not commit.has_reviewers):
+        # Mark a commit as WIP if --wip is provided or if the revision has no reviewers.
+        # This is after checking for WIP: prefix in helpers.augment_commits_from_body().
+        if args.no_wip:
+            commit.wip = False
+        elif args.wip or (
+            not commit.has_reviewers and not conduit.has_revision_reviewers(commit)
+        ):
             commit.wip = True
         elif commit.wip is None:
             commit.wip = False
@@ -344,10 +357,13 @@ def update_commits_from_args(commits: List[Commit], args: argparse.Namespace):
             }
 
 
-def update_commits_for_uplift(
-    commits: List[Commit], revisions: Dict[int, dict], repo: Repository
-):
+def update_commits_for_uplift(commits: List[Commit], repo: Repository):
     """Prepares a set of commits for uplifting."""
+    with wait_message("Loading revision data..."):
+        rev_ids = [commit.rev_id for commit in commits if commit.rev_id]
+        revisions = conduit.get_revisions(ids=rev_ids) if rev_ids else []
+        revisions = {revision["id"]: revision for revision in revisions}
+
     for commit in commits:
         # Clear all reviewers from the revision.
         commit.reviewers = {
@@ -466,11 +482,8 @@ def _submit(repo: Repository, args: argparse.Namespace):
         morph_blocking_reviewers(commits)
         augment_commits_from_body(commits)
         update_commits_from_args(commits, args)
-        rev_ids = [commit.rev_id for commit in commits if commit.rev_id is not None]
         if args.command == "uplift":
-            revisions = conduit.get_revisions(ids=rev_ids) if rev_ids else []
-            revisions = {revision["id"]: revision for revision in revisions}
-            update_commits_for_uplift(commits, revisions, repo)
+            update_commits_for_uplift(commits, repo)
         update_commit_title_previews(commits)
 
     # Display a one-line summary of commit and WIP count.
@@ -544,13 +557,6 @@ def _submit(repo: Repository, args: argparse.Namespace):
 
     # Process.
     telemetry().submission.process_time.start()
-    # Collect all existing revisions to get reviewers info.
-    revisions_to_update = None
-    if rev_ids:
-        with wait_message("Loading revision data..."):
-            list_to_update = conduit.get_revisions(ids=rev_ids)
-
-        revisions_to_update = {revision["id"]: revision for revision in list_to_update}
 
     previous_commit = None
     for commit in commits:
@@ -560,12 +566,6 @@ def _submit(repo: Repository, args: argparse.Namespace):
 
         # Only revisions being updated have an ID. Newly created ones don't.
         is_update = bool(commit.rev_id)
-        revision_to_update = revisions_to_update[commit.rev_id] if is_update else None
-        has_existing_reviewers = (
-            bool(revision_to_update["attachments"]["reviewers"]["reviewers"])
-            if revision_to_update
-            else False
-        )
 
         # Let the user know something's happening.
         if is_update:
@@ -594,7 +594,6 @@ def _submit(repo: Repository, args: argparse.Namespace):
             with wait_message("Updating revision..."):
                 rev = conduit.update_revision(
                     commit,
-                    has_existing_reviewers,
                     diff_phid=diff.phid,
                     comment=args.message,
                 )
