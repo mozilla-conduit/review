@@ -316,7 +316,7 @@ class Git(Repository):
 
         return []
 
-    def _get_commits_info(self, start: int, end: int) -> List[str]:
+    def _get_commits_info(self, start: str, end: str) -> List[str]:
         """Log useful info about the commits within the desired range.
 
         Returns a list of strings
