@@ -97,3 +97,7 @@ class Commit:
     def wip_in_commit_title(self) -> bool:
         """Return `True` if the commit title indicates the revision is a WIP."""
         return WIP_RE.search(self.title) is not None
+
+    @property
+    def message(self) -> str:
+        return f"{self.title}\n\n{self.body}"
