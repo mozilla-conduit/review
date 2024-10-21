@@ -169,7 +169,9 @@ class Git(Repository):
         for commit in commits:
             if commit.node == commit.orig_node:
                 continue
-            branches = self.git_out(["branch", "--contains", commit.orig_node])
+            branches = self.git_out(
+                ["branch", "--contains", commit.orig_node, "--format=%(refname)"]
+            )
             for branch in branches:
                 if branch.startswith(("* (", "+ ")):
                     # Omit `* (detached from {SHA1})`
@@ -186,10 +188,10 @@ class Git(Repository):
         """Rebase all branches based on changed commits from the stack."""
         branches_to_rebase = self._find_branches_to_rebase(commits)
 
-        for branch, nodes in branches_to_rebase.items():
-            self.checkout(branch)
-            self._rebase(*nodes)
+        for branch, (newbase, upstream) in branches_to_rebase.items():
+            self._rebase_branch(branch, newbase, upstream)
 
+        # Return to the newly-updated branch. This should be a noop file-mtime-wise
         self.checkout(self.branch)
 
     def refresh_commit_stack(self, commits: List[Commit]):
@@ -730,6 +732,37 @@ class Git(Repository):
 
     def _rebase(self, newbase: str, upstream: str):
         self.git_call(["rebase", "--quiet", "--onto", newbase, upstream])
+
+    def _rebase_branch(self, branch: str, newbase: str, upstream: str):
+        """Rebase `branch` from `upstream` onto `newbase` without checking it out.
+
+        This rewrites all the commits in `usptream..branch` into new commits rooted in `newbase`,
+        reusing the git tree object of the original commit.
+
+        The branch reference is then updated to the last-rewritten commit.
+
+        """
+        # Get list of commits from upstream.
+        commits = self._get_commits_info(upstream, branch)
+
+        # Rebase each commit on the precedent.
+        base = newbase
+        for c_info in commits:
+            if not c_info:
+                continue
+            commit = self._commit_from_info(c_info)
+            # _commit_from_info parses tree_hash and author_date as necessary for _commit_tree,
+            # even if the Commit object allows them to be None.
+            base = self._commit_tree(
+                base,
+                commit.tree_hash,
+                commit.message,
+                commit.author_name,
+                commit.author_email,
+                commit.author_date,
+            )
+        # Update the branch ref to use the updated commit tree.
+        self.git_call(["update-ref", branch, base])
 
     @lru_cache(maxsize=128)  # noqa: B019
     def _file_size(self, blob: str) -> int:
