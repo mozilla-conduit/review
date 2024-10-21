@@ -66,7 +66,7 @@ class Commit:
 
         return bool(self.reviewers.get("granted") or self.reviewers.get("request"))
 
-    def build_commit_message(self) -> str:
+    def build_arc_commit_message(self) -> str:
         """Contruct a commit message for this `Commit` object."""
         # WIP submissions shouldn't set reviewers.
         if self.wip:

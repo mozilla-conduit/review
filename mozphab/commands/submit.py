@@ -631,7 +631,7 @@ def _submit(repo: Repository, args: argparse.Namespace):
         # Diff property has to be set after potential SHA1 change.
         if diff:
             with wait_message("Setting diff metadata..."):
-                message = commit.build_commit_message()
+                message = commit.build_arc_commit_message()
                 conduit.set_diff_property(diff.id, commit, message)
 
         previous_commit = commit
