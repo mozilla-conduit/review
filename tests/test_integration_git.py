@@ -3,6 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import os
+import pathlib
 import platform
 import shutil
 from unittest import mock
@@ -29,7 +30,7 @@ check_call_by_line.side_effect = by_line_mock
 initial_sha = None
 
 
-def test_submit_create(in_process, git_repo_path, init_sha):
+def test_submit_create(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.side_effect = (
         # ping
         {},
@@ -163,7 +164,9 @@ Differential Revision: http://example.test/D123
     )
 
 
-def test_submit_create_added_not_commited(in_process, git_repo_path, init_sha):
+def test_submit_create_added_not_commited(
+    in_process, git_repo_path: pathlib.Path, init_sha
+):
     call_conduit.side_effect = (
         # ping
         {},
@@ -192,7 +195,7 @@ def test_submit_create_added_not_commited(in_process, git_repo_path, init_sha):
     assert "Uncommitted changes present." in str(excinfo.value)
 
 
-def test_submit_create_no_bug(in_process, git_repo_path, init_sha):
+def test_submit_create_no_bug(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
@@ -226,7 +229,9 @@ Differential Revision: http://example.test/D123
     assert log.strip() == expected.strip()
 
 
-def test_submit_create_binary(in_process, git_repo_path, init_sha, data_file):
+def test_submit_create_binary(
+    in_process, git_repo_path: pathlib.Path, init_sha, data_file
+):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
@@ -270,7 +275,9 @@ Differential Revision: http://example.test/D123
     )
 
 
-def test_submit_create_binary_existing(in_process, git_repo_path, init_sha, data_file):
+def test_submit_create_binary_existing(
+    in_process, git_repo_path: pathlib.Path, init_sha, data_file
+):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
@@ -310,7 +317,9 @@ Differential Revision: http://example.test/D123
     assert mock.call("file.upload", mock.ANY) not in call_conduit.call_args_list
 
 
-def test_submit_create_binary_chunked(in_process, git_repo_path, init_sha, data_file):
+def test_submit_create_binary_chunked(
+    in_process, git_repo_path: pathlib.Path, init_sha, data_file
+):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
@@ -400,7 +409,7 @@ Differential Revision: http://example.test/D123
     )
 
 
-def test_submit_update(in_process, git_repo_path, init_sha):
+def test_submit_update(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = [
         # ping
@@ -458,7 +467,7 @@ def test_submit_update(in_process, git_repo_path, init_sha):
     )
 
 
-def test_submit_update_uplift(in_process, git_repo_path, init_sha):
+def test_submit_update_uplift(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = [
         # conduit.ping
@@ -521,7 +530,7 @@ def test_submit_update_uplift(in_process, git_repo_path, init_sha):
 
 @mock.patch("mozphab.commands.submit.logger.warning")
 def test_submit_update_no_change(
-    m_logger_warning, in_process, git_repo_path, init_sha, git_sha
+    m_logger_warning, in_process, git_repo_path: pathlib.Path, init_sha, git_sha
 ):
     testfile = git_repo_path / "X"
     testfile.write_text("a")
@@ -560,7 +569,7 @@ Differential Revision: http://example.test/D123
     m_logger_warning.assert_called_with("No changes to submit.")
 
 
-def test_submit_remove_cr(in_process, git_repo_path, init_sha):
+def test_submit_remove_cr(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = [
         # ping
@@ -595,7 +604,7 @@ def test_submit_remove_cr(in_process, git_repo_path, init_sha):
     )
 
 
-def test_submit_remove_form_feed(in_process, git_repo_path, init_sha):
+def test_submit_remove_form_feed(in_process, git_repo_path: pathlib.Path, init_sha):
     """Test deleting a file with a form feed character will not corrupt the diff."""
     call_conduit.side_effect = (
         # CREATE
@@ -636,7 +645,7 @@ def test_submit_remove_form_feed(in_process, git_repo_path, init_sha):
     assert not failing
 
 
-def test_submit_single_last(in_process, git_repo_path, init_sha):
+def test_submit_single_last(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.side_effect = (
         # ping
         {},
@@ -669,7 +678,9 @@ A
     assert log == expected
 
 
-def test_submit_single_first(in_process, git_repo_path, init_sha, git_sha):
+def test_submit_single_first(
+    in_process, git_repo_path: pathlib.Path, init_sha, git_sha
+):
     call_conduit.side_effect = (
         # ping
         {},
@@ -705,7 +716,7 @@ Differential Revision: http://example.test/D123
     assert log == expected
 
 
-def test_submit_update_no_message(in_process, git_repo_path, init_sha):
+def test_submit_update_no_message(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
@@ -746,7 +757,9 @@ Differential Revision: http://example.test/D123
     assert log == expected
 
 
-def test_submit_update_revision_not_found(in_process, git_repo_path, init_sha):
+def test_submit_update_revision_not_found(
+    in_process, git_repo_path: pathlib.Path, init_sha
+):
     call_conduit.reset_mock()
     call_conduit.side_effect = [
         # conduit.ping
@@ -781,7 +794,7 @@ def test_submit_update_revision_not_found(in_process, git_repo_path, init_sha):
     assert "query result for revision D124" in str(excinfo.value)
 
 
-def test_uplift_create(in_process, git_repo_path, init_sha):
+def test_uplift_create(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = [
         # diffusion.repository.search
@@ -851,7 +864,7 @@ def test_uplift_create(in_process, git_repo_path, init_sha):
     )
 
 
-def test_empty_file(in_process, git_repo_path, init_sha):
+def test_empty_file(in_process, git_repo_path: pathlib.Path, init_sha):
     # Add an empty file
     call_conduit.side_effect = (
         # ping
