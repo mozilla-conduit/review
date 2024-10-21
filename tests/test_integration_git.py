@@ -410,6 +410,115 @@ Differential Revision: http://example.test/D123
     )
 
 
+def test_submit_create_no_checkout(in_process, git_repo_path: pathlib.Path, init_sha):
+    """Tests that updates which rewrite the commit message:
+    1. do
+    2. update all branches containing the rewritten commits
+    """
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        {},
+        # diffusion.repository.search
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
+        # user search
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
+        # First diff
+        # differential.creatediff
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
+        # differential.revision.edit
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
+        # differential.setdiffproperty
+        {},
+        # Second diff
+        # differential.creatediff
+        {"phid": "PHID-DIFF-2", "diffid": "2"},
+        # differential.revision.edit
+        {"object": {"id": "124", "phid": "PHID-DREV-124"}},
+        # differential.setdiffproperty
+        {},
+    )
+
+    git_out("checkout", "-qb", "first")
+
+    (git_repo_path / "X").write_text("ą\nb\nc\n", encoding="utf-8")
+    (git_repo_path / "Y").write_text("no line ending")
+    git_out("add", ".")
+    (git_repo_path / "msg").write_text("Ą r?alice", encoding="utf-8")
+    git_out("commit", "--file", "msg")
+    (git_repo_path / "msg").unlink()
+
+    (git_repo_path / "Z").write_text("ą\nb\nc\n", encoding="utf-8")
+    git_out("add", ".")
+    (git_repo_path / "msg").write_text("B r?alice", encoding="utf-8")
+    git_out("commit", "--file", "msg")
+    (git_repo_path / "msg").unlink()
+
+    first_branch_tip = git_out("rev-parse", "first")
+    first_branch_tree = git_out("rev-parse", "first^{tree}")
+
+    # Create a second branch sharing the bottom commit.
+    git_out("checkout", "-qb", "second", "HEAD^")
+
+    AA = git_repo_path / "AA"
+    AA.write_text("ą\nb\nc\n", encoding="utf-8")
+    git_out("add", ".")
+    (git_repo_path / "msg").write_text("C r?alice", encoding="utf-8")
+    git_out("commit", "--file", "msg")
+    (git_repo_path / "msg").unlink()
+
+    second_branch_tip = git_out("rev-parse", "second")
+    second_branch_tree = git_out("rev-parse", "second^{tree}")
+
+    start_branch = git_out("rev-parse", "--abbrev-ref", "HEAD").strip()
+
+    mozphab.main(["submit", "--yes", "--bug", "1", init_sha], is_development=True)
+
+    current_branch = git_out("rev-parse", "--abbrev-ref", "HEAD").strip()
+
+    new_first_branch_tip = git_out("rev-parse", "first")
+    new_first_branch_tree = git_out("rev-parse", "first^{tree}")
+    new_second_branch_tip = git_out("rev-parse", "second")
+    new_second_branch_tree = git_out("rev-parse", "second^{tree}")
+
+    # Branches should have been rewritten, but trees should be unchanged.
+    assert (
+        new_first_branch_tip != first_branch_tip
+    ), "The tip of the first branch should have changed."
+    assert (
+        new_first_branch_tree == first_branch_tree
+    ), "The tree of the first branch should not have changed."
+    # Ensure commits have been updated in other branches, too.
+    first_log = git_out("log", "--format=%s%n%n%b", "-2", "first").strip()
+    assert (
+        "Differential Revision: http://example.test/D123" in first_log
+    ), "Some commits in the first branch should contain the Differential Revision."
+    assert (
+        "D124" not in first_log
+    ), "Unexpected Differential Revision found in first branch."
+
+    assert (
+        new_second_branch_tip != second_branch_tip
+    ), "The tip of the second branch should have changed."
+    assert (
+        new_second_branch_tree == second_branch_tree
+    ), "The tree of the second branch should not have changed."
+
+    sep = "---sep---"
+    second_log = (
+        git_out("log", "--format=%s%n%n%b" + sep, "-2", "second").strip().split(sep)
+    )
+    assert (
+        "Differential Revision: http://example.test/D123" in second_log[1]
+    ), "The commits in the second branch should contain the first Differential Revision."
+    assert (
+        "Differential Revision: http://example.test/D124" in second_log[0]
+    ), "The commits in the second branch should contain the second Differential Revision."
+
+    # Make sure we're still on the same branch
+    assert current_branch == start_branch, "The current branch has changed"
+
+
 def test_submit_update(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = [
