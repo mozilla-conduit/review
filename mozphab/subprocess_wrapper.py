@@ -8,6 +8,7 @@ from shlex import quote
 from typing import (
     List,
     Optional,
+    Union,
 )
 
 from .exceptions import CommandError
@@ -74,8 +75,13 @@ def check_output(
     env: Optional[dict] = None,
     search_error=None,
     expect_binary: bool = False,
-) -> List[str]:
-    # wrapper around subprocess.check_output with debug output and splitting
+) -> Union[List[str], str]:
+    """
+    Wrapper around subprocess.check_output with debug output and splitting
+
+    Returns: EITHER a list of str if `split` is True (the default)
+             OR a single string if `split` is False
+    """
     debug_log_command(command)
     kwargs = {"cwd": cwd, "stdin": stdin, "stderr": stderr}
     if not expect_binary:

@@ -14,6 +14,7 @@ from functools import lru_cache
 from typing import (
     List,
     Optional,
+    Union,
 )
 
 from mozphab import environment
@@ -146,8 +147,13 @@ class Git(Repository):
         path: Optional[str] = None,
         extra_env: Optional[dict] = None,
         **kwargs,
-    ) -> str:
-        """Call git from the repository path and return the result."""
+    ) -> Union[List[str], str]:
+        """
+        Call git from the repository path and return the result.
+
+        Returns: EITHER a list of str if `kwargs.split` is True (the default)
+                 OR a single string if `kwargs.split` is False
+        """
         return self.git.output(
             command, cwd=path or self.path, extra_env=extra_env, **kwargs
         )
@@ -340,6 +346,7 @@ class Git(Repository):
             split=False,
             strip=False,
         )[: -len(boundary) - 1]
+        # We have split=False above, so log is indeed a string.
         return log.split("%s\n" % boundary)
 
     def _is_child(self, parent: str, node: str, rev_list: List[str]) -> bool:

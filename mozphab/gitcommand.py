@@ -11,6 +11,7 @@ from shutil import which
 from typing import (
     List,
     Optional,
+    Union,
 )
 
 from .config import config
@@ -45,7 +46,13 @@ class GitCommand:
 
     def output(
         self, git_args: List[str], extra_env: Optional[dict] = None, **kwargs
-    ) -> str:
+    ) -> Union[List[str], str]:
+        """
+        Run git command and return its output
+
+        Returns: EITHER a list of str if `kwargs.split` is True (the default)
+                 OR a single string if `kwargs.split` is False
+        """
         env = dict(self._env)
         if extra_env:
             env.update(extra_env)
