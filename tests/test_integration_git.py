@@ -412,8 +412,10 @@ Differential Revision: http://example.test/D123
 
 def test_submit_create_no_checkout(in_process, git_repo_path: pathlib.Path, init_sha):
     """Tests that updates which rewrite the commit message:
+
     1. do
     2. update all branches containing the rewritten commits
+    3. don't update the mtime of touched files
     """
     call_conduit.reset_mock()
     call_conduit.side_effect = (
@@ -467,6 +469,7 @@ def test_submit_create_no_checkout(in_process, git_repo_path: pathlib.Path, init
     git_out("commit", "--file", "msg")
     (git_repo_path / "msg").unlink()
 
+    AA_old_mtime = AA.stat().st_mtime
     second_branch_tip = git_out("rev-parse", "second")
     second_branch_tree = git_out("rev-parse", "second^{tree}")
 
@@ -514,6 +517,11 @@ def test_submit_create_no_checkout(in_process, git_repo_path: pathlib.Path, init
     assert (
         "Differential Revision: http://example.test/D124" in second_log[0]
     ), "The commits in the second branch should contain the second Differential Revision."
+
+    # Files mtimes should not have changed.
+    assert (
+        AA.stat().st_mtime == AA_old_mtime
+    ), "The mtime of file AA should not have changed."
 
     # Make sure we're still on the same branch
     assert current_branch == start_branch, "The current branch has changed"
