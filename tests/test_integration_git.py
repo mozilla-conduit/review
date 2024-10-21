@@ -31,6 +31,7 @@ initial_sha = None
 
 
 def test_submit_create(in_process, git_repo_path: pathlib.Path, init_sha):
+    call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
         {},
