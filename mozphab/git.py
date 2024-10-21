@@ -384,63 +384,74 @@ class Git(Repository):
             if not log_line:
                 continue
 
-            (
-                author_date,
-                author_name,
-                author_email,
-                parents,
-                tree_hash,
-                node,
-                desc,
-            ) = log_line.split("\n", 6)
-            desc = desc.splitlines()
+            commit = self._commit_from_info(log_line, first_node)
 
             if not single:
                 # Check if the commit is a child of the first one
                 if rev_list is None:
-                    rev_list = self._git_get_children(node)
-                    first_node = node
-                elif not self._is_child(first_node, node, rev_list):
+                    rev_list = self._git_get_children(commit.node)
+                    first_node = commit.node
+                elif not self._is_child(first_node, commit.node, rev_list):
                     raise Error(
                         "Commit %s is not a child of %s, unable to continue"
-                        % (short_node(node), short_node(first_node))
+                        % (short_node(commit.node), short_node(first_node))
                     )
 
-            # Check if commit has multiple parents, if so - raise an Error
-            # We may push the merging commit if it's the first one
-            parents = parents.split(" ")
-            if node != first_node and len(parents) > 1:
-                raise Error(
-                    "Multiple parents found for commit %s, unable to continue"
-                    % short_node(node)
-                )
-
-            # Tue, 14 Apr 2020 12:02:20 +0000
-            commit_epoch = datetime.strptime(
-                author_date, "%a, %d %b %Y %H:%M:%S %z"
-            ).timestamp()
-            commits.append(
-                Commit(
-                    name=short_node(node),
-                    node=node,
-                    orig_node=node,
-                    submit=True,
-                    title=desc[0],
-                    title_preview=desc[0],
-                    body="\n".join(desc[1:]).rstrip(),
-                    bug_id=None,
-                    reviewers={"request": [], "granted": []},
-                    rev_id=None,
-                    parent=parents[0],
-                    tree_hash=tree_hash,
-                    author_date=author_date,
-                    author_date_epoch=commit_epoch,
-                    author_name=author_name,
-                    author_email=author_email,
-                )
-            )
+            commits.append(commit)
 
         return commits
+
+    def _commit_from_info(
+        self, log_info: str, first_node: Optional[str] = None
+    ) -> Commit:
+        """Parse the ouptut of _get_commits_info into a Commit object.
+
+        Note: This does some validation to prevent merge commits,
+        unless the node currently getting parsed is the `first_node`.
+        """
+        (
+            author_date,
+            author_name,
+            author_email,
+            parents,
+            tree_hash,
+            node,
+            desc,
+        ) = log_info.split("\n", 6)
+        desc = desc.splitlines()
+
+        # Check if commit has multiple parents, if so - raise an Error
+        # We may push the merging commit if it's the first one
+        parents = parents.split(" ")
+        if first_node and node != first_node and len(parents) > 1:
+            raise Error(
+                "Multiple parents found for commit %s, unable to continue"
+                % short_node(node)
+            )
+
+        # Tue, 14 Apr 2020 12:02:20 +0000
+        commit_epoch = datetime.strptime(
+            author_date, "%a, %d %b %Y %H:%M:%S %z"
+        ).timestamp()
+
+        return Commit(
+            name=short_node(node),
+            node=node,
+            orig_node=node,
+            submit=True,
+            title=desc[0],
+            title_preview=desc[0],
+            body="\n".join(desc[1:]).rstrip(),
+            bug_id=None,
+            reviewers={"request": [], "granted": []},
+            rev_id=None,
+            parent=parents[0],
+            tree_hash=tree_hash,
+            author_date=author_date,
+            author_date_epoch=commit_epoch,
+            author_name=author_name,
+            author_email=author_email,
+        )
 
     def is_node(self, node: str) -> bool:
         try:
