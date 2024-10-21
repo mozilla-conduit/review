@@ -21,10 +21,14 @@ from mozphab.helpers import prepare_body, prompt, short_node
 from mozphab.logger import logger
 from mozphab.mercurial import Mercurial
 from mozphab.patch import apply_patch
+from mozphab.repository import (
+    Repository,
+)
 from mozphab.spinner import wait_message
 
 
-def get_base_ref(diff):
+def get_base_ref(diff: dict) -> Optional[str]:
+    """Given a diff, return the base revision SHA the diff was based on."""
     for ref in diff["fields"].get("refs", []):
         if ref["type"] == "base":
             return ref["identifier"]
@@ -97,7 +101,7 @@ def resolve_branch_name(
     return config.branch_name_template.format(rev_id=rev_id)
 
 
-def patch(repo, args):
+def patch(repo: Repository, args: argparse.Namespace):
     """Patch repository from Phabricator's revisions.
 
     By default:
@@ -316,7 +320,12 @@ def patch(repo, args):
     logger.warning("D%s applied", rev_id)
 
 
-def check_revision_id(value):
+def check_revision_id(value: str) -> int:
+    """Parse the revision ID from `value`.
+
+    `value` is a `str` which is either `<id>`, `D<id>`,
+    or a Phabricator revision URL.
+    """
     # D123 or 123
     m = re.search(r"^D?(\d+)$", value)
     if m:
