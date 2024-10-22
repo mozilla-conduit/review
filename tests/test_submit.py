@@ -719,6 +719,25 @@ class Commits(unittest.TestCase):
             Contains('submitted as "Changes Planned"')
         )
 
+        # Submitting a stack of two commits with one revision already on Phabricator
+        # should properly set `commit.rev_phid` with `validate=True`.
+        mock_logger.reset_mock()
+        commits = [_commit(title="submitted", rev=1), _commit(title="new", rev=None)]
+        submit.show_commit_stack(
+            commits,
+            args,
+            validate=True,
+        )
+        for commit in commits:
+            if commit.title_preview == "submitted":
+                assert (
+                    commit.rev_phid == "PHID-DREV-1"
+                ), "`rev_id` should be set for already submitted commit."
+            elif commit.title_preview == "new":
+                assert (
+                    commit.rev_phid is None
+                ), "`rev_id` should not be set for newly created commit."
+
         # Submitting a new uplift clears reviewers and shouldn't warn.
         mock_logger.reset_mock()
         args.command = "uplift"

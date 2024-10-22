@@ -109,6 +109,7 @@ def show_commit_stack(
             action = action_template % f"D{commit.rev_id}"
 
             if validate and (revision := revisions.get(commit.rev_id)):
+                commit.rev_phid = revision["phid"]
                 fields = revision["fields"]
 
                 # WIP if either in changes-planned state, or if the revision has the
