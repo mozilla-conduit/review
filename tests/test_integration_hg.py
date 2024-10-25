@@ -687,6 +687,284 @@ Differential Revision: http://example.test/D123
     )
 
 
+def test_submit_create_no_checkout(in_process, hg_repo_path):
+    """Test that diffing behaviour is consistent even without an explicit
+    checkout prior to generating diffs.
+
+    This is a counterpart to test_integration_git.test_submit_create_no_checkout
+    and is named the same for ease of localisation. It doesn't however, test
+    that the Hg logic doesn't do checkouts during submissions. Currently, it
+    very much does, and diffs for files touched by multiple commits end up
+    containing, incorrectly, all the changes up to the tip of the branche (see
+    bug 1926924).
+    """
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        {},
+        # diffusion.repository.search
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
+        # First diff
+        # differential.creatediff
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
+        # differential.revision.edit
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
+        # differential.setdiffproperty
+        {},
+        # Second diff
+        # differential.creatediff
+        {"phid": "PHID-DIFF-2", "diffid": "2"},
+        # differential.revision.edit
+        {"object": {"id": "124", "phid": "PHID-DREV-124"}},
+        # differential.setdiffproperty
+        {},
+    )
+    write_text(hg_repo_path / "A to rename", "rename me\nsecond line\n")
+    write_text(hg_repo_path / "B to remove", "remove me\n")
+    write_text(hg_repo_path / "C to modify", "modify me\n")
+    write_text(hg_repo_path / "D to copy", "copy me\n")
+    hg_out("add")
+    hg_out("commit", "-m", "first")
+    (hg_repo_path / "subdir").mkdir()
+    hg_out("copy", "D to copy", "D copied")
+    write_text(hg_repo_path / "subdir" / "E add", "added\n")
+    (hg_repo_path / "A to rename").rename(hg_repo_path / "A renamed")
+    (hg_repo_path / "B to remove").unlink()
+    write_text(hg_repo_path / "C to modify", "modified\n")
+    hg_out("addremove")
+    write_text(hg_repo_path / "msg", "Ą r?alice", encoding="utf-8")
+    hg_out("commit", "-l", "msg")
+    (hg_repo_path / "msg").unlink()
+    write_text(hg_repo_path / "C to modify", "leave me alone\n")
+    hg_out("add")
+    hg_out("commit", "-m", "second")
+
+    mozphab.main(["submit", "--yes", "--bug", "1", "-2"], is_development=True)
+
+    expected_calls = [
+        (
+            "differential.creatediff",
+            {
+                "sourceControlPath": "/",
+                "sourceControlSystem": "hg",
+                "lintStatus": "none",
+                "sourcePath": mock.ANY,
+                "unitStatus": "none",
+                "sourceMachine": "http://example.test",
+                "sourceControlBaseRevision": mock.ANY,
+                "repositoryPHID": "PHID-REPO-1",
+                "branch": "default",
+                "changes": [
+                    {
+                        "currentPath": "A renamed",
+                        "type": 6,  # MOVE_HERE
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 2,
+                                "newOffset": 1,
+                                "newLength": 2,
+                                "addLines": 0,
+                                "delLines": 0,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": " rename me\n second line\n",
+                            }
+                        ],
+                        "oldProperties": {},
+                        "oldPath": "A to rename",
+                        "commitHash": mock.ANY,
+                        "awayPaths": [],
+                        "metadata": {},
+                        "newProperties": {},
+                        "fileType": 1,
+                    },
+                    {
+                        "currentPath": "A to rename",
+                        "type": 4,  # MOVE_AWAY
+                        "hunks": [],
+                        "oldProperties": {},
+                        "oldPath": None,
+                        "commitHash": mock.ANY,
+                        "awayPaths": ["A renamed"],
+                        "metadata": {},
+                        "newProperties": {},
+                        "fileType": 1,
+                    },
+                    {
+                        "currentPath": "B to remove",
+                        "type": 3,  # DELETE
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 1,
+                                "newOffset": 0,
+                                "newLength": 0,
+                                "addLines": 0,
+                                "delLines": 1,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": "-remove me\n",
+                            }
+                        ],
+                        "awayPaths": [],
+                        "fileType": 1,
+                        "oldPath": "B to remove",
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "metadata": {},
+                        "oldProperties": {"unix:filemode": "100644"},
+                    },
+                    {
+                        "currentPath": "C to modify",
+                        "type": 2,  # CHANGE
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 1,
+                                "newOffset": 1,
+                                "newLength": 1,
+                                "addLines": 1,
+                                "delLines": 1,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": "-modify me\n+modified\n",
+                            }
+                        ],
+                        "commitHash": mock.ANY,
+                        "metadata": {},
+                        "fileType": 1,
+                        "oldPath": "C to modify",
+                        "newProperties": {},
+                        "awayPaths": [],
+                        "oldProperties": {},
+                    },
+                    {
+                        "metadata": {},
+                        "oldPath": "D to copy",
+                        "currentPath": "D copied",
+                        "awayPaths": [],
+                        "oldProperties": {},
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "type": 7,  # COPY HERE
+                        "fileType": 1,
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 1,
+                                "newOffset": 1,
+                                "newLength": 1,
+                                "addLines": 0,
+                                "delLines": 0,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": " copy me\n",
+                            }
+                        ],
+                    },
+                    {
+                        "metadata": {},
+                        "oldPath": None,
+                        "currentPath": "D to copy",
+                        "awayPaths": ["D copied"],
+                        "oldProperties": {},
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "type": 5,  # COPY AWAY
+                        "fileType": 1,
+                        "hunks": [],
+                    },
+                    {
+                        "currentPath": "subdir/E add",
+                        "type": 1,  # ADD
+                        "hunks": [
+                            {
+                                "corpus": "+added\n",
+                                "addLines": 1,
+                                "oldOffset": 0,
+                                "newOffset": 1,
+                                "newLength": 1,
+                                "delLines": 0,
+                                "isMissingOldNewline": False,
+                                "oldLength": 0,
+                                "isMissingNewNewline": False,
+                            }
+                        ],
+                        "commitHash": mock.ANY,
+                        "awayPaths": [],
+                        "newProperties": {"unix:filemode": "100644"},
+                        "oldPath": None,
+                        "oldProperties": {},
+                        "fileType": 1,
+                        "metadata": {},
+                    },
+                ],
+                "creationMethod": "moz-phab-hg",
+            },
+        ),
+        (
+            "differential.creatediff",
+            {
+                "changes": [
+                    {
+                        "metadata": {},
+                        "oldPath": "C to modify",
+                        "currentPath": "C to modify",
+                        "awayPaths": [],
+                        "oldProperties": {},
+                        "newProperties": {},
+                        "commitHash": mock.ANY,
+                        "type": 2,
+                        "fileType": 1,
+                        "hunks": [
+                            {
+                                "oldOffset": 1,
+                                "oldLength": 1,
+                                "newOffset": 1,
+                                "newLength": 1,
+                                "addLines": 1,
+                                "delLines": 1,
+                                "isMissingOldNewline": False,
+                                "isMissingNewNewline": False,
+                                "corpus": "-modified\n+leave me alone\n",
+                            }
+                        ],
+                    }
+                ],
+                "sourceMachine": "http://example.test",
+                "sourceControlSystem": "hg",
+                "sourceControlPath": "/",
+                "sourceControlBaseRevision": mock.ANY,
+                "creationMethod": "moz-phab-hg",
+                "lintStatus": "none",
+                "unitStatus": "none",
+                "repositoryPHID": "PHID-REPO-1",
+                "sourcePath": mock.ANY,
+                "branch": "default",
+            },
+        ),
+    ]
+
+    # Match expectations to the specific call to compare them to.
+    # This makes failure reporting more helpful for debugging.
+    matched_calls = list(
+        zip(
+            expected_calls,
+            [
+                c[0]
+                for c in call_conduit.call_args_list
+                if c[0][0] == "differential.creatediff"
+            ],
+        )
+    )
+    # Make sure we've got something to assert!
+    assert matched_calls, "There are no differential.creatediff calls to compare!"
+    for expected, actual in matched_calls:
+        assert actual == expected
+
+
 def test_submit_remove_cr(in_process, hg_repo_path):
     call_conduit.reset_mock()
     call_conduit.side_effect = [
