@@ -36,21 +36,37 @@ def test_submit_create(in_process, hg_repo_path):
         # differential.setdiffproperty
         {},
     )
-    write_text(hg_repo_path / "A to rename", "rename me\nsecond line\n")
-    write_text(hg_repo_path / "B to remove", "remove me\n")
-    write_text(hg_repo_path / "C to modify", "modify me\n")
-    write_text(hg_repo_path / "D to copy", "copy me\n")
+    a_rename = hg_repo_path / "A to rename"
+    write_text(a_rename, "rename me\nsecond line\n")
+
+    b_remove = hg_repo_path / "B to remove"
+    write_text(b_remove, "remove me\n")
+
+    c_modify = hg_repo_path / "C to modify"
+    write_text(c_modify, "modify me\n")
+
+    d_copy = hg_repo_path / "D to copy"
+    write_text(d_copy, "copy me\n")
+
     hg_out("add")
     hg_out("commit", "-m", "first")
-    (hg_repo_path / "subdir").mkdir()
-    hg_out("copy", "D to copy", "D copied")
-    write_text(hg_repo_path / "subdir" / "E add", "added\n")
-    (hg_repo_path / "A to rename").rename(hg_repo_path / "A renamed")
-    (hg_repo_path / "B to remove").unlink()
-    write_text(hg_repo_path / "C to modify", "modified\n")
+
+    a_rename.rename(hg_repo_path / "A renamed")
+    b_remove.unlink()
+    write_text(c_modify, "modified\n")
+    hg_out("copy", d_copy, "D copied")
+
+    e_subdir = hg_repo_path / "subdir"
+    e_subdir.mkdir()
+    write_text(e_subdir / "E add", "added\n")
+
     hg_out("addremove")
-    write_text(hg_repo_path / "msg", "Ą r?alice", encoding="utf-8")
-    hg_out("commit", "-l", "msg")
+
+    msg = hg_repo_path / "msg"
+    write_text(msg, "Ą r?alice", encoding="utf-8")
+    hg_out("commit", "-l", msg)
+    msg.unlink()
+
     mozphab.main(["submit", "--yes", "--bug", "1", "."], is_development=True)
 
     log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
@@ -271,21 +287,37 @@ def test_submit_create_no_trailing_newline(in_process, hg_repo_path):
         # differential.setdiffproperty
         {},
     )
-    write_text(hg_repo_path / "A to rename", "rename me\nsecond line")
-    write_text(hg_repo_path / "B to remove", "remove me")
-    write_text(hg_repo_path / "C to modify", "modify me")
-    write_text(hg_repo_path / "D to copy", "copy me")
+    a_rename = hg_repo_path / "A to rename"
+    write_text(a_rename, "rename me\nsecond line")
+
+    b_remove = hg_repo_path / "B to remove"
+    write_text(b_remove, "remove me")
+
+    c_modify = hg_repo_path / "C to modify"
+    write_text(c_modify, "modify me")
+
+    d_copy = hg_repo_path / "D to copy"
+    write_text(d_copy, "copy me")
+
     hg_out("add")
     hg_out("commit", "-m", "first")
-    (hg_repo_path / "subdir").mkdir()
-    hg_out("copy", "D to copy", "D copied")
-    write_text(hg_repo_path / "subdir" / "E add", "added")
-    (hg_repo_path / "A to rename").rename(hg_repo_path / "A renamed")
-    (hg_repo_path / "B to remove").unlink()
-    write_text(hg_repo_path / "C to modify", "modified")
+
+    a_rename.rename(hg_repo_path / "A renamed")
+    b_remove.unlink()
+    write_text(c_modify, "modified")
+    hg_out("copy", d_copy, "D copied")
+
+    e_subdir = hg_repo_path / "subdir"
+    e_subdir.mkdir()
+    write_text(e_subdir / "E add", "added")
+
     hg_out("addremove")
-    write_text(hg_repo_path / "msg", "Ą r?alice", encoding="utf-8")
-    hg_out("commit", "-l", "msg")
+
+    msg = hg_repo_path / "msg"
+    write_text(msg, "Ą r?alice", encoding="utf-8")
+    hg_out("commit", "-l", msg)
+    msg.unlink()
+
     mozphab.main(["submit", "--yes", "--bug", "1", "."], is_development=True)
 
     log = hg_out("log", "--template", r"{desc}\n", "--rev", ".")
@@ -720,23 +752,38 @@ def test_submit_create_no_checkout(in_process, hg_repo_path):
         # differential.setdiffproperty
         {},
     )
-    write_text(hg_repo_path / "A to rename", "rename me\nsecond line\n")
-    write_text(hg_repo_path / "B to remove", "remove me\n")
-    write_text(hg_repo_path / "C to modify", "modify me\n")
-    write_text(hg_repo_path / "D to copy", "copy me\n")
+    a_rename = hg_repo_path / "A to rename"
+    write_text(a_rename, "rename me\nsecond line\n")
+
+    b_remove = hg_repo_path / "B to remove"
+    write_text(b_remove, "remove me\n")
+
+    c_modify = hg_repo_path / "C to modify"
+    write_text(c_modify, "modify me\n")
+
+    d_copy = hg_repo_path / "D to copy"
+    write_text(d_copy, "copy me\n")
+
     hg_out("add")
     hg_out("commit", "-m", "first")
-    (hg_repo_path / "subdir").mkdir()
-    hg_out("copy", "D to copy", "D copied")
-    write_text(hg_repo_path / "subdir" / "E add", "added\n")
-    (hg_repo_path / "A to rename").rename(hg_repo_path / "A renamed")
-    (hg_repo_path / "B to remove").unlink()
-    write_text(hg_repo_path / "C to modify", "modified\n")
+
+    a_rename.rename(hg_repo_path / "A renamed")
+    b_remove.unlink()
+    write_text(c_modify, "modified\n")
+    hg_out("copy", d_copy, "D copied")
+
+    e_subdir = hg_repo_path / "subdir"
+    e_subdir.mkdir()
+    write_text(e_subdir / "E add", "added\n")
+
     hg_out("addremove")
-    write_text(hg_repo_path / "msg", "Ą r?alice", encoding="utf-8")
-    hg_out("commit", "-l", "msg")
-    (hg_repo_path / "msg").unlink()
-    write_text(hg_repo_path / "C to modify", "leave me alone\n")
+
+    msg = hg_repo_path / "msg"
+    write_text(msg, "Ą r?alice", encoding="utf-8")
+    hg_out("commit", "-l", msg)
+    msg.unlink()
+
+    write_text(c_modify, "leave me alone\n")
     hg_out("add")
     hg_out("commit", "-m", "second")
 
