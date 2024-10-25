@@ -910,6 +910,7 @@ class Mercurial(Repository):
 
     def get_diff(self, commit: Commit) -> Diff:
         """Create a Diff object containing all changes for this commit."""
+        self.checkout(commit.node)
         commit.parent = self._get_parent(commit.node)
         file_modes = self._get_file_modes(commit)
 
