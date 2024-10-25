@@ -193,6 +193,9 @@ def test_change_empty_hg(
         mock.Mock(hex="def456"),
     ]
     m_hg_out.side_effect = [
+        # hg checkout
+        "",
+        # hg log
         "--abc123----def456----abc123----def456--fn--abc123----def456----abc123--",
     ]
     m_get_file_meta.side_effect = [
