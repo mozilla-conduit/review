@@ -326,8 +326,8 @@ class ConduitAPI:
         diff_list = response.get("data", [])
 
         diff_dict = {}
-        for d in diff_list:
-            diff_dict[d["phid"]] = d
+        for diff in diff_list:
+            diff_dict[diff["phid"]] = diff
 
         return diff_dict
 
