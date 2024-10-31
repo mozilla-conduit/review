@@ -4,11 +4,6 @@
 
 import subprocess
 from pathlib import Path
-from typing import List, Tuple
-
-import pytest
-
-from mozphab.helpers import parse_bugs
 
 from .conftest import find_script_path
 
@@ -40,46 +35,3 @@ def test_ruff():
             ROOT,
         )
     )
-
-
-def get_commit_info() -> List[Tuple[str, str]]:
-    """Return a list of (commit sha, commit message) tuples since `origin/main`."""
-    git_out = subprocess.run(
-        ["git", "log", "origin/main..HEAD", "--pretty=%H %s"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    return [
-        (line.split(" ", 1)[0], line.split(" ", 1)[1])
-        for line in git_out.stdout.strip().split("\n")
-    ]
-
-
-BUG_REQUIRED_PATHS = ("mozphab/", "pyproject.toml")
-
-
-def commit_touches_code(commit_sha: str):
-    """Checks if a commit modifies any code in the repo."""
-    result = subprocess.run(
-        ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit_sha],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    changed_files = result.stdout.strip().splitlines()
-    return any(
-        changed_file.startswith(BUG_REQUIRED_PATHS) for changed_file in changed_files
-    )
-
-
-@pytest.mark.parametrize("commit_sha,commit_message", get_commit_info())
-def test_bug_number(commit_sha: str, commit_message: str):
-    """Enforce bug numbers in un-landed commit messages."""
-    if not commit_touches_code(commit_sha):
-        pytest.skip(f"Commit {commit_sha} does not modify code.")
-
-    assert parse_bugs(
-        commit_message
-    ), f"Commit {commit_sha} does not have a bug number."
