@@ -11,6 +11,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Tuple,
 )
 
 from mozphab.conduit import conduit
@@ -74,6 +75,23 @@ def walk_llist(
     return nodes
 
 
+def remove_or_set_child(
+    local_list: Dict, remote_list: Dict, revision: str
+) -> Optional[Tuple[str, List[str]]]:
+    """"""
+    # Set children if child is present.
+    child = local_list[revision]
+    if child is not None:
+        return ("children.set", [child])
+
+    # Remove child if the last child is a parent remotely
+    if revision in remote_list and remote_list[revision] is not None:
+        return ("children.remove", [remote_list[revision]])
+
+    # No transaction otherwise.
+    return None
+
+
 def stack_transactions(
     remote_phids: List[str],
     local_phids: List[str],
@@ -110,13 +128,10 @@ def stack_transactions(
     ]
     for revision in local_revisions_missing_from_remote:
         child = local_list[revision]
-        if child is None:
-            if revision in remote_list and remote_list[revision] is not None:
-                transactions[revision].append(
-                    ("children.remove", [remote_list[revision]])
-                )
-        else:
-            transactions[revision].append(("children.set", [child]))
+
+        transaction = remove_or_set_child(local_list, remote_list, revision)
+        if transaction:
+            transactions[revision].append(transaction)
 
         remote_list[revision] = child
         walk_llist(remote_list, allow_multiple_heads=True)
@@ -126,14 +141,10 @@ def stack_transactions(
     for revision in remote_revisions_found_in_local:
         if local_list[revision] != remote_list[revision]:
             child = local_list[revision]
-            if child is None:
-                # Remove child if the last child is a parent remotely
-                if revision in remote_list and remote_list[revision] is not None:
-                    transactions[revision].append(
-                        ("children.remove", [remote_list[revision]])
-                    )
-            else:
-                transactions[revision].append(("children.set", [child]))
+
+            transaction = remove_or_set_child(local_list, remote_list, revision)
+            if transaction:
+                transactions[revision].append(transaction)
 
             remote_list[revision] = child
             walk_llist(remote_list, allow_multiple_heads=True)
