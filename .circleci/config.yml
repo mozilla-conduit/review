@@ -51,6 +51,9 @@ workflows:
             - test_3_8
             - test_3_9
             - test_3_10
+            - test_3_11
+            - test_3_12
+            - test_3_13
             - test_package
 
 jobs:
