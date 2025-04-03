@@ -78,7 +78,10 @@ def walk_llist(
 def remove_or_set_child(
     local_list: Dict, remote_list: Dict, revision: str
 ) -> Optional[Tuple[str, List[str]]]:
-    """"""
+    """Return a `children.*` transaction for the revision based on remote/local state.
+
+    Return `None` if no transaction is required.
+    """
     # Set children if child is present.
     child = local_list[revision]
     if child is not None:
