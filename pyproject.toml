@@ -21,7 +21,7 @@ dependencies = [
 
 # Note: please change the `updater.py::check_for_updates` method if the format
 # would be different than `>=x.y`.
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 
 # Required for `setuptools_scm` when using only `pyproject.toml` (ie no `setup.cfg`).
 dynamic = ["version"]

@@ -340,7 +340,6 @@ Docker to regenerate these files.
 To generate `dev/requirements/python*.*.txt`, run the following commands while
 in the `dev` directory:
 
-- `docker-compose run generate-python3.8-requirements`
 - `docker-compose run generate-python3.9-requirements`
 - `docker-compose run generate-python3.10-requirements`
 
@@ -359,9 +358,9 @@ To ensure that your changes work, run `circleci` locally.
 
 1. Ensure you have the `circleci` client installed, see the [CircleCI CLI docs](https://circleci.com/docs/2.0/local-cli/)
 2. In your clone of this repository, run:
-   `circleci local execute test_3_8`
+   `circleci local execute test_3_9`
 
-This will run all the Python 3.8 tests in a dockerized environment.
+This will run all the Python 3.9 tests in a dockerized environment.
 This step takes a while, so you might want to run `pytest` for working on your changes,
 as explained above.
 

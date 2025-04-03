@@ -48,7 +48,6 @@ workflows:
       - publish:
           <<: *tags-only-filter
           requires:
-            - test_3_8
             - test_3_9
             - test_3_10
             - test_3_11
@@ -57,11 +56,11 @@ workflows:
             - test_package
 
 jobs:
-  test_3_8: &test_template
+  test_3_9: &test_template
     environment:
-      - REQUIREMENTS_FILE: dev/requirements/python3.8.txt
+      - REQUIREMENTS_FILE: dev/requirements/python3.9.txt
     docker:
-      - image: cimg/python:3.8
+      - image: cimg/python:3.9
     working_directory: ~/repo
     steps:
       - checkout
@@ -108,12 +107,6 @@ jobs:
           path: ~/test-reports
       - store_artifacts:
           path: ~/coredumps
-  test_3_9:
-    <<: *test_template
-    environment:
-      - REQUIREMENTS_FILE: dev/requirements/python3.9.txt
-    docker:
-      - image: cimg/python:3.9
   test_3_10:
     <<: *test_template
     environment:
@@ -181,7 +174,7 @@ jobs:
 
   test_package:
     docker:
-      - image: cimg/python:3.8
+      - image: cimg/python:3.9
     working_directory: ~/repo
     steps:
       - checkout
@@ -199,7 +192,7 @@ jobs:
             ./venv/bin/moz-phab version
   publish:
     docker:
-      - image: cimg/python:3.8
+      - image: cimg/python:3.9
     working_directory: ~/repo
     steps:
     - checkout
