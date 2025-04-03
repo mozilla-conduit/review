@@ -31,8 +31,6 @@ workflows:
   version: 2
   test:
     jobs:
-      - test_3_8:
-          <<: *branches-and-tags-filter
       - test_3_9:
           <<: *branches-and-tags-filter
       - test_3_10:
