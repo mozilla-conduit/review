@@ -190,7 +190,7 @@ This behavior can be modified with the following options:
 - `--apply-to TARGET` Define the commit to which apply the patch:
   - `base` (default) find the base commit in the first ancestor of the revision,
   - `here` use the current commit,
-  - `{NODE}` use a commit identified by SHA1 or (in Mecurial) revision number
+  - `{NODE}` use a commit identified by SHA1 or (in Mercurial) revision number
 
 - `--raw` Print out the diffs of each revision starting from the oldest
    ancestor instead of applying to the repository. It can be used to patch the
