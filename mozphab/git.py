@@ -685,11 +685,11 @@ class Git(Repository):
         # If the command ran without an error, the commit is a descendant.
         return True
 
-    def map_callsign_to_unified_head(self, callsign: str) -> Optional[str]:
+    def map_shortname_to_unified_head(self, shortname: str) -> Optional[str]:
         if not self.is_cinnabar_required:
-            unified_head = f"remotes/origin/{callsign}"
+            unified_head = f"remotes/origin/{shortname}"
         else:
-            unified_head = f"remotes/origin/bookmarks/{callsign}"
+            unified_head = f"remotes/origin/bookmarks/{shortname}"
 
         if not self.is_node(unified_head):
             return None

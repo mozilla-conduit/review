@@ -599,7 +599,7 @@ description
 )
 @mock.patch("mozphab.git.Git.is_node")
 @mock.patch("mozphab.git.Git.is_cinnabar_required", new_callable=mock.PropertyMock)
-def test_git_map_callsign_to_unified_head(
+def test_git_map_shortname_to_unified_head(
     m_is_cinnabar_required, m_is_node, git, cinnabar_required, unified_head
 ):
     m_is_cinnabar_required.return_value = cinnabar_required
@@ -607,13 +607,13 @@ def test_git_map_callsign_to_unified_head(
     # If head is not a node in the repo, raise `ValueError`.
     m_is_node.return_value = False
     assert (
-        git.map_callsign_to_unified_head("beta") is None
+        git.map_shortname_to_unified_head("beta") is None
     ), "Unknown head should have returned `None`."
 
     # If head is a node in the repo, should map to a remote branch.
     m_is_node.return_value = True
     assert (
-        git.map_callsign_to_unified_head("beta") == unified_head
+        git.map_shortname_to_unified_head("beta") == unified_head
     ), "beta did not correctly map to a branch"
 
 

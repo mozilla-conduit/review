@@ -19,7 +19,7 @@ class Repo:
         self.uplift_called = False
         self.phid = phid
 
-    def map_callsign_to_unified_head(self, *args, **kwargs):
+    def map_shortname_to_unified_head(self, *args, **kwargs):
         return self.unified_head
 
     def is_descendant(self, *args, **kwargs):

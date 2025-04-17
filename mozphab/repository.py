@@ -181,7 +181,7 @@ class Repository(object):
     def is_descendant(self, node: str) -> bool:
         """Return `True` if the repository revset is descendant from `node`."""
 
-    def map_callsign_to_unified_head(self, callsign: str) -> Optional[str]:
+    def map_shortname_to_unified_head(self, shortname: str) -> Optional[str]:
         """Return the expected VCS identifier for the given callsign.
 
         Returns a VCS identifier that corresponds to the given Phabricator repository

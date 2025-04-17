@@ -734,11 +734,11 @@ class Mercurial(Repository):
 
         return True
 
-    def map_callsign_to_unified_head(self, callsign: str) -> Optional[str]:
-        if not self.is_node(callsign):
+    def map_shortname_to_unified_head(self, shortname: str) -> Optional[str]:
+        if not self.is_node(shortname):
             return None
 
-        return callsign
+        return shortname
 
     def rebase_commit(self, source_commit: Commit, dest_commit: Commit):
         self.hg(

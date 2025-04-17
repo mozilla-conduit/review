@@ -716,15 +716,15 @@ def test_repository_cached(m_which, m_is_dir, m_os_chdir, m_phab_url, m_open, *p
 
 
 @mock.patch("mozphab.mercurial.Mercurial.is_node")
-def test_hg_map_callsign_to_unified_head(m_is_node, hg):
+def test_hg_map_shortname_to_unified_head(m_is_node, hg):
     m_is_node.return_value = False
     assert (
-        hg.map_callsign_to_unified_head("blah") is None
+        hg.map_shortname_to_unified_head("blah") is None
     ), "Unknown head should have returned `None`."
 
     m_is_node.return_value = True
     assert (
-        hg.map_callsign_to_unified_head("beta") == "beta"
+        hg.map_shortname_to_unified_head("beta") == "beta"
     ), "beta did not correctly map to a branch"
 
 

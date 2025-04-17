@@ -434,7 +434,7 @@ def local_uplift_if_possible(
 
     # Try and find a local repo identifier (hg bookmark, git remote branch) to rebase
     # our revset onto.
-    unified_head = repo.map_callsign_to_unified_head(args.train)
+    unified_head = repo.map_shortname_to_unified_head(args.train)
 
     if not unified_head:
         # If we didn't find a unified head, we intend to submit an uplift without
