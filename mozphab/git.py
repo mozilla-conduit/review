@@ -686,10 +686,10 @@ class Git(Repository):
         return True
 
     def map_callsign_to_unified_head(self, callsign: str) -> Optional[str]:
-        # TODO: there are apparently multiple ways to use git remote refs/branches,
-        # a template may not be appropriate.
-        # See https://github.com/glandium/git-cinnabar#remote-refs-styles
-        unified_head = f"remotes/origin/bookmarks/{callsign}"
+        if not self.is_cinnabar_required:
+            unified_head = f"remotes/origin/{callsign}"
+        else:
+            unified_head = f"remotes/origin/bookmarks/{callsign}"
 
         if not self.is_node(unified_head):
             return None
