@@ -298,7 +298,7 @@ using the default settings.
 ### MacOS / Linux
 
 1. Ensure you have Python 3, Git, and Mercurial installed
-   - eg. using `homebrew` on macOS, or your Linux distribution's package manager
+   - E.g. using `homebrew` on macOS, or your Linux distribution's package manager
    - `python3`, `git`, and `hg` executables must be on the system path
 2. In your clone of this repository run the following commands (adjusting to the
    version of Python):
