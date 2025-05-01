@@ -346,7 +346,7 @@ class Repository(object):
         It is stored in a file to avoid calling the API on every run.
         """
         if not self._phid:
-            path = os.path.join(self.dot_path, ".moz-phab_phid")
+            path = os.path.join(self.dot_path, ".moz-phab_phid_cache")
 
             if os.path.isfile(path):
                 with open(path) as f:
@@ -376,7 +376,7 @@ class Repository(object):
 
         if self.vcs != self.phab_vcs:
             # This error is captured in Git and not raised if Cinnabar installed.
-            raise Error(
+            logger.warning(
                 "Local VCS ({local}) is different from the one defined in the "
                 "repository ({remote}).".format(local=self.vcs, remote=self.phab_vcs)
             )
@@ -392,7 +392,7 @@ class Repository(object):
         """
         if not self._phab_vcs:
             # check file
-            path = os.path.join(self.dot_path, ".moz-phab_vcs")
+            path = os.path.join(self.dot_path, ".moz-phab_vcs_cache")
             if os.path.isfile(path):
                 with open(path) as f:
                     self._phab_vcs = f.readline()

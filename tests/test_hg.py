@@ -667,8 +667,10 @@ def test_check_vcs(hg):
     assert hg.check_vcs()
 
     hg._phab_vcs = "git"
-    with pytest.raises(exceptions.Error):
-        hg.check_vcs()
+
+    # This just produces a warning now.
+    # See bug 1963878.
+    hg.check_vcs()
 
     hg.args = Args(force_vcs=True)
     assert hg.check_vcs()

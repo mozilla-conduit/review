@@ -562,8 +562,10 @@ def test_check_vcs(git):
     assert git.check_vcs()
 
     git.git._cinnabar_installed = False
-    with pytest.raises(exceptions.Error):
-        git.check_vcs()
+
+    # This just produces a warning now.
+    # See bug 1963878.
+    git.check_vcs()
 
     args = Args(force_vcs=True)
     git.set_args(args)

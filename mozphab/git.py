@@ -930,7 +930,7 @@ class Git(Repository):
             return True
 
         if self.is_cinnabar_required and not self.is_cinnabar_installed:
-            raise Error(
+            logger.warning(
                 "Git Cinnabar extension is required to work on this repository."
             )
 
