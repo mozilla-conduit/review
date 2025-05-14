@@ -74,6 +74,9 @@ def uplift(repo: Repository, args: argparse.Namespace):
     repo.call_sign = phab_repo["fields"]["callsign"]
     repo._phab_repo = phab_repo
 
+    if phab_repo["fields"]["vcs"] == "git":
+        args.train = phab_repo["fields"]["defaultBranch"]
+
     # Run the usual submit comment with our patched arg values.
     submit(repo, args)
 

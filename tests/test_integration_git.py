@@ -912,7 +912,12 @@ def test_submit_update_revision_not_found(
     assert "query result for revision D124" in str(excinfo.value)
 
 
-def test_uplift_create(in_process, git_repo_path: pathlib.Path, init_sha):
+def test_uplift_create(
+    in_process,
+    git_repo_path: pathlib.Path,
+    init_sha: str,
+    caplog: pytest.LogCaptureFixture,
+):
     call_conduit.reset_mock()
     call_conduit.side_effect = [
         # diffusion.repository.search
@@ -920,12 +925,17 @@ def test_uplift_create(in_process, git_repo_path: pathlib.Path, init_sha):
             "data": [
                 {
                     "phid": "PHID-BETA-2",
-                    "fields": {"shortName": "beta", "callsign": "BETA", "vcs": "git"},
+                    "fields": {
+                        "shortName": "firefox-beta",
+                        "defaultBranch": "beta",
+                        "callsign": "BETA",
+                        "vcs": "git",
+                    },
                 }
             ]
         },
         # diffusion.repository.search
-        {"data": [{"fields": {"shortName": "beta"}}]},
+        {"data": [{"fields": {"shortName": "firefox-beta"}}]},
         # conduit.ping
         {},
         # differential.revision.search
@@ -947,7 +957,9 @@ def test_uplift_create(in_process, git_repo_path: pathlib.Path, init_sha):
     )
     git_out("commit", "--file", "msg")
 
-    mozphab.main(["uplift", "-y", "--train", "beta", init_sha], is_development=True)
+    mozphab.main(
+        ["uplift", "-y", "--train", "firefox-beta", init_sha], is_development=True
+    )
 
     call_conduit.assert_any_call(
         "differential.creatediff",
@@ -980,6 +992,9 @@ def test_uplift_create(in_process, git_repo_path: pathlib.Path, init_sha):
             ),
         },
     )
+    assert (
+        "Couldn't find a head for firefox-beta in version control" not in caplog.text
+    ), "Git branch mapping from Phabricator was not correctly performed, and the uplift base could not be found."
 
 
 def test_empty_file(in_process, git_repo_path: pathlib.Path, init_sha):
