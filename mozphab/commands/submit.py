@@ -434,7 +434,7 @@ def local_uplift_if_possible(
 
     # Try and find a local repo identifier (hg bookmark, git remote branch) to rebase
     # our revset onto.
-    unified_head = repo.map_shortname_to_unified_head(args.train)
+    unified_head = repo.get_repo_head_branch()
 
     if not unified_head:
         # If we didn't find a unified head, we intend to submit an uplift without
@@ -498,7 +498,9 @@ def _submit(repo: Repository, args: argparse.Namespace):
     else:
         status = "for review"
 
-    logger.warning(f"Submitting {commit_count} commit{'s'[:commit_count^1]} {status}")
+    logger.warning(
+        f"Submitting {commit_count} commit{'s'[: commit_count ^ 1]} {status}"
+    )
 
     # Validate commit stack is suitable for review.
     show_commit_stack(commits, args, validate=True)

@@ -734,7 +734,8 @@ class Mercurial(Repository):
 
         return True
 
-    def map_shortname_to_unified_head(self, shortname: str) -> Optional[str]:
+    def get_repo_head_branch(self) -> Optional[str]:
+        shortname = self._phab_repo["fields"]["shortName"]
         if not self.is_node(shortname):
             return None
 

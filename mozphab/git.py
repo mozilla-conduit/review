@@ -685,11 +685,12 @@ class Git(Repository):
         # If the command ran without an error, the commit is a descendant.
         return True
 
-    def map_shortname_to_unified_head(self, shortname: str) -> Optional[str]:
+    def get_repo_head_branch(self) -> Optional[str]:
+        default_branch = self._phab_repo["fields"]["defaultBranch"]
         if not self.is_cinnabar_required:
-            unified_head = f"remotes/origin/{shortname}"
+            unified_head = f"remotes/origin/{default_branch}"
         else:
-            unified_head = f"remotes/origin/bookmarks/{shortname}"
+            unified_head = f"remotes/origin/bookmarks/{default_branch}"
 
         if not self.is_node(unified_head):
             return None

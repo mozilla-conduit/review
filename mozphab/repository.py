@@ -181,11 +181,10 @@ class Repository(object):
     def is_descendant(self, node: str) -> bool:
         """Return `True` if the repository revset is descendant from `node`."""
 
-    def map_shortname_to_unified_head(self, shortname: str) -> Optional[str]:
-        """Return the expected VCS identifier for the given callsign.
+    def get_repo_head_branch(self) -> Optional[str]:
+        """Return the expected branch/head for the current Phabricator repo.
 
-        Returns a VCS identifier that corresponds to the given Phabricator repository
-        callsign. Confirms the identified head exists in the repository.
+        Confirms the identified head exists in the repository.
         """
 
     def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:

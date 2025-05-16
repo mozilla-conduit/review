@@ -170,6 +170,13 @@ def git(
     m_git_get_current_head.return_value = "branch"
     git = Git("x")
     git._phab_vcs = "git"
+    git._phab_repo = {
+        "fields": {
+            "defaultBranch": "beta",
+            "shortName": "firefox-beta",
+            "vcs": "git",
+        }
+    }
     return git
 
 
@@ -202,6 +209,13 @@ def hg(
     hg.use_evolve = True
     hg.has_mq = False
     hg._phab_vcs = "hg"
+    hg._phab_repo = {
+        "fields": {
+            "defaultBranch": "default",
+            "shortName": "beta",
+            "vcs": "hg",
+        }
+    }
     return hg
 
 
