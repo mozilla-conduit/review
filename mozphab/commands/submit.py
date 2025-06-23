@@ -471,6 +471,15 @@ def _submit(repo: Repository, args: argparse.Namespace):
         commits = repo.commit_stack(single=args.single)
     if not commits:
         raise Error("Failed to find any commits to submit")
+    n_commits = len(commits)
+    if n_commits > 100:
+        raise Error(
+            f"Unable to create a stack with {n_commits} unpublished commits.\n\n"
+            "This is usually the result of a failure to detect the correct "
+            "remote repository.\nTry again with the `--upstream <upstream>` "
+            "switch to specify the correct remote repository,\n"
+            "or set the `git_remote` config option to specify a remote."
+        )
 
     if args.command == "uplift":
         # Perform uplift logic during submission.

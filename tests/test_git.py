@@ -14,54 +14,107 @@ from mozphab.commits import Commit
 from .conftest import create_temp_fn
 
 
+@pytest.mark.parametrize(
+    "revisions, expected",
+    (
+        (
+            [
+                "a1b2c3d4e5f6g7h8i9j0aabbccddeeff00112233",  # oldest unpublished
+                "b1c2d3e4f5g6h7i8j9k0aabbccddeeff00112234",
+                "c1d2e3f4g5h6i7j8k9l0aabbccddeeff00112235",  # newest unpublished
+                "-1234567890abcdef1234567890abcdef12345678",  # last published commit
+            ],
+            "c1d2e3f4g5h6i7j8k9l0aabbccddeeff00112235",
+        ),
+        (["-abcdef1234567890abcdef1234567890abcdef12"], None),
+        ([], None),
+    ),
+)
 @mock.patch("mozphab.git.Git.git_out")
-def test_cherry(m_git_git_out, git):
-    m_git_git_out.side_effect = (exceptions.CommandError, ["output"])
-    assert git._cherry(["one", "two"]) == ["output"]
-    m_git_git_out.assert_has_calls(
-        [
-            mock.call(["cherry", "--abbrev=12", "one"]),
-            mock.call(["cherry", "--abbrev=12", "two"]),
-        ]
+def test_first_unpublished(m_git_git_out, git, revisions, expected):
+    m_git_git_out.return_value = revisions
+
+    result = git._get_first_unpublished_node()
+    assert result == expected, "Incorrect first unpublished node detected."
+
+
+@mock.patch("mozphab.git.config")
+@mock.patch("mozphab.git.Git.git_out")
+def test_get_base_remotes_with_git_remote(mock_git_out, mock_config, git):
+    mock_config.git_remote = ["custom"]
+    mock_git_out.return_value = ["origin", "upstream"]
+
+    remotes = git.get_base_remotes()
+    assert remotes == [
+        "custom"
+    ], "`git_remote` config option should override any found remotes."
+    mock_git_out.assert_not_called()
+
+
+@mock.patch("mozphab.git.config")
+@mock.patch("mozphab.git.Git.git_out")
+@mock.patch("mozphab.git.logger")
+def test_get_base_remotes_single(mock_logger, mock_git_out, mock_config, git):
+    mock_config.git_remote = []
+    mock_git_out.return_value = ["onlyremote"]
+
+    remotes = git.get_base_remotes()
+    assert remotes == [
+        "onlyremote"
+    ], "Single remote in the repo should be returned as the base."
+    mock_logger.info.assert_called_once_with(
+        "Detecting base using the only available remote: onlyremote"
     )
 
 
-@mock.patch("mozphab.git.Git.git_out")
-@mock.patch("mozphab.git.Git._cherry")
 @mock.patch("mozphab.git.config")
-def test_first_unpublished(m_config, m_git_cherry, m_git_git_out, git):
-    class Args:
-        def __init__(self, upstream=None, start_rev="(auto)"):
-            self.upstream = upstream
-            self.start_rev = start_rev
+@mock.patch("mozphab.git.Git.git_out")
+@mock.patch("mozphab.git.logger")
+def test_get_base_remotes_with_origin(mock_logger, mock_git_out, mock_config, git):
+    mock_config.git_remote = []
+    mock_git_out.return_value = ["upstream", "origin", "custom"]
 
-    m_config.git_remote = []
-    m_git_git_out.side_effect = (["a", "b"], ["c"], ["d"])
-    m_git_cherry.side_effect = (["- sha1", "+ sha2"], [], None)
-    git.args = Args()
-    first = git._get_first_unpublished_node
-    assert "sha2" == first()
-    m_git_cherry.assert_called_with(["a", "b"])
-    assert first() is None
-    with pytest.raises(exceptions.Error):
-        first()
+    remotes = git.get_base_remotes()
+    assert remotes == [
+        "origin"
+    ], "`origin` should be returned when multiple remotes are found."
+    mock_logger.warning.assert_called_once()
+    assert "Defaulting to 'origin'" in mock_logger.warning.call_args[0][0]
 
-    m_git_cherry.side_effect = ([],)
-    git.args = Args(upstream=["upstream"])
-    first()
-    m_git_cherry.assert_called_with(["upstream"])
 
-    m_git_cherry.side_effect = ([],)
-    m_config.git_remote = ["someremote"]
-    git.args = Args()
-    first()
-    m_git_cherry.assert_called_with(["someremote"])
-    m_config.git_remote = []
+@mock.patch("mozphab.git.config")
+@mock.patch("mozphab.git.Git.git_out")
+@mock.patch("mozphab.git.logger")
+def test_get_base_remotes_multiple_without_origin(
+    mock_logger, mock_git_out, mock_config, git
+):
+    mock_config.git_remote = []
+    mock_git_out.return_value = ["upstream", "custom"]
 
-    m_git_cherry.side_effect = (["+ %s" % i for i in range(101)],)
-    m_git_git_out.side_effect = (["origin"],)
-    with pytest.raises(exceptions.Error):
-        first()
+    remotes = git.get_base_remotes()
+    assert remotes == [
+        "upstream",
+        "custom",
+    ], "All remotes should be returned when multiple remotes found without `origin`."
+    mock_logger.warning.assert_called_once()
+    assert (
+        "Multiple remotes found, and no `origin` present."
+        in mock_logger.warning.call_args[0][0]
+    )
+
+
+@mock.patch("mozphab.git.Git.get_base_remotes")
+def test_get_base_remote_args_with_result(mock_get_base_remotes, git):
+    mock_get_base_remotes.return_value = ["origin", "custom"]
+    remote_args = git.get_base_remote_args()
+    assert remote_args == ["--remotes=origin", "--remotes=custom"]
+
+
+@mock.patch("mozphab.git.Git.get_base_remotes")
+def test_get_base_remote_args_empty(mock_get_base_remotes, git):
+    mock_get_base_remotes.return_value = []
+    remote_args = git.get_base_remote_args()
+    assert remote_args == ["--remotes"]
 
 
 @mock.patch("mozphab.git.Git.git_out")

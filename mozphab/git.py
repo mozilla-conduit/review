@@ -200,61 +200,53 @@ class Git(Repository):
             commit.name = short_node(commit.node)
         self.revset = (commits[0].node, commits[-1].node)
 
-    def _cherry(self, remotes: List[str]):
-        """Run `git cherry` and try all the remotes until success."""
-        command = ["cherry", "--abbrev=12"]
-        if not remotes:
-            return self.git_out(command)
+    def get_base_remote_args(self) -> List[str]:
+        """Return a list of `--remotes` arguments to limit commits to official remotes."""
+        remote_args = [f"--remotes={remote}" for remote in self.get_base_remotes()]
 
-        for remote in remotes:
-            logger.info('Determining the commit range using upstream "%s"', remote)
+        return remote_args if remote_args else ["--remotes"]
 
-            try:
-                response = self.git_out(command + [remote])
-            except CommandError:
+    def get_base_remotes(self) -> List[str]:
+        """Return a list of remotes to use for selecting the first unpublished node."""
+        if config.git_remote:
+            return config.git_remote
+
+        remotes: List[str] = self.git_out(["remote"])
+
+        if len(remotes) == 1:
+            logger.info(f"Detecting base using the only available remote: {remotes[0]}")
+            return remotes
+
+        if "origin" in remotes:
+            logger.warning(
+                "Multiple remotes found. Defaulting to 'origin'.\n"
+                "Set `git_remote` in your config if you want to override this."
+            )
+            return ["origin"]
+
+        logger.warning(
+            "Multiple remotes found, and no `origin` present.\n"
+            "Attempting all remotes. This may produce incorrect results.\n"
+            "Set `git_remote` in your config to resolve this."
+        )
+        return remotes
+
+    def _get_first_unpublished_node(self, end: str = "HEAD") -> Optional[str]:
+        """Check which commits should be pushed and return the oldest one."""
+        remote_args = self.get_base_remote_args()
+
+        refs = self.git_out(
+            ["rev-list", end, "--topo-order", "--boundary", "--not", *remote_args]
+        )
+
+        # Iterate from the bottom of the list.
+        for ref in reversed(refs):
+            if ref.startswith("-"):
                 continue
 
-            return response
+            return ref
 
-    def _get_first_unpublished_node(self) -> Optional[str]:
-        """Check which commits should be pushed and return the oldest one."""
-        remotes = config.git_remote
-        if self.args.upstream:
-            remotes = self.args.upstream
-        elif not remotes:
-            remotes = self.git_out(["remote"])
-            if len(remotes) > 1:
-                logger.warning("!! Found multiple upstreams (%s).", ", ".join(remotes))
-
-        unpublished = self._cherry(remotes)
-        if unpublished is None:
-            raise Error(
-                "Unable to detect the start commit. Please provide its SHA-1 or\n"
-                "specify the upstream branch with `--upstream <branch>`."
-            )
-
-        if not unpublished:
-            return None
-
-        if len(unpublished) > 100:
-            raise Error(
-                "Unable to create a stack with %s unpublished commits.\n\n"
-                "This is usually the result of a failure to detect the correct "
-                "remote repository.\nTry again with the `--upstream <upstream>` "
-                "switch to specify the correct remote repository." % len(unpublished)
-            )
-
-        for line in unpublished:
-            # `git cherry` is producing the output in reverse order - oldest
-            # commit is the first one. That is the *opposite* of what we can find
-            # in the documentation.
-            if line.startswith("+"):
-                return line.split("+ ")[1]
-            else:
-                logger.warning(
-                    "!! Diff from commit %s found in upstream - omitting.",
-                    line.split("- ")[1],
-                )
+        return None
 
     def set_args(self, args: argparse.Namespace):
         """Store moz-phab command line args and set the revset."""
@@ -263,20 +255,20 @@ class Git(Repository):
         self.git.set_args(args)
         if hasattr(self.args, "start_rev"):
             is_single = hasattr(self.args, "single") and self.args.single
-            if self.args.start_rev == environment.DEFAULT_START_REV:
-                if is_single:
-                    start_rev = "HEAD"
-                else:
-                    start_rev = self._get_first_unpublished_node()
-            else:
+
+            if self.args.start_rev != environment.DEFAULT_START_REV:
                 start_rev = self.args.start_rev
+            elif is_single:
+                start_rev = "HEAD"
+            else:
+                start_rev = self._get_first_unpublished_node()
 
             if start_rev is None:
                 return None
 
-            # We want inclusive range of commits if start commit is detected
             if self.args.start_rev == environment.DEFAULT_START_REV or is_single:
-                start = "%s^" % start_rev
+                # We want inclusive range of commits if start commit is detected
+                start = f"{start_rev}^"
             else:
                 start = start_rev
 
