@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import errno
+import importlib.metadata
 import logging
 import socket
 import ssl
@@ -10,15 +11,13 @@ import urllib.error
 
 import hglib.error
 import sentry_sdk
-from pkg_resources import get_distribution
 from sentry_sdk.integrations.logging import LoggingIntegration
 
+from .environment import MOZPHAB_VERSION
 from .exceptions import CommandError
 
 
 def init_sentry():
-    distribution = get_distribution("MozPhab")
-
     sentry_logging = LoggingIntegration(
         level=logging.INFO,
         event_level=None,
@@ -32,7 +31,7 @@ def init_sentry():
             "https://f2dcfa028ddb4540b5d64a855d480909@o1069899.ingest.sentry.io/6250015"
         ),
         integrations=[sentry_logging],
-        release=distribution.version,
+        release=MOZPHAB_VERSION,
     )
 
 
