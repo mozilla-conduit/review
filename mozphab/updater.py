@@ -11,7 +11,8 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from packaging.version import parse as parse_version, Version
+from packaging.version import Version
+from packaging.version import parse as parse_version
 from setuptools import Distribution
 
 from mozphab import environment
