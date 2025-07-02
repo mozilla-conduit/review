@@ -809,9 +809,9 @@ def test_move_drev_to_original():
         "bug 1: title r?reviewer\n\nOriginal Revision: http://phabricator.test/D1"
     )
     message, rev_id = helpers.move_drev_to_original(commit_message, 1)
-    assert message == expected, (
-        "`Differential Revision` not re-written to `Original Revision` on uplift."
-    )
+    assert (
+        message == expected
+    ), "`Differential Revision` not re-written to `Original Revision` on uplift."
     assert rev_id is None, "`rev_id` not returned as `None` for new uplift."
 
     # If `Original` and `Differential` are in the commit message, then a previously
@@ -825,9 +825,9 @@ def test_move_drev_to_original():
         "Differential Revision: http://phabricator.test/D2"
     )
     message, rev_id = helpers.move_drev_to_original(commit_message, 2)
-    assert message == expected, (
-        "`Original Revision` should be kept and `Differential Revision` cleared."
-    )
+    assert (
+        message == expected
+    ), "`Original Revision` should be kept and `Differential Revision` cleared."
     assert rev_id is None, "`rev_id` should be `None` for new uplift."
 
 

@@ -100,6 +100,7 @@ class Jujutsu(Repository):
         if version < min_version:
             raise Error(f"`moz-phab` requires Jujutsu {min_version} or higher.")
         return m.group(0)
+
     def check_vcs(self) -> bool:
         if self.args.force_vcs:
             return True
