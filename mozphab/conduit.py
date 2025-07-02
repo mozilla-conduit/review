@@ -631,7 +631,9 @@ class ConduitAPI:
         base_revision = conduit.repo.get_public_node(commit.parent)
 
         creation_method = ["moz-phab", conduit.repo.vcs]
-        if conduit.repo.vcs == "git" and conduit.repo.is_cinnabar_required:
+        if (
+            conduit.repo.vcs == "git" or conduit.repo.vcs == "jj"
+        ) and conduit.repo.is_cinnabar_required:
             creation_method.append("cinnabar")
 
         # Use the repo of the existing revision if this is an update.
