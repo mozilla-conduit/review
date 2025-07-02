@@ -41,14 +41,14 @@ NULL_SHA1 = "0" * 40
 
 
 class Git(Repository):
-    def __init__(self, path: str):
-        dot_path = os.path.join(path, ".git")
+    def __init__(self, path: str, bare_path: Optional[str] = None):
+        dot_path = bare_path or os.path.join(path, ".git")
         if not os.path.exists(dot_path):
             raise ValueError("%s: not a git repository" % path)
 
         logger.debug("found git repo in %s", path)
 
-        self.git = GitCommand()
+        self.git = GitCommand(path, bare_path)
 
         if os.path.isfile(dot_path):
             # We're working from a worktree. Let's find the dot_path directory.

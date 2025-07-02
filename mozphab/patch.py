@@ -11,7 +11,7 @@ from .logger import logger
 def apply_patch(diff: str, cwd: str):
     """Apply a patch provided in the `diff`."""
     try:
-        git = GitCommand()
+        git = GitCommand(cwd)
     except Error:
         logger.error("Git is required to apply patches.")
         raise

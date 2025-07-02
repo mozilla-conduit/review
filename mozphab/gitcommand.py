@@ -21,7 +21,7 @@ from .subprocess_wrapper import check_call, check_output
 
 
 class GitCommand:
-    def __init__(self):
+    def __init__(self, path: str, bare_repo_path: Optional[str] = None):
         """Check if Git is available, set initial values."""
         self.command = config.git_command.copy()
         if not which_path(self.command[0]):
@@ -29,6 +29,9 @@ class GitCommand:
 
         # `self._env` is a dict representing environment used in all git commands.
         self._env = os.environ.copy()
+        if bare_repo_path:
+            self._env["GIT_DIR"] = bare_repo_path
+            self._env["GIT_WORK_TREE"] = path
 
         self.extensions = []
         self._cinnabar_installed = None
