@@ -11,15 +11,19 @@ from packaging.version import Version
 from mozphab import environment
 
 from .commits import Commit
+from .config import config
 from .diff import Diff
-from .exceptions import Error
+from .exceptions import CommandError, Error
 from .git import Git
 from .helpers import (
     is_valid_email,
+    short_node,
+    temporary_binary_file,
     temporary_file,
 )
 from .logger import logger
 from .repository import Repository
+from .spinner import wait_message
 from .subprocess_wrapper import check_call, check_output, subprocess
 
 
@@ -311,6 +315,99 @@ class Jujutsu(Repository):
         return self.__git_repo.get_public_node(node)
 
     # TODO: Functionality to make `local_uplift_if_possible` work?
+
+    def is_worktree_clean(self):
+        """Check if the working tree is clean."""
+        check_call(["jj", "git", "export"])
+        return True
+
+    def check_node(self, node: str) -> str:
+        """Check if the node exists.
+
+        Consults `jj log --revisions $node` first, and:
+
+        1. If multiple commits are found, return an error.
+        2. If a single commit is found, return it as a node.
+        3. If the CLI errors (which happens when there is no match,
+           among other things), then fall back to the Git backend's
+           behavior.
+
+        Raises NotFoundError if none of the above yield a single commit.
+        """
+        try:
+            commits = self.__cli_log(template='commit_id ++ "\\n"', revset=node)
+            if len(commits) > 1:
+                raise Error(
+                    f"Multiple commits match revset `{node}`, unable to continue"
+                )
+            return commits[0]
+        except CommandError:
+            # Call the git backend as well, as it will try to resolve any
+            # cinnabar hashes.
+            return self.__git_repo.check_node(node)
+
+    def before_patch(self, node: str, name: str):
+        """Prepare repository to apply the patches.
+
+        Args:
+            node - SHA1 of the base commit
+            name - name of the bookmark to be created
+        """
+
+        if node:
+            with wait_message("Checking out %s.." % short_node(node)):
+                check_call(["jj", "new", node])
+            logger.info("Checked out %s", short_node(node))
+
+        if name and not self.args.no_branch and config.create_branch:
+            branches = set(
+                check_output(
+                    ["jj", "bookmark", "list", "--template", 'name ++ "\n"'],
+                    strip=False,
+                )
+            )
+            branches = [re.sub("[ *]", "", b) for b in branches]
+            branch_name = name
+            i = 0
+            while branch_name in branches:
+                i += 1
+                branch_name = "%s_%s" % (name, i)
+
+            check_call(["jj", "bookmark", "create", "--revision=@", branch_name])
+            logger.info("Created bookmark %s", branch_name)
+            self.__patch_branch_name = branch_name
+
+    def apply_patch(self, diff: str, body: str, author: str, author_date: str):
+        # NOTE: `before_patch` ensures that we are editing a new, empty commit on the base we want.
+
+        # apply the patch as a binary file to ensure the correct line endings
+        # is used.
+        # TODO: Use `jj`'s built-in patching facilities when it exists (see
+        # <https://github.com/martinvonz/jj/issues/2702>).
+        with temporary_binary_file(diff.encode("utf8")) as patch_file:
+            # NOTE: We avoid `self.__git_repo.git_call` because it changes the CWD.
+            self.__git_repo.git.call(["apply", patch_file], cwd=self.path)
+
+        # TODO: author date
+        # TODO: dedupe with other `describe` usage
+        with temporary_file(body) as message_path:
+            with open(message_path) as message_file:
+                check_call(
+                    ["jj", "describe", "--author", author, "--stdin"],
+                    stdin=message_file,
+                )
+
+        check_call(["jj", "new"])
+
+        if not self.args.no_branch and config.create_branch:
+            # # Advance the bookmark we created for this patch. Because we know we're creating
+            # entirely new commits, and we have the branch at the parent commit, we can let `--from`
+            # compensate for the fact that we otherwise don't remember the name of the branch.
+
+            check_call(["jj", "bookmark", "move", self.__patch_branch_name, "--to=@-"])
+
+    def format_patch(self, diff: str, body: str, author: str, author_date: str) -> str:
+        return diff
 
     # ----
     # Methods private to this abstraction.
