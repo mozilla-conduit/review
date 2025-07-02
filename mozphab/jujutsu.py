@@ -57,22 +57,17 @@ class Jujutsu(Repository):
             )
         logger.debug(f"git_path: {self.git_path}")
 
-        is_colocated = (
-            resolved_path == self.git_path.parent and self.git_path.name == ".git"
-        )
-        if not is_colocated:
-            msg = " ".join(
-                [
-                    f"`jj git root` points to `{self.git_path}`, which we assume to mean",
-                    "this is a non-co-located repo. Currently support requires a co-located",
-                    "Jujutsu repository. Non-co-located repos will be supported with",
-                    "<https://bugzilla.mozilla.org/show_bug.cgi?id=1964150>.",
-                ]
+        try:
+            is_colocated = (
+                resolved_path == self.git_path.parent and self.git_path.name == ".git"
             )
-            logger.warn(msg)
-            raise ValueError(msg)
-
-        self.__git_repo = Git(self.git_path.parent)
+            logger.debug(f"is_colocated: {is_colocated}")
+            bare_path = None if is_colocated else self.git_path
+            self.__git_repo = Git(path, bare_path=bare_path)
+        except Exception:
+            raise ValueError(
+                f"internal error: failed to initialize Git repo from {self.git_path}"
+            )
 
         # Populate common fields expected from a `Repository`
 
