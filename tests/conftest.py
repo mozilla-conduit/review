@@ -299,6 +299,14 @@ def git_out(*args):
     )
 
 
+def jj_out(*args):
+    env = os.environ.copy()
+    args = ["jj", "--debug"] + list(args)
+    return subprocess.check_output(
+        args, env=env, universal_newlines=True, encoding="utf-8"
+    )
+
+
 @pytest.fixture
 def git_repo_path(monkeypatch, tmp_path):
     """Build a usable Git repository. Return the pathlib.Path to the repo."""
@@ -318,6 +326,21 @@ def git_repo_path(monkeypatch, tmp_path):
 
     git_out("add", ".")
     git_out("commit", "--message", "initial commit")
+    return repo_path
+
+
+@pytest.fixture
+def jj_colocated_repo_path(monkeypatch, tmp_path):
+    """Build a usable Jujutsu repository. Return the pathlib.Path to the repo."""
+    phabricator_uri = "http://example.test"
+    repo_path = tmp_path / "jj-repo"
+    repo_path.mkdir()
+    monkeypatch.chdir(str(repo_path))
+    arcconfig = repo_path / ".arcconfig"
+    arcconfig.write_text(json.dumps({"phabricator.uri": phabricator_uri}))
+
+    jj_out("git", "init", "--colocate")
+    jj_out("commit", "--message", "initial commit")
     return repo_path
 
 

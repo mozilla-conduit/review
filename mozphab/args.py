@@ -34,7 +34,8 @@ def should_fallback_to_submit(argv: List[str], commands: Set[str]) -> bool:
         return False
 
     # Don't fallback when we aren't in a repo.
-    if not find_repo_root(os.getcwd()):
+    avoid_jj_vcs = "--avoid-jj-vcs" in argv
+    if not find_repo_root(os.getcwd(), avoid_jj=avoid_jj_vcs):
         return False
 
     return True
@@ -45,6 +46,15 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     main_parser.add_argument("--version", action="store_true", help=argparse.SUPPRESS)
     main_parser.add_argument(
         "--trace", "--debug", action="store_true", help=argparse.SUPPRESS
+    )
+    main_parser.add_argument(
+        "--avoid-jj-vcs",
+        action="store_true",
+        help=(
+            "Suppress discovery of Jujutsu repositories via `.jj`. "
+            "Useful if you have a co-located Jujutsu repository, "
+            "and would like to use Git instead."
+        ),
     )
     parser = argparse.ArgumentParser(
         parents=[main_parser],

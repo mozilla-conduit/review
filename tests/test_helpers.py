@@ -366,6 +366,27 @@ def test_hg_find_repo(hg_repo_path):
     assert path == detect_repository.find_repo_root(path)
 
 
+def test_jj_find_colocated_repo_at_root(jj_colocated_repo_path):
+    path = str(jj_colocated_repo_path)
+    assert path == detect_repository.find_repo_root(path)
+
+
+def test_jj_find_colocated_repo_in_subdir(jj_colocated_repo_path):
+    path = str(jj_colocated_repo_path)
+    assert path == detect_repository.find_repo_root(path)
+    subdir = jj_colocated_repo_path / "test_dir"
+    subdir.mkdir()
+    assert path == detect_repository.find_repo_root(str(subdir))
+
+
+def test_avoid_jj_find_colocated_git_repo(jj_colocated_repo_path):
+    path = str(jj_colocated_repo_path)
+    assert path == detect_repository.find_repo_root(path, avoid_jj=True)
+    subdir = jj_colocated_repo_path / "test_dir"
+    subdir.mkdir()
+    assert path == detect_repository.find_repo_root(str(subdir))
+
+
 def test_fail_find_repo():
     path = "/non/existing/path"
     assert detect_repository.find_repo_root(path) is None
@@ -373,13 +394,21 @@ def test_fail_find_repo():
 
 @mock.patch("mozphab.detect_repository.Mercurial")
 @mock.patch("mozphab.detect_repository.Git")
-def test_probe_repo(m_git, m_hg):
+@mock.patch("mozphab.detect_repository.Jujutsu")
+def test_probe_repo(m_jj, m_git, m_hg):
     m_hg.return_value = "HG"
 
     assert "HG" == detect_repository.probe_repo("path")
 
     m_hg.side_effect = ValueError
+
+    m_jj.return_value = "JJ"
+    assert "JJ" == detect_repository.probe_repo("path")
+
     m_git.return_value = "GIT"
+    assert "GIT" == detect_repository.probe_repo("path", avoid_jj=True)
+
+    m_jj.side_effect = ValueError
     assert "GIT" == detect_repository.probe_repo("path")
 
     m_git.side_effect = ValueError
