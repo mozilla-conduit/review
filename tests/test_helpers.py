@@ -102,7 +102,7 @@ class Helpers(unittest.TestCase):
         # TODO test walking the path
         repo = None
 
-        def probe_repo(_):
+        def probe_repo(*_args, **_kwargs):
             return repo
 
         m_probe.side_effect = probe_repo
@@ -391,7 +391,7 @@ def test_repo_from_args(m_probe):
     # TODO test walking the path
     repo = None
 
-    def probe_repo(path):
+    def probe_repo(*_args, **_kwargs):
         return repo
 
     m_probe.side_effect = probe_repo
