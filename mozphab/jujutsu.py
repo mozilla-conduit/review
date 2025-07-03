@@ -41,6 +41,11 @@ class Jujutsu(Repository):
 
     def __init__(self, path: str):
         self.vcs_version = Jujutsu.__check_and_get_version()
+        dot_path = os.path.join(path, ".jj")
+        if not os.path.exists(dot_path):
+            raise ValueError(f"{path}: not a Jujutsu repository")
+
+        logger.debug("found Jujutsu repo in %s", path)
 
         resolved_path = Path(path).resolve(strict=True)
         logger.debug(f"resolved_path: {resolved_path}")
@@ -70,11 +75,6 @@ class Jujutsu(Repository):
             )
 
         # Populate common fields expected from a `Repository`
-
-        dot_path = os.path.join(path, ".jj")
-        if not os.path.exists(dot_path):
-            raise ValueError("%s: not a Jujutsu repository" % path)
-        logger.debug("found Jujutsu repo in %s", path)
         super().__init__(path, dot_path)
 
         self.vcs = "jj"
