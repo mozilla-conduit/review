@@ -178,7 +178,6 @@ class Mercurial(Repository):
         capture: bool = True,
         expect_binary: bool = False,
         strip: bool = True,
-        keep_ends: bool = False,
         split: bool = True,
         never_log: bool = False,
     ) -> Optional[bytes | str]:
@@ -220,7 +219,7 @@ class Mercurial(Repository):
             logger.debug(out)
 
         if capture:
-            return out.splitlines(keep_ends) if split else out
+            return out.splitlines() if split else out
 
         clear_terminal_line()
         print(out, end="")
