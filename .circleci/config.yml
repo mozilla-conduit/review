@@ -74,6 +74,17 @@ jobs:
             # configure git
             git config --global user.email "moz-phab-tests@example.com"
             git config --global user.name "moz-phab tests"
+            # Install and configure jj.
+            JJ_VERSION="0.31.0"
+            JJ_PLATFORM="x86_64-unknown-linux-musl"
+            JJ_FILENAME="jj-v${JJ_VERSION}-${JJ_PLATFORM}.tar.gz"
+            JJ_EXPECTED_SHA="b217d8c1e8617096e8d420bb18b208267fa3d5702a85bec87731d1390a980711"
+            curl -LO "https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/${JJ_FILENAME}"
+            echo "${JJ_EXPECTED_SHA}  ${JJ_FILENAME}" | sha256sum -c
+            tar -xzf "${JJ_FILENAME}"
+            sudo mv jj /usr/local/bin
+            jj config set --user user.name "moz-phab tests"
+            jj config set --user user.email "moz-phab-tests@example.com"
             # install test dependencies
             python3 -m venv ~/venv
             source ~/venv/bin/activate
@@ -88,6 +99,7 @@ jobs:
             python3 --version
             which python3
             git --version
+            jj --version
             python3 -m pip --disable-pip-version-check list --format freeze
       - run:
           name: run tests
