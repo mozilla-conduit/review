@@ -66,7 +66,7 @@ class Repository(object):
         elif is_mozilla_phabricator(self.phab_url):
             self.bmo_url = "https://bugzilla.mozilla.org"
 
-    def is_worktree_clean(self):
+    def is_worktree_clean(self) -> bool:
         """Check if the working tree is clean."""
 
     def before_submit(self):

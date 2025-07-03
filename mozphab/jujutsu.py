@@ -318,7 +318,7 @@ class Jujutsu(Repository):
 
     # TODO: Functionality to make `local_uplift_if_possible` work?
 
-    def is_worktree_clean(self):
+    def is_worktree_clean(self) -> bool:
         """Check if the working tree is clean."""
         check_call(["jj", "git", "export"])
         return True
