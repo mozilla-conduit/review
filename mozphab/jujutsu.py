@@ -40,12 +40,13 @@ class Jujutsu(Repository):
     # ----
 
     def __init__(self, path: str):
-        self.vcs_version = Jujutsu.__check_and_get_version()
         dot_path = os.path.join(path, ".jj")
         if not os.path.exists(dot_path):
             raise ValueError(f"{path}: not a Jujutsu repository")
 
         logger.debug("found Jujutsu repo in %s", path)
+
+        self.vcs_version = self.__check_and_get_version()
 
         resolved_path = Path(path).resolve(strict=True)
         logger.debug(f"resolved_path: {resolved_path}")
@@ -86,8 +87,7 @@ class Jujutsu(Repository):
             ["jj", "config", "get", "user.email"], split=False
         ).rstrip()
 
-    @staticmethod
-    def __check_and_get_version() -> str:
+    def __check_and_get_version(self) -> str:
         min_version = Jujutsu.MIN_VERSION
 
         version_re = re.compile(r"jj (\d+\.\d+\.\d+)(?:-[a-fA-F0-9]{40})?")
