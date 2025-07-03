@@ -91,7 +91,13 @@ class Jujutsu(Repository):
         min_version = Jujutsu.MIN_VERSION
 
         version_re = re.compile(r"jj (\d+\.\d+\.\d+)(?:-[a-fA-F0-9]{40})?")
-        jj_version_output = check_output(["jj", "version"], split=False)
+        try:
+            jj_version_output = check_output(["jj", "version"], split=False)
+        except FileNotFoundError as exc:
+            if exc.filename == "jj":
+                raise Error("`jj` executable was not found.")
+            raise exc
+
         m = version_re.fullmatch(jj_version_output)
         if not m:
             raise Error("Failed to determine Jujutsu version.")
