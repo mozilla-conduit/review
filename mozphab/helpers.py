@@ -36,12 +36,15 @@ ARC_REJECT_RE_LIST = [
 ]
 
 
+# Regex for matching Phabricator URLs with revision
+PHABRICATOR_URL_REVISION_PATTERN = r"https?://[^/]+/D(?P<rev>\d+)"
+
 ARC_DIFF_REV_RE = re.compile(
-    r"^\s*Differential Revision:\s*(?P<phab_url>https?://.+)/D(?P<rev>\d+)\s*$",
+    r"^\s*Differential Revision:\s*" + PHABRICATOR_URL_REVISION_PATTERN + r"\s*$",
     flags=re.MULTILINE,
 )
 ORIGINAL_DIFF_REV_RE = re.compile(
-    r"^\s*Original Revision:\s*(?P<phab_url>https?://.+)/D(?P<rev>\d+)\s*$",
+    r"^\s*Original Revision:\s*" + PHABRICATOR_URL_REVISION_PATTERN + r"\s*$",
     flags=re.MULTILINE,
 )
 
@@ -218,13 +221,17 @@ def move_drev_to_original(
     if original_revision:
         return strip_differential_revision(body), None
 
-    def repl(match):
-        phab_url = match.group("phab_url")
-        rev = match.group("rev")
-        return f"\nOriginal Revision: {phab_url}/D{rev}"
-
-    # Update the commit message and set the `rev-id` to `None`.
-    return ARC_DIFF_REV_RE.sub(repl, body), None
+    # Replace "Differential Revision" with "Original Revision", and set the
+    # `rev-id` to `None`
+    return (
+        ARC_DIFF_REV_RE.sub(
+            lambda m: m.group(0).replace(
+                "Differential Revision:", "Original Revision:"
+            ),
+            body,
+        ),
+        None,
+    )
 
 
 def parse_api_error(api_response: str) -> Optional[str]:
