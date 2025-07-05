@@ -23,11 +23,6 @@ from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
 
-PHABRICATOR_URLS = {
-    "https://phabricator.services.mozilla.com/": "Phabricator",
-    "https://phabricator-dev.allizom.org/": "Phabricator-Dev",
-}
-
 
 def morph_blocking_reviewers(commits: List[Commit]):
     """Automatically fix common typo by replacing r!user with r=user!"""
@@ -557,10 +552,7 @@ def _submit(repo: Repository, args: argparse.Namespace):
             config.filename,
         )
     else:
-        res = prompt(
-            "Submit to %s" % PHABRICATOR_URLS.get(repo.phab_url, repo.phab_url),
-            ["Yes", "No", "Always"],
-        )
+        res = prompt(f"Submit to {repo.phab_url}", ["Yes", "No", "Always"])
         if res == "No":
             return
         if res == "Always":
