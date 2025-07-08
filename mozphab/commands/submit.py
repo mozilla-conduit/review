@@ -742,12 +742,6 @@ def add_submit_arguments(parser):
         action="append",
         help="Set blocking review(s) for all commits (default: from commit).",
     )
-    parser.add_argument(
-        "--nolint",
-        "--no-lint",
-        action="store_true",
-        help="Do not run lint (default: lint changed files if configured).",
-    )
     wip_group = parser.add_mutually_exclusive_group()
     wip_group.add_argument(
         "--wip",
