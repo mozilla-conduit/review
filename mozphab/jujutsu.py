@@ -68,7 +68,7 @@ class Jujutsu(Repository):
                 resolved_path == self.git_path.parent and self.git_path.name == ".git"
             )
             logger.debug(f"is_colocated: {is_colocated}")
-            bare_path = None if is_colocated else self.git_path
+            bare_path = None if is_colocated else str(self.git_path)
             self.__git_repo = Git(path, bare_path=bare_path)
         except Exception:
             raise ValueError(
