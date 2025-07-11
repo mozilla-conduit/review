@@ -390,7 +390,7 @@ class Jujutsu(Repository):
             # NOTE: We avoid `self.__git_repo.git_call` because it changes the CWD.
             self.__git_repo.git.call(["apply", patch_file], cwd=self.path)
 
-        # TODO: author date
+        # TODO: author date: <https://bugzilla.mozilla.org/show_bug.cgi?id=1976915>
         # TODO: dedupe with other `describe` usage
         with temporary_file(body) as message_path:
             with open(message_path) as message_file:
