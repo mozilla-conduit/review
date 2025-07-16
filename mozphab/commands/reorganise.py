@@ -219,9 +219,83 @@ def convert_stackgraph_to_linear(
     return linear_stackgraph
 
 
-def reorganise(repo: Repository, args: argparse.Namespace):
+def force_stack_transactions(
+    remote_phids: List[str],
+    local_phids: List[str],
+    abandoned_revisions: Container[str],
+    no_abandon_unconnected: bool = False,
+) -> Dict[str, List[Dict]]:
+    """Prepare transactions for force mode: synchronize remote to match local exactly.
+
+    Force mode logic:
+    1. Abandon all remote revisions not found locally in the range (unless no_abandon_unconnected is True)
+    2. Unlink all revisions (remove all existing parent-children relationships)
+    3. Relink revisions to match local state exactly
+
+    Args:
+        remote_phids: List of remote PHIDs in the stack
+        local_phids: List of local PHIDs in the desired order
+        abandoned_revisions: Set of already abandoned revision PHIDs
+        no_abandon_unconnected: If True, do not abandon remote revisions not found locally
+
+    Returns a dict of transactions for PHID as defined in `differential.revision.edit`.
+    """
+    local_list = to_llist(local_phids)
+    transactions = OrderedDict()
+
+    # Initialize transactions for all revisions that will be touched
+    all_phids = set(remote_phids + local_phids)
+    for revision in all_phids:
+        transactions[revision] = []
+
+    # Step 1: Abandon remote revisions not found locally
+    remote_revisions_missing_from_local = [
+        r for r in remote_phids if r not in local_phids
+    ]
+
+    if not no_abandon_unconnected:
+        for revision in remote_revisions_missing_from_local:
+            # Only abandon if not already abandoned
+            if revision not in abandoned_revisions:
+                transactions[revision].append(("abandon", True))
+
+    # Step 2: Unlink all revisions - we'll use children.set with empty list to
+    # remove all children. This effectively unlinks all existing relationships
+    for revision in remote_phids:
+        if revision not in local_phids and not no_abandon_unconnected:
+            # Don't unset children for revisions that will be abandoned - no need to modify
+            # their relationships since they'll be abandoned anyway
+            continue
+        transactions[revision].append(("children.set", []))
+
+    # Step 3: Relink revisions to match local state exactly
+    for revision in local_phids:
+        child = local_list[revision]
+        if child is not None:
+            transactions[revision].append(("children.set", [child]))
+
+    # Clean up empty transaction lists
+    conduit_transactions = {}
+    for revision, transaction_list in transactions.items():
+        if not transaction_list:
+            continue
+        conduit_transactions.setdefault(revision, [])
+
+        for trans_type, trans_value in transaction_list:
+            conduit_transactions[revision].append(
+                {"type": trans_type, "value": trans_value}
+            )
+
+    return conduit_transactions
+
+
+def reorganise_inner(repo: Repository, args: argparse.Namespace):
     """Reorganise the stack on Phabricator to match the stack in the local VCS."""
     telemetry().submission.preparation_time.start()
+
+    # Validate argument combinations
+    if args.no_abandon_unconnected and not args.force:
+        raise Error("--no-abandon-unconnected can only be used with --force")
 
     with wait_message("Checking connection to Phabricator."):
         # Check if raw Conduit API can be used
@@ -240,6 +314,10 @@ def reorganise(repo: Repository, args: argparse.Namespace):
 
     localstack_ids = [commit.rev_id for commit in commits]
     if not all(localstack_ids):
+        if args.force:
+            raise Error(
+                "Force mode requires all local revisions to be present on Phabricator."
+            )
         names = [commit.name for commit in commits if commit.rev_id is None]
         plural = len(names) > 1
         raise Error(
@@ -289,13 +367,23 @@ def reorganise(repo: Repository, args: argparse.Namespace):
         try:
             phabstack_phids = walk_llist(phabstack)
         except Error:
-            logger.error(
-                "Remote stack is not linear.\n"
-                "Detected stack:\n{}".format(
-                    " <- ".join(conduit.phids_to_ids(list(phabstack.keys())))
+            if args.force:
+                # In force mode, we ignore remote stack structure issues
+                logger.warning(
+                    "Remote stack is not linear, but continuing in force mode.\n"
+                    "Detected stack:\n{}".format(
+                        " <- ".join(conduit.phids_to_ids(list(phabstack.keys())))
+                    )
                 )
-            )
-            raise
+                phabstack_phids = list(phabstack.keys())
+            else:
+                logger.error(
+                    "Remote stack is not linear.\n"
+                    "Detected stack:\n{}".format(
+                        " <- ".join(conduit.phids_to_ids(list(phabstack.keys())))
+                    )
+                )
+                raise
     else:
         phabstack_phids = []
 
@@ -305,21 +393,34 @@ def reorganise(repo: Repository, args: argparse.Namespace):
         for revision in revisions
         if revision["fields"]["status"]["value"] == "abandoned"
     }
-    try:
-        transactions = stack_transactions(
+
+    if args.force:
+        transactions = force_stack_transactions(
             phabstack_phids,
             localstack_phids,
             abandoned_revisions,
-            no_abandon=args.no_abandon,
+            no_abandon_unconnected=args.no_abandon_unconnected,
         )
-    except Error:
-        logger.error("Unable to prepare stack transactions.")
-        raise
+    else:
+        try:
+            transactions = stack_transactions(
+                phabstack_phids,
+                localstack_phids,
+                abandoned_revisions,
+                no_abandon=args.no_abandon,
+            )
+        except Error:
+            logger.error("Unable to prepare stack transactions.")
+            raise
 
     if not transactions:
         raise Error("Reorganisation is not needed.")
 
-    logger.warning("Stack will be reorganised:")
+    if args.force:
+        logger.warning("Stack will be forcibly synchronized:")
+    else:
+        logger.warning("Stack will be reorganised:")
+
     for phid, rev_transactions in transactions.items():
         node_id = conduit.phid_to_id(phid)
         if any(transaction["type"] == "abandon" for transaction in rev_transactions):
@@ -327,12 +428,17 @@ def reorganise(repo: Repository, args: argparse.Namespace):
         else:
             for t in rev_transactions:
                 if t["type"] == "children.set":
-                    logger.info(
-                        " * {child} will depend on {parent}".format(
-                            child=conduit.phid_to_id(t["value"][0]),
-                            parent=node_id,
+                    if t["value"]:  # Has children
+                        logger.info(
+                            " * {child} will depend on {parent}".format(
+                                child=conduit.phid_to_id(t["value"][0]),
+                                parent=node_id,
+                            )
                         )
-                    )
+                    elif args.force:
+                        logger.info(
+                            " * {} will have all dependencies removed".format(node_id)
+                        )
                 if t["type"] == "children.remove":
                     logger.info(
                         " * {child} will no longer depend on {parent}".format(
@@ -346,7 +452,10 @@ def reorganise(repo: Repository, args: argparse.Namespace):
     if args.yes:
         pass
     else:
-        res = prompt("Perform reorganisation", ["Yes", "No"])
+        if args.force:
+            res = prompt("Perform force synchronization", ["Yes", "No"])
+        else:
+            res = prompt("Perform reorganisation", ["Yes", "No"])
         if res == "No":
             sys.exit(1)
 
@@ -361,6 +470,20 @@ def reorganise(repo: Repository, args: argparse.Namespace):
 
     telemetry().submission.process_time.stop()
     logger.info("Stack has been reorganised.")
+
+
+def reorganise(repo: Repository, args: argparse.Namespace):
+    """Reorganise the stack on Phabricator to match the stack in the local VCS."""
+    try:
+        reorganise_inner(repo, args)
+    except Error as e:
+        # Check if the `force` flag was not set and print a hint about --force mode
+        if not args.force:
+            logger.warning(
+                "Reorganisation failed. You might try using --force to bypass "
+                "stack structure checks and force synchronization."
+            )
+        raise e
 
 
 def add_parser(parser):
@@ -401,5 +524,17 @@ def add_parser(parser):
         action="store_true",
         dest="no_abandon",
         help="Do not abandon revisions during reorg.",
+    )
+    reorg_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force synchronization: abandon remote revisions not found locally, "
+        "unlink all revisions, then relink to match local state.",
+    )
+    reorg_parser.add_argument(
+        "--no-abandon-unconnected",
+        action="store_true",
+        help="When used with --force, do not abandon remote revisions that are not "
+        "connected to the local stack. Useful for managing multiple patch series.",
     )
     reorg_parser.set_defaults(func=reorganise, needs_repo=True)

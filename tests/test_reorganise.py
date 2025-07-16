@@ -325,6 +325,8 @@ def test_reorg_calling_stack_transactions(
     class Args:
         yes = True
         no_abandon = kwargs["no_abandon"]
+        force = False
+        no_abandon_unconnected = False
 
     phabstack, commits, rev_ids = stacks
     m_convert_stackgraph_to_linear.return_value = phabstack
@@ -339,8 +341,13 @@ def test_reorg_calling_stack_transactions(
 @mock.patch("mozphab.conduit.ConduitAPI.check")
 def test_conduit_broken(m_check):
     m_check.return_value = False
+
+    class Args:
+        force = False
+        no_abandon_unconnected = False
+
     with pytest.raises(exceptions.Error) as e:
-        reorganise.reorganise(None, None)
+        reorganise.reorganise(None, Args())
 
     assert str(e.value) == "Failed to use Conduit API"
 
@@ -348,17 +355,21 @@ def test_conduit_broken(m_check):
 @mock.patch("mozphab.conduit.ConduitAPI.check")
 @mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
 def test_commits_invalid(_augment, _check, git):
+    class Args:
+        force = False
+        no_abandon_unconnected = False
+
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()
     mozphab.conduit.repo.commit_stack.return_value = []
     with pytest.raises(exceptions.Error) as e:
-        reorganise.reorganise(git, None)
+        reorganise.reorganise(git, Args())
 
     assert str(e.value) == "Failed to find any commits to reorganise."
 
     mozphab.conduit.repo.commit_stack.return_value = [Commit(rev_id=None, name="A")]
     with pytest.raises(exceptions.Error) as e:
-        reorganise.reorganise(git, None)
+        reorganise.reorganise(git, Args())
 
     error = str(e.value)
     assert error.startswith("Found new commit in the local stack: A.")
@@ -374,6 +385,10 @@ def test_commits_invalid(_augment, _check, git):
 def test_remote_stack_invalid(
     m_logger, m_walk, m_ids, m_stack, _augment, _check, _call, git
 ):
+    class Args:
+        force = False
+        no_abandon_unconnected = False
+
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()
 
@@ -382,7 +397,7 @@ def test_remote_stack_invalid(
     mozphab.conduit.repo.commit_stack.return_value = [Commit(rev_id=1, name="A")]
     m_walk.side_effect = exceptions.Error("TEST")
     with pytest.raises(exceptions.Error) as e:
-        reorganise.reorganise(git, None)
+        reorganise.reorganise(git, Args())
 
     assert str(e.value) == "TEST"
     m_logger.error.assert_called_once_with(
@@ -482,3 +497,413 @@ def test_convert_stackgraph_to_linear_fail(stack_graph):
     phids_to_ids = {phid: int(phid) for phid in stack_graph}
     with pytest.raises(exceptions.Error):
         reorganise.convert_stackgraph_to_linear(stack_graph, phids_to_ids)
+
+
+@pytest.mark.parametrize(
+    "remote_phids,local_phids,abandoned,expected_transactions",
+    [
+        # Simple case: same revision in both remote and local
+        (
+            ["A"],
+            ["A"],
+            set(),
+            {
+                "A": [
+                    {"type": "children.set", "value": []},
+                ]
+            },
+        ),
+        # Local revision with child
+        (
+            ["A"],
+            ["A", "B"],
+            set(),
+            {
+                "A": [
+                    {"type": "children.set", "value": []},
+                    {"type": "children.set", "value": ["B"]},
+                ]
+            },
+        ),
+        # Remote revision not in local - should be abandoned
+        (
+            ["A", "B"],
+            ["A"],
+            set(),
+            {
+                "A": [
+                    {"type": "children.set", "value": []},
+                ],
+                "B": [
+                    {"type": "abandon", "value": True},
+                ],
+            },
+        ),
+        # Remote revision not in local but already abandoned - no abandon transaction
+        (
+            ["A", "B"],
+            ["A"],
+            {"B"},
+            {
+                "A": [
+                    {"type": "children.set", "value": []},
+                ]
+            },
+        ),
+        # Complex case: reorder with abandonment
+        (
+            ["A", "B", "C"],
+            ["C", "A"],
+            set(),
+            {
+                "A": [
+                    {"type": "children.set", "value": []},
+                ],
+                "B": [
+                    {"type": "abandon", "value": True},
+                ],
+                "C": [
+                    {"type": "children.set", "value": []},
+                    {"type": "children.set", "value": ["A"]},
+                ],
+            },
+        ),
+        # Empty remote, non-empty local
+        (
+            [],
+            ["A", "B"],
+            set(),
+            {
+                "A": [
+                    {"type": "children.set", "value": ["B"]},
+                ]
+            },
+        ),
+        # Empty local, non-empty remote - abandon all
+        (
+            ["A", "B"],
+            [],
+            set(),
+            {
+                "A": [
+                    {"type": "abandon", "value": True},
+                ],
+                "B": [
+                    {"type": "abandon", "value": True},
+                ],
+            },
+        ),
+    ],
+)
+def test_force_stack_transactions(
+    remote_phids, local_phids, abandoned, expected_transactions
+):
+    """Test the force_stack_transactions function with various scenarios."""
+    result = reorganise.force_stack_transactions(remote_phids, local_phids, abandoned)
+    assert result == expected_transactions
+
+
+@pytest.mark.parametrize(
+    "remote_phids,local_phids,abandoned,no_abandon_unconnected,expected_transactions",
+    [
+        # With no_abandon_unconnected=True: don't abandon remote revisions not in local
+        (
+            ["A", "B", "C"],
+            ["A"],
+            set(),
+            True,
+            {
+                "A": [
+                    {"type": "children.set", "value": []},
+                ],
+                "B": [
+                    {"type": "children.set", "value": []},
+                ],
+                "C": [
+                    {"type": "children.set", "value": []},
+                ],
+            },
+        ),
+        # With no_abandon_unconnected=False: abandon remote revisions not in local (default behavior)
+        (
+            ["A", "B", "C"],
+            ["A"],
+            set(),
+            False,
+            {
+                "A": [
+                    {"type": "children.set", "value": []},
+                ],
+                "B": [
+                    {"type": "abandon", "value": True},
+                ],
+                "C": [
+                    {"type": "abandon", "value": True},
+                ],
+            },
+        ),
+        # With no_abandon_unconnected=True and already abandoned revision: no change
+        (
+            ["A", "B"],
+            ["A"],
+            {"B"},
+            True,
+            {
+                "A": [
+                    {"type": "children.set", "value": []},
+                ],
+                "B": [
+                    {"type": "children.set", "value": []},
+                ],
+            },
+        ),
+        # Complex case with no_abandon_unconnected=True: reorder but don't abandon
+        (
+            ["A", "B", "C"],
+            ["C", "A"],
+            set(),
+            True,
+            {
+                "A": [
+                    {"type": "children.set", "value": []},
+                ],
+                "B": [
+                    {"type": "children.set", "value": []},
+                ],
+                "C": [
+                    {"type": "children.set", "value": []},
+                    {"type": "children.set", "value": ["A"]},
+                ],
+            },
+        ),
+    ],
+)
+def test_force_stack_transactions_no_abandon_unconnected(
+    remote_phids, local_phids, abandoned, no_abandon_unconnected, expected_transactions
+):
+    """Test the force_stack_transactions function with no_abandon_unconnected flag."""
+    result = reorganise.force_stack_transactions(
+        remote_phids, local_phids, abandoned, no_abandon_unconnected
+    )
+    assert result == expected_transactions
+
+
+@pytest.mark.parametrize(
+    "stacks,expected_args",
+    [
+        # Force mode with all local revisions present
+        (
+            ({"A": None}, [Commit(rev_id=1)], ["A"], True),
+            (["A"], ["A"], set()),
+        ),
+        # Force mode with reordering
+        (
+            (
+                {"A": "B", "B": None},
+                [Commit(rev_id=2), Commit(rev_id=1)],
+                ["B", "A"],
+                True,
+            ),
+            (["A", "B"], ["B", "A"], set()),
+        ),
+    ],
+)
+@mock.patch("mozphab.commands.reorganise.force_stack_transactions")
+@mock.patch("mozphab.commands.reorganise.stack_transactions")
+@mock.patch("mozphab.conduit.ConduitAPI.check")
+@mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
+@mock.patch("mozphab.commands.reorganise.convert_stackgraph_to_linear")
+@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+@mock.patch("mozphab.conduit.ConduitAPI.ids_to_phids")
+@mock.patch("mozphab.conduit.ConduitAPI.phids_to_ids")
+@mock.patch("mozphab.conduit.ConduitAPI.apply_transactions_to_revision")
+def test_reorg_force_mode(
+    _apply_transactions,
+    _phid2id,
+    m_id2phid,
+    _get_revs,
+    m_convert_stackgraph_to_linear,
+    _augment_commits,
+    _check,
+    m_stack_trans,
+    m_force_trans,
+    git,
+    stacks,
+    expected_args,
+):
+    """Test that force mode calls force_stack_transactions instead of stack_transactions."""
+    phabstack, commits, rev_ids, force_mode = stacks
+
+    class Args:
+        yes = True
+        no_abandon = False
+        force = force_mode
+        no_abandon_unconnected = False
+
+    m_convert_stackgraph_to_linear.return_value = phabstack
+    mozphab.conduit.set_repo(git)
+    mozphab.conduit.repo.commit_stack = mock.Mock()
+    mozphab.conduit.repo.commit_stack.return_value = commits
+    m_id2phid.return_value = rev_ids
+
+    # Mock return values for transactions
+    m_force_trans.return_value = {"A": [{"type": "children.set", "value": []}]}
+    m_stack_trans.return_value = {"A": [{"type": "children.set", "value": []}]}
+
+    reorganise.reorganise(git, Args())
+
+    if force_mode:
+        m_force_trans.assert_called_once_with(
+            *expected_args, no_abandon_unconnected=False
+        )
+        m_stack_trans.assert_not_called()
+    else:
+        m_stack_trans.assert_called_once()
+        m_force_trans.assert_not_called()
+
+
+@mock.patch("mozphab.conduit.ConduitAPI.check")
+@mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
+def test_force_mode_requires_all_local_revisions_on_phabricator(_augment, _check, git):
+    """Test that force mode requires all local revisions to be present on Phabricator."""
+
+    class Args:
+        force = True
+        no_abandon_unconnected = False
+
+    mozphab.conduit.set_repo(git)
+    mozphab.conduit.repo.commit_stack = mock.Mock()
+    mozphab.conduit.repo.commit_stack.return_value = [Commit(rev_id=None, name="A")]
+
+    with pytest.raises(exceptions.Error) as e:
+        reorganise.reorganise(git, Args())
+
+    assert (
+        str(e.value)
+        == "Force mode requires all local revisions to be present on Phabricator."
+    )
+
+
+@mock.patch("mozphab.conduit.ConduitAPI.check")
+def test_no_abandon_unconnected_requires_force(_check):
+    """Test that --no-abandon-unconnected requires --force flag."""
+
+    class Args:
+        force = False
+        no_abandon_unconnected = True
+
+    _check.return_value = True
+
+    with pytest.raises(exceptions.Error) as e:
+        reorganise.reorganise(None, Args())
+
+    assert str(e.value) == "--no-abandon-unconnected can only be used with --force"
+
+
+@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+@mock.patch("mozphab.conduit.ConduitAPI.check")
+@mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
+@mock.patch("mozphab.commands.reorganise.convert_stackgraph_to_linear")
+@mock.patch("mozphab.conduit.ConduitAPI.phids_to_ids")
+@mock.patch("mozphab.commands.reorganise.walk_llist")
+@mock.patch("mozphab.commands.reorganise.logger")
+def test_force_mode_ignores_remote_stack_errors(
+    m_logger, m_walk, m_ids, m_stack, _augment, _check, _call, git
+):
+    """Test that force mode ignores remote stack structure issues."""
+
+    class Args:
+        force = True
+        yes = True
+        no_abandon_unconnected = False
+
+    mozphab.conduit.set_repo(git)
+    mozphab.conduit.repo.commit_stack = mock.Mock()
+
+    m_stack.return_value = {"A": "B"}
+    m_ids.return_value = ["A", "B", "C"]
+    mozphab.conduit.repo.commit_stack.return_value = [Commit(rev_id=1, name="A")]
+    m_walk.side_effect = exceptions.Error("Remote stack is not linear")
+
+    # Mock the conduit methods that would be called
+    with mock.patch("mozphab.conduit.ConduitAPI.ids_to_phids") as m_id2phid:
+        with mock.patch(
+            "mozphab.commands.reorganise.force_stack_transactions"
+        ) as m_force_trans:
+            with mock.patch(
+                "mozphab.conduit.ConduitAPI.apply_transactions_to_revision"
+            ):
+                m_id2phid.return_value = ["A"]
+                m_force_trans.return_value = {
+                    "A": [{"type": "children.set", "value": []}]
+                }
+
+                # This should not raise an error in force mode
+                reorganise.reorganise(git, Args())
+
+    # Should log a warning instead of an error
+    # Check that the specific warning was called
+    warning_calls = [
+        call
+        for call in m_logger.warning.call_args_list
+        if "Remote stack is not linear, but continuing in force mode" in call[0][0]
+    ]
+    assert (
+        len(warning_calls) == 1
+    ), f"Expected one warning about remote stack being non-linear, got: {m_logger.warning.call_args_list}"
+
+
+class TestReorganiseParser:
+    """Test the argument parser setup for reorganise command."""
+
+    def test_add_parser(self):
+        """Test that the parser is configured correctly for the --force flag."""
+        import argparse
+
+        # Create a parent parser to add our command to
+        parent_parser = argparse.ArgumentParser()
+        subparsers = parent_parser.add_subparsers()
+
+        # Add our reorganise parser
+        reorganise.add_parser(subparsers)
+
+        # Test parsing without --force flag
+        args = parent_parser.parse_args(["reorg"])
+        assert args.force is False
+        assert args.yes is False
+        assert args.no_abandon is False
+
+        # Test parsing with --force flag
+        args = parent_parser.parse_args(["reorg", "--force"])
+        assert args.force is True
+        assert args.yes is False
+        assert args.no_abandon is False
+
+        # Test parsing with multiple flags
+        args = parent_parser.parse_args(["reorg", "--force", "--yes", "--no-abandon"])
+        assert args.force is True
+        assert args.yes is True
+        assert args.no_abandon is True
+
+        # Test parsing with revision arguments
+        args = parent_parser.parse_args(["reorg", "--force", "abc123", "def456"])
+        assert args.force is True
+        assert args.start_rev == "abc123"
+        assert args.end_rev == "def456"
+
+        # Test parsing with upstream argument
+        args = parent_parser.parse_args(["reorg", "--force", "--upstream", "main"])
+        assert args.force is True
+        assert args.upstream == ["main"]
+
+        # Test parsing with --no-abandon-unconnected flag
+        args = parent_parser.parse_args(
+            ["reorg", "--force", "--no-abandon-unconnected"]
+        )
+        assert args.force is True
+        assert args.no_abandon_unconnected is True
+
+        # Test parsing without --no-abandon-unconnected flag
+        args = parent_parser.parse_args(["reorg", "--force"])
+        assert args.force is True
+        assert args.no_abandon_unconnected is False
