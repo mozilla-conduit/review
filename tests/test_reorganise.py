@@ -327,6 +327,8 @@ def test_reorg_calling_stack_transactions(
         no_abandon = kwargs["no_abandon"]
         force = False
         no_abandon_unconnected = False
+        no_hyperlinks = False
+        verbose = False
 
     phabstack, commits, rev_ids = stacks
     m_convert_stackgraph_to_linear.return_value = phabstack
@@ -345,6 +347,8 @@ def test_conduit_broken(m_check):
     class Args:
         force = False
         no_abandon_unconnected = False
+        no_hyperlinks = False
+        verbose = False
 
     with pytest.raises(exceptions.Error) as e:
         reorganise.reorganise(None, Args())
@@ -358,6 +362,8 @@ def test_commits_invalid(_augment, _check, git):
     class Args:
         force = False
         no_abandon_unconnected = False
+        no_hyperlinks = False
+        verbose = False
 
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()
@@ -388,6 +394,8 @@ def test_remote_stack_invalid(
     class Args:
         force = False
         no_abandon_unconnected = False
+        no_hyperlinks = False
+        verbose = False
 
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()
@@ -739,6 +747,8 @@ def test_reorg_force_mode(
         no_abandon = False
         force = force_mode
         no_abandon_unconnected = False
+        no_hyperlinks = False
+        verbose = False
 
     m_convert_stackgraph_to_linear.return_value = phabstack
     mozphab.conduit.set_repo(git)
@@ -770,6 +780,8 @@ def test_force_mode_requires_all_local_revisions_on_phabricator(_augment, _check
     class Args:
         force = True
         no_abandon_unconnected = False
+        no_hyperlinks = False
+        verbose = False
 
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()
@@ -791,6 +803,8 @@ def test_no_abandon_unconnected_requires_force(_check):
     class Args:
         force = False
         no_abandon_unconnected = True
+        no_hyperlinks = False
+        verbose = False
 
     _check.return_value = True
 
@@ -816,6 +830,8 @@ def test_force_mode_ignores_remote_stack_errors(
         force = True
         yes = True
         no_abandon_unconnected = False
+        no_hyperlinks = False
+        verbose = False
 
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()

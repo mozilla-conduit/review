@@ -28,6 +28,7 @@ This file will be created if it doesn't exist.
 ```ini
 [ui]
 no_ansi = False
+hyperlinks = True
 
 [vcs]
 safe_mode = False
@@ -63,6 +64,7 @@ report_to_sentry = True
 ```
 
 - `ui.no_ansi` : Never use ANSI colours (default: auto-detected).
+- `ui.hyperlinks` : Enable terminal hyperlinks for revision IDs and bug numbers (default: `True`).
 - `vcs.safe_mode` : Use only safe VCS settings (default: `False`). Use `--safe-mode`
     option to switch it on for a one-time usage.
 - `git.remote`: Comma separated string. Default remotes used to find the first

@@ -44,10 +44,8 @@ Differential Revision: http://example.test/D1
 """
     )
     git_out("commit", "--file", "msg")
-    with pytest.raises(exceptions.Error) as e:
-        mozphab.main(["reorg", "--yes", init_sha], is_development=True)
-
-    assert (str(e.value)) == "Reorganisation is not needed."
+    # Should succeed when no reorganization is needed
+    mozphab.main(["reorg", "--yes", init_sha], is_development=True)
 
     # Stack of commits
     call_conduit.side_effect = (
@@ -84,10 +82,8 @@ Differential Revision: http://example.test/D2
     )
     git_out("commit", "-a", "--file", "msg")
 
-    with pytest.raises(exceptions.Error) as e:
-        mozphab.main(["reorg", "--yes", init_sha], is_development=True)
-
-    assert (str(e.value)) == "Reorganisation is not needed."
+    # Should also succeed when stack is already correctly organized
+    mozphab.main(["reorg", "--yes", init_sha], is_development=True)
 
 
 def test_new_separate_revisions_to_stack(in_process, git_repo_path, init_sha):

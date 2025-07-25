@@ -15,12 +15,45 @@ from typing import (
 )
 
 from mozphab.conduit import conduit
+from mozphab.config import config
 from mozphab.exceptions import Error
-from mozphab.helpers import augment_commits_from_body, prompt
+from mozphab.helpers import BUG_ID_RE, augment_commits_from_body, prompt
 from mozphab.logger import logger
 from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
+
+
+def create_hyperlink(text: str, url: str) -> str:
+    """Create a terminal hyperlink using ANSI escape sequences."""
+    return f"\033]8;;{url}\033\\{text}\033]8;;\033\\"
+
+
+def linkify_revision_id(
+    revision_id: str, phab_url: str, hyperlinks_enabled: bool = True
+) -> str:
+    """Convert revision ID like 'D123456' to a clickable Phabricator link."""
+    if not hyperlinks_enabled:
+        return revision_id
+    # Extract the numeric part (remove 'D' prefix)
+    numeric_id = revision_id.removeprefix("D")
+    phabricator_url = f"{phab_url}/D{numeric_id}"
+    return create_hyperlink(revision_id, phabricator_url)
+
+
+def linkify_bugs_in_text(
+    text: str, bmo_url: str, hyperlinks_enabled: bool = True
+) -> str:
+    """Find bug numbers in text and make them clickable Bugzilla links."""
+    if not hyperlinks_enabled:
+        return text
+
+    def replace_bug(match):
+        bug_number = match.group(1)
+        bugzilla_url = f"{bmo_url}/show_bug.cgi?id={bug_number}"
+        return create_hyperlink(f"Bug {bug_number}", bugzilla_url)
+
+    return BUG_ID_RE.sub(replace_bug, text)
 
 
 def to_llist(revisions: List[str]) -> Dict[str, Optional[str]]:
@@ -289,6 +322,107 @@ def force_stack_transactions(
     return conduit_transactions
 
 
+def show_revision_glossary(
+    transactions: Dict[str, List[Dict]],
+    revisions: List[dict],
+    repo: Repository,
+    hyperlinks_enabled: bool = True,
+):
+    """Show a glossary with commit messages for all referenced revisions."""
+    # Collect all referenced revision PHIDs
+    referenced_phids = set()
+    for phid, rev_transactions in transactions.items():
+        referenced_phids.add(phid)
+        for transaction in rev_transactions:
+            if transaction["type"] in ["children.set", "children.remove"]:
+                if transaction["value"]:
+                    referenced_phids.update(transaction["value"])
+
+    if not referenced_phids:
+        return
+
+    # Create a mapping from PHID to revision data
+    phid_to_revision = {revision["phid"]: revision for revision in revisions}
+
+    # Display the glossary
+    logger.info("")
+    logger.info("Referenced revisions:")
+    for phid in sorted(
+        referenced_phids,
+        key=lambda p: phid_to_revision[p]["id"] if p in phid_to_revision else 0,
+    ):
+        if phid not in phid_to_revision:
+            continue
+        revision_id = f"D{phid_to_revision[phid]['id']}"
+        linked_revision_id = linkify_revision_id(
+            revision_id, repo.phab_url, hyperlinks_enabled
+        )
+        if phid in phid_to_revision:
+            title = phid_to_revision[phid]["fields"].get("title", "(no title)")
+            linked_title = linkify_bugs_in_text(title, repo.bmo_url, hyperlinks_enabled)
+            logger.info(" * %s: %s", linked_revision_id, linked_title)
+        else:
+            logger.info(" * %s: (unknown)", linked_revision_id)
+
+
+def format_stack(
+    phids: List[str],
+    title: str,
+    phid_to_revision: Dict[str, dict],
+    repo: Repository,
+    hyperlinks_enabled: bool = True,
+) -> None:
+    """Format and display a stack of revisions."""
+    if not phids:
+        logger.info("%s: (empty)", title)
+        return
+    logger.info("%s:", title)
+    # Reverse the order so bottom patch is at the bottom (stack order)
+    reversed_phids = list(reversed(phids))
+    for phid in reversed_phids:
+        revision_id = f"D{phid_to_revision[phid]['id']}"
+        linked_revision_id = linkify_revision_id(
+            revision_id, repo.phab_url, hyperlinks_enabled
+        )
+        if phid in phid_to_revision:
+            title_text = phid_to_revision[phid]["fields"].get("title", "(no title)")
+            linked_title_text = linkify_bugs_in_text(
+                title_text, repo.bmo_url, hyperlinks_enabled
+            )
+            logger.info("○ %s %s", linked_revision_id, linked_title_text)
+        else:
+            logger.info("○ %s (unknown)", linked_revision_id)
+
+
+def show_verbose_stack_info(
+    phabstack_phids: List[str],
+    localstack_phids: List[str],
+    revisions: List[dict],
+    repo: Repository,
+    hyperlinks_enabled: bool = True,
+):
+    """Show detailed information about the current and future stack shapes."""
+    phid_to_revision = {revision["phid"]: revision for revision in revisions}
+
+    logger.info("")
+    logger.info("Stack reorganization details:")
+    format_stack(
+        phabstack_phids,
+        "Current remote stack",
+        phid_to_revision,
+        repo,
+        hyperlinks_enabled,
+    )
+    format_stack(
+        localstack_phids,
+        "Target local stack",
+        phid_to_revision,
+        repo,
+        hyperlinks_enabled,
+    )
+    logger.info("")
+
+
 def reorganise_inner(repo: Repository, args: argparse.Namespace):
     """Reorganise the stack on Phabricator to match the stack in the local VCS."""
     telemetry().submission.preparation_time.start()
@@ -378,8 +512,7 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
                 phabstack_phids = list(phabstack.keys())
             else:
                 logger.error(
-                    "Remote stack is not linear.\n"
-                    "Detected stack:\n{}".format(
+                    "Remote stack is not linear.\nDetected stack:\n{}".format(
                         " <- ".join(conduit.phids_to_ids(list(phabstack.keys())))
                     )
                 )
@@ -417,36 +550,63 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
         logger.info("Reorganisation is not needed.")
         return
 
+    # Determine hyperlinks setting from config and args
+    hyperlinks_enabled = config.hyperlinks and not args.no_hyperlinks
+
     if args.force:
         logger.warning("Stack will be forcibly synchronized:")
     else:
         logger.warning("Stack will be reorganised:")
 
     for phid, rev_transactions in transactions.items():
-        node_id = conduit.phid_to_id(phid)
+        if phid not in phid_to_id:
+            # Skip PHIDs that are not in our mapping (can happen in tests)
+            continue
+        node_id = f"D{phid_to_id[phid]}"
+        linked_node_id = linkify_revision_id(node_id, repo.phab_url, hyperlinks_enabled)
         if any(transaction["type"] == "abandon" for transaction in rev_transactions):
-            logger.info(" * {} will be abandoned".format(node_id))
+            logger.info(" * {} will be abandoned".format(linked_node_id))
         else:
             for t in rev_transactions:
                 if t["type"] == "children.set":
-                    if t["value"]:  # Has children
+                    if t["value"] and t["value"][0] in phid_to_id:  # Has children
+                        child_id = f"D{phid_to_id[t['value'][0]]}"
+                        linked_child_id = linkify_revision_id(
+                            child_id, repo.phab_url, hyperlinks_enabled
+                        )
                         logger.info(
                             " * {child} will depend on {parent}".format(
-                                child=conduit.phid_to_id(t["value"][0]),
-                                parent=node_id,
+                                child=linked_child_id,
+                                parent=linked_node_id,
                             )
                         )
                     elif args.force:
                         logger.info(
-                            " * {} will have all dependencies removed".format(node_id)
+                            " * {} will have all dependencies removed".format(
+                                linked_node_id
+                            )
                         )
                 if t["type"] == "children.remove":
-                    logger.info(
-                        " * {child} will no longer depend on {parent}".format(
-                            child=conduit.phid_to_id(t["value"][0]),
-                            parent=node_id,
+                    if t["value"] and t["value"][0] in phid_to_id:
+                        child_id = f"D{phid_to_id[t['value'][0]]}"
+                        linked_child_id = linkify_revision_id(
+                            child_id, repo.phab_url, hyperlinks_enabled
                         )
-                    )
+                        logger.info(
+                            " * {child} will no longer depend on {parent}".format(
+                                child=linked_child_id,
+                                parent=linked_node_id,
+                            )
+                        )
+
+    # Show glossary with commit messages for all referenced revisions (but not in verbose mode)
+    if not args.verbose:
+        show_revision_glossary(transactions, revisions, repo, hyperlinks_enabled)
+    else:
+        # Show verbose information at the bottom
+        show_verbose_stack_info(
+            phabstack_phids, localstack_phids, revisions, repo, hyperlinks_enabled
+        )
 
     telemetry().submission.preparation_time.stop()
 
@@ -537,5 +697,17 @@ def add_parser(parser):
         action="store_true",
         help="When used with --force, do not abandon remote revisions that are not "
         "connected to the local stack. Useful for managing multiple patch series.",
+    )
+    reorg_parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show detailed information about stack reorganization, including "
+        "previous and future stack shapes.",
+    )
+    reorg_parser.add_argument(
+        "--no-hyperlinks",
+        action="store_true",
+        help="Disable terminal hyperlinks for revision IDs and bug numbers.",
     )
     reorg_parser.set_defaults(func=reorganise, needs_repo=True)
