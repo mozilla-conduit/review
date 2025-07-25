@@ -414,7 +414,8 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
             raise
 
     if not transactions:
-        raise Error("Reorganisation is not needed.")
+        logger.info("Reorganisation is not needed.")
+        return
 
     if args.force:
         logger.warning("Stack will be forcibly synchronized:")
