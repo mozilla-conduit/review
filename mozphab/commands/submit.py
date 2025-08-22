@@ -756,9 +756,10 @@ def add_submit_arguments(parser):
     wip_group.add_argument(
         "--no-wip",
         action="store_true",
-        help="Don't mark reviewer-less commits as work-in-progress. Commits "
-        "with descriptions that start with WIP: will continue to be "
-        "flagged as work-in-progress.",
+        help=(
+            "Force revisions to not be marked as work-in-progress. The status of "
+            "commits without reviewers can be overridden for example."
+        ),
     )
     parser.add_argument(
         "--less-context",
