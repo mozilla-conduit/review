@@ -3,6 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 import copy
 import unittest
 import uuid
@@ -25,19 +26,56 @@ def reviewers_dict(reviewers=None):
 
 
 def commit(
-    bug_id=None, reviewers=None, body="", name="", title="", rev_id=None, wip=False
+    bug_id=None,
+    reviewers=None,
+    rev_id=None,
+    node=None,
+    title="",
+    body="",
+    wip=False,
+    bug_id_orig=None,
+    submit=True,
 ):
+    node = node or f"{uuid.uuid4().hex}12345678"
     return Commit(
-        name=name,
+        name=helpers.short_node(node),
         title=title,
+        title_preview=title,
         bug_id=bug_id,
+        bug_id_orig=bug_id_orig,
         reviewers=reviewers_dict(reviewers),
         body=body,
         rev_id=rev_id,
-        node=uuid.uuid4().hex,
-        submit=True,
+        node=node,
+        submit=submit,
         wip=wip,
     )
+
+
+class Args(argparse.Namespace):
+    def __init__(
+        self,
+        command="submit",
+        reviewer=None,
+        blocker=None,
+        bug=None,
+        wip=False,
+        no_wip=False,
+        no_bug=False,
+        force=False,
+        single=False,
+        end_rev=environment.DEFAULT_END_REV,
+    ):
+        self.command = command
+        self.reviewer = reviewer
+        self.blocker = blocker
+        self.bug = bug
+        self.wip = wip
+        self.no_wip = no_wip
+        self.no_bug = no_bug
+        self.force = force
+        self.single = single
+        self.end_rev = end_rev
 
 
 # noinspection PyPep8Naming,PyBroadException
@@ -49,15 +87,8 @@ class Commits(unittest.TestCase):
             self.fail("%s raised" % e)
 
     def _assertError(self, callableObj, expected, *args, **kwargs):
-        try:
+        with self.assertRaisesRegex(exceptions.Error, expected):
             callableObj(*args, **kwargs)
-        except exceptions.Error as e:
-            if expected != str(e).strip():
-                self.fail("%s not raised" % expected)
-            return
-        except Exception as e:
-            self.fail("%s raised" % e)
-        self.fail("%s failed to raise Error" % callableObj)
 
     @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
     @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
@@ -108,10 +139,6 @@ class Commits(unittest.TestCase):
 
     @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
     def test_invalid_reviewers_fails_the_stack_validation_check(self, check_reviewers):
-        class Args:
-            def __init__(self):
-                self.force = False
-
         def fail_gonzo(reviewers):
             # Replace the check_for_invalid_reviewers() function with something that
             # fails if "gonzo" is in the reviewers list.
@@ -141,7 +168,7 @@ class Commits(unittest.TestCase):
 
         self._assertError(
             repo.check_commits_for_submit,
-            "- goober is not available until string (submit anyway with `-f`)",
+            r"- goober is not available until string \(submit anyway with `-f`\)",
             (
                 # Build a stack with an unavailable reviewer in the middle.
                 [
@@ -176,9 +203,9 @@ class Commits(unittest.TestCase):
             repo.check_commits_for_submit,
             (
                 [
-                    commit("1", (["r"], []), name="a"),
-                    commit("2", (["r"], []), name="b"),
-                    commit("3", (["r"], []), name="c"),
+                    commit("1", (["r"], []), node="a"),
+                    commit("2", (["r"], []), node="b"),
+                    commit("3", (["r"], []), node="c"),
                 ]
             ),
         )
@@ -187,9 +214,9 @@ class Commits(unittest.TestCase):
             repo.check_commits_for_submit,
             (
                 [
-                    commit("1", (["r"], []), rev_id="1", name="a"),
-                    commit("2", (["r"], []), rev_id="2", name="b"),
-                    commit("3", (["r"], []), rev_id="3", name="c"),
+                    commit("1", (["r"], []), rev_id=1, node="a"),
+                    commit("2", (["r"], []), rev_id=2, node="b"),
+                    commit("3", (["r"], []), rev_id=3, node="c"),
                 ]
             ),
         )
@@ -197,14 +224,14 @@ class Commits(unittest.TestCase):
         self._assertError(
             repo.check_commits_for_submit,
             "Phabricator revisions should be unique, "
-            "but the following commits refer to the same one (D1):\n"
-            "* a\n"
-            "* c",
+            "but the following commits refer to the same one \\(D1\\):\n"
+            "\\* a\n"
+            "\\* c",
             (
                 [
-                    commit("1", (["r"], []), rev_id="1", name="a"),
-                    commit("2", (["r"], []), rev_id="2", name="b"),
-                    commit("3", (["r"], []), rev_id="1", name="c"),
+                    commit("1", (["r"], []), rev_id=1, node="a"),
+                    commit("2", (["r"], []), rev_id=2, node="b"),
+                    commit("3", (["r"], []), rev_id=1, node="c"),
                 ]
             ),
         )
@@ -212,20 +239,20 @@ class Commits(unittest.TestCase):
         self._assertError(
             repo.check_commits_for_submit,
             "Phabricator revisions should be unique, "
-            "but the following commits refer to the same one (D1):\n"
-            "* a\n"
-            "* c"
+            "but the following commits refer to the same one \\(D1\\):\n"
+            "\\* a\n"
+            "\\* c"
             "\n\n\n"
             "Phabricator revisions should be unique, "
-            "but the following commits refer to the same one (D2):\n"
-            "* b\n"
-            "* d",
+            "but the following commits refer to the same one \\(D2\\):\n"
+            "\\* b\n"
+            "\\* d",
             (
                 [
-                    commit("1", (["r"], []), rev_id="1", name="a"),
-                    commit("2", (["r"], []), rev_id="2", name="b"),
-                    commit("3", (["r"], []), rev_id="1", name="c"),
-                    commit("4", (["r"], []), rev_id="2", name="d"),
+                    commit("1", (["r"], []), rev_id=1, node="a"),
+                    commit("2", (["r"], []), rev_id=2, node="b"),
+                    commit("3", (["r"], []), rev_id=1, node="c"),
+                    commit("4", (["r"], []), rev_id=2, node="d"),
                 ]
             ),
         )
@@ -498,130 +525,107 @@ class Commits(unittest.TestCase):
         # r?one,two
         self.assertEqual("r?one", replace("r?one,two", reviewers_dict([["one"], []])))
 
-    @mock.patch("mozphab.commands.submit.conduit.get_revisions")
-    @mock.patch("mozphab.commands.submit.conduit.get_diffs")
-    @mock.patch("mozphab.commands.submit.conduit.whoami")
-    @mock.patch("mozphab.commands.submit.logger")
-    def test_show_commit_stack(
-        self, mock_logger, m_whoami, m_get_diffs, m_get_revisions
-    ):
-        class Repository:
-            phab_url = "http://phab"
-            path = "x"
-            api_url = "x"
-            dot_path = "x"
+    def test_show_commit_stack(self):
+        submit.conduit.set_repo(repository.Repository("", "", "http://phab"))
 
-        class Args:
-            command = "submit"
-            force = False
-            wip = False
+        with self.assertLogs() as logging_watcher:
+            submit.log_commit_stack_with_messages([commit(node="aaa000", title="A")])
+        self.assertEqual(logging_watcher.output, [Contains("(New) aaa000 A")])
 
+        with self.assertLogs() as logging_watcher:
+            submit.log_commit_stack_with_messages(
+                [commit(rev_id=12, node="aaa000", title="A")]
+            )
+        self.assertEqual(logging_watcher.output, [Contains("(D12) aaa000 A")])
+
+        with self.assertLogs() as logging_watcher:
+            submit.log_commit_stack_with_messages(
+                [
+                    commit(node="aaa000", title="A"),
+                    commit(node="bbb000", title="B"),
+                ]
+            )
+        self.assertEqual(
+            logging_watcher.output,
+            [Contains("(New) bbb000 B"), Contains("(New) aaa000 A")],
+        )
+
+        with self.assertLogs() as logging_watcher:
+            submit.show_commit_stack([commit(rev_id=123, node="aaa000", title="A")])
+        self.assertEqual(
+            logging_watcher.output,
+            [Contains("(D123) aaa000 A"), Contains("-> http://phab/D123")],
+        )
+
+        # Only show commits that were submitted.
+        with self.assertLogs() as logging_watcher:
+            submit.show_commit_stack(
+                [commit(rev_id=1, submit=False), commit(rev_id=2), commit(rev_id=3)]
+            )
+        self.assertEqual(
+            logging_watcher.output,
+            [
+                Contains("(D3)"),
+                Contains("-> http://phab/D3"),
+                Contains("(D2)"),
+                Contains("-> http://phab/D2"),
+            ],
+        )
+
+    @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
+    @mock.patch("mozphab.conduit.ConduitAPI.whoami")
+    def test_validate_commit_stack(self, m_whoami, m_get_diffs, m_get_revisions):
         def _commit(
-            name="aaa000",
-            node="aaa000aaa000",
+            node=None,
             title="A",
             rev=None,
             bug="1",
-            bug_orig="1",
+            bug_orig=None,
             granted=None,
             request=None,
             wip=False,
         ):
             granted = granted or []
             request = request or []
-            return Commit(
-                name=name,
+            return commit(
                 node=node,
-                submit=True,
-                title_preview=title,
+                title=title,
                 rev_id=rev,
                 bug_id_orig=bug_orig,
                 bug_id=bug,
-                reviewers={"granted": granted, "request": request},
+                reviewers=(request, granted),
                 wip=wip,
             )
-
-        repo = Repository()
-        submit.conduit.set_repo(repo)
-
-        args = Args()
 
         m_whoami.return_value = {"phid": "PHID-USER-1"}
         m_get_revisions.return_value = [search_rev()]
         m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
 
-        submit.show_commit_stack([], args)
-        self.assertFalse(mock_logger.info.called, "logger.info() shouldn't be called")
-        self.assertFalse(
-            mock_logger.warning.called, "logger.warning() shouldn't be called"
-        )
+        warnings = submit.validate_commit_stack([], Args())
+        self.assertEqual(warnings, {})
 
-        submit.show_commit_stack(
-            [Commit(name="aaa000", title_preview="A")], args, validate=False
+        warnings = submit.validate_commit_stack(
+            [_commit(bug_orig="2", bug="1", granted=["alice"])], Args()
         )
-        mock_logger.info.assert_called_with("%s %s %s", "(New)", "aaa000", "A")
-        self.assertFalse(
-            mock_logger.warning.called, "logger.warning() shouldn't be called"
-        )
-        mock_logger.reset_mock()
-
-        submit.show_commit_stack([_commit(rev=12)], args, validate=False)
-        mock_logger.info.assert_called_with("%s %s %s", "(D12)", "aaa000", "A")
-        self.assertFalse(
-            mock_logger.warning.called, "logger.warning() shouldn't be called"
-        )
-        mock_logger.reset_mock()
-
-        submit.show_commit_stack(
-            [_commit(), _commit(name="bbb000", title="B")],
-            args,
-            validate=False,
-        )
-        self.assertEqual(2, mock_logger.info.call_count)
-        self.assertEqual(
-            [
-                mock.call("%s %s %s", "(New)", "bbb000", "B"),
-                mock.call("%s %s %s", "(New)", "aaa000", "A"),
-            ],
-            mock_logger.info.call_args_list,
-        )
-        mock_logger.reset_mock()
-
-        submit.show_commit_stack(
-            [_commit(bug_orig=2, bug=1, granted=["alice"])], args, validate=True
-        )
-        mock_logger.info.assert_called_with("%s %s %s", "(New)", "aaa000", "A")
-        mock_logger.warning.assert_called_with("!! Bug ID changed from %s to %s", 2, 1)
+        self.assertEqual(list(warnings.values()), [["Bug ID changed from 2 to 1"]])
 
         # Submit with missing bug ID.
-        mock_logger.reset_mock()
-        submit.show_commit_stack(
-            [_commit(bug="", bug_orig="", request=["bob"])], args, validate=True
+        warnings = submit.validate_commit_stack(
+            [_commit(bug="", request=["bob"])], Args()
         )
-        mock_logger.warning.assert_called_with(Contains("Missing Bug ID"))
+        self.assertEqual(list(warnings.values()), [["Missing bug ID"]])
 
         # Submit with missing reviewers.
-        mock_logger.reset_mock()
-        submit.show_commit_stack([_commit()], args, validate=True)
-        mock_logger.warning.assert_called_with(Contains("Missing reviewers"))
+        warnings = submit.validate_commit_stack([_commit()], Args())
+        self.assertEqual(list(warnings.values()), [["Missing reviewers"]])
 
         # Submit with existing revision reviewers.
-        mock_logger.reset_mock()
         m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
-        submit.show_commit_stack([_commit(rev=1)], args, validate=True)
-        mock_logger.warning.assert_not_called()
-
-        mock_logger.reset_mock()
-        submit.show_commit_stack(
-            [_commit(rev=123)],
-            args,
-            validate=False,
-            show_rev_urls=True,
-        )
-        mock_logger.warning.assert_called_with("-> %s/D%s", "http://phab", 123)
+        warnings = submit.validate_commit_stack([_commit(rev=1)], Args())
+        self.assertEqual(warnings, {})
 
         # Do not update not changed commits
-        mock_logger.reset_mock()
         m_get_revisions.return_value = [
             search_rev(),
             search_rev(rev=2, phid="PHID-REV-2", diff="PHID-DIFF-2"),
@@ -631,143 +635,112 @@ class Commits(unittest.TestCase):
             "PHID-DIFF-2": search_diff(),
         }
         # we're changing bug id in the first revision to 2
-        submit.show_commit_stack(
+        warnings = submit.validate_commit_stack(
             [
-                _commit(rev=1, bug="2", bug_orig="2", granted=["alice"]),
-                _commit(
-                    name="bbb000",
-                    node="bbb000bbb000",
-                    title="B",
-                    rev=2,
-                    granted=["alice"],
-                ),
+                _commit(node="aaa000aaa000", rev=1, bug="2", granted=["alice"]),
+                _commit(node="bbb000bbb000", title="B", rev=2, granted=["alice"]),
             ],
-            args,
-            validate=True,
+            Args(),
         )
-        mock_logger.warning.assert_called_once_with(
-            "!! Bug ID in Phabricator revision will change from %s to %s", "1", "2"
+        self.assertEqual(
+            warnings, {"aaa000aaa000": [Contains("revision will change from 1 to 2")]}
         )
 
-        mock_logger.reset_mock()
         m_whoami.return_value = {"phid": "PHID-USER-2"}
-        submit.show_commit_stack(
-            [_commit(rev=1, granted=["alice"])],
-            args,
-            validate=True,
+        warnings = submit.validate_commit_stack(
+            [_commit(rev=1, granted=["alice"])], Args()
         )
-        mock_logger.warning.assert_called_once_with(Contains("Commandeer"))
+        self.assertEqual(list(warnings.values()), [[Contains("Commandeer")]])
 
         # Information about not updating the commit if not changed
-        mock_logger.reset_mock()
         m_whoami.return_value = {"phid": "PHID-USER-1"}
         m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
-        m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
+        m_get_diffs.return_value = {"PHID-DIFF-1": search_diff(node="aaa000aaa000")}
 
-        submit.show_commit_stack(
-            [_commit(rev=1, granted=["alice"])], args, validate=True
+        warnings = submit.validate_commit_stack(
+            [_commit(node="aaa000aaa000", rev=1, granted=["alice"])], Args()
         )
-        assert mock_logger.info.call_args_list[1] == mock.call(
-            Contains("revision has not changed")
+        self.assertEqual(
+            warnings, {"aaa000aaa000": [Contains("revision has not changed")]}
         )
 
         # Removing the WIP state from the revision without changing the commit's SHA1
-        mock_logger.reset_mock()
         m_get_revisions.return_value = [search_rev(status="changes-planned")]
-        submit.show_commit_stack(
-            [_commit(rev=1, granted=["alice"])], args, validate=True
+        warnings = submit.validate_commit_stack(
+            [_commit(node="aaa000aaa000", rev=1, granted=["alice"])], Args()
         )
-        mock_logger.warning.assert_called_once_with(
-            Contains('"Changes Planned" status will change')
+        self.assertEqual(
+            warnings,
+            {"aaa000aaa000": [Contains('"Changes Planned" status will change')]},
         )
 
         # Adding the WIP state to the revision without changing the commit's SHA1
-        mock_logger.reset_mock()
-        args.wip = True
         m_get_revisions.return_value = [search_rev()]
-        submit.show_commit_stack(
-            [_commit(rev=1, granted=["alice"], wip=True)], args, validate=True
+        warnings = submit.validate_commit_stack(
+            [_commit(node="aaa000aaa000", rev=1, granted=["alice"], wip=True)],
+            Args(wip=True),
         )
-        mock_logger.warning.assert_called_with(
-            Contains('status will change to "Changes Planned"')
+        self.assertEqual(
+            warnings,
+            {"aaa000aaa000": [Contains('status will change to "Changes Planned"')]},
         )
+
+        # Submit a new patch with reviewers.
+        warnings = submit.validate_commit_stack([_commit(request=["alice"])], Args())
+        self.assertEqual(warnings, {})
 
         # Submit a new patch without reviewers.
-        mock_logger.reset_mock()
-        args.wip = False
-        submit.show_commit_stack(
-            [_commit(rev=None, request=[], wip=True)], args, validate=True
+        warnings = submit.validate_commit_stack(
+            [_commit(rev=None, request=[], wip=True)], Args()
         )
-        mock_logger.warning.assert_any_call(Contains("Missing reviewers"))
-        mock_logger.warning.assert_any_call(Contains('submitted as "Changes Planned"'))
+        self.assertEqual(
+            list(warnings.values()),
+            [
+                [
+                    Contains("Missing reviewers"),
+                    Contains('submitted as "Changes Planned"'),
+                ]
+            ],
+        )
 
         # Submit a new WIP patch with reviewers.
-        mock_logger.reset_mock()
-        args.wip = True
-        submit.show_commit_stack(
-            [_commit(rev=None, request=["alice"], wip=True)], args, validate=True
+        warnings = submit.validate_commit_stack(
+            [_commit(rev=None, request=["alice"], wip=True)], Args(wip=True)
         )
-        mock_logger.warning.assert_not_called()
+        self.assertEqual(warnings, {})
 
         # Submit a new patch with the WIP prefix.
-        mock_logger.reset_mock()
-        args.wip = False
-        submit.show_commit_stack(
-            [_commit(title="WIP: A", request=["alice"], wip=True)], args, validate=True
+        warnings = submit.validate_commit_stack(
+            [_commit(title="WIP: A", request=["alice"], wip=True)], Args()
         )
-        mock_logger.warning.assert_called_with(
-            Contains('submitted as "Changes Planned"')
+        self.assertEqual(
+            list(warnings.values()), [[Contains('submitted as "Changes Planned"')]]
         )
 
         # Submitting a stack of two commits with one revision already on Phabricator
-        # should properly set `commit.rev_phid` with `validate=True`.
-        mock_logger.reset_mock()
+        # should properly set `commit.rev_phid`.
         commits = [_commit(title="submitted", rev=1), _commit(title="new", rev=None)]
-        submit.show_commit_stack(
-            commits,
-            args,
-            validate=True,
+        submit.validate_commit_stack(commits, Args())
+        self.assertEqual(
+            commits[0].rev_phid,
+            "PHID-DREV-1",
+            "`rev_id` should be set for already submitted commit.",
         )
-        for commit in commits:
-            if commit.title_preview == "submitted":
-                assert (
-                    commit.rev_phid == "PHID-DREV-1"
-                ), "`rev_id` should be set for already submitted commit."
-            elif commit.title_preview == "new":
-                assert (
-                    commit.rev_phid is None
-                ), "`rev_id` should not be set for newly created commit."
+        self.assertIsNone(
+            commits[1].rev_phid, "`rev_id` should not be set for newly created commit."
+        )
 
         # Submitting a new uplift clears reviewers and shouldn't warn.
-        mock_logger.reset_mock()
-        args.command = "uplift"
-        submit.show_commit_stack(
-            [_commit(rev=None, granted=[], wip=False)], args, validate=True
+        warnings = submit.validate_commit_stack(
+            [_commit(rev=None, granted=[], request=[])], Args(command="uplift")
         )
-        mock_logger.warning.assert_not_called()
+        self.assertEqual(warnings, {})
 
     def test_update_commits_from_args(self):
         def lwr(revs):
             return [r.lower() for r in revs]
 
         update = submit.update_commits_from_args
-
-        class Args:
-            def __init__(
-                self,
-                reviewer=None,
-                blocker=None,
-                bug=None,
-                wip=False,
-                no_wip=False,
-                command="submit",
-            ):
-                self.reviewer = reviewer
-                self.blocker = blocker
-                self.bug = bug
-                self.wip = wip
-                self.no_wip = no_wip
-                self.command = command
 
         _commits = [
             Commit(title="A", reviewers={"granted": [], "request": []}, bug_id=None),
@@ -916,16 +889,11 @@ class Commits(unittest.TestCase):
         # --single is working with one SHA1 provided only
         repo = repository.Repository("", "", "dummy")
 
-        class Args:
-            def __init__(self, end_rev=environment.DEFAULT_END_REV):
-                self.single = True
-                self.end_rev = end_rev
-
-        self._assertNoError(repo.set_args, Args())
+        self._assertNoError(repo.set_args, Args(single=True))
         self._assertError(
             repo.set_args,
             "Option --single can be used with only one identifier.",
-            Args("endrev"),
+            Args(single=True, end_rev="endrev"),
         )
 
 
