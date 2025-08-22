@@ -92,169 +92,194 @@ class Commits(unittest.TestCase):
 
     @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
     @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
-    @mock.patch("mozphab.conduit.ConduitAPI.whoami")
-    def test_commit_validation(self, m_whoami, m_get_revs, check_reviewers):
+    def test_commit_stack_validation_errors(self, m_revs, check_reviewers):
         check_reviewers.return_value = []
-        repo = repository.Repository("", "", "dummy")
-        check = repo.check_commits_for_submit
+        m_revs.return_value = []
 
-        self._assertNoError(check, [])
-        self._assertNoError(check, [commit("1", (["r"], []))])
-        self._assertNoError(
-            check,
+        _, errors = submit.validate_commit_stack([commit("1", (["r"], []))], Args())
+        self.assertEqual(errors, {})
+
+        _, errors = submit.validate_commit_stack(
             [
                 commit("1", (["r1"], [])),
                 commit("2", (["r1"], [])),
                 commit("3", (["r1", "r2"], [])),
             ],
+            Args(),
         )
-        self._assertNoError(check, [commit("1", None)])
-        self._assertNoError(check, [commit("1", (["r"], [])), commit("1", None)])
+        self.assertEqual(errors, {})
 
-        self._assertError(check, "- missing bug-id", [commit(None, (["r"], []))])
-        self._assertNoError(check, [commit(None, (["r"], []))], require_bug=False)
-        self._assertError(check, "- missing bug-id", [commit("", (["r"], []))])
-        self._assertError(
-            check,
-            "- missing bug-id",
-            [commit("1", (["r"], [])), commit("", (["r"], []))],
-        )
-        self._assertNoError(
-            check,
-            [commit("1", (["r"], [])), commit("", (["r"], []))],
-            require_bug=False,
-        )
+        _, errors = submit.validate_commit_stack([commit("1", None)], Args())
+        self.assertEqual(errors, {})
 
-        self._assertError(
-            check,
-            "- contains arc fields",
-            [commit("1", (["r"], []), body="Summary: blah\nReviewers: r")],
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["r"], [])), commit("1", None)], Args()
         )
+        self.assertEqual(errors, {})
 
-        m_whoami.return_value = {"phid": "PHID-1"}
-        m_get_revs.return_value = [{"fields": {"authorPHID": "PHID-1"}}]
-        self._assertNoError(check, [commit(bug_id=1, rev_id=1)])
-        m_whoami.return_value = {"phid": "PHID-2"}
-        self._assertNoError(check, [commit(bug_id=1, rev_id=1)])
+        _, errors = submit.validate_commit_stack([commit(None, (["r"], []))], Args())
+        self.assertEqual(list(errors.values()), [[Contains("Missing bug ID")]])
+
+        _, errors = submit.validate_commit_stack(
+            [commit(None, (["r"], []))], Args(no_bug=True)
+        )
+        self.assertEqual(errors, {})
+
+        _, errors = submit.validate_commit_stack([commit("", (["r"], []))], Args())
+        self.assertEqual(list(errors.values()), [[Contains("Missing bug ID")]])
+
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["r"], [])), commit("", (["r"], []))], Args()
+        )
+        self.assertEqual(list(errors.values()), [[Contains("Missing bug ID")]])
+
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["r"], [])), commit("", (["r"], []))], Args(no_bug=True)
+        )
+        self.assertEqual(errors, {})
+
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["r"], []), body="Summary: blah\nReviewers: r")], Args()
+        )
+        self.assertEqual(list(errors.values()), [[Contains("Contains arc fields")]])
+
+        _, errors = submit.validate_commit_stack([commit(bug_id="1", rev_id=1)], Args())
+        self.assertEqual(
+            list(errors.values()),
+            [[Contains("didn't return a query result for revision D1")]],
+        )
 
     @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
-    def test_invalid_reviewers_fails_the_stack_validation_check(self, check_reviewers):
+    @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
+    @mock.patch("mozphab.conduit.ConduitAPI.whoami")
+    def test_invalid_reviewers_fails_the_stack_validation_check(
+        self, m_whoami, m_diffs, m_revs, check_reviewers
+    ):
         def fail_gonzo(reviewers):
             # Replace the check_for_invalid_reviewers() function with something that
-            # fails if "gonzo" is in the reviewers list.
+            # fails for certain reviewers.
             if "gonzo" in reviewers["request"]:
                 return [{"name": "gonzo"}]
             elif "goober" in reviewers["request"]:
                 return [{"name": "goober", "until": "string"}]
+            elif "goofus" in reviewers["request"]:
+                return [{"name": "goofus", "disabled": True}]
             else:
                 return []
 
         check_reviewers.side_effect = fail_gonzo
-        repo = repository.Repository("", "", "dummy")
-        repo.args = Args()
+        m_revs.return_value = []
+        m_diffs.return_value = {"PHID-DIFF-1": search_diff()}
+        m_whoami.return_value = {"phid": "PHID-USER-1"}
 
-        self._assertError(
-            repo.check_commits_for_submit,
-            "- gonzo is not a valid reviewer's name",
-            (
-                # Build a stack with an invalid reviewer in the middle.
-                [
-                    commit("1", (["alice"], [])),
-                    commit("2", (["bob", "gonzo"], [])),
-                    commit("3", (["charlie"], [])),
-                ]
-            ),
+        _, errors = submit.validate_commit_stack(
+            # Build a stack with an invalid reviewer in the middle.
+            [
+                commit("1", (["alice"], [])),
+                commit("2", (["bob", "gonzo"], [])),
+                commit("3", (["charlie"], [])),
+            ],
+            Args(),
+        )
+        self.assertEqual(
+            list(errors.values()), [[Contains("gonzo isn't a valid reviewer")]]
         )
 
-        self._assertError(
-            repo.check_commits_for_submit,
-            r"- goober is not available until string \(submit anyway with `-f`\)",
-            (
-                # Build a stack with an unavailable reviewer in the middle.
-                [
-                    commit("1", (["alice"], [])),
-                    commit("2", (["bob", "goober"], [])),
-                    commit("3", (["charlie"], [])),
-                ]
-            ),
+        _, errors = submit.validate_commit_stack(
+            # Build a stack with an unavailable reviewer in the middle.
+            [
+                commit("1", (["alice"], [])),
+                commit("2", (["bob", "goober"], [])),
+                commit("3", (["charlie"], [])),
+            ],
+            Args(),
+        )
+        self.assertEqual(
+            list(errors.values()), [[Contains("goober isn't available until string")]]
         )
 
-        repo.args.force = True
-        self._assertNoError(
-            repo.check_commits_for_submit,
-            (
-                [
-                    commit("1", (["alice"], [])),
-                    commit("2", (["bob", "goober"], [])),
-                    commit("3", (["charlie"], [])),
-                ]
-            ),
+        warnings, errors = submit.validate_commit_stack(
+            [
+                commit("1", (["alice"], [])),
+                commit("2", (["bob", "goober"], [])),
+                commit("3", (["charlie"], [])),
+            ],
+            Args(force=True),
         )
+        self.assertEqual(
+            list(warnings.values()), [[Contains("goober isn't available until string")]]
+        )
+        self.assertEqual(errors, {})
 
-    @mock.patch("mozphab.mozphab.conduit.get_revisions")
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["goofus"], []))], Args()
+        )
+        self.assertEqual(list(errors.values()), [[Contains("goofus is disabled")]])
+
+    @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
+    @mock.patch("mozphab.conduit.ConduitAPI.whoami")
     @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
-    def test_validate_duplicate_revision(self, check_reviewers, get_revisions):
+    def test_validate_duplicate_revision(
+        self, check_reviewers, m_whoami, m_diffs, m_revs
+    ):
         check_reviewers.return_value = []
-        get_revisions.return_value = [True]
+        m_revs.return_value = [
+            search_rev(rev=1),
+            search_rev(rev=2),
+            search_rev(rev=3),
+        ]
+        m_diffs.return_value = {"PHID-DIFF-1": search_diff()}
+        m_whoami.return_value = {"phid": "PHID-USER-1"}
 
-        repo = repository.Repository("", "", "dummy")
+        _, errors = submit.validate_commit_stack(
+            [
+                commit("1", (["r"], []), node="a"),
+                commit("2", (["r"], []), node="b"),
+                commit("3", (["r"], []), node="c"),
+            ],
+            Args(),
+        )
+        self.assertEqual(errors, {})
 
-        self._assertNoError(
-            repo.check_commits_for_submit,
-            (
-                [
-                    commit("1", (["r"], []), node="a"),
-                    commit("2", (["r"], []), node="b"),
-                    commit("3", (["r"], []), node="c"),
-                ]
-            ),
+        _, errors = submit.validate_commit_stack(
+            [
+                commit("1", (["r"], []), rev_id=1, node="a"),
+                commit("2", (["r"], []), rev_id=2, node="b"),
+                commit("3", (["r"], []), rev_id=3, node="c"),
+            ],
+            Args(),
+        )
+        self.assertEqual(errors, {})
+
+        _, errors = submit.validate_commit_stack(
+            [
+                commit("1", (["r"], []), rev_id=1, node="a"),
+                commit("2", (["r"], []), rev_id=2, node="b"),
+                commit("3", (["r"], []), rev_id=1, node="c"),
+            ],
+            Args(),
+        )
+        self.assertEqual(
+            errors, {"c": [Contains("commit a refers to the same one D1")]}
         )
 
-        self._assertNoError(
-            repo.check_commits_for_submit,
-            (
-                [
-                    commit("1", (["r"], []), rev_id=1, node="a"),
-                    commit("2", (["r"], []), rev_id=2, node="b"),
-                    commit("3", (["r"], []), rev_id=3, node="c"),
-                ]
-            ),
+        _, errors = submit.validate_commit_stack(
+            [
+                commit("1", (["r"], []), rev_id=1, node="a"),
+                commit("2", (["r"], []), rev_id=2, node="b"),
+                commit("3", (["r"], []), rev_id=1, node="c"),
+                commit("4", (["r"], []), rev_id=2, node="d"),
+            ],
+            Args(),
         )
-
-        self._assertError(
-            repo.check_commits_for_submit,
-            "Phabricator revisions should be unique, "
-            "but the following commits refer to the same one \\(D1\\):\n"
-            "\\* a\n"
-            "\\* c",
-            (
-                [
-                    commit("1", (["r"], []), rev_id=1, node="a"),
-                    commit("2", (["r"], []), rev_id=2, node="b"),
-                    commit("3", (["r"], []), rev_id=1, node="c"),
-                ]
-            ),
-        )
-
-        self._assertError(
-            repo.check_commits_for_submit,
-            "Phabricator revisions should be unique, "
-            "but the following commits refer to the same one \\(D1\\):\n"
-            "\\* a\n"
-            "\\* c"
-            "\n\n\n"
-            "Phabricator revisions should be unique, "
-            "but the following commits refer to the same one \\(D2\\):\n"
-            "\\* b\n"
-            "\\* d",
-            (
-                [
-                    commit("1", (["r"], []), rev_id=1, node="a"),
-                    commit("2", (["r"], []), rev_id=2, node="b"),
-                    commit("3", (["r"], []), rev_id=1, node="c"),
-                    commit("4", (["r"], []), rev_id=2, node="d"),
-                ]
-            ),
+        self.assertEqual(
+            errors,
+            {
+                "c": [Contains("commit a refers to the same one D1")],
+                "d": [Contains("commit b refers to the same one D2")],
+            },
         )
 
     def test_commit_preview(self):
@@ -575,7 +600,10 @@ class Commits(unittest.TestCase):
     @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
     @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
     @mock.patch("mozphab.conduit.ConduitAPI.whoami")
-    def test_validate_commit_stack(self, m_whoami, m_get_diffs, m_get_revisions):
+    @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
+    def test_validate_commit_stack(
+        self, m_check_reviewers, m_whoami, m_get_diffs, m_get_revisions
+    ):
         def _commit(
             node=None,
             title="A",
@@ -601,29 +629,30 @@ class Commits(unittest.TestCase):
         m_whoami.return_value = {"phid": "PHID-USER-1"}
         m_get_revisions.return_value = [search_rev()]
         m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
+        m_check_reviewers.return_value = []
 
-        warnings = submit.validate_commit_stack([], Args())
-        self.assertEqual(warnings, {})
+        warnings, errors = submit.validate_commit_stack([], Args())
+        self.assertEqual((warnings, errors), ({}, {}))
 
-        warnings = submit.validate_commit_stack(
+        warnings, _ = submit.validate_commit_stack(
             [_commit(bug_orig="2", bug="1", granted=["alice"])], Args()
         )
         self.assertEqual(list(warnings.values()), [["Bug ID changed from 2 to 1"]])
 
         # Submit with missing bug ID.
-        warnings = submit.validate_commit_stack(
-            [_commit(bug="", request=["bob"])], Args()
+        warnings, _ = submit.validate_commit_stack(
+            [_commit(bug="", request=["bob"])], Args(force=True)
         )
         self.assertEqual(list(warnings.values()), [["Missing bug ID"]])
 
         # Submit with missing reviewers.
-        warnings = submit.validate_commit_stack([_commit()], Args())
+        warnings, _ = submit.validate_commit_stack([_commit()], Args())
         self.assertEqual(list(warnings.values()), [["Missing reviewers"]])
 
         # Submit with existing revision reviewers.
         m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
-        warnings = submit.validate_commit_stack([_commit(rev=1)], Args())
-        self.assertEqual(warnings, {})
+        warnings, errors = submit.validate_commit_stack([_commit(rev=1)], Args())
+        self.assertEqual((warnings, errors), ({}, {}))
 
         # Do not update not changed commits
         m_get_revisions.return_value = [
@@ -635,7 +664,7 @@ class Commits(unittest.TestCase):
             "PHID-DIFF-2": search_diff(),
         }
         # we're changing bug id in the first revision to 2
-        warnings = submit.validate_commit_stack(
+        warnings, _ = submit.validate_commit_stack(
             [
                 _commit(node="aaa000aaa000", rev=1, bug="2", granted=["alice"]),
                 _commit(node="bbb000bbb000", title="B", rev=2, granted=["alice"]),
@@ -647,7 +676,7 @@ class Commits(unittest.TestCase):
         )
 
         m_whoami.return_value = {"phid": "PHID-USER-2"}
-        warnings = submit.validate_commit_stack(
+        warnings, _ = submit.validate_commit_stack(
             [_commit(rev=1, granted=["alice"])], Args()
         )
         self.assertEqual(list(warnings.values()), [[Contains("Commandeer")]])
@@ -657,7 +686,7 @@ class Commits(unittest.TestCase):
         m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
         m_get_diffs.return_value = {"PHID-DIFF-1": search_diff(node="aaa000aaa000")}
 
-        warnings = submit.validate_commit_stack(
+        warnings, _ = submit.validate_commit_stack(
             [_commit(node="aaa000aaa000", rev=1, granted=["alice"])], Args()
         )
         self.assertEqual(
@@ -666,7 +695,7 @@ class Commits(unittest.TestCase):
 
         # Removing the WIP state from the revision without changing the commit's SHA1
         m_get_revisions.return_value = [search_rev(status="changes-planned")]
-        warnings = submit.validate_commit_stack(
+        warnings, _ = submit.validate_commit_stack(
             [_commit(node="aaa000aaa000", rev=1, granted=["alice"])], Args()
         )
         self.assertEqual(
@@ -676,7 +705,7 @@ class Commits(unittest.TestCase):
 
         # Adding the WIP state to the revision without changing the commit's SHA1
         m_get_revisions.return_value = [search_rev()]
-        warnings = submit.validate_commit_stack(
+        warnings, _ = submit.validate_commit_stack(
             [_commit(node="aaa000aaa000", rev=1, granted=["alice"], wip=True)],
             Args(wip=True),
         )
@@ -686,11 +715,13 @@ class Commits(unittest.TestCase):
         )
 
         # Submit a new patch with reviewers.
-        warnings = submit.validate_commit_stack([_commit(request=["alice"])], Args())
-        self.assertEqual(warnings, {})
+        warnings, errors = submit.validate_commit_stack(
+            [_commit(request=["alice"])], Args()
+        )
+        self.assertEqual((warnings, errors), ({}, {}))
 
         # Submit a new patch without reviewers.
-        warnings = submit.validate_commit_stack(
+        warnings, _ = submit.validate_commit_stack(
             [_commit(rev=None, request=[], wip=True)], Args()
         )
         self.assertEqual(
@@ -704,13 +735,13 @@ class Commits(unittest.TestCase):
         )
 
         # Submit a new WIP patch with reviewers.
-        warnings = submit.validate_commit_stack(
+        warnings, errors = submit.validate_commit_stack(
             [_commit(rev=None, request=["alice"], wip=True)], Args(wip=True)
         )
-        self.assertEqual(warnings, {})
+        self.assertEqual((warnings, errors), ({}, {}))
 
         # Submit a new patch with the WIP prefix.
-        warnings = submit.validate_commit_stack(
+        warnings, _ = submit.validate_commit_stack(
             [_commit(title="WIP: A", request=["alice"], wip=True)], Args()
         )
         self.assertEqual(
@@ -731,10 +762,10 @@ class Commits(unittest.TestCase):
         )
 
         # Submitting a new uplift clears reviewers and shouldn't warn.
-        warnings = submit.validate_commit_stack(
+        warnings, errors = submit.validate_commit_stack(
             [_commit(rev=None, granted=[], request=[])], Args(command="uplift")
         )
-        self.assertEqual(warnings, {})
+        self.assertEqual((warnings, errors), ({}, {}))
 
     def test_update_commits_from_args(self):
         def lwr(revs):

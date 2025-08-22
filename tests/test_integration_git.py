@@ -2,6 +2,7 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+import logging
 import os
 import pathlib
 import platform
@@ -675,15 +676,12 @@ Differential Revision: http://example.test/D123
         {"data": [search_diff(node=sha)]},
         # whoami
         {"phid": "PHID-USER-1"},
-        # user.query
-        [{"phid": "PHID-USER-2", "userName": "test"}],
     )
 
     mozphab.main(
         ["submit", "--yes"] + [init_sha],
         is_development=True,
     )
-    assert call_conduit.call_count == 6
     m_logger_warning.assert_called_with("No changes to submit.")
 
 
@@ -875,20 +873,19 @@ Differential Revision: http://example.test/D123
     assert log == expected
 
 
+@mock.patch("mozphab.commands.submit.logger")
 def test_submit_update_revision_not_found(
-    in_process, git_repo_path: pathlib.Path, init_sha
+    m_logger, in_process, git_repo_path: pathlib.Path, init_sha
 ):
     call_conduit.reset_mock()
-    call_conduit.side_effect = [
+    call_conduit.side_effect = (
         # conduit.ping
         {},
         # diffusion.repository.search
         {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
         # differential.revision.search
         {"data": []},
-        # moz-phab asks again for D124
-        {"data": []},
-    ]
+    )
     testfile = git_repo_path / "X"
     testfile.write_text("ą", encoding="utf-8")
     git_out("add", "X")
@@ -899,7 +896,7 @@ def test_submit_update_revision_not_found(
     )
     git_out("commit", "--file", "msg")
 
-    with pytest.raises(exceptions.Error) as excinfo:
+    with pytest.raises(exceptions.Error, match="Unable to submit commits"):
         mozphab.main(
             ["submit", "--yes"]
             + ["--bug", "1"]
@@ -908,8 +905,9 @@ def test_submit_update_revision_not_found(
             + [init_sha],
             is_development=True,
         )
-
-    assert "query result for revision D124" in str(excinfo.value)
+    m_logger.log.assert_called_with(
+        logging.ERROR, Contains("didn't return a query result for revision D124")
+    )
 
 
 def test_uplift_create(

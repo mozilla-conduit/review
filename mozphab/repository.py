@@ -13,12 +13,11 @@ from typing import (
 from mozphab import environment
 
 from .commits import Commit
-from .conduit import conduit, normalise_reviewer
+from .conduit import conduit
 from .diff import Diff
 from .exceptions import Error
 from .helpers import (
     get_arcrc_path,
-    has_arc_rejections,
     read_json_field,
 )
 from .logger import logger
@@ -202,120 +201,8 @@ class Repository(object):
     def format_patch(self, diff, body, author, author_date):
         """Format a patch appropriate for importing."""
 
-    def check_commits_for_submit(self, commits: List[Commit], *, require_bug=True):
-        """Validate the list of commits (from commit_stack) are ok to submit"""
-        errors = []
-        warnings = []
-
-        # Extract a set of reviewers and verify first; they will be displayed
-        # with other commit errors.
-        all_reviewers = {}
-        reviewer_commit_map = {}
-        commit_invalid_reviewers = {}
-        rev_ids_to_names = {}
-        for commit in commits:
-            commit_invalid_reviewers[commit.node] = []
-
-            if not commit.rev_id:
-                continue
-            names = rev_ids_to_names.setdefault(commit.rev_id, [])
-            names.append(commit.name)
-
-        for rev_id, names in rev_ids_to_names.items():
-            if len(names) < 2:
-                continue
-
-            error_msg = (
-                "Phabricator revisions should be unique, but the following "
-                "commits refer to the same one (D{}):\n".format(rev_id)
-            )
-            for name in names:
-                error_msg += "* %s\n" % name
-            errors.append(error_msg)
-
-        # Flatten and deduplicate reviewer list, keeping track of the
-        # associated commit
-        for commit in commits:
-            # We can ignore reviewers on WIP commits, as they won't be passed to Phab
-            if commit.wip:
-                continue
-
-            for group in list(commit.reviewers.keys()):
-                for reviewer in commit.reviewers[group]:
-                    all_reviewers.setdefault(group, set())
-                    all_reviewers[group].add(reviewer)
-
-                    reviewer = normalise_reviewer(reviewer)
-                    reviewer_commit_map.setdefault(reviewer, [])
-                    reviewer_commit_map[reviewer].append(commit.node)
-
-        # Verify all reviewers in a single call
-        for invalid_reviewer in conduit.check_for_invalid_reviewers(all_reviewers):
-            for node in reviewer_commit_map[
-                normalise_reviewer(invalid_reviewer["name"])
-            ]:
-                commit_invalid_reviewers[node].append(invalid_reviewer)
-
-        unavailable_reviewers_warning = False
-        for commit in commits:
-            commit_errors = []
-            commit_warnings = []
-
-            if require_bug and not commit.bug_id:
-                commit_errors.append("missing bug-id")
-            if has_arc_rejections(commit.body):
-                commit_errors.append("contains arc fields")
-
-            if commit.rev_id:
-                revisions = conduit.get_revisions(ids=[commit.rev_id])
-                if len(revisions) == 0:
-                    commit_errors.append(
-                        "Phabricator did not return a query result for revision D%s"
-                        " (it might be inaccessible or not exist at all)"
-                        % commit.rev_id
-                    )
-
-            # commit_issues identified below this are commit_errors unless
-            # self.args.force is True, which makes them commit_warnings
-            commit_issues = (
-                commit_warnings if self.args and self.args.force else commit_errors
-            )
-
-            for reviewer in commit_invalid_reviewers[commit.node]:
-                if "disabled" in reviewer:
-                    commit_errors.append("User %s is disabled" % reviewer["name"])
-                elif "until" in reviewer:
-                    unavailable_reviewers_warning = True
-                    msg = (
-                        f"{reviewer['name']} is not available until "
-                        f"{reviewer['until']} (submit anyway with `-f`)"
-                    )
-                    commit_issues.append(msg)
-                else:
-                    commit_errors.append(
-                        "%s is not a valid reviewer's name" % reviewer["name"]
-                    )
-
-            if commit_errors:
-                errors.append(
-                    "%s %s\n- %s"
-                    % (commit.name, commit.title, "\n- ".join(commit_errors))
-                )
-
-            if commit_warnings:
-                warnings.append(
-                    "%s %s\n- %s"
-                    % (commit.name, commit.title, "\n- ".join(commit_warnings))
-                )
-
-        if errors:
-            raise Error("\n\n".join(errors))
-
-        if warnings:
-            logger.warning("\n\n".join(warnings))
-
-        if unavailable_reviewers_warning:
-            logger.warning("Notice: reviewer availability overridden.")
+    def check_commits_for_submit(self, commits: List[Commit]):
+        """Validate the list of commits are okay to submit."""
 
     def _api_url(self):
         """Return a base URL for conduit API call"""

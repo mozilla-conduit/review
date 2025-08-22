@@ -800,7 +800,7 @@ class Mercurial(Repository):
 
         return commits
 
-    def check_commits_for_submit(self, commits: List[Commit], require_bug: bool = True):
+    def check_commits_for_submit(self, commits: List[Commit]):
         # 'Greatest Common Ancestor'/'Merge Base' should be included in the revset.
         ancestor = self.hg_log("ancestor(%s)" % self.revset, split=False)
         if not any(commit.node == ancestor for commit in commits):
@@ -846,8 +846,6 @@ class Mercurial(Repository):
             if not self.has_shelve:
                 err.append("You can enable the shelve extension via `hg config --edit`")
             raise Error("\n".join(err))
-
-        super().check_commits_for_submit(commits, require_bug=require_bug)
 
     def _get_file_modes(self, commit: Commit) -> dict:
         """Get modes of the modified files."""

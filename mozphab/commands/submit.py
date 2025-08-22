@@ -15,6 +15,7 @@ from mozphab.exceptions import Error
 from mozphab.helpers import (
     BLOCKING_REVIEWERS_RE,
     augment_commits_from_body,
+    has_arc_rejections,
     move_drev_to_original,
     prompt,
     strip_differential_revision,
@@ -107,8 +108,11 @@ def show_commit_stack(commits: List[Commit]):
 
 def validate_commit_stack(
     commits: List[Commit], args: argparse.Namespace
-) -> dict[str, list[str]]:
-    """Validate commit stack is suitable for review."""
+) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """Validate commit stack is suitable for review.
+
+    Return collections of warnings and errors.
+    """
 
     # Preload all revisions.
     ids = [commit.rev_id for commit in commits if commit.rev_id]
@@ -122,11 +126,19 @@ def validate_commit_stack(
         diffs = conduit.get_diffs(phids=diff_phids) if diff_phids else {}
 
     warnings = {}
+    errors = {}
+    nodes = {}
 
     for commit in commits:
-        revision_has_reviewers = False
-
         if revision := revisions.get(commit.rev_id):
+            if commit.name != (dupe := nodes.setdefault(commit.rev_id, commit.name)):
+                errors.setdefault(commit.name, []).append(
+                    f"Phabricator revisions should be unique, but commit {dupe} refers "
+                    f"to the same one D{commit.rev_id}."
+                )
+                # Don't show more for this commit because it's probably wrong.
+                continue
+
             commit.rev_phid = revision["phid"]
             fields = revision["fields"]
 
@@ -151,11 +163,9 @@ def validate_commit_stack(
             different_author = fields["authorPHID"] != whoami["phid"]
 
             # Any reviewers added to a revision without them?
-            revision_has_reviewers = bool(
-                revision["attachments"]["reviewers"]["reviewers"]
-            )
             reviewers_added = bool(
-                commit.reviewers["granted"] and not revision_has_reviewers
+                commit.reviewers["granted"]
+                and not revision["attachments"]["reviewers"]["reviewers"]
             )
 
             # If SHA1 hasn't changed
@@ -206,9 +216,45 @@ def validate_commit_stack(
                     "This revision is closed! It will be reopened if submission "
                     "proceeds. You can stop now and refine the stack range."
                 )
+        elif commit.rev_id:
+            errors.setdefault(commit.name, []).append(
+                "Phabricator didn't return a query result for revision "
+                f"D{commit.rev_id}. It might be inaccessible or not exist at all."
+            )
+            # Unrecoverable error for this commit.
+            continue
 
-        if not commit.bug_id:
-            warnings.setdefault(commit.name, []).append("Missing bug ID")
+        overridable_errors = []
+
+        if not commit.bug_id and not args.no_bug:
+            overridable_errors.append("Missing bug ID")
+
+        if has_arc_rejections(commit.body):
+            overridable_errors.append("Contains arc fields")
+
+        if (
+            commit.has_reviewers
+            and not commit.wip
+            and (invalid := conduit.check_for_invalid_reviewers(commit.reviewers))
+        ):
+            for reviewer in invalid:
+                if "disabled" in reviewer:
+                    message = f"User {reviewer['name']} is disabled"
+                elif "until" in reviewer:
+                    message = (
+                        f"{reviewer['name']} isn't available until {reviewer['until']} "
+                        "(override with `-f`)"
+                    )
+                else:
+                    message = f"{reviewer['name']} isn't a valid reviewer name"
+                overridable_errors.append(message)
+
+        if overridable_errors:
+            if args.force:
+                # Downgrade to warnings if `-f` was passed.
+                warnings.setdefault(commit.name, []).extend(overridable_errors)
+            else:
+                errors.setdefault(commit.name, []).extend(overridable_errors)
 
         if commit.bug_id_orig and commit.bug_id != commit.bug_id_orig:
             warnings.setdefault(commit.name, []).append(
@@ -217,7 +263,7 @@ def validate_commit_stack(
 
         if (
             not commit.has_reviewers
-            and not revision_has_reviewers
+            and not conduit.has_revision_reviewers(commit)
             # Submitting a new uplift clears reviewers and shouldn't warn.
             and args.command != "uplift"
         ):
@@ -229,7 +275,7 @@ def validate_commit_stack(
                 "`--no-wip` to prevent this."
             )
 
-    return warnings
+    return warnings, errors
 
 
 def make_blocking(reviewers: List[str]) -> List[str]:
@@ -512,11 +558,15 @@ def _submit(repo: Repository, args: argparse.Namespace):
         f"Submitting {commit_count} commit{'s'[: commit_count ^ 1]} {status}"
     )
 
-    warnings = validate_commit_stack(commits, args)
+    with wait_message("Checking commits..."):
+        warnings, errors = validate_commit_stack(commits, args)
+    if errors:
+        log_commit_stack_with_messages(commits, errors, "- ", "  ", logging.ERROR)
+        raise Error("Unable to submit commits")
     log_commit_stack_with_messages(commits, warnings, "!! ", "   ")
+
     try:
-        with wait_message("Checking commits.."):
-            repo.check_commits_for_submit(commits, require_bug=not args.no_bug)
+        repo.check_commits_for_submit(commits)
     except Error as e:
         if not args.force:
             raise Error("Unable to submit commits:\n\n%s" % e)
