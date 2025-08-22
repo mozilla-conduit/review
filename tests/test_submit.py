@@ -217,6 +217,13 @@ class Commits(unittest.TestCase):
         )
         self.assertEqual(list(errors.values()), [[Contains("goofus is disabled")]])
 
+        # Never error for an existing revision with reviewers.
+        m_revs.return_value = [search_rev(reviewers=["PHID-USER-2"])]
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["goofus"], []), rev_id=1)], Args()
+        )
+        self.assertEqual(errors, {})
+
     @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
     @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
     @mock.patch("mozphab.conduit.ConduitAPI.whoami")

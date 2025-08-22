@@ -530,7 +530,7 @@ def test_submit_create_no_checkout(in_process, git_repo_path: pathlib.Path, init
 
 def test_submit_update(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.reset_mock()
-    call_conduit.side_effect = [
+    call_conduit.side_effect = (
         # ping
         {},
         # diffusion.repository.search
@@ -541,15 +541,13 @@ def test_submit_update(in_process, git_repo_path: pathlib.Path, init_sha):
         {"data": [search_diff()]},
         # whoami
         {"phid": "PHID-USER-1"},
-        # user.query
-        [{"phid": "PHID-USER-2", "userName": "alice"}],
         # differential.creatediff
         {"phid": "PHID-DIFF-2", "diffid": "2"},
         # differential.revision.edit
         {"object": {"id": "123", "phid": "PHID-DREV-123"}},
         # differential.setdiffproperty
         {},
-    ]
+    )
     testfile = git_repo_path / "X"
     testfile.write_text("ą", encoding="utf-8")
     git_out("add", "X")

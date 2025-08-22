@@ -235,6 +235,7 @@ def validate_commit_stack(
         if (
             commit.has_reviewers
             and not commit.wip
+            and not conduit.has_revision_reviewers(commit)
             and (invalid := conduit.check_for_invalid_reviewers(commit.reviewers))
         ):
             for reviewer in invalid:
