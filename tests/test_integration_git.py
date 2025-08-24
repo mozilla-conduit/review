@@ -2,7 +2,7 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
-import logging
+
 import os
 import pathlib
 import platform
@@ -645,9 +645,12 @@ def test_submit_update_uplift(in_process, git_repo_path: pathlib.Path, init_sha)
     )
 
 
-@mock.patch("mozphab.commands.submit.logger.warning")
 def test_submit_update_no_change(
-    m_logger_warning, in_process, git_repo_path: pathlib.Path, init_sha, git_sha
+    in_process,
+    git_repo_path: pathlib.Path,
+    init_sha,
+    git_sha,
+    caplog: pytest.LogCaptureFixture,
 ):
     testfile = git_repo_path / "X"
     testfile.write_text("a")
@@ -680,7 +683,8 @@ Differential Revision: http://example.test/D123
         ["submit", "--yes"] + [init_sha],
         is_development=True,
     )
-    m_logger_warning.assert_called_with("No changes to submit.")
+
+    assert "No changes to submit." in caplog.messages
 
 
 def test_submit_remove_cr(in_process, git_repo_path: pathlib.Path, init_sha):
@@ -871,9 +875,8 @@ Differential Revision: http://example.test/D123
     assert log == expected
 
 
-@mock.patch("mozphab.commands.submit.logger")
 def test_submit_update_revision_not_found(
-    m_logger, in_process, git_repo_path: pathlib.Path, init_sha
+    in_process, git_repo_path: pathlib.Path, init_sha, caplog: pytest.LogCaptureFixture
 ):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
@@ -903,9 +906,8 @@ def test_submit_update_revision_not_found(
             + [init_sha],
             is_development=True,
         )
-    m_logger.log.assert_called_with(
-        logging.ERROR, Contains("didn't return a query result for revision D124")
-    )
+
+    assert Contains("didn't return a query result for revision D124") in caplog.messages
 
 
 def test_uplift_create(
