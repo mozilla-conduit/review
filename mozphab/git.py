@@ -214,7 +214,7 @@ class Git(Repository):
         remotes: List[str] = self.git_out(["remote"])
 
         if len(remotes) == 1:
-            logger.info(f"Detecting base using the only available remote: {remotes[0]}")
+            logger.info(f"Using the only available remote: {remotes[0]}")
             return remotes
 
         if "origin" in remotes:
@@ -679,15 +679,17 @@ class Git(Repository):
 
     def get_repo_head_branch(self) -> Optional[str]:
         default_branch = self._phab_repo["fields"]["defaultBranch"]
-        if not self.is_cinnabar_required:
-            unified_head = f"remotes/origin/{default_branch}"
-        else:
-            unified_head = f"remotes/origin/bookmarks/{default_branch}"
 
-        if not self.is_node(unified_head):
-            return None
+        remotes = self.get_base_remotes()
 
-        return unified_head
+        for remote in remotes:
+            if not self.is_cinnabar_required:
+                unified_head = f"remotes/{remote}/{default_branch}"
+            else:
+                unified_head = f"remotes/{remote}/bookmarks/{default_branch}"
+
+            if self.is_node(unified_head):
+                return unified_head
 
     def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
         # Branch name for the uplift.

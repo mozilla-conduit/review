@@ -63,7 +63,7 @@ def test_get_base_remotes_single(mock_logger, mock_git_out, mock_config, git):
         "onlyremote"
     ], "Single remote in the repo should be returned as the base."
     mock_logger.info.assert_called_once_with(
-        "Detecting base using the only available remote: onlyremote"
+        "Using the only available remote: onlyremote"
     )
 
 
@@ -649,21 +649,36 @@ description
 
 
 @pytest.mark.parametrize(
-    "cinnabar_required,unified_head",
-    ((True, "remotes/origin/bookmarks/beta"), (False, "remotes/origin/beta")),
+    "cinnabar_required,remotes,unified_head",
+    (
+        (True, ["origin"], "remotes/origin/bookmarks/beta"),
+        (False, ["origin"], "remotes/origin/beta"),
+        (True, ["origin", "upstream"], "remotes/origin/bookmarks/beta"),
+        (False, ["origin", "upstream"], "remotes/origin/beta"),
+        (True, ["upstream"], "remotes/upstream/bookmarks/beta"),
+        (False, ["upstream"], "remotes/upstream/beta"),
+    ),
 )
 @mock.patch("mozphab.git.Git.is_node")
 @mock.patch("mozphab.git.Git.is_cinnabar_required", new_callable=mock.PropertyMock)
+@mock.patch("mozphab.git.Git.get_base_remotes")
 def test_git_get_repo_head_branch(
-    m_is_cinnabar_required, m_is_node, git, cinnabar_required, unified_head
+    m_get_base_remotes,
+    m_is_cinnabar_required,
+    m_is_node,
+    git,
+    cinnabar_required,
+    remotes,
+    unified_head,
 ):
+    m_get_base_remotes.return_value = remotes
     m_is_cinnabar_required.return_value = cinnabar_required
 
     # If head is not a node in the repo, raise `ValueError`.
     m_is_node.return_value = False
     assert (
         git.get_repo_head_branch() is None
-    ), "Unknown head should have returned `None`."
+    ), "No found heads should have returned `None`."
 
     # If head is a node in the repo, should map to a remote branch.
     m_is_node.return_value = True

@@ -947,6 +947,7 @@ def test_uplift_create(
     ]
 
     # Fake a `beta` branch on the `origin` remote.
+    git_out("remote", "add", "origin", "https://example.com/git-repo")
     remote_branches = git_repo_path / ".git" / "refs" / "remotes" / "origin"
     remote_branches.mkdir(parents=True)
     shutil.copy(
