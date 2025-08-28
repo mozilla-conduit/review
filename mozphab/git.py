@@ -220,14 +220,14 @@ class Git(Repository):
         if "origin" in remotes:
             logger.warning(
                 "Multiple remotes found. Defaulting to 'origin'.\n"
-                "Set `git_remote` in your config if you want to override this."
+                "Set `git.remote` in your moz-phab config to specify another remote."
             )
             return ["origin"]
 
         logger.warning(
             "Multiple remotes found, and no `origin` present.\n"
             "Attempting all remotes. This may produce incorrect results.\n"
-            "Set `git_remote` in your config to resolve this."
+            "Set `git.remote` in your moz-phab config to specify the upstream remote."
         )
         return remotes
 

@@ -526,7 +526,7 @@ def _submit(repo: Repository, args: argparse.Namespace) -> bool:
             "This is usually the result of a failure to detect the correct "
             "remote repository.\nTry again with the `--upstream <upstream>` "
             "switch to specify the correct remote repository,\n"
-            "or set the `git_remote` config option to specify a remote."
+            "or set the `git.remote` moz-phab config option to specify a remote."
         )
 
     if args.command == "uplift":
