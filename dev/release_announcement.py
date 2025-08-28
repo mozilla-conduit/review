@@ -67,7 +67,7 @@ def discourse_formatted_text(current_version: str, bug_titles: dict) -> str:
     for bug, bug_title in bug_titles.items():
         out.append(f"- [bug {bug}](https://bugzilla.mozilla.org/{bug}) {bug_title}")
     out.append("")
-    out.append("Discuss these changes in #conduit on Slack or Matrix.")
+    out.append("Discuss these changes in #engineering-workflow on Slack or #Conduit Matrix.")
 
     return "\n".join(out)
 
