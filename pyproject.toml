@@ -11,7 +11,7 @@ readme = "README.md"
 
 dependencies = [
     "distro",
-    "glean-sdk==60.*",
+    "glean-sdk==65.*",
     "packaging",
     "python-hglib>=2.6.2",
     "sentry-sdk>=0.14.3",
