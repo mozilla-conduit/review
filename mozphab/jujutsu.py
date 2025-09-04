@@ -81,7 +81,7 @@ class Jujutsu(Repository):
         self.revset = None
         self.branch = None
 
-        self.__email = check_output(
+        self.__email = self.__check_output(
             ["jj", "config", "get", "user.email"], split=False
         ).rstrip()
 
@@ -90,7 +90,7 @@ class Jujutsu(Repository):
 
         version_re = re.compile(r"jj (\d+\.\d+\.\d+)(?:-[a-fA-F0-9]{40})?")
         try:
-            jj_version_output = check_output(["jj", "version"], split=False)
+            jj_version_output = self.__check_output(["jj", "version"], split=False)
         except FileNotFoundError as exc:
             if exc.filename == "jj":
                 raise Error("`jj` executable was not found.")
@@ -361,7 +361,7 @@ class Jujutsu(Repository):
 
         if name and not self.args.no_branch and config.create_branch:
             branches = set(
-                check_output(
+                self.__check_output(
                     ["jj", "bookmark", "list", "--template", 'name ++ "\n"'],
                     strip=False,
                 )
@@ -419,7 +419,7 @@ class Jujutsu(Repository):
         options = []
         if use_reversed:
             options.append("--reversed")
-        return check_output(
+        return self.__check_output(
             [
                 "jj",
                 "log",
