@@ -146,8 +146,12 @@ def read_json_field(files: List[str], field_path: List[str]) -> Optional[str]:
 
 
 @contextmanager
-def temporary_file(content: str, encoding: str = "utf-8"):
-    f = tempfile.NamedTemporaryFile(delete=False, mode="w+", encoding=encoding)
+def temporary_file(
+    content: str, encoding: str = "utf-8", newline: Optional[str] = "\n"
+):
+    f = tempfile.NamedTemporaryFile(
+        delete=False, mode="w+", encoding=encoding, newline=newline
+    )
     try:
         f.write(content)
         f.flush()
