@@ -53,9 +53,7 @@ class Jujutsu(Repository):
 
         try:
             self.git_path = Path(
-                check_output(
-                    ["jj", "git", "root"], split=False, stderr=subprocess.STDOUT
-                )
+                self.__check_output(["jj", "git", "root"], split=False)
             )
         except Exception:
             raise ValueError(
@@ -486,3 +484,6 @@ class Jujutsu(Repository):
         if s not in ["true", "false"]:
             raise Error(f"internal error: {name} was not `true` or `false`")
         return s == "true"
+
+    def __check_output(self, *args, **kwargs) -> Union[List[str], str]:
+        return check_output(*args, stderr=subprocess.PIPE, **kwargs)
