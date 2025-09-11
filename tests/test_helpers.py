@@ -4,6 +4,7 @@
 
 import builtins
 import datetime
+import logging
 import subprocess
 import unittest
 from pathlib import Path
@@ -326,18 +327,19 @@ def test_simple_cache():
 
 
 @mock.patch("subprocess.check_output")
-@mock.patch("mozphab.subprocess_wrapper.logger")
-def test_check_output(m_logger, m_check_output):
+def test_check_output(m_check_output, caplog: pytest.LogCaptureFixture):
+    caplog.set_level(logging.DEBUG)
     m_check_output.side_effect = subprocess.CalledProcessError(
         cmd=["some", "cmd"], returncode=2, output="output msg", stderr="stderr msg"
     )
+
     with pytest.raises(exceptions.CommandError) as e:
         subprocess_wrapper.check_output(["command"])
 
     assert e.value.status == 2
     assert str(e.value).startswith("command 'command'")
-    assert mock.call("stderr msg") in m_logger.debug.call_args_list
-    assert mock.call("output msg") in m_logger.debug.call_args_list
+    assert "stderr msg" in caplog.messages
+    assert "output msg" in caplog.messages
 
     m_check_output.side_effect = ("response \nline \n",)
     assert ["response ", "line"] == subprocess_wrapper.check_output(["command"])

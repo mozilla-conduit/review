@@ -3,9 +3,11 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import logging
 from unittest import mock
 
 import pytest
+from callee import Contains
 
 from mozphab import exceptions, mozphab
 from mozphab.commands import reorganise
@@ -381,36 +383,31 @@ def test_commits_invalid(_augment, _check, git):
     assert error.startswith("Found new commit in the local stack: A.")
 
 
-@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
-@mock.patch("mozphab.conduit.ConduitAPI.check")
-@mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
-@mock.patch("mozphab.commands.reorganise.convert_stackgraph_to_linear")
 @mock.patch("mozphab.conduit.ConduitAPI.phids_to_ids")
 @mock.patch("mozphab.commands.reorganise.walk_llist")
-@mock.patch("mozphab.commands.reorganise.logger")
-def test_remote_stack_invalid(
-    m_logger, m_walk, m_ids, m_stack, _augment, _check, _call, git
-):
+def test_remote_stack_invalid(m_walk, m_ids, git, caplog: pytest.LogCaptureFixture):
     class Args:
         force = False
         no_abandon_unconnected = False
         no_hyperlinks = False
         verbose = False
 
-    mozphab.conduit.set_repo(git)
-    mozphab.conduit.repo.commit_stack = mock.Mock()
-
-    m_stack.return_value = {"A": "B"}
+    caplog.set_level(logging.ERROR)
     m_ids.return_value = ["A", "B", "C"]
-    mozphab.conduit.repo.commit_stack.return_value = [Commit(rev_id=1, name="A")]
     m_walk.side_effect = exceptions.Error("TEST")
-    with pytest.raises(exceptions.Error) as e:
+
+    with (
+        mock.patch("mozphab.conduit.ConduitAPI.check"),
+        mock.patch("mozphab.git.Git.commit_stack"),
+        mock.patch("mozphab.conduit.ConduitAPI.get_revisions"),
+        mock.patch("mozphab.commands.reorganise.convert_stackgraph_to_linear"),
+        pytest.raises(exceptions.Error, match="TEST"),
+    ):
         reorganise.reorganise(git, Args())
 
-    assert str(e.value) == "TEST"
-    m_logger.error.assert_called_once_with(
+    assert caplog.messages == [
         "Remote stack is not linear.\nDetected stack:\nA <- B <- C"
-    )
+    ]
 
 
 @pytest.mark.parametrize(
@@ -814,15 +811,9 @@ def test_no_abandon_unconnected_requires_force(_check):
     assert str(e.value) == "--no-abandon-unconnected can only be used with --force"
 
 
-@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
-@mock.patch("mozphab.conduit.ConduitAPI.check")
-@mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
-@mock.patch("mozphab.commands.reorganise.convert_stackgraph_to_linear")
-@mock.patch("mozphab.conduit.ConduitAPI.phids_to_ids")
 @mock.patch("mozphab.commands.reorganise.walk_llist")
-@mock.patch("mozphab.commands.reorganise.logger")
 def test_force_mode_ignores_remote_stack_errors(
-    m_logger, m_walk, m_ids, m_stack, _augment, _check, _call, git
+    m_walk, git, caplog: pytest.LogCaptureFixture
 ):
     """Test that force mode ignores remote stack structure issues."""
 
@@ -833,40 +824,27 @@ def test_force_mode_ignores_remote_stack_errors(
         no_hyperlinks = False
         verbose = False
 
-    mozphab.conduit.set_repo(git)
-    mozphab.conduit.repo.commit_stack = mock.Mock()
-
-    m_stack.return_value = {"A": "B"}
-    m_ids.return_value = ["A", "B", "C"]
-    mozphab.conduit.repo.commit_stack.return_value = [Commit(rev_id=1, name="A")]
+    caplog.set_level(logging.WARNING, logger="moz-phab")
     m_walk.side_effect = exceptions.Error("Remote stack is not linear")
 
     # Mock the conduit methods that would be called
-    with mock.patch("mozphab.conduit.ConduitAPI.ids_to_phids") as m_id2phid:
-        with mock.patch(
-            "mozphab.commands.reorganise.force_stack_transactions"
-        ) as m_force_trans:
-            with mock.patch(
-                "mozphab.conduit.ConduitAPI.apply_transactions_to_revision"
-            ):
-                m_id2phid.return_value = ["A"]
-                m_force_trans.return_value = {
-                    "A": [{"type": "children.set", "value": []}]
-                }
-
-                # This should not raise an error in force mode
-                reorganise.reorganise(git, Args())
+    with (
+        mock.patch("mozphab.conduit.ConduitAPI.check"),
+        mock.patch("mozphab.git.Git.commit_stack"),
+        mock.patch("mozphab.conduit.ConduitAPI.get_revisions"),
+        mock.patch("mozphab.commands.reorganise.convert_stackgraph_to_linear"),
+    ):
+        # This should not raise an error in force mode
+        reorganise.reorganise(git, Args())
 
     # Should log a warning instead of an error
     # Check that the specific warning was called
-    warning_calls = [
-        call
-        for call in m_logger.warning.call_args_list
-        if "Remote stack is not linear, but continuing in force mode" in call[0][0]
-    ]
+    for record in caplog.records:
+        assert record.levelno == logging.WARNING
     assert (
-        len(warning_calls) == 1
-    ), f"Expected one warning about remote stack being non-linear, got: {m_logger.warning.call_args_list}"
+        Contains("Remote stack is not linear, but continuing in force mode")
+        in caplog.messages
+    )
 
 
 class TestReorganiseParser:

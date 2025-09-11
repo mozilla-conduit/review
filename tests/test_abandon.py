@@ -6,6 +6,8 @@ import argparse
 import unittest
 from unittest import mock
 
+from callee import Contains
+
 from mozphab import exceptions
 from mozphab.commands import abandon
 
@@ -84,8 +86,7 @@ class TestAbandonRevisions(unittest.TestCase):
         ]
 
     @mock.patch("mozphab.commands.abandon.conduit")
-    @mock.patch("mozphab.commands.abandon.logger")
-    def test_abandon_revisions_success(self, mock_logger, mock_conduit):
+    def test_abandon_revisions_success(self, mock_conduit):
         """Test successful abandonment of revisions."""
         # Setup mocks
         mock_conduit.check.return_value = True
@@ -115,8 +116,7 @@ class TestAbandonRevisions(unittest.TestCase):
         mock_conduit.apply_transactions_to_revision.assert_has_calls(expected_calls)
 
     @mock.patch("mozphab.commands.abandon.conduit")
-    @mock.patch("mozphab.commands.abandon.logger")
-    def test_abandon_already_abandoned(self, mock_logger, mock_conduit):
+    def test_abandon_already_abandoned(self, mock_conduit):
         """Test handling of already abandoned revisions."""
         # Setup mocks
         mock_conduit.check.return_value = True
@@ -125,14 +125,16 @@ class TestAbandonRevisions(unittest.TestCase):
         ]  # Already abandoned
 
         # Call function
-        abandon.abandon_revisions([124], self.args)
+        with self.assertLogs() as logging_watcher:
+            abandon.abandon_revisions([124], self.args)
 
         # Verify no abandonment calls were made
         mock_conduit.apply_transactions_to_revision.assert_not_called()
 
         # Verify warning was logged
-        mock_logger.warning.assert_called_with(
-            "All specified revisions are already abandoned."
+        self.assertIn(
+            Contains("All specified revisions are already abandoned."),
+            logging_watcher.output,
         )
 
     @mock.patch("mozphab.commands.abandon.conduit")
@@ -158,8 +160,7 @@ class TestAbandonRevisions(unittest.TestCase):
 
     @mock.patch("mozphab.commands.abandon.conduit")
     @mock.patch("mozphab.commands.abandon.prompt")
-    @mock.patch("mozphab.commands.abandon.logger")
-    def test_abandon_with_confirmation_no(self, mock_logger, mock_prompt, mock_conduit):
+    def test_abandon_with_confirmation_no(self, mock_prompt, mock_conduit):
         """Test abandonment with confirmation prompt answering No."""
         # Setup mocks
         mock_conduit.check.return_value = True
@@ -180,10 +181,7 @@ class TestAbandonRevisions(unittest.TestCase):
 
     @mock.patch("mozphab.commands.abandon.conduit")
     @mock.patch("mozphab.commands.abandon.prompt")
-    @mock.patch("mozphab.commands.abandon.logger")
-    def test_abandon_with_confirmation_yes(
-        self, mock_logger, mock_prompt, mock_conduit
-    ):
+    def test_abandon_with_confirmation_yes(self, mock_prompt, mock_conduit):
         """Test abandonment with confirmation prompt answering Yes."""
         # Setup mocks
         mock_conduit.check.return_value = True
@@ -205,15 +203,15 @@ class TestAbandonRevisions(unittest.TestCase):
         )
 
     @mock.patch("mozphab.commands.abandon.conduit")
-    @mock.patch("mozphab.commands.abandon.logger")
-    def test_abandon_mixed_statuses(self, mock_logger, mock_conduit):
+    def test_abandon_mixed_statuses(self, mock_conduit):
         """Test abandonment with mixed revision statuses."""
         # Setup mocks
         mock_conduit.check.return_value = True
         mock_conduit.get_revisions.return_value = self.mock_revisions  # Mix of statuses
 
         # Call function
-        abandon.abandon_revisions([123, 124, 125], self.args)
+        with self.assertLogs() as logging_watcher:
+            abandon.abandon_revisions([123, 124, 125], self.args)
 
         # Verify only non-abandoned revisions were processed
         expected_calls = [
@@ -229,7 +227,7 @@ class TestAbandonRevisions(unittest.TestCase):
         mock_conduit.apply_transactions_to_revision.assert_has_calls(expected_calls)
 
         # Verify already abandoned message was logged
-        mock_logger.info.assert_any_call("Already abandoned: %s", "D124")
+        self.assertIn(Contains("Already abandoned: D124"), logging_watcher.output)
 
 
 class TestAbandonMainFunction(unittest.TestCase):

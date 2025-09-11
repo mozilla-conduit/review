@@ -3,10 +3,12 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import logging
 from pathlib import Path
 from unittest import mock
 
 import pytest
+from callee import Contains
 
 from mozphab import environment, exceptions, mozphab
 from mozphab.commits import Commit
@@ -53,54 +55,54 @@ def test_get_base_remotes_with_git_remote(mock_git_out, mock_config, git):
 
 @mock.patch("mozphab.git.config")
 @mock.patch("mozphab.git.Git.git_out")
-@mock.patch("mozphab.git.logger")
-def test_get_base_remotes_single(mock_logger, mock_git_out, mock_config, git):
+def test_get_base_remotes_single(
+    mock_git_out, mock_config, git, caplog: pytest.LogCaptureFixture
+):
+    caplog.set_level(logging.INFO)
     mock_config.git_remote = []
     mock_git_out.return_value = ["onlyremote"]
 
     remotes = git.get_base_remotes()
+
     assert remotes == [
         "onlyremote"
     ], "Single remote in the repo should be returned as the base."
-    mock_logger.info.assert_called_once_with(
-        "Using the only available remote: onlyremote"
-    )
+    assert caplog.messages == ["Using the only available remote: onlyremote"]
 
 
 @mock.patch("mozphab.git.config")
 @mock.patch("mozphab.git.Git.git_out")
-@mock.patch("mozphab.git.logger")
-def test_get_base_remotes_with_origin(mock_logger, mock_git_out, mock_config, git):
+def test_get_base_remotes_with_origin(
+    mock_git_out, mock_config, git, caplog: pytest.LogCaptureFixture
+):
     mock_config.git_remote = []
     mock_git_out.return_value = ["upstream", "origin", "custom"]
 
     remotes = git.get_base_remotes()
+
     assert remotes == [
         "origin"
     ], "`origin` should be returned when multiple remotes are found."
-    mock_logger.warning.assert_called_once()
-    assert "Defaulting to 'origin'" in mock_logger.warning.call_args[0][0]
+    assert caplog.messages == [Contains("Defaulting to 'origin'")]
 
 
 @mock.patch("mozphab.git.config")
 @mock.patch("mozphab.git.Git.git_out")
-@mock.patch("mozphab.git.logger")
 def test_get_base_remotes_multiple_without_origin(
-    mock_logger, mock_git_out, mock_config, git
+    mock_git_out, mock_config, git, caplog: pytest.LogCaptureFixture
 ):
     mock_config.git_remote = []
     mock_git_out.return_value = ["upstream", "custom"]
 
     remotes = git.get_base_remotes()
+
     assert remotes == [
         "upstream",
         "custom",
     ], "All remotes should be returned when multiple remotes found without `origin`."
-    mock_logger.warning.assert_called_once()
-    assert (
-        "Multiple remotes found, and no `origin` present."
-        in mock_logger.warning.call_args[0][0]
-    )
+    assert caplog.messages == [
+        Contains("Multiple remotes found, and no `origin` present.")
+    ]
 
 
 @mock.patch("mozphab.git.Git.get_base_remotes")
@@ -392,9 +394,16 @@ def test_check_node(m_phab_vcs, m_git_is_node, m_hg2git, git):
 @mock.patch("mozphab.git.Git.checkout")
 @mock.patch("mozphab.git.Git.git_call")
 @mock.patch("mozphab.git.prompt")
-@mock.patch("mozphab.git.logger")
 @mock.patch("mozphab.git.config")
-def test_before_patch(m_config, m_logger, m_prompt, m_git, m_checkout, m_git_out, git):
+def test_before_patch(
+    m_config,
+    m_prompt,
+    m_git,
+    m_checkout,
+    m_git_out,
+    git,
+    caplog: pytest.LogCaptureFixture,
+):
     class Args:
         def __init__(
             self,
@@ -437,26 +446,26 @@ def test_before_patch(m_config, m_logger, m_prompt, m_git, m_checkout, m_git_out
 
     m_git.reset_mock()
     m_checkout.reset_mock()
-    m_logger.reset_mock()
+    caplog.clear()
     git.args = Args(no_branch=True, yes=True)
     git.before_patch("abcdef", "name")
     m_checkout.assert_called_once()
     m_git.assert_not_called()
-    assert "git checkout -b" in m_logger.warning.call_args_list[1][0][0]
+    assert Contains("git checkout -b") in caplog.messages
 
     m_git.reset_mock()
     m_checkout.reset_mock()
-    m_logger.reset_mock()
+    caplog.clear()
     git.args = Args(no_branch=True)
     git.before_patch("abcdef", "name")
     m_checkout.assert_called_once()
     m_git.assert_not_called()
     m_prompt.assert_called_once()
-    assert "git checkout -b" in m_logger.warning.call_args_list[0][0][0]
+    assert Contains("git checkout -b") in caplog.messages
 
     m_git.reset_mock()
     m_checkout.reset_mock()
-    m_logger.reset_mock()
+    caplog.clear()
     m_prompt.reset_mock()
     m_config.create_branch = False
     git.args = Args()
@@ -464,7 +473,7 @@ def test_before_patch(m_config, m_logger, m_prompt, m_git, m_checkout, m_git_out
     m_checkout.assert_called_once()
     m_git.assert_not_called()
     m_prompt.assert_called_once()
-    assert "git checkout -b" in m_logger.warning.call_args_list[0][0][0]
+    assert Contains("git checkout -b") in caplog.messages
 
     m_prompt.return_value = "No"
     with pytest.raises(SystemExit):
