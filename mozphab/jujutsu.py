@@ -178,7 +178,7 @@ class Jujutsu(Repository):
                     ")",
                 ]
             ),
-            revset="{}::{}".format(self.revset[0], self.revset[1]),
+            revset="({})::({})".format(self.revset[0], self.revset[1]),
             split=False,
             strip=False,
         )[: -len(boundary)]
