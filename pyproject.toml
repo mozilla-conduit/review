@@ -5,9 +5,18 @@
 [project]
 name = "MozPhab"
 description = "Phabricator review submission/management tool."
-license = {file = "LICENSE"}
+license = "MPL-2.0"
 authors = [{name = "Mozilla", email = "conduit-team@mozilla.com"}]
 readme = "README.md"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Version Control :: Git",
+    "Topic :: Software Development :: Version Control :: Mercurial",
+]
 
 dependencies = [
     "distro",
@@ -29,7 +38,6 @@ dynamic = ["version"]
 # Derive version number from version control.
 [tool.setuptools_scm]
 
-# NOTE: using setting this here instead of `setup.cfg` is a beta feature.
 [tool.setuptools]
 packages = ["mozphab", "mozphab.commands"]
 
@@ -43,7 +51,6 @@ moz-phab = "mozphab.mozphab:run"
 [build-system]
 build-backend = "setuptools.build_meta"
 requires = [
-    "setuptools>=45",
+    "setuptools>=77",
     "setuptools_scm[toml]>=7.0.5",
 ]
-
