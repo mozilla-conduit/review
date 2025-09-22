@@ -75,11 +75,15 @@ def uplift(repo: Repository, args: argparse.Namespace):
     repo._phab_repo = phab_repo
 
     # Run the usual submit comment with our patched arg values.
-    success = submit(repo, args)
+    commits = submit(repo, args)
 
-    if success:
+    if commits:
+        tip_commit = commits[-1]
+        tip_commit_id = tip_commit.rev_id
+        tip_lando_url = f"{repo.lando_url}/D{tip_commit_id}"
+
         logger.warning(
-            "\nPlease navigate to the tip-most commit and complete the uplift "
+            f"\nPlease navigate to {tip_lando_url} and complete the uplift "
             "request form."
         )
 

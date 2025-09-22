@@ -910,12 +910,16 @@ def test_submit_update_revision_not_found(
     assert Contains("didn't return a query result for revision D124") in caplog.messages
 
 
+@mock.patch("mozphab.repository.get_lando_url_for_phabricator")
 def test_uplift_create(
+    m_lando_url,
     in_process,
     git_repo_path: pathlib.Path,
     init_sha: str,
     caplog: pytest.LogCaptureFixture,
 ):
+    m_lando_url.return_value = "https://lando.example.com"
+
     call_conduit.reset_mock()
     call_conduit.side_effect = [
         # diffusion.repository.search

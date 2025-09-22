@@ -502,7 +502,7 @@ def local_uplift_if_possible(
     return False
 
 
-def _submit(repo: Repository, args: argparse.Namespace) -> bool:
+def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
     telemetry().submission.preparation_time.start()
     with wait_message("Checking connection to Phabricator."):
         # Check if raw Conduit API can be used
@@ -575,7 +575,7 @@ def _submit(repo: Repository, args: argparse.Namespace) -> bool:
 
     if not any(commit.submit for commit in commits):
         logger.warning("No changes to submit.")
-        return False
+        return []
 
     # Show a warning if there are untracked files.
     if config.warn_untracked:
@@ -611,7 +611,7 @@ def _submit(repo: Repository, args: argparse.Namespace) -> bool:
     else:
         res = prompt(f"Submit to {repo.phab_url}", ["Yes", "No", "Always"])
         if res == "No":
-            return False
+            return []
         if res == "Always":
             config.auto_submit = True
             config.write()
@@ -710,10 +710,10 @@ def _submit(repo: Repository, args: argparse.Namespace) -> bool:
     telemetry().submission.process_time.stop()
 
     # Indicate that commits were submitted.
-    return True
+    return commits
 
 
-def submit(repo: Repository, args: argparse.Namespace) -> bool:
+def submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
     try:
         return _submit(repo, args)
     except Exception as e:

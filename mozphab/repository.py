@@ -29,6 +29,18 @@ MOZILLA_DOMAINS = {
     ".allizom.org",
 }
 
+# Mapping of known Phabricator URLs to Lando URLs.
+LANDO_URL_MAPPING = {
+    "https://phabricator.services.mozilla.com/": "https://lando.moz.tools",
+    "https://phabricator-dev.allizom.org/": "https://dev.lando.nonprod.webservices.mozgcp.net",
+    "https://phabricator.allizom.org/": "https://stage.lando.nonprod.webservices.mozgcp.net",
+}
+
+
+def get_lando_url_for_phabricator(phab_url: str) -> str:
+    """Return the Lando URL for the given Phabricator URL."""
+    return LANDO_URL_MAPPING[phab_url]
+
 
 def is_mozilla_phabricator(url: str) -> bool:
     """Return `True` if the `url` is a Mozilla owned domain."""
@@ -288,6 +300,11 @@ class Repository(object):
                     f.write(self._phab_vcs)
 
         return self._phab_vcs
+
+    @property
+    def lando_url(self) -> str:
+        """Return the Lando URL for this repository."""
+        return get_lando_url_for_phabricator(self.phab_url)
 
     def get_public_node(self, node):
         """Hashtag in a remote VCS."""
