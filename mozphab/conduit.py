@@ -68,6 +68,10 @@ class ConduitAPI:
         Returns:
             API Token string
         """
+        try:
+            return os.environ["MOZPHAB_PHABRICATOR_API_TOKEN"]
+        except KeyError:
+            pass
 
         if "api_token" in cache:
             return str(cache.get("api_token"))

@@ -43,6 +43,16 @@ def test_load_api_token(m_read):
     assert mozphab.conduit.load_api_token() == "x"
 
 
+@pytest.mark.no_mock_token
+def test_load_api_token_from_env(monkeypatch):
+    monkeypatch.setenv("MOZPHAB_PHABRICATOR_API_TOKEN", "api-token123")
+
+    mozphab.conduit.set_repo(Repo())
+    token = mozphab.conduit.load_api_token()
+
+    assert token == "api-token123", "API token should be loaded from environment."
+
+
 @mock.patch("mozphab.conduit.ConduitAPI.load_api_token")
 def test_build_request(m_load_api_token):
     m_load_api_token.return_value = "saved-token"
