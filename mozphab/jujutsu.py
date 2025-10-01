@@ -248,8 +248,20 @@ class Jujutsu(Repository):
         pass
 
     def untracked(self) -> List[str]:
-        # Jujutsu snapshots files automatically, so there's no risk of losing anything. Report
-        # nothing untracked.
+        is_working_copy_descriptionless_but_changed = self.__cli_log(
+            revset="@",
+            template="self.description().len() == 0 && !self.empty()",
+            split=False,
+        )
+        is_working_copy_descriptionless_but_changed = Jujutsu.__parse_log_bool(
+            "check for descriptionless-but-changed working copy",
+            is_working_copy_descriptionless_but_changed,
+        )
+        if is_working_copy_descriptionless_but_changed:
+            return self.__cli_log(
+                revset="@",
+                template='self.diff().files().map(|f| f.path()).join("\n")',
+            )
         return []
 
     def get_diff(self, commit: Commit) -> Diff:
