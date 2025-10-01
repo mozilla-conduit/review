@@ -457,7 +457,9 @@ class Jujutsu(Repository):
         revset = "heads(immutable()..@-)"
         mutable_roots = self.__cli_log(template='change_id ++ "\\n"', revset=revset)
         if not mutable_roots:
-            return None
+            raise Error(
+                f"No mutable parents found (revset `{revset}`), unable to continue"
+            )
         elif len(mutable_roots) > 1:
             raise Error(
                 f"Multiple mutable parents found (revset `{revset}`), unable to continue"
@@ -472,7 +474,9 @@ class Jujutsu(Repository):
         revset = "roots(immutable()..@-)"
         mutable_roots = self.__cli_log(template='change_id ++ "\\n"', revset=revset)
         if not mutable_roots:
-            return None
+            raise Error(
+                f"No mutable parents found (revset `{revset}`), unable to continue"
+            )
         elif len(mutable_roots) > 1:
             raise Error(
                 f"Multiple mutable parent roots found (revset `{revset}`), unable to continue"
