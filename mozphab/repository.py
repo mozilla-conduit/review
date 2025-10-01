@@ -136,7 +136,7 @@ class Repository(object):
 
         self.args = args
 
-    def untracked(self):
+    def untracked(self) -> List[str]:
         """Return a list of untracked files."""
 
     def commit_stack(self, **kwargs) -> Optional[List[Commit]]:
