@@ -133,9 +133,9 @@ class Jujutsu(Repository):
             start_rev = self.args.start_rev
         else:
             start_rev = (
-                self.__get_last_mutable_parent()
+                self.__get_last_stack_change()
                 if is_single
-                else self.__get_first_mutable_parent()
+                else self.__get_first_stack_change()
             )
         if not start_rev:
             return None
@@ -149,7 +149,7 @@ class Jujutsu(Repository):
         ):
             end_rev = self.args.end_rev
         else:
-            end_rev = self.__get_last_mutable_parent()
+            end_rev = self.__get_last_stack_change()
 
         self.revset = (start_rev, end_rev)
 
@@ -449,12 +449,12 @@ class Jujutsu(Repository):
                 # <https://github.com/martinvonz/jj/issues/4170>
             )
 
-    def __get_last_mutable_parent(self) -> str:
-        """Gets the last mutable parent of the working directory, but _only_ if there's one."""
+    def __get_last_stack_change(self) -> str:
+        """Gets the last of the current stack of mutable changes, but _only_ if there's one."""
         # TODO: Should we do something different when `config.git_remote` or `self.args.upstream`
         # are specified? Compare with `remotes` checks in Git impl.
 
-        revset = "heads(immutable()..@-)"
+        revset = 'heads(immutable()..@- | present(@ ~ description(exact:"")))'
         mutable_roots = self.__cli_log(template='change_id ++ "\\n"', revset=revset)
         if not mutable_roots:
             raise Error(
@@ -466,12 +466,12 @@ class Jujutsu(Repository):
             )
         return mutable_roots[0]
 
-    def __get_first_mutable_parent(self) -> str:
-        """Gets the first mutable parent of the working-copy change, but _only_ if there's one."""
+    def __get_first_stack_change(self) -> str:
+        """Gets the first of the current stack of mutable changes, but _only_ if there's one."""
         # TODO: Should we do something different when `config.git_remote` or `self.args.upstream`
         # are specified? Compare with `remotes` checks in Git impl.
 
-        revset = "roots(immutable()..@-)"
+        revset = 'roots(immutable()..@- | present(@ ~ description(exact:"")))'
         mutable_roots = self.__cli_log(template='change_id ++ "\\n"', revset=revset)
         if not mutable_roots:
             raise Error(
