@@ -55,6 +55,17 @@ def test_get_base_remotes_with_git_remote(mock_git_out, mock_config, git):
 
 @mock.patch("mozphab.git.config")
 @mock.patch("mozphab.git.Git.git_out")
+def test_get_base_remotes_with_remote_arg(mock_git_out, mock_config, git):
+    mock_config.git_remote = ["origin"]
+    git.args.upstream = ["custom"]
+
+    remotes = git.get_base_remotes()
+    assert remotes == ["custom"], "--upstream arg should take priority."
+    mock_git_out.assert_not_called()
+
+
+@mock.patch("mozphab.git.config")
+@mock.patch("mozphab.git.Git.git_out")
 def test_get_base_remotes_single(
     mock_git_out, mock_config, git, caplog: pytest.LogCaptureFixture
 ):

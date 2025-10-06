@@ -838,7 +838,10 @@ def add_submit_arguments(parser):
         "--remote",
         "-u",
         action="append",
-        help='Set upstream branch to detect the starting commit (default: "").',
+        help=(
+            "Git only: Set remote to detect the starting commit. Overrides "
+            "`git.remote` in config."
+        ),
     )
     parser.add_argument(
         "--force-vcs",

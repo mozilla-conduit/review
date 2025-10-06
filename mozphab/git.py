@@ -208,6 +208,9 @@ class Git(Repository):
 
     def get_base_remotes(self) -> List[str]:
         """Return a list of remotes to use for selecting the first unpublished node."""
+        if self.args.upstream:
+            return self.args.upstream
+
         if config.git_remote:
             return config.git_remote
 

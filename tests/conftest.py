@@ -1,6 +1,8 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+import argparse
 import io
 import json
 import os
@@ -177,6 +179,14 @@ def git(
             "vcs": "git",
         }
     }
+    git.args = argparse.Namespace(
+        upstream=[],
+        safe_mode=False,
+        no_branch=False,
+        yes=False,
+        lesscontext=False,
+        force_vcs=False,
+    )
     return git
 
 
