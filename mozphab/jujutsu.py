@@ -474,7 +474,7 @@ class Jujutsu(Repository):
             return None
         elif len(mutable_roots) > 1:
             raise Error(
-                f"Multiple mutable parents found (revset `{revset}`), unable to continue"
+                f"Multiple mutable heads found (revset `{revset}`), unable to continue"
             )
         return mutable_roots[0]
 
@@ -489,7 +489,7 @@ class Jujutsu(Repository):
             return None
         elif len(mutable_roots) > 1:
             raise Error(
-                f"Multiple mutable parent roots found (revset `{revset}`), unable to continue"
+                f"Multiple mutable roots found (revset `{revset}`), unable to continue"
             )
         return mutable_roots[0]
 
