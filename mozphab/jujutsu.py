@@ -150,6 +150,8 @@ class Jujutsu(Repository):
             end_rev = self.args.end_rev
         else:
             end_rev = self.__get_last_stack_change()
+        if not end_rev:
+            return None
 
         self.revset = (start_rev, end_rev)
 
@@ -461,7 +463,7 @@ class Jujutsu(Repository):
                 # <https://github.com/martinvonz/jj/issues/4170>
             )
 
-    def __get_last_stack_change(self) -> str:
+    def __get_last_stack_change(self) -> Optional[str]:
         """Gets the last of the current stack of mutable changes, but _only_ if there's one."""
         # TODO: Should we do something different when `config.git_remote` or `self.args.upstream`
         # are specified? Compare with `remotes` checks in Git impl.
@@ -469,16 +471,14 @@ class Jujutsu(Repository):
         revset = 'heads(immutable()..@- | present(@ ~ description(exact:"")))'
         mutable_roots = self.__cli_log(template='change_id ++ "\\n"', revset=revset)
         if not mutable_roots:
-            raise Error(
-                f"No mutable parents found (revset `{revset}`), unable to continue"
-            )
+            return None
         elif len(mutable_roots) > 1:
             raise Error(
                 f"Multiple mutable parents found (revset `{revset}`), unable to continue"
             )
         return mutable_roots[0]
 
-    def __get_first_stack_change(self) -> str:
+    def __get_first_stack_change(self) -> Optional[str]:
         """Gets the first of the current stack of mutable changes, but _only_ if there's one."""
         # TODO: Should we do something different when `config.git_remote` or `self.args.upstream`
         # are specified? Compare with `remotes` checks in Git impl.
@@ -486,9 +486,7 @@ class Jujutsu(Repository):
         revset = 'roots(immutable()..@- | present(@ ~ description(exact:"")))'
         mutable_roots = self.__cli_log(template='change_id ++ "\\n"', revset=revset)
         if not mutable_roots:
-            raise Error(
-                f"No mutable parents found (revset `{revset}`), unable to continue"
-            )
+            return None
         elif len(mutable_roots) > 1:
             raise Error(
                 f"Multiple mutable parent roots found (revset `{revset}`), unable to continue"
