@@ -583,12 +583,16 @@ class Mercurial(Repository):
 
             self.hg(["topic", topic_name])
 
-    def apply_patch(self, diff: str, body: str, author: str, author_date: str):
+    def apply_patch(
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+    ):
         changeset_str = self.format_patch(diff, body, author, author_date)
         with temporary_binary_file(changeset_str.encode("utf8")) as changeset_file:
             self.hg(["import", changeset_file, "--quiet"])
 
-    def format_patch(self, diff: str, body: str, author: str, author_date: str) -> str:
+    def format_patch(
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+    ) -> str:
         changeset = ["# HG changeset patch"]
         if author:
             changeset.append("# User {}".format(author))

@@ -207,10 +207,14 @@ class Repository(object):
     def before_patch(self, node, name):
         """Prepare repository to apply the patches."""
 
-    def apply_patch(self, diff, body, author, author_date):
+    def apply_patch(
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+    ):
         """Apply the patch and commit the changes."""
 
-    def format_patch(self, diff, body, author, author_date):
+    def format_patch(
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+    ):
         """Format a patch appropriate for importing."""
 
     def check_commits_for_submit(self, commits: List[Commit]):

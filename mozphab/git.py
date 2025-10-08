@@ -550,7 +550,9 @@ class Git(Repository):
             self.git_call(["checkout", "-q", "-b", branch_name])
             logger.info("Created branch %s", branch_name)
 
-    def apply_patch(self, diff: str, body: str, author: str, author_date: str):
+    def apply_patch(
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+    ):
         # apply the patch as a binary file to ensure the correct line endings
         # is used.
         with temporary_binary_file(diff.encode("utf8")) as patch_file:
@@ -558,7 +560,9 @@ class Git(Repository):
 
         self.commit(body, author, author_date)
 
-    def format_patch(self, diff: str, body: str, author: str, author_date: str) -> str:
+    def format_patch(
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+    ) -> str:
         return diff
 
     def _get_current_head(self) -> str:

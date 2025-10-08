@@ -391,7 +391,9 @@ class Jujutsu(Repository):
             logger.info("Created bookmark %s", branch_name)
             self.__patch_branch_name = branch_name
 
-    def apply_patch(self, diff: str, body: str, author: str, author_date: str):
+    def apply_patch(
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+    ):
         # NOTE: `before_patch` ensures that we are editing a new, empty commit on the base we want.
 
         # apply the patch as a binary file to ensure the correct line endings
@@ -420,7 +422,9 @@ class Jujutsu(Repository):
 
             check_call(["jj", "bookmark", "move", self.__patch_branch_name, "--to=@-"])
 
-    def format_patch(self, diff: str, body: str, author: str, author_date: str) -> str:
+    def format_patch(
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+    ) -> str:
         return diff
 
     # ----
