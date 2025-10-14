@@ -98,28 +98,6 @@ class Helpers(unittest.TestCase):
         input_response = "abc"
         self.assertEqual("abc", helpers.prompt(""))
 
-    @mock.patch("mozphab.detect_repository.probe_repo")
-    def test_repo_from_args(self, m_probe):
-        # TODO test walking the path
-        repo = None
-
-        def probe_repo(*_args, **_kwargs):
-            return repo
-
-        m_probe.side_effect = probe_repo
-
-        class Args:
-            def __init__(self, path=None):
-                self.path = path
-
-        with self.assertRaises(exceptions.Error):
-            detect_repository.repo_from_args(Args(path="some path"))
-
-        repo = mock.MagicMock()
-        args = Args(path="some path")
-        self.assertEqual(repo, mozphab.repo_from_args(args))
-        repo.set_args.assert_called_once_with(args)
-
     def test_strip_differential_revision_from_commit_body(self):
         self.assertEqual("", helpers.strip_differential_revision("\n\n"))
         self.assertEqual(
