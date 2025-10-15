@@ -31,15 +31,15 @@ MOZILLA_DOMAINS = {
 
 # Mapping of known Phabricator URLs to Lando URLs.
 LANDO_URL_MAPPING = {
-    "https://phabricator.services.mozilla.com/": "https://lando.moz.tools",
-    "https://phabricator-dev.allizom.org/": "https://dev.lando.nonprod.webservices.mozgcp.net",
-    "https://phabricator.allizom.org/": "https://stage.lando.nonprod.webservices.mozgcp.net",
+    "https://phabricator.services.mozilla.com": "https://lando.moz.tools",
+    "https://phabricator-dev.allizom.org": "https://dev.lando.nonprod.webservices.mozgcp.net",
+    "https://phabricator.allizom.org": "https://stage.lando.nonprod.webservices.mozgcp.net",
 }
 
 
 def get_lando_url_for_phabricator(phab_url: str) -> str:
     """Return the Lando URL for the given Phabricator URL."""
-    return LANDO_URL_MAPPING[phab_url]
+    return LANDO_URL_MAPPING[phab_url.rstrip("/")]
 
 
 def is_mozilla_phabricator(url: str) -> bool:

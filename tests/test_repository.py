@@ -17,7 +17,11 @@ def test_get_lando_url_for_phabricator():
     assert (
         get_lando_url_for_phabricator("https://phabricator.services.mozilla.com/")
         == "https://lando.moz.tools"
-    ), "Prod Phabricator should return prod Lando URL."
+    ), "Prod Phabricator with trailing slash should return prod Lando URL."
+    assert (
+        get_lando_url_for_phabricator("https://phabricator.services.mozilla.com")
+        == "https://lando.moz.tools"
+    ), "Prod Phabricator without trailing slash should return prod Lando URL."
     assert (
         get_lando_url_for_phabricator("https://phabricator-dev.allizom.org/")
         == "https://dev.lando.nonprod.webservices.mozgcp.net"
