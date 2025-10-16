@@ -208,12 +208,12 @@ class Repository(object):
         """Prepare repository to apply the patches."""
 
     def apply_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
     ):
         """Apply the patch and commit the changes."""
 
     def format_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
     ):
         """Format a patch appropriate for importing."""
 

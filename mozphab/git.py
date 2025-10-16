@@ -551,7 +551,7 @@ class Git(Repository):
             logger.info("Created branch %s", branch_name)
 
     def apply_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
     ):
         # apply the patch as a binary file to ensure the correct line endings
         # is used.
@@ -561,7 +561,7 @@ class Git(Repository):
         self.commit(body, author, author_date)
 
     def format_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
     ) -> str:
         return diff
 

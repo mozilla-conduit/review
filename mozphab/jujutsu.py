@@ -394,7 +394,7 @@ class Jujutsu(Repository):
             self.__patch_branch_name = branch_name
 
     def apply_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
     ):
         # NOTE: `before_patch` ensures that we are editing a new, empty commit on the base we want.
 
@@ -423,7 +423,7 @@ class Jujutsu(Repository):
             check_call(["jj", "bookmark", "move", self.__patch_branch_name, "--to=@-"])
 
     def format_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[str]
+        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
     ) -> str:
         return diff
 
