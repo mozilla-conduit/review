@@ -410,7 +410,7 @@ class Jujutsu(Repository):
         # TODO: dedupe with other `describe` usage
         with temporary_file(body) as message_path:
             with open(message_path) as message_file:
-                check_call(["jj", "describe"], stdin=message_file)
+                check_call(["jj", "describe", "--stdin"], stdin=message_file)
         check_call(["jj", "metaedit", "--author", author])
 
         check_call(["jj", "new"])
