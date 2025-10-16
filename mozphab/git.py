@@ -209,9 +209,11 @@ class Git(Repository):
     def get_base_remotes(self) -> List[str]:
         """Return a list of remotes to use for selecting the first unpublished node."""
         if self.args.upstream:
+            logger.debug(f"Using remote from `--upstream` arg: {self.args.upstream}.")
             return self.args.upstream
 
         if config.git_remote:
+            logger.debug(f"Using remote from `git.remote` config: {config.git_remote}.")
             return config.git_remote
 
         remotes: List[str] = self.git_out(["remote"])
@@ -232,6 +234,7 @@ class Git(Repository):
             "Attempting all remotes. This may produce incorrect results.\n"
             "Set `git.remote` in your moz-phab config to specify the upstream remote."
         )
+        logger.debug(f"Using all detected remotes: {remotes}.")
         return remotes
 
     def _get_first_unpublished_node(self, end: str = "HEAD") -> Optional[str]:
