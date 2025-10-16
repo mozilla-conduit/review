@@ -9,3 +9,4 @@ docker-compose -f dev/docker-compose.yml run generate-python3.10-requirements
 docker-compose -f dev/docker-compose.yml run generate-python3.11-requirements
 docker-compose -f dev/docker-compose.yml run generate-python3.12-requirements
 docker-compose -f dev/docker-compose.yml run generate-python3.13-requirements
+docker-compose -f dev/docker-compose.yml run generate-python3.14-requirements
