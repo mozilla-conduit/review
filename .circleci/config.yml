@@ -78,7 +78,7 @@ jobs:
             JJ_VERSION="0.33.0"
             JJ_PLATFORM="x86_64-unknown-linux-musl"
             JJ_FILENAME="jj-v${JJ_VERSION}-${JJ_PLATFORM}.tar.gz"
-            JJ_EXPECTED_SHA="39b5d689bcdc37256fe5f9ed9caccf5e73b310d1f86848fdf610a7bea9d75c14"
+            JJ_EXPECTED_SHA="2703e13b3d5623aa67e19358b257fe5a761faa883bd0bd716d0b1c801a214093"
             curl -LO "https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/${JJ_FILENAME}"
             echo "${JJ_EXPECTED_SHA}  ${JJ_FILENAME}" | sha256sum -c
             tar -xzf "${JJ_FILENAME}"
