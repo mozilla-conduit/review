@@ -74,7 +74,7 @@ def uplift(repo: Repository, args: argparse.Namespace):
     repo.call_sign = phab_repo["fields"]["callsign"]
     repo._phab_repo = phab_repo
 
-    # Run the usual submit comment with our patched arg values.
+    # Run the usual submit command with our patched arg values.
     commits = submit(repo, args)
 
     if commits:
