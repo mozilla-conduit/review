@@ -28,7 +28,7 @@ from .subprocess_wrapper import check_call, check_output, subprocess
 
 
 class Jujutsu(Repository):
-    MIN_VERSION = Version("0.28.0")
+    MIN_VERSION = Version("0.33.0")
 
     @classmethod
     def is_repo(cls, path: str) -> bool:
@@ -410,10 +410,8 @@ class Jujutsu(Repository):
         # TODO: dedupe with other `describe` usage
         with temporary_file(body) as message_path:
             with open(message_path) as message_file:
-                check_call(
-                    ["jj", "describe", "--author", author, "--stdin"],
-                    stdin=message_file,
-                )
+                check_call(["jj", "describe"], stdin=message_file)
+        check_call(["jj", "metaedit", "--author", author])
 
         check_call(["jj", "new"])
 
