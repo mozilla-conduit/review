@@ -4,7 +4,7 @@ import re
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 from packaging.version import Version
 
@@ -46,7 +46,9 @@ class Jujutsu(Repository):
 
         logger.debug("found Jujutsu repo in %s", path)
 
-        self.vcs_version = self.__check_and_get_version()
+        version_str, version = self.__check_and_get_version()
+        self.vcs_version = version_str
+        self.__version = version
 
         resolved_path = Path(path).resolve(strict=True)
         logger.debug(f"resolved_path: {resolved_path}")
@@ -85,7 +87,7 @@ class Jujutsu(Repository):
             ["jj", "config", "get", "user.email"], split=False
         ).rstrip()
 
-    def __check_and_get_version(self) -> str:
+    def __check_and_get_version(self) -> Tuple[str, Version]:
         min_version = Jujutsu.MIN_VERSION
 
         version_re = re.compile(r"jj (\d+\.\d+\.\d+)(?:-[a-fA-F0-9]{40})?")
@@ -103,7 +105,7 @@ class Jujutsu(Repository):
 
         if version < min_version:
             raise Error(f"`moz-phab` requires Jujutsu {min_version} or higher.")
-        return m.group(0)
+        return m.group(0), version
 
     def check_vcs(self) -> bool:
         if self.args.force_vcs:
