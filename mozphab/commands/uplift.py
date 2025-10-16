@@ -3,6 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
+import json
+from pathlib import Path
 
 from mozphab.conduit import (
     conduit,
@@ -87,6 +89,13 @@ def uplift(repo: Repository, args: argparse.Namespace):
             "request form."
         )
 
+    # Output machine-readable data to a file.
+    if args.output_file:
+        data = {"commits": [commit.to_dict() for commit in commits]}
+
+        with args.output_file.open("w") as f:
+            json.dump(data, f)
+
 
 def add_parser(parser):
     uplift_parser = parser.add_parser(
@@ -126,5 +135,11 @@ def add_parser(parser):
             "to rebase."
         ),
         action="store_true",
+    )
+    uplift_parser.add_argument(
+        "--output-file",
+        dest="output_file",
+        type=Path,
+        help=argparse.SUPPRESS,
     )
     uplift_parser.set_defaults(func=uplift, needs_repo=True)

@@ -4,6 +4,7 @@
 
 import re
 from dataclasses import (
+    asdict,
     dataclass,
     field,
 )
@@ -101,3 +102,7 @@ class Commit:
     @property
     def message(self) -> str:
         return f"{self.title}\n\n{self.body}"
+
+    def to_dict(self) -> dict:
+        """Convert the `Commit` to a `dict`."""
+        return asdict(self)

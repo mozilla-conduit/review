@@ -3,10 +3,12 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import json
 import os
 import pathlib
 import platform
 import shutil
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -916,6 +918,7 @@ def test_uplift_create(
     in_process,
     git_repo_path: pathlib.Path,
     init_sha: str,
+    tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ):
     m_lando_url.return_value = "https://lando.example.com"
@@ -969,8 +972,19 @@ def test_uplift_create(
     )
     git_out("commit", "--file", "msg")
 
+    out_file = tmp_path / "output.json"
+
     mozphab.main(
-        ["uplift", "-y", "--train", "firefox-beta", init_sha], is_development=True
+        [
+            "uplift",
+            "-y",
+            "--train",
+            "firefox-beta",
+            "--output-file",
+            str(out_file),
+            init_sha,
+        ],
+        is_development=True,
     )
 
     call_conduit.assert_any_call(
@@ -1007,6 +1021,14 @@ def test_uplift_create(
     assert (
         "Couldn't find a head for firefox-beta in version control" not in caplog.text
     ), "Git branch mapping from Phabricator was not correctly performed, and the uplift base could not be found."
+
+    assert out_file.exists(), "Expected `--output-file` to be created."
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+
+    assert "commits" in data, "Output should contain `commits` key."
+    commits = data["commits"]
+    assert len(commits) == 1, "One commit should have been created."
+    assert data["commits"][0]["rev_id"] == "2", "Output should contain new revision."
 
 
 def test_empty_file(in_process, git_repo_path: pathlib.Path, init_sha):
