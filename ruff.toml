@@ -4,6 +4,8 @@
 
 line-length = 88
 
+target-version = "py39"
+
 [lint]
 select = ["C", "E", "F", "W", "B", "B9", "I"]
 ignore = ["B006", "B904", "C901", "E203", "E501"]

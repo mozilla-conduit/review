@@ -26,12 +26,4 @@ def test_ruff():
     Use the project root as the directory to lint, and define appropriate lint
     paths in the `ruff.toml` file.
     """
-    subprocess.check_call(
-        (
-            find_script_path("ruff"),
-            "check",
-            "--target-version",
-            "py38",
-            ROOT,
-        )
-    )
+    subprocess.check_call((find_script_path("ruff"), "check", ROOT))
