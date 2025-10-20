@@ -127,35 +127,33 @@ class Jujutsu(Repository):
 
         is_single = hasattr(self.args, "single") and self.args.single
 
-        start_rev = None
-        if (
-            hasattr(self.args, "start_rev")
-            and self.args.start_rev != environment.DEFAULT_START_REV
-        ):
-            start_rev = self.args.start_rev
-        else:
-            start_rev = (
-                self.__get_last_stack_change()
-                if is_single
-                else self.__get_first_stack_change()
-            )
-        if not start_rev:
-            return None
+        if hasattr(self.args, "start_rev"):
+            start_rev = None
+            if self.args.start_rev != environment.DEFAULT_START_REV:
+                start_rev = self.args.start_rev
+            else:
+                start_rev = (
+                    self.__get_last_stack_change()
+                    if is_single
+                    else self.__get_first_stack_change()
+                )
+            if not start_rev:
+                return None
 
-        end_rev = None
-        if is_single:
-            end_rev = start_rev
-        elif (
-            hasattr(self.args, "end_rev")
-            and self.args.end_rev != environment.DEFAULT_END_REV
-        ):
-            end_rev = self.args.end_rev
-        else:
-            end_rev = self.__get_last_stack_change()
-        if not end_rev:
-            return None
+            end_rev = None
+            if is_single:
+                end_rev = start_rev
+            elif (
+                hasattr(self.args, "end_rev")
+                and self.args.end_rev != environment.DEFAULT_END_REV
+            ):
+                end_rev = self.args.end_rev
+            else:
+                end_rev = self.__get_last_stack_change()
+            if not end_rev:
+                return None
 
-        self.revset = (start_rev, end_rev)
+            self.revset = (start_rev, end_rev)
 
     def commit_stack(self, single: bool = False) -> Optional[List[Commit]]:
         """Collect all the info about commits."""
