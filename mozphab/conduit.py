@@ -623,6 +623,29 @@ class ConduitAPI:
 
         return data
 
+    def build_creation_method(self) -> str:
+        """Build the creationMethod string for differential.creatediff."""
+        creation_method = ["moz-phab", self.repo.vcs]
+
+        if (
+            self.repo.vcs == "git" or self.repo.vcs == "jj"
+        ) and self.repo.is_cinnabar_required:
+            creation_method.append("cinnabar")
+
+        # Add uplift indicator if this is an uplift command
+        if self.repo.args.command == "uplift":
+            creation_method.append("uplift")
+
+        # Indicate Lando as the creation method when the
+        # API key is set programmatically from the environment.
+        # In theory a user could set this variable themselves,
+        # so we should come up with a better way to check this
+        # in the future.
+        if "MOZPHAB_PHABRICATOR_API_TOKEN" in os.environ:
+            creation_method.append("lando")
+
+        return "-".join(creation_method)
+
     def submit_diff(self, diff: Diff, commit: Commit) -> dict:
         files_changed = sorted(
             diff.changes.values(), key=operator.attrgetter("cur_path")
@@ -634,11 +657,7 @@ class ConduitAPI:
 
         base_revision = conduit.repo.get_public_node(commit.parent)
 
-        creation_method = ["moz-phab", conduit.repo.vcs]
-        if (
-            conduit.repo.vcs == "git" or conduit.repo.vcs == "jj"
-        ) and conduit.repo.is_cinnabar_required:
-            creation_method.append("cinnabar")
+        creation_method_str = self.build_creation_method()
 
         # Use the repo of the existing revision if this is an update.
         revs = conduit.get_revisions(ids=[commit.rev_id]) if commit.rev_id else []
@@ -650,7 +669,7 @@ class ConduitAPI:
             "sourceControlSystem": self.repo.phab_vcs,
             "sourceControlPath": "/",
             "sourceControlBaseRevision": base_revision,
-            "creationMethod": "-".join(creation_method),
+            "creationMethod": creation_method_str,
             "lintStatus": "none",
             "unitStatus": "none",
             "repositoryPHID": diff_repo_phid,

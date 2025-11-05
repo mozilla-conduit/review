@@ -186,6 +186,7 @@ def git(
         yes=False,
         lesscontext=False,
         force_vcs=False,
+        command="submit",
     )
     return git
 

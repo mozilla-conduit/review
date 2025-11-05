@@ -700,6 +700,186 @@ def test_submit_diff(m_call, git):
 
 
 @mock.patch("mozphab.repository.conduit.call")
+def test_submit_diff_uplift(m_call, git):
+    """Test that uplift command adds 'uplift' to creationMethod."""
+    git.args.command = "uplift"
+    mozphab.conduit.set_repo(git)
+    diff = Diff()
+    commit = Commit(
+        name="abc-name",
+        author_name="Author Name",
+        author_email="auth@example.com",
+        author_date_epoch=1234567,
+        title_preview="Title Preview",
+        body="Additional summary.",
+        bug_id="777",
+        rev_id=456,
+        node="abc",
+        parent="def",
+    )
+    m_call.side_effect = [
+        # differential.revision.search
+        {"data": [search_rev(rev=456, repo="PHID-BETA")]},
+        # differential.creatediff
+        {},
+    ]
+    mozphab.conduit.submit_diff(diff, commit)
+    m_call.assert_any_call(
+        "differential.creatediff",
+        {
+            "changes": mock.ANY,
+            "sourceMachine": mock.ANY,
+            "sourceControlSystem": "git",
+            "sourceControlPath": "/",
+            "sourceControlBaseRevision": "def",
+            "creationMethod": "moz-phab-git-uplift",
+            "lintStatus": "none",
+            "unitStatus": "none",
+            "repositoryPHID": "PHID-BETA",
+            "sourcePath": mock.ANY,
+            "branch": "HEAD",
+        },
+    )
+
+
+@mock.patch("mozphab.repository.conduit.call")
+def test_submit_diff_lando(m_call, git, monkeypatch):
+    """Test that MOZPHAB_PHABRICATOR_API_TOKEN env var adds 'lando' to creationMethod."""
+    monkeypatch.setenv("MOZPHAB_PHABRICATOR_API_TOKEN", "some-token")
+    mozphab.conduit.set_repo(git)
+    diff = Diff()
+    commit = Commit(
+        name="abc-name",
+        author_name="Author Name",
+        author_email="auth@example.com",
+        author_date_epoch=1234567,
+        title_preview="Title Preview",
+        body="Additional summary.",
+        bug_id="777",
+        rev_id=456,
+        node="abc",
+        parent="def",
+    )
+    m_call.side_effect = [
+        # differential.revision.search
+        {"data": [search_rev(rev=456, repo="PHID-BETA")]},
+        # differential.creatediff
+        {},
+    ]
+    mozphab.conduit.submit_diff(diff, commit)
+    m_call.assert_any_call(
+        "differential.creatediff",
+        {
+            "changes": mock.ANY,
+            "sourceMachine": mock.ANY,
+            "sourceControlSystem": "git",
+            "sourceControlPath": "/",
+            "sourceControlBaseRevision": "def",
+            "creationMethod": "moz-phab-git-lando",
+            "lintStatus": "none",
+            "unitStatus": "none",
+            "repositoryPHID": "PHID-BETA",
+            "sourcePath": mock.ANY,
+            "branch": "HEAD",
+        },
+    )
+
+
+@mock.patch("mozphab.repository.conduit.call")
+def test_submit_diff_uplift_and_lando(m_call, git, monkeypatch):
+    """Test that both uplift command and lando env var are reflected in creationMethod."""
+    git.args.command = "uplift"
+    monkeypatch.setenv("MOZPHAB_PHABRICATOR_API_TOKEN", "some-token")
+    mozphab.conduit.set_repo(git)
+    diff = Diff()
+    commit = Commit(
+        name="abc-name",
+        author_name="Author Name",
+        author_email="auth@example.com",
+        author_date_epoch=1234567,
+        title_preview="Title Preview",
+        body="Additional summary.",
+        bug_id="777",
+        rev_id=456,
+        node="abc",
+        parent="def",
+    )
+    m_call.side_effect = [
+        # differential.revision.search
+        {"data": [search_rev(rev=456, repo="PHID-BETA")]},
+        # differential.creatediff
+        {},
+    ]
+    mozphab.conduit.submit_diff(diff, commit)
+    m_call.assert_any_call(
+        "differential.creatediff",
+        {
+            "changes": mock.ANY,
+            "sourceMachine": mock.ANY,
+            "sourceControlSystem": "git",
+            "sourceControlPath": "/",
+            "sourceControlBaseRevision": "def",
+            "creationMethod": "moz-phab-git-uplift-lando",
+            "lintStatus": "none",
+            "unitStatus": "none",
+            "repositoryPHID": "PHID-BETA",
+            "sourcePath": mock.ANY,
+            "branch": "HEAD",
+        },
+    )
+
+
+@mock.patch("mozphab.git.Git.get_public_node")
+@mock.patch("mozphab.repository.conduit.call")
+def test_submit_diff_cinnabar_uplift_lando(m_call, m_get_public_node, git, monkeypatch):
+    """Test that cinnabar, uplift, and lando all appear in creationMethod in correct order."""
+    git.args.command = "uplift"
+    git._cinnabar_installed = True
+    # Make cinnabar required by setting phab_vcs different from local vcs
+    git._phab_vcs = "hg"  # git.vcs is "git", so is_cinnabar_required will be True
+    monkeypatch.setenv("MOZPHAB_PHABRICATOR_API_TOKEN", "some-token")
+    # Mock get_public_node to just return the node as-is
+    m_get_public_node.side_effect = lambda x: x
+    mozphab.conduit.set_repo(git)
+    diff = Diff()
+    commit = Commit(
+        name="abc-name",
+        author_name="Author Name",
+        author_email="auth@example.com",
+        author_date_epoch=1234567,
+        title_preview="Title Preview",
+        body="Additional summary.",
+        bug_id="777",
+        rev_id=456,
+        node="abc",
+        parent="def",
+    )
+    m_call.side_effect = [
+        # differential.revision.search
+        {"data": [search_rev(rev=456, repo="PHID-BETA")]},
+        # differential.creatediff
+        {},
+    ]
+    mozphab.conduit.submit_diff(diff, commit)
+    m_call.assert_any_call(
+        "differential.creatediff",
+        {
+            "changes": mock.ANY,
+            "sourceMachine": mock.ANY,
+            "sourceControlSystem": "hg",  # When phab_vcs is "hg", sourceControlSystem is "hg"
+            "sourceControlPath": "/",
+            "sourceControlBaseRevision": "def",
+            "creationMethod": "moz-phab-git-cinnabar-uplift-lando",
+            "lintStatus": "none",
+            "unitStatus": "none",
+            "repositoryPHID": "PHID-BETA",
+            "sourcePath": mock.ANY,
+            "branch": "default",  # When phab_vcs is "hg", branch is "default"
+        },
+    )
+
+
+@mock.patch("mozphab.repository.conduit.call")
 def test_create_revision(m_call):
     commit = Commit(
         name="abc-name",
