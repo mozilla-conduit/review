@@ -5,6 +5,7 @@
 import argparse
 import json
 from pathlib import Path
+from typing import Optional
 
 from mozphab.conduit import (
     conduit,
@@ -61,6 +62,23 @@ def list_trains():
         logger.info(f"   - {repository['fields']['shortName']}")
 
 
+def build_assessment_linking_url(
+    lando_url: str, tip_commit_id: int, assessment_id: Optional[int] = None
+) -> str:
+    """Return the URL for linking revisions."""
+    # Ensure `lando_url` doesn't have a trailing slash.
+    base_url = lando_url.rstrip("/")
+
+    # Build the URL with `revisions` parameter.
+    url = f"{base_url}/uplift/request/?revisions={tip_commit_id}"
+
+    # Add `assessment_id` if provided.
+    if assessment_id is not None:
+        url += f"&assessment_id={assessment_id}"
+
+    return url
+
+
 def uplift(repo: Repository, args: argparse.Namespace):
     if args.list_trains:
         return list_trains()
@@ -82,10 +100,13 @@ def uplift(repo: Repository, args: argparse.Namespace):
     if commits:
         tip_commit = commits[-1]
         tip_commit_id = tip_commit.rev_id
-        tip_lando_url = f"{repo.lando_url}/D{tip_commit_id}"
+
+        uplift_assessment_linking_url = build_assessment_linking_url(
+            repo.lando_url, tip_commit_id, args.assessment_id
+        )
 
         logger.warning(
-            f"\nPlease navigate to {tip_lando_url} and complete the uplift "
+            f"\nPlease navigate to {uplift_assessment_linking_url} and complete the uplift "
             "request form."
         )
 
@@ -135,6 +156,10 @@ def add_parser(parser):
             "to rebase."
         ),
         action="store_true",
+    )
+    uplift_parser.add_argument(
+        "--assessment-id",
+        help="Existing assessment ID to link the new uplift revision to.",
     )
     uplift_parser.add_argument(
         "--output-file",

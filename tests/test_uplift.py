@@ -8,6 +8,9 @@ from mozphab.commands.submit import (
     local_uplift_if_possible,
     update_commits_for_uplift,
 )
+from mozphab.commands.uplift import (
+    build_assessment_linking_url,
+)
 from mozphab.commits import Commit
 from mozphab.helpers import ORIGINAL_DIFF_REV_RE
 
@@ -223,3 +226,25 @@ def test_uplift_beta_commit_to_esr():
     assert "Differential Revision:" not in body
     assert ORIGINAL_DIFF_REV_RE.search(body).group("rev") == "1"
     assert rev_id is None
+
+
+def test_build_assessment_linking_url():
+    url = build_assessment_linking_url("https://lando.moz.tools", 123)
+    assert (
+        url == "https://lando.moz.tools/uplift/request/?revisions=123"
+    ), "Revision ID only should produce expected URL."
+
+    url = build_assessment_linking_url("https://lando.moz.tools", 123, 5)
+    assert (
+        url == "https://lando.moz.tools/uplift/request/?revisions=123&assessment_id=5"
+    ), "Revision ID and assessment ID should produce expected URL."
+
+    url = build_assessment_linking_url("https://lando.moz.tools/", 456)
+    assert (
+        url == "https://lando.moz.tools/uplift/request/?revisions=456"
+    ), "Trailing slash in Lando URL should produce valid URL."
+
+    url = build_assessment_linking_url("https://lando.moz.tools/", 456, 10)
+    assert (
+        url == "https://lando.moz.tools/uplift/request/?revisions=456&assessment_id=10"
+    ), "Trailing slash in Lando URL with assessment ID should produce valid URL."
