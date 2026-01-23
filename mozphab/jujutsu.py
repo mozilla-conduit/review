@@ -410,7 +410,14 @@ class Jujutsu(Repository):
                 check_call(["jj", "describe", "--stdin"], stdin=message_file)
         author_date = datetime.fromtimestamp(author_date, tz=timezone.utc).isoformat()
         check_call(
-            ["jj", "metaedit", "--author", author, "--author-timestamp", author_date]
+            [
+                "jj",
+                "metaedit",
+                "--author",
+                author,
+                "--author-timestamp",
+                author_date,
+            ]
         )
 
         check_call(["jj", "new"])
@@ -420,7 +427,15 @@ class Jujutsu(Repository):
             # entirely new commits, and we have the branch at the parent commit, we can let `--from`
             # compensate for the fact that we otherwise don't remember the name of the branch.
 
-            check_call(["jj", "bookmark", "move", self.__patch_branch_name, "--to=@-"])
+            check_call(
+                [
+                    "jj",
+                    "bookmark",
+                    "move",
+                    self.__patch_branch_name,
+                    "--to=@-",
+                ]
+            )
 
     def format_patch(
         self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
