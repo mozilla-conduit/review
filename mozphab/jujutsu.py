@@ -370,7 +370,7 @@ class Jujutsu(Repository):
 
         if node:
             with wait_message("Checking out %s.." % short_node(node)):
-                check_call(["jj", "new", node])
+                check_call(["jj", "new", "--quiet", node])
             logger.info("Checked out %s", short_node(node))
 
         if name and not self.args.no_branch and config.create_branch:
@@ -387,7 +387,9 @@ class Jujutsu(Repository):
                 i += 1
                 branch_name = "%s_%s" % (name, i)
 
-            check_call(["jj", "bookmark", "create", "--revision=@", branch_name])
+            check_call(
+                ["jj", "bookmark", "create", "--quiet", "--revision=@", branch_name]
+            )
             logger.info("Created bookmark %s", branch_name)
             self.__patch_branch_name = branch_name
 
@@ -407,12 +409,13 @@ class Jujutsu(Repository):
         # TODO: dedupe with other `describe` usage
         with temporary_file(body) as message_path:
             with open(message_path) as message_file:
-                check_call(["jj", "describe", "--stdin"], stdin=message_file)
+                check_call(["jj", "describe", "--quiet", "--stdin"], stdin=message_file)
         author_date = datetime.fromtimestamp(author_date, tz=timezone.utc).isoformat()
         check_call(
             [
                 "jj",
                 "metaedit",
+                "--quiet",
                 "--author",
                 author,
                 "--author-timestamp",
@@ -420,7 +423,7 @@ class Jujutsu(Repository):
             ]
         )
 
-        check_call(["jj", "new"])
+        check_call(["jj", "new", "--quiet"])
 
         if not self.args.no_branch and config.create_branch:
             # # Advance the bookmark we created for this patch. Because we know we're creating
@@ -432,6 +435,7 @@ class Jujutsu(Repository):
                     "jj",
                     "bookmark",
                     "move",
+                    "--quiet",
                     self.__patch_branch_name,
                     "--to=@-",
                 ]
