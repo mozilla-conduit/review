@@ -25,6 +25,7 @@ DEFAULT_START_REV = "(auto)"
 DEFAULT_END_REV = "."
 
 HOME_DIR = Path.home()
+CONFIG_DIR = os.getenv("XDG_HOME_CONFIG") or HOME_DIR / ".config"
 
 MOZPHAB_MAIN_DIR = Path(__file__).resolve().parent
 

@@ -28,7 +28,7 @@ class Config(object):
         """
         self._should_access_file = should_access_file
 
-        self.filename = filename or (environment.HOME_DIR / ".moz-phab-config")
+        self.filename = filename or self._getconfigfile()
 
         # Default values.
         defaults = """
@@ -136,6 +136,12 @@ class Config(object):
                 f"could not convert {section}.{option} to an integer: {str(e)}"
             )
 
+    def _getconfigfile(self) -> str:
+        legacy_config = environment.HOME_DIR / ".moz-phab-config"
+        if Path.exists(legacy_config):
+            return legacy_config
+        return environment.CONFIG_DIR / "moz-phab/config.ini"
+
     def write(self):
         if not self._should_access_file:
             return
@@ -151,6 +157,7 @@ class Config(object):
 
         else:
             logger.debug("creating %s", self.filename)
+            os.makedirs(self.filename.parent, exists_ok=True)
             self._set("ui", "no_ansi", self.no_ansi)
             self._set("ui", "hyperlinks", self.hyperlinks)
             self._set("vcs", "safe_mode", self.safe_mode)
