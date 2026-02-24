@@ -228,6 +228,54 @@ def test_uplift_beta_commit_to_esr():
     assert rev_id is None
 
 
+def test_update_commits_for_uplift_strips_dontbuild():
+    commits = [
+        Commit(
+            title="bug 1: fix something r=reviewer DONTBUILD",
+            reviewers={"granted": ["reviewer"], "request": []},
+            bug_id="1",
+            body=(
+                "bug 1: fix something r=reviewer DONTBUILD\n"
+                "\n"
+                "Differential Revision: https://phabricator.services.mozila.com/D1\n"
+            ),
+            rev_id=1,
+        ),
+        Commit(
+            title="bug 2: another fix r=reviewer DONTBUILD (NPOTB)",
+            reviewers={"granted": ["reviewer"], "request": []},
+            bug_id="2",
+            body=(
+                "bug 2: another fix r=reviewer DONTBUILD (NPOTB)\n"
+                "\n"
+                "Differential Revision: https://phabricator.services.mozila.com/D2\n"
+            ),
+            rev_id=2,
+        ),
+    ]
+
+    with mock.patch("mozphab.commands.submit.conduit.get_revisions") as m_get_revs:
+        m_get_revs.return_value = [
+            {"id": 1, "fields": {"repositoryPHID": "PHID-mc"}},
+            {"id": 2, "fields": {"repositoryPHID": "PHID-mc"}},
+        ]
+        update_commits_for_uplift(commits, Repo())
+
+    assert (
+        "DONTBUILD" not in commits[0].title
+    ), "DONTBUILD should be stripped from title on uplift."
+    assert (
+        commits[0].title == "bug 1: fix something r=reviewer"
+    ), "Title should have DONTBUILD removed."
+
+    assert (
+        "DONTBUILD" not in commits[1].title
+    ), "DONTBUILD (NPOTB) should be stripped from title on uplift."
+    assert (
+        commits[1].title == "bug 2: another fix r=reviewer"
+    ), "Title should have DONTBUILD (NPOTB) removed."
+
+
 def test_build_assessment_linking_url():
     url = build_assessment_linking_url("https://lando.moz.tools", 123)
     assert (

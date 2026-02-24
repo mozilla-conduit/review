@@ -72,6 +72,8 @@ BLOCKING_REVIEWERS_RE = re.compile(r"\b(r!)([" + IRC_NICK_CHARS_WITH_PERIOD + ",
 
 DEPENDS_ON_RE = re.compile(r"^\s*Depends on\s*D(\d+)\s*$", flags=re.MULTILINE)
 
+DONTBUILD_RE = re.compile(r"\s*\(?DONTBUILD\)?(?:\s*\(NPOTB\))?")
+
 
 VALID_EMAIL_RE = re.compile(r"[^@ \t\r\n]+@[^@ \t\r\n]+\.[^@ \t\r\n]+")
 
@@ -197,6 +199,11 @@ def parse_arc_diff_rev(body: str) -> Optional[int]:
 
 def strip_differential_revision(body: str) -> str:
     return ARC_DIFF_REV_RE.sub("", body).rstrip()
+
+
+def strip_dontbuild(text: str) -> str:
+    """Remove the DONTBUILD flag from text."""
+    return DONTBUILD_RE.sub("", text).strip()
 
 
 def move_drev_to_original(

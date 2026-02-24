@@ -19,6 +19,7 @@ from mozphab.helpers import (
     move_drev_to_original,
     prompt,
     strip_differential_revision,
+    strip_dontbuild,
     update_commit_title_previews,
 )
 from mozphab.logger import logger
@@ -419,6 +420,9 @@ def update_commits_for_uplift(commits: List[Commit], repo: Repository):
             "granted": [],
             "request": [],
         }
+
+        # Remove DONTBUILD flag from commit title on uplift.
+        commit.title = strip_dontbuild(commit.title)
 
         # Skip when updating an existing revision on the uplift repo.
         revision = revisions.get(commit.rev_id)

@@ -774,6 +774,32 @@ def test_augment_commits_from_body():
     assert commits[1].wip
 
 
+def test_strip_dontbuild():
+    assert helpers.strip_dontbuild("bug 1: fix something r=reviewer") == (
+        "bug 1: fix something r=reviewer"
+    ), "No DONTBUILD flag should return the text unchanged."
+
+    assert helpers.strip_dontbuild("bug 1: fix r=reviewer DONTBUILD") == (
+        "bug 1: fix r=reviewer"
+    ), "DONTBUILD at end of title should be stripped."
+
+    assert helpers.strip_dontbuild("bug 1: fix r=reviewer (DONTBUILD)") == (
+        "bug 1: fix r=reviewer"
+    ), "DONTBUILD in parentheses should be stripped."
+
+    assert helpers.strip_dontbuild("bug 1: fix r=reviewer DONTBUILD (NPOTB)") == (
+        "bug 1: fix r=reviewer"
+    ), "DONTBUILD with NPOTB qualifier should be stripped."
+
+    assert (
+        helpers.strip_dontbuild("DONTBUILD") == ""
+    ), "DONTBUILD as only content should return empty string."
+
+    assert (
+        helpers.strip_dontbuild("(DONTBUILD)") == ""
+    ), "Parenthesized DONTBUILD as only content should return empty string."
+
+
 def test_move_drev_to_original():
     # Ensure the arguments are returned as-is when `rev_id` is `None`.
     assert helpers.move_drev_to_original("blah", None) == (
