@@ -35,7 +35,6 @@ from .helpers import (
     is_valid_email,
     parse_config,
     short_node,
-    temporary_binary_file,
     temporary_file,
     which_path,
 )
@@ -586,9 +585,20 @@ class Mercurial(Repository):
     def apply_patch(
         self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
     ):
-        changeset_str = self.format_patch(diff, body, author, author_date)
-        with temporary_binary_file(changeset_str.encode("utf8")) as changeset_file:
-            self.hg(["import", changeset_file, "--quiet"])
+        # Import the diff to apply the changes then commit separately to
+        # ensure correct parsing of the commit message.
+        with temporary_file(diff) as diff_file, temporary_file(body) as msg_file:
+            # Apply the patch with `--no-commit`, with file rename detection
+            # (similarity). Using 95 as the similarity to match automv's default.
+            self.hg(["import", "--no-commit", "-s", "95", diff_file, "--quiet"])
+
+            commit_cmd = ["commit", "--logfile", msg_file]
+            if author:
+                commit_cmd.extend(["--user", author])
+            if author_date:
+                commit_cmd.extend(["--date", f"{author_date} 0"])
+
+            self.hg(commit_cmd)
 
     def format_patch(
         self, diff: str, body: str, author: Optional[str], author_date: Optional[int]

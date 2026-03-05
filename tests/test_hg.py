@@ -319,15 +319,22 @@ def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
     )
 
 
-@mock.patch("mozphab.mercurial.temporary_binary_file")
+@mock.patch("mozphab.mercurial.temporary_file")
 @mock.patch("mozphab.mercurial.Mercurial.hg")
-def test_apply_patch(m_hg, m_temp_bin_fn, hg):
-    m_temp_bin_fn.return_value = create_temp_fn("diff_fn")
+def test_apply_patch(m_hg, m_temp_file, hg):
+    diff_fn = create_temp_fn("diff_fn")
+    msg_fn = create_temp_fn("msg_fn")
+    m_temp_file.side_effect = [diff_fn, msg_fn]
+
     hg.apply_patch("diff", "body", "user", 1)
-    m_hg.assert_called_once_with(["import", "diff_fn", "--quiet"])
-    m_temp_bin_fn.assert_called_once_with(
-        b"# HG changeset patch\n# User user\n# Date 1 0\nbody\ndiff"
+
+    assert m_hg.call_count == 2, "`hg` should be called twice (import + commit)."
+    m_hg.assert_any_call(["import", "--no-commit", "-s", "95", "diff_fn", "--quiet"])
+    m_hg.assert_any_call(
+        ["commit", "--logfile", "msg_fn", "--user", "user", "--date", "1 0"]
     )
+    m_temp_file.assert_any_call("diff")
+    m_temp_file.assert_any_call("body")
 
 
 @mock.patch("mozphab.mercurial.Mercurial.hg_out")
