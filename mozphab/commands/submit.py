@@ -159,8 +159,7 @@ def validate_commit_stack(
             revision_is_closed = bool(fields["status"]["closed"])
 
             # Check if comandeering is required.
-            with wait_message("Figuring out who you are..."):
-                whoami = conduit.whoami()
+            whoami = conduit.whoami()
             different_author = fields["authorPHID"] != whoami["phid"]
 
             # Any reviewers added to a revision without them?
