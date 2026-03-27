@@ -391,7 +391,11 @@ def update_commits_from_args(commits: List[Commit], args: argparse.Namespace):
         if args.no_wip:
             commit.wip = False
         elif args.wip or (
-            not commit.has_reviewers and not conduit.has_revision_reviewers(commit)
+            # `moz-phab uplift` assumes `#release-managers` review will be set
+            # by automation once the assessment form is submitted.
+            args.command != "uplift"
+            and not commit.has_reviewers
+            and not conduit.has_revision_reviewers(commit)
         ):
             commit.wip = True
         elif commit.wip is None:

@@ -899,6 +899,13 @@ class Commits(unittest.TestCase):
         assert not commits[1].wip
         assert not commits[2].wip
 
+        # Reviewerless uplift commits should not be marked as WIP, since
+        # uplift clears reviewers and `#release-managers` is set by automation.
+        commits = copy.deepcopy(_commits)
+        update(commits, Args(command="uplift"))
+        assert not commits[0].wip, "Uplift commit without reviewers should not be WIP."
+        assert not commits[1].wip, "Uplift commit with reviewers should not be WIP."
+
         # Forcing blocking reviewers
         commits = copy.deepcopy(_commits)
         commits[1].reviewers["granted"].append("two")
