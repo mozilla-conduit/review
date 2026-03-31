@@ -113,4 +113,13 @@ class Commit:
 
     def to_dict(self) -> dict:
         """Convert the `Commit` to a `dict`."""
-        return asdict(self)
+        return asdict(
+            self,
+            # NOTE: once we are on Python 3.11 as the minimum version,
+            # we can convert `AiReviewState` to a `StrEnum` and remove
+            # this code.
+            dict_factory=lambda fields: {
+                key: value.value if isinstance(value, Enum) else value
+                for key, value in fields
+            },
+        )

@@ -55,6 +55,7 @@ def test_commit_to_dict_json_roundtrip():
         "wip": False,
         "tree_hash": "deadbeefcafebabe",
         "reviewers": {"granted": ["r1", "r2"], "request": ["r3"]},
+        "ai_review_state": "not requested",
     }
 
     assert commit_dict == expected
