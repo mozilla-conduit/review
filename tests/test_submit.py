@@ -1088,9 +1088,7 @@ def m_conduit():
 def m_repo():
     with mock.patch("mozphab.commands.submit.Repository") as m:
         m.phab_url = "http://example.test"
-        m.get_diff.return_value = mock.MagicMock(
-            phid="PHID-DIFF-1", id="1", changes=[]
-        )
+        m.get_diff.return_value = mock.MagicMock(phid="PHID-DIFF-1", id="1", changes=[])
         m.args = mock.MagicMock()
         m.check_vcs.return_value = None
         m.before_submit.return_value = None
