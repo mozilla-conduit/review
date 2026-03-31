@@ -681,7 +681,7 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
         commit.rev_id = rev["object"]["id"]
         commit.rev_phid = rev["object"]["phid"]
 
-        if args.ai:
+        if args.ai or config.ai_review:
             try:
                 with wait_message("Requesting AI review..."):
                     conduit.request_ai_review(commit.rev_id)
@@ -727,6 +727,13 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
 
     logger.warning("\nCompleted")
     show_commit_stack(commits)
+
+    if args.ai and not config.ai_review:
+        logger.info(
+            "Tip: to always request AI review, set submit.ai_review to true in %s",
+            config.filename,
+        )
+
     telemetry().submission.process_time.stop()
 
     # Indicate that commits were submitted.
@@ -883,7 +890,8 @@ def add_submit_arguments(parser):
     parser.add_argument(
         "--ai",
         action="store_true",
-        help="Request an AI-generated review for each submitted revision.",
+        help="Request an AI-generated review for each submitted revision (default: %s)."
+        % config.ai_review,
     )
     parser.add_argument(
         "start_rev",

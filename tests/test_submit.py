@@ -1116,6 +1116,13 @@ def m_logger():
 
 
 @pytest.fixture
+def m_config():
+    with mock.patch("mozphab.commands.submit.config") as m:
+        m.ai_review = False
+        yield m
+
+
+@pytest.fixture
 def submit_args():
     args = Args(ai=False)
     args.message = None
@@ -1129,7 +1136,7 @@ def submit_args():
 
 
 def test_ai_review_requested_for_each_commit(
-    m_conduit, m_repo, m_validate, m_logger, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
 ):
     commits = [commit(bug_id="1"), commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
@@ -1141,7 +1148,7 @@ def test_ai_review_requested_for_each_commit(
 
 
 def test_ai_review_not_called_without_flag(
-    m_conduit, m_repo, m_validate, m_logger, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
 ):
     commits = [commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
@@ -1153,7 +1160,7 @@ def test_ai_review_not_called_without_flag(
 
 
 def test_ai_review_failure_does_not_abort_submission(
-    m_conduit, m_repo, m_validate, m_logger, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
 ):
     commits = [commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
@@ -1169,7 +1176,7 @@ def test_ai_review_failure_does_not_abort_submission(
 
 
 def test_ai_review_skipped_for_non_submitted_commits(
-    m_conduit, m_repo, m_validate, m_logger, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
 ):
     submitted = commit(bug_id="1")
     skipped = commit(bug_id="1", submit=False)
@@ -1179,6 +1186,49 @@ def test_ai_review_skipped_for_non_submitted_commits(
     submit._submit(m_repo, submit_args)
 
     assert m_conduit.request_ai_review.call_count == 1
+
+
+def test_ai_review_triggered_by_config(
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+):
+    commits = [commit(bug_id="1")]
+    m_repo.commit_stack.return_value = commits
+    submit_args.ai = False
+    m_config.ai_review = True
+
+    submit._submit(m_repo, submit_args)
+
+    assert m_conduit.request_ai_review.call_count == 1
+
+
+def test_ai_review_config_hint_shown(
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+):
+    commits = [commit(bug_id="1")]
+    m_repo.commit_stack.return_value = commits
+    submit_args.ai = True
+    m_config.ai_review = False
+
+    submit._submit(m_repo, submit_args)
+
+    m_logger.info.assert_any_call(
+        "Tip: to always request AI review, set submit.ai_review to true in %s",
+        m_config.filename,
+    )
+
+
+def test_ai_review_config_hint_not_shown_when_config_set(
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+):
+    commits = [commit(bug_id="1")]
+    m_repo.commit_stack.return_value = commits
+    submit_args.ai = True
+    m_config.ai_review = True
+
+    submit._submit(m_repo, submit_args)
+
+    for call in m_logger.info.call_args_list:
+        assert "Tip:" not in str(call)
 
 
 if __name__ == "__main__":

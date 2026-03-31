@@ -50,6 +50,7 @@ class Config(object):
             auto_submit = False
             always_blocking = False
             warn_untracked = True
+            ai_review = False
 
             [patch]
             apply_to = base
@@ -89,6 +90,7 @@ class Config(object):
         self.auto_submit = self._getboolean("submit", "auto_submit")
         self.always_blocking = self._getboolean("submit", "always_blocking")
         self.warn_untracked = self._getboolean("submit", "warn_untracked")
+        self.ai_review = self._getboolean("submit", "ai_review")
         self.apply_patch_to = self._config.get("patch", "apply_to")
         self.create_bookmark = self._getboolean("patch", "create_bookmark")
         self.create_topic = self._getboolean("patch", "create_topic")
@@ -143,6 +145,7 @@ class Config(object):
         if os.path.exists(self.filename):
             logger.debug("updating %s", self.filename)
             self._set("submit", "auto_submit", self.auto_submit)
+            self._set("submit", "ai_review", self.ai_review)
             self._set("patch", "always_full_stack", self.always_full_stack)
             self._set("updater", "self_last_check", self.self_last_check)
             self._set("updater", "self_auto_update", self.self_auto_update)
@@ -160,6 +163,7 @@ class Config(object):
             self._set("submit", "auto_submit", self.auto_submit)
             self._set("submit", "always_blocking", self.always_blocking)
             self._set("submit", "warn_untracked", self.warn_untracked)
+            self._set("submit", "ai_review", self.ai_review)
             self._set("patch", "apply_to", self.apply_patch_to)
             self._set("patch", "create_bookmark", self.create_bookmark)
             self._set("patch", "create_topic", self.create_topic)
