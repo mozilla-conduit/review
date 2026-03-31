@@ -1047,3 +1047,13 @@ class TestEditRevision:
                 "objectIdentifier": 1,
             },
         )
+
+
+@mock.patch("mozphab.conduit.ConduitAPI.call")
+def test_request_ai_review(m_call):
+    m_call.return_value = {}
+    conduit.request_ai_review(rev_id=123)
+    m_call.assert_called_once_with(
+        "reviewhelper.request",
+        {"revisionID": 123},
+    )

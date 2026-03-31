@@ -9,11 +9,13 @@ import unittest
 import uuid
 from unittest import mock
 
+import pytest
 from callee import Contains
 
 from mozphab import environment, exceptions, helpers, mozphab, repository
 from mozphab.commands import submit
 from mozphab.commits import Commit
+from mozphab.conduit import ConduitAPIError
 
 from .conftest import search_diff, search_rev
 
@@ -65,6 +67,7 @@ class Args(argparse.Namespace):
         force=False,
         single=False,
         end_rev=environment.DEFAULT_END_REV,
+        ai=False,
     ):
         self.command = command
         self.reviewer = reviewer
@@ -76,6 +79,7 @@ class Args(argparse.Namespace):
         self.force = force
         self.single = single
         self.end_rev = end_rev
+        self.ai = ai
 
 
 # noinspection PyPep8Naming,PyBroadException
@@ -1059,6 +1063,122 @@ class TestUpdateCommitSummary(unittest.TestCase):
             transactions, Commit(bug_id=None), {"fields": {"bugzilla.bug-id": ""}}
         )
         self.assertEqual([], transactions)
+
+
+@pytest.fixture
+def m_conduit():
+    with mock.patch("mozphab.commands.submit.conduit") as m:
+        m.check.return_value = True
+        m.check_for_invalid_reviewers.return_value = []
+        m.get_revisions.return_value = []
+        m.upload_files_from_diff.return_value = None
+        m.submit_diff.return_value = {"phid": "PHID-DIFF-1", "diffid": "1"}
+        m.create_revision.return_value = {
+            "object": {"id": "123", "phid": "PHID-DREV-123"}
+        }
+        m.update_revision.return_value = {
+            "object": {"id": "456", "phid": "PHID-DREV-456"}
+        }
+        m.set_diff_property.return_value = None
+        m.request_ai_review.return_value = {}
+        yield m
+
+
+@pytest.fixture
+def m_repo():
+    with mock.patch("mozphab.commands.submit.Repository") as m:
+        m.phab_url = "http://example.test"
+        m.get_diff.return_value = mock.MagicMock(
+            phid="PHID-DIFF-1", id="1", changes=[]
+        )
+        m.args = mock.MagicMock()
+        m.check_vcs.return_value = None
+        m.before_submit.return_value = None
+        m.after_submit.return_value = None
+        m.cleanup.return_value = None
+        m.finalize.return_value = None
+        m.refresh_commit_stack.return_value = None
+        m.amend_commit.return_value = None
+        yield m
+
+
+@pytest.fixture
+def m_validate():
+    with mock.patch("mozphab.commands.submit.validate_commit_stack") as m:
+        m.return_value = ([], {})
+        yield m
+
+
+@pytest.fixture
+def m_logger():
+    with mock.patch("mozphab.commands.submit.logger") as m:
+        yield m
+
+
+@pytest.fixture
+def submit_args():
+    args = Args(ai=False)
+    args.message = None
+    args.yes = True
+    args.lesscontext = False
+    args.no_stack = False
+    args.force = False
+    args.force_vcs = False
+    args.safe_mode = False
+    return args
+
+
+def test_ai_review_requested_for_each_commit(
+    m_conduit, m_repo, m_validate, m_logger, submit_args
+):
+    commits = [commit(bug_id="1"), commit(bug_id="1")]
+    m_repo.commit_stack.return_value = commits
+    submit_args.ai = True
+
+    submit._submit(m_repo, submit_args)
+
+    assert m_conduit.request_ai_review.call_count == 2
+
+
+def test_ai_review_not_called_without_flag(
+    m_conduit, m_repo, m_validate, m_logger, submit_args
+):
+    commits = [commit(bug_id="1")]
+    m_repo.commit_stack.return_value = commits
+    submit_args.ai = False
+
+    submit._submit(m_repo, submit_args)
+
+    m_conduit.request_ai_review.assert_not_called()
+
+
+def test_ai_review_failure_does_not_abort_submission(
+    m_conduit, m_repo, m_validate, m_logger, submit_args
+):
+    commits = [commit(bug_id="1")]
+    m_repo.commit_stack.return_value = commits
+    m_conduit.request_ai_review.side_effect = ConduitAPIError("AI service unavailable")
+    submit_args.ai = True
+
+    result = submit._submit(m_repo, submit_args)
+
+    assert result is not None
+    m_logger.error.assert_any_call(
+        "Failed to request AI review for D%s: %s", mock.ANY, mock.ANY
+    )
+
+
+def test_ai_review_skipped_for_non_submitted_commits(
+    m_conduit, m_repo, m_validate, m_logger, submit_args
+):
+    submitted = commit(bug_id="1")
+    skipped = commit(bug_id="1", submit=False)
+    m_repo.commit_stack.return_value = [skipped, submitted]
+    submit_args.ai = True
+
+    submit._submit(m_repo, submit_args)
+
+    assert m_conduit.request_ai_review.call_count == 1
 
 
 if __name__ == "__main__":

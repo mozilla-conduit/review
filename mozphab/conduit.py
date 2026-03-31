@@ -586,6 +586,13 @@ class ConduitAPI:
             {"objectIdentifier": rev_id, "transactions": transactions},
         )
 
+    def request_ai_review(self, rev_id: int) -> dict:
+        """Request an AI-generated review for a revision."""
+        return self.call(
+            "reviewhelper.request",
+            {"revisionID": rev_id},
+        )
+
     def get_repository_by_callsign(self, call_sign: str) -> dict:
         """Get repository info for a repo on Phabricator by callsign."""
         return self.repository_search_single("callsigns", call_sign)

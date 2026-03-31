@@ -8,8 +8,8 @@ import textwrap
 from typing import List
 
 from mozphab import environment
-from mozphab.commits import Commit
-from mozphab.conduit import conduit
+from mozphab.commits import AiReviewState, Commit
+from mozphab.conduit import ConduitAPIError, conduit
 from mozphab.config import config
 from mozphab.exceptions import Error
 from mozphab.helpers import (
@@ -103,6 +103,8 @@ def show_commit_stack(commits: List[Commit]):
             continue
         submitted_commits.append(commit)
         urls[commit.name] = [f"{conduit.repo.phab_url}/D{commit.rev_id}"]
+        if commit.ai_review_state != AiReviewState.NOT_REQUESTED:
+            urls[commit.name][0] += f" (AI review {commit.ai_review_state.value})"
 
     log_commit_stack_with_messages(submitted_commits, urls, "-> ")
 
@@ -679,6 +681,17 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
         commit.rev_id = rev["object"]["id"]
         commit.rev_phid = rev["object"]["phid"]
 
+        if args.ai:
+            try:
+                with wait_message("Requesting AI review..."):
+                    conduit.request_ai_review(commit.rev_id)
+                commit.ai_review_state = AiReviewState.REQUESTED
+            except ConduitAPIError as e:
+                commit.ai_review_state = AiReviewState.FAILED
+                logger.error(
+                    "Failed to request AI review for D%s: %s", commit.rev_id, e
+                )
+
         revision_url = "%s/D%s" % (repo.phab_url, commit.rev_id)
 
         # Append/replace div rev url to/in commit description.
@@ -866,6 +879,11 @@ def add_submit_arguments(parser):
         "-s",
         action="store_true",
         help="Submit a single commit.",
+    )
+    parser.add_argument(
+        "--ai",
+        action="store_true",
+        help="Request an AI-generated review for each submitted revision.",
     )
     parser.add_argument(
         "start_rev",

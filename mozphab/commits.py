@@ -8,6 +8,7 @@ from dataclasses import (
     dataclass,
     field,
 )
+from enum import Enum
 from typing import (
     Dict,
     List,
@@ -34,6 +35,12 @@ Bug #: {bug_id}
 WIP_RE = re.compile(r"^(?:WIP[: ]|WIP$)", flags=re.IGNORECASE)
 
 
+class AiReviewState(Enum):
+    NOT_REQUESTED = "not requested"
+    REQUESTED = "requested"
+    FAILED = "failed"
+
+
 @dataclass
 class Commit:
     """`moz-phab`'s representation of a commit."""
@@ -57,6 +64,7 @@ class Commit:
     rev_phid: Optional[str] = None
     wip: Optional[bool] = None
     tree_hash: Optional[str] = None
+    ai_review_state: AiReviewState = AiReviewState.NOT_REQUESTED
     reviewers: Dict[str, List[str]] = field(default_factory=dict)
 
     @property
