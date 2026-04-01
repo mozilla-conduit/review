@@ -24,6 +24,7 @@ Summary:
 {body}
 
 Test Plan:
+{test_plan}
 
 Reviewers: {reviewers}
 
@@ -52,6 +53,7 @@ class Commit:
     title: str = ""
     title_preview: str = ""
     body: str = ""
+    test_plan: str = ""
     author_date_epoch: int = 0
     author_name: str = ""
     author_email: str = ""
@@ -87,6 +89,7 @@ class Commit:
         template_vars = {
             "title": self.revision_title(),
             "body": self.body,
+            "test_plan": self.test_plan,
             "reviewers": reviewers,
             # Change `None` to an empty string.
             "bug_id": self.bug_id or "",

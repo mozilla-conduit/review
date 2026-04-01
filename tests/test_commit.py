@@ -56,6 +56,7 @@ def test_commit_to_dict_json_roundtrip():
         "tree_hash": "deadbeefcafebabe",
         "reviewers": {"granted": ["r1", "r2"], "request": ["r3"]},
         "ai_review_state": "not requested",
+        "test_plan": "",
     }
 
     assert commit_dict == expected
@@ -80,3 +81,4 @@ def test_commit_to_dict_defaults_are_serializable():
     assert commit_dict["reviewers"] == {}
     assert commit_dict["rev_id"] is None
     assert commit_dict["submit"] is False
+    assert commit_dict["test_plan"] == ""
