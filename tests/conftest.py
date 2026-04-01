@@ -70,6 +70,7 @@ def search_rev(
     repo="PHID-REPO-1",
     reviewers=None,
     is_draft=False,
+    test_plan="",
 ):
     reviewers = reviewers or []
     return {
@@ -82,6 +83,7 @@ def search_rev(
             "diffPHID": diff,
             "repositoryPHID": repo,
             "isDraft": is_draft,
+            "testPlan": test_plan,
         },
         "attachments": {
             "reviewers": {"reviewers": [{"reviewerPHID": r} for r in reviewers]}

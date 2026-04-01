@@ -1212,3 +1212,126 @@ Differential Revision: http://example.test/D125
         "The diff should have empty `newProperties` and "
         "`change.hunks` should be an empty list"
     )
+
+
+def test_submit_create_with_test_plan(in_process, git_repo_path: pathlib.Path, init_sha):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        {},
+        # diffusion.repository.search
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
+        # user search
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
+        # differential.creatediff
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
+        # differential.revision.edit
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
+        # differential.setdiffproperty
+        {},
+    )
+    (git_repo_path / "X").write_text("a\n")
+    git_out("add", ".")
+    git_out("commit", "-m", "Bug 1 - test r=alice")
+
+    mozphab.main(
+        ["submit", "--yes", "--bug", "1", "--test-plan", "Run the tests", init_sha],
+        is_development=True,
+    )
+
+    call_conduit.assert_any_call(
+        "differential.revision.edit",
+        {
+            "transactions": [
+                {"type": "title", "value": "Bug 1 - test r=alice"},
+                {"type": "summary", "value": ""},
+                {"type": "testPlan", "value": "Run the tests"},
+                {"type": "reviewers.set", "value": ["PHID-USER-1"]},
+                {"type": "bugzilla.bug-id", "value": "1"},
+                {"type": "update", "value": "PHID-DIFF-1"},
+            ]
+        },
+    )
+
+
+def test_submit_create_without_test_plan_sends_no_testPlan_transaction(
+    in_process, git_repo_path: pathlib.Path, init_sha
+):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        {},
+        # diffusion.repository.search
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
+        # user search
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
+        # differential.creatediff
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
+        # differential.revision.edit
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
+        # differential.setdiffproperty
+        {},
+    )
+    (git_repo_path / "X").write_text("a\n")
+    git_out("add", ".")
+    git_out("commit", "-m", "Bug 1 - test r=alice")
+
+    mozphab.main(["submit", "--yes", "--bug", "1", init_sha], is_development=True)
+
+    revision_edit_calls = [
+        args
+        for args, _ in call_conduit.call_args_list
+        if args[0] == "differential.revision.edit"
+    ]
+    assert revision_edit_calls, "differential.revision.edit should have been called"
+    for _, call_kwargs in [(c, {}) for c in revision_edit_calls]:
+        transactions = revision_edit_calls[0][1]["transactions"]
+        assert not any(t["type"] == "testPlan" for t in transactions), (
+            "No testPlan transaction should be sent when --test-plan is not used"
+        )
+
+
+def test_submit_update_without_test_plan_preserves_existing(
+    in_process, git_repo_path: pathlib.Path, init_sha
+):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        {},
+        # diffusion.repository.search
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
+        # differential.revision.search (existing revision with a test plan)
+        {"data": [search_rev(rev=123, reviewers=["alice"], test_plan="Existing plan")]},
+        # differential.diff.search
+        {"data": [search_diff()]},
+        # whoami
+        {"phid": "PHID-USER-1"},
+        # differential.creatediff
+        {"phid": "PHID-DIFF-2", "diffid": "2"},
+        # differential.revision.edit
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
+        # differential.setdiffproperty
+        {},
+    )
+    testfile = git_repo_path / "X"
+    testfile.write_text("a\n")
+    git_out("add", "X")
+    git_out(
+        "commit",
+        "-m",
+        "Bug 1 - test r=alice\n\nDifferential Revision: http://example.test/D123",
+    )
+
+    mozphab.main(["submit", "--yes", init_sha], is_development=True)
+
+    revision_edit_calls = [
+        args
+        for args, _ in call_conduit.call_args_list
+        if args[0] == "differential.revision.edit"
+    ]
+    assert revision_edit_calls, "differential.revision.edit should have been called"
+    transactions = revision_edit_calls[0][1]["transactions"]
+    assert not any(t["type"] == "testPlan" for t in transactions), (
+        "No testPlan transaction should be sent when --test-plan is not used, "
+        "even if the revision already has a test plan"
+    )

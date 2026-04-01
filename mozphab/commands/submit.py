@@ -335,6 +335,12 @@ def update_commits_from_args(commits: List[Commit], args: argparse.Namespace):
     change all reviewers in title to blocking.
     """
 
+    if args.test_plan and len(commits) > 1:
+        raise Error(
+            "--test-plan can only be used with a single commit. "
+            "Use --single or narrow your commit range."
+        )
+
     # Build list of reviewers from args.
     reviewers = list(set(args.reviewer)) if args.reviewer else []
 
@@ -387,6 +393,9 @@ def update_commits_from_args(commits: List[Commit], args: argparse.Namespace):
         if args.bug:
             # Bug ID command arg used.
             commit.bug_id = args.bug
+
+        if args.test_plan:
+            commit.test_plan = args.test_plan
 
         # Mark a commit as WIP if --wip is provided or if the revision has no reviewers.
         # This is after checking for WIP: prefix in helpers.augment_commits_from_body().
@@ -792,6 +801,10 @@ def add_submit_arguments(parser):
         "--message",
         "-m",
         help="Provide a custom update message (default: none).",
+    )
+    parser.add_argument(
+        "--test-plan",
+        help="Set the Test Plan field on the Phabricator revision (single commit only).",
     )
     parser.add_argument(
         "--force",

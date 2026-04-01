@@ -68,6 +68,7 @@ class Args(argparse.Namespace):
         single=False,
         end_rev=environment.DEFAULT_END_REV,
         ai=False,
+        test_plan=None,
     ):
         self.command = command
         self.reviewer = reviewer
@@ -80,6 +81,7 @@ class Args(argparse.Namespace):
         self.single = single
         self.end_rev = end_rev
         self.ai = ai
+        self.test_plan = test_plan
 
 
 # noinspection PyPep8Naming,PyBroadException
@@ -933,6 +935,23 @@ class Commits(unittest.TestCase):
                     ),
                 ],
             )
+
+    def test_update_commits_from_args_test_plan_single_commit(self):
+        commits = [Commit(title="A", reviewers={"granted": [], "request": []})]
+        with mock.patch("mozphab.commands.submit.conduit") as m_conduit:
+            m_conduit.has_revision_reviewers.return_value = False
+            submit.update_commits_from_args(commits, Args(test_plan="Run tests"))
+        self.assertEqual(commits[0].test_plan, "Run tests")
+
+    def test_update_commits_from_args_test_plan_multi_commit_raises(self):
+        commits = [
+            Commit(title="A", reviewers={"granted": [], "request": []}),
+            Commit(title="B", reviewers={"granted": ["r"], "request": []}),
+        ]
+        with self.assertRaises(exceptions.Error) as cm:
+            submit.update_commits_from_args(commits, Args(test_plan="Run tests"))
+
+        self.assertIn("--test-plan", str(cm.exception))
 
     def test_single_fails_with_end_rev(self):
         # --single is working with one SHA1 provided only
