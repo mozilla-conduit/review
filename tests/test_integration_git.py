@@ -1268,7 +1268,9 @@ Differential Revision: http://example.test/D125
     )
 
 
-def test_submit_create_with_test_plan(in_process, git_repo_path: pathlib.Path, init_sha):
+def test_submit_create_with_test_plan(
+    in_process, git_repo_path: pathlib.Path, init_sha
+):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
         # ping
@@ -1338,11 +1340,11 @@ def test_submit_create_without_test_plan_sends_no_testPlan_transaction(
         if args[0] == "differential.revision.edit"
     ]
     assert revision_edit_calls, "differential.revision.edit should have been called"
-    for _, call_kwargs in [(c, {}) for c in revision_edit_calls]:
+    for _, _call_kwargs in [(c, {}) for c in revision_edit_calls]:
         transactions = revision_edit_calls[0][1]["transactions"]
-        assert not any(t["type"] == "testPlan" for t in transactions), (
-            "No testPlan transaction should be sent when --test-plan is not used"
-        )
+        assert not any(
+            t["type"] == "testPlan" for t in transactions
+        ), "No testPlan transaction should be sent when --test-plan is not used"
 
 
 def test_submit_update_without_test_plan_preserves_existing(
