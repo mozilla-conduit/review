@@ -689,6 +689,60 @@ Differential Revision: http://example.test/D123
     assert "No changes to submit." in caplog.messages
 
 
+def test_submit_update_test_plan_only(
+    in_process,
+    git_repo_path: pathlib.Path,
+    init_sha,
+    git_sha,
+):
+    testfile = git_repo_path / "X"
+    testfile.write_text("a")
+    git_out("add", ".")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text(
+        "Bug 1 - A, r=test\n\nDifferential Revision: http://example.test/D123\n"
+    )
+    git_out("commit", "--file", "msg")
+    sha = git_sha()
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        {},
+        # diffusion.repository.search
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
+        # differential.revision.search (same SHA → no diff change)
+        {"data": [search_rev(rev=123, reviewers=("test",))]},
+        # differential.diff.search
+        {"data": [search_diff(node=sha)]},
+        # whoami
+        {"phid": "PHID-USER-1"},
+        # differential.creatediff
+        {"phid": "PHID-DIFF-2", "diffid": "2"},
+        # differential.revision.edit
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
+        # differential.setdiffproperty
+        {},
+    )
+
+    mozphab.main(
+        ["submit", "--yes", "--test-plan", "New plan", init_sha],
+        is_development=True,
+    )
+
+    call_conduit.assert_any_call(
+        "differential.revision.edit",
+        {
+            "objectIdentifier": 123,
+            "transactions": [
+                {"type": "title", "value": "Bug 1 - A, r=test"},
+                {"type": "summary", "value": ""},
+                {"type": "testPlan", "value": "New plan"},
+                {"type": "update", "value": "PHID-DIFF-2"},
+            ],
+        },
+    )
+
+
 def test_submit_remove_cr(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = [

@@ -187,6 +187,7 @@ def validate_commit_stack(
                 and not bug_id_changed
                 and not revision_is_closed
                 and not args.force
+                and not commit.test_plan
             ):
                 commit.submit = False
                 warnings.setdefault(commit.name, []).append(
