@@ -979,6 +979,35 @@ class TestUpdateCommitSummary(unittest.TestCase):
 
         self.assertListEqual(t, expected)
 
+    def test_update_revision_description_with_test_plan(self):
+        c = commit(rev_id="D123", title="hi!", body="")
+        c.test_plan = "Run unit tests"
+        r = {"fields": {"title": "hi!", "summary": "", "testPlan": ""}}
+        t = []
+
+        submit.update_revision_description(t, c, r)
+
+        self.assertIn({"type": "testPlan", "value": "Run unit tests"}, t)
+
+    def test_update_revision_description_test_plan_no_op(self):
+        c = commit(rev_id="D123", title="hi!", body="")
+        c.test_plan = "Run unit tests"
+        r = {"fields": {"title": "hi!", "summary": "", "testPlan": "Run unit tests"}}
+        t = []
+
+        submit.update_revision_description(t, c, r)
+
+        self.assertNotIn({"type": "testPlan", "value": "Run unit tests"}, t)
+
+    def test_update_revision_description_empty_test_plan_not_sent(self):
+        c = commit(rev_id="D123", title="hi!", body="")
+        r = {"fields": {"title": "hi!", "summary": "", "testPlan": "existing plan"}}
+        t = []
+
+        submit.update_revision_description(t, c, r)
+
+        self.assertFalse(any(tx["type"] == "testPlan" for tx in t))
+
     @mock.patch("mozphab.conduit.ConduitAPI.get_users")
     def test_update_revision_reviewers(self, m_get_users):
         # From https://phabricator.services.mozilla.com/api/differential.revision.edit

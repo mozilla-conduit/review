@@ -455,6 +455,8 @@ class ConduitAPI:
             {"type": "title", "value": commit.revision_title()},
             {"type": "summary", "value": commit.body},
         ]
+        if commit.test_plan:
+            transactions.append({"type": "testPlan", "value": commit.test_plan})
         if commit.has_reviewers and not commit.wip:
             self.update_revision_reviewers(transactions, commit)
 
@@ -481,6 +483,8 @@ class ConduitAPI:
             {"type": "title", "value": commit.revision_title()},
             {"type": "summary", "value": strip_differential_revision(commit.body)},
         ]
+        if commit.test_plan:
+            transactions.append({"type": "testPlan", "value": commit.test_plan})
 
         # Add update comment
         if comment:

@@ -458,6 +458,9 @@ def update_revision_description(
     if local_body != remote_body:
         transactions.append({"type": "summary", "value": local_body})
 
+    if commit.test_plan and commit.test_plan != revision["fields"].get("testPlan", ""):
+        transactions.append({"type": "testPlan", "value": commit.test_plan})
+
 
 def update_revision_bug_id(transactions: List[dict], commit: Commit, revision: dict):
     # Appends differential.revision.edit transaction(s) to `transactions` if
