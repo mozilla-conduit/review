@@ -44,6 +44,7 @@ command_path =
 auto_submit = False
 always_blocking = False
 warn_untracked = True
+ai_review = False
 
 [patch]
 apply_to = base
@@ -79,6 +80,10 @@ report_to_sentry = True
     (default: `False`).
 - `submit.warn_untracked` : When `True` show a warning if there are uncommitted or
     untracked changes in the working directory (default: `True`).
+- `submit.ai_review` : When `True` moz-phab will automatically request an AI review
+    for newly created revisions. AI review is not requested for updates to existing
+    revisions; use the `--ai` flag to explicitly request AI review on updates
+    (default: `False`).
 - `patch.apply_to` : [base/here] Where to apply the patches by default. If `"base"`
     `moz-phab` will look for the SHA1 in the first commit. If `"here"` - current
     commit/checkout will be used (default: base).
@@ -160,6 +165,10 @@ A bug ID can also be set *for every revision in the series* with the
 Similarly, reviewers can be set *for every revision in the series*
 with `--reviewer` (regular reviewers) and/or `--blocker` (blocking
 reviewers), which again overrides any reviewers in commit messages.
+
+Use `--ai` to request an AI review for all revisions in the stack, including
+updates to existing revisions. Or enable the `submit.ai_review` config to
+request AI review automatically for new revisions.
 
 Run `moz-phab submit -h` for more options for submitting revisions.
 
