@@ -694,7 +694,7 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
         commit.rev_id = rev["object"]["id"]
         commit.rev_phid = rev["object"]["phid"]
 
-        if args.ai or config.ai_review:
+        if args.ai or (config.ai_review and not is_update):
             try:
                 with wait_message("Requesting AI review..."):
                     conduit.request_ai_review(commit.rev_id)

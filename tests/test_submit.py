@@ -1263,6 +1263,45 @@ def test_ai_review_config_hint_shown(
     )
 
 
+def test_ai_review_skipped_for_updates_with_config(
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+):
+    # Commit with rev_id set simulates an update to an existing revision.
+    commits = [
+        commit(
+            bug_id="1",
+            rev_id=456,
+            body="Differential Revision: http://example.test/D456",
+        )
+    ]
+    m_repo.commit_stack.return_value = commits
+    submit_args.ai = False
+    m_config.ai_review = True
+
+    submit._submit(m_repo, submit_args)
+
+    m_conduit.request_ai_review.assert_not_called()
+
+
+def test_ai_review_requested_for_updates_with_flag(
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+):
+    # --ai flag should always request AI review, even for updates.
+    commits = [
+        commit(
+            bug_id="1",
+            rev_id=456,
+            body="Differential Revision: http://example.test/D456",
+        )
+    ]
+    m_repo.commit_stack.return_value = commits
+    submit_args.ai = True
+
+    submit._submit(m_repo, submit_args)
+
+    assert m_conduit.request_ai_review.call_count == 1
+
+
 def test_ai_review_config_hint_not_shown_when_config_set(
     m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
 ):
