@@ -641,6 +641,8 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
     # Process.
     telemetry().submission.process_time.start()
 
+    has_new_revisions = any(not commit.rev_id for commit in commits if commit.submit)
+
     previous_commit = None
     for commit in commits:
         if not commit.submit:
@@ -741,9 +743,9 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
     logger.warning("\nCompleted")
     show_commit_stack(commits)
 
-    if args.ai and not config.ai_review:
+    if args.ai and not config.ai_review and has_new_revisions:
         logger.info(
-            "Tip: to always request AI review, set submit.ai_review to true in %s",
+            "Tip: to always request AI review on new revisions, set submit.ai_review to true in %s",
             config.filename,
         )
 

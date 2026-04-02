@@ -1258,7 +1258,7 @@ def test_ai_review_config_hint_shown(
     submit._submit(m_repo, submit_args)
 
     m_logger.info.assert_any_call(
-        "Tip: to always request AI review, set submit.ai_review to true in %s",
+        "Tip: to always request AI review on new revisions, set submit.ai_review to true in %s",
         m_config.filename,
     )
 
