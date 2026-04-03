@@ -643,10 +643,10 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
 
     has_new_revisions = any(not commit.rev_id for commit in commits if commit.submit)
 
-    previous_commit = None
-    for commit in commits:
+    # Note: we can use `itertools.pairwise([None, *commits])` once we
+    # upgrade our minimum Python version to 3.10.
+    for previous_commit, commit in zip([None, *commits], commits):
         if not commit.submit:
-            previous_commit = commit
             continue
 
         # Only revisions being updated have an ID. Newly created ones don't.
@@ -728,8 +728,6 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
             with wait_message("Setting diff metadata..."):
                 message = commit.build_arc_commit_message()
                 conduit.set_diff_property(diff.id, commit, message)
-
-        previous_commit = commit
 
     # Cleanup (eg. strip nodes) and refresh to ensure the stack is right for the
     # final showing.
