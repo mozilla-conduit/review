@@ -11,6 +11,7 @@ import pytest
 from callee import Contains, Matching, StartsWith
 
 from mozphab import mozphab
+from mozphab.mercurial import Mercurial
 
 from .conftest import hg_out, write_text
 
@@ -1406,3 +1407,184 @@ Differential Revision: http://example.test/D125
         "The diff should have empty `newProperties` and "
         "`change.hunks` should be an empty list"
     )
+
+
+def test_apply_patch(in_process, hg_repo_path):
+    """Verify `apply_patch` applies a diff and creates a commit."""
+    # Create a file and commit it so we have a base to patch against.
+    testfile = hg_repo_path / "hello.txt"
+    write_text(testfile, "hello\n")
+    hg_out("add", "hello.txt")
+    hg_out("commit", "-m", "initial commit")
+
+    # Construct a `Mercurial` repository object.
+    repo = Mercurial(str(hg_repo_path))
+
+    # Build a git-style diff that modifies the file.
+    diff = (
+        "diff --git a/hello.txt b/hello.txt\n"
+        "--- a/hello.txt\n"
+        "+++ b/hello.txt\n"
+        "@@ -1 +1 @@\n"
+        "-hello\n"
+        "+goodbye\n"
+    )
+    body = "Bug 1 - Update hello.txt"
+    author = "Test User <test@example.com>"
+    author_date = 1700000000
+
+    repo.apply_patch(diff, body, author, author_date)
+
+    # Verify the commit was created with the correct message.
+    log_desc = hg_out("log", "-r", ".", "-T", "{desc}").strip()
+    assert log_desc == body, "The commit message should match the provided body."
+
+    # Verify the commit author.
+    log_author = hg_out("log", "-r", ".", "-T", "{author}").strip()
+    assert log_author == author, "The commit author should match the provided author."
+
+    # Verify the commit date (unix timestamp).
+    log_date = hg_out("log", "-r", ".", "-T", "{date|hgdate}").strip()
+    assert (
+        log_date == f"{author_date} 0"
+    ), "The commit date should match the provided `author_date`."
+
+    # Verify the file content was actually changed.
+    assert (
+        testfile.read_text() == "goodbye\n"
+    ), "The file content should reflect the applied patch."
+
+
+def test_apply_patch_new_file(in_process, hg_repo_path):
+    """Verify `apply_patch` can add a new file."""
+    repo = Mercurial(str(hg_repo_path))
+
+    diff = (
+        "diff --git a/newfile.txt b/newfile.txt\n"
+        "new file mode 100644\n"
+        "--- /dev/null\n"
+        "+++ b/newfile.txt\n"
+        "@@ -0,0 +1 @@\n"
+        "+new content\n"
+    )
+    body = "Bug 2 - Add newfile.txt"
+
+    repo.apply_patch(diff, body, "Test User <test@example.com>", 1700000000)
+
+    newfile = hg_repo_path / "newfile.txt"
+    assert newfile.exists(), "The new file should exist after applying the patch."
+    assert (
+        newfile.read_text() == "new content\n"
+    ), "The new file content should match the applied patch."
+
+    log_desc = hg_out("log", "-r", ".", "-T", "{desc}").strip()
+    assert log_desc == body, "The commit message should match the provided body."
+
+
+def test_apply_patch_without_author_or_date(in_process, hg_repo_path):
+    """Verify `apply_patch` works when author and date are omitted."""
+    testfile = hg_repo_path / "hello.txt"
+    write_text(testfile, "hello\n")
+    hg_out("add", "hello.txt")
+    hg_out("commit", "-m", "initial commit")
+
+    repo = Mercurial(str(hg_repo_path))
+
+    diff = (
+        "diff --git a/hello.txt b/hello.txt\n"
+        "--- a/hello.txt\n"
+        "+++ b/hello.txt\n"
+        "@@ -1 +1 @@\n"
+        "-hello\n"
+        "+patched\n"
+    )
+
+    repo.apply_patch(diff, "Bug 3 - Patch without author", None, None)
+
+    log_desc = hg_out("log", "-r", ".", "-T", "{desc}").strip()
+    assert (
+        log_desc == "Bug 3 - Patch without author"
+    ), "The commit message should match the provided body."
+
+    assert (
+        testfile.read_text() == "patched\n"
+    ), "The file content should reflect the applied patch."
+
+
+def test_apply_patch_diff_in_body_is_not_applied(in_process, hg_repo_path):
+    """Verify that diff-like content in the commit message body is not applied.
+
+    This is a regression test for a security bug where a crafted commit message
+    containing embedded diff content (e.g. inside an HTML table) could be parsed
+    by `hg import` as part of the actual patch, causing unintended file changes.
+    """
+    # Create the file that the malicious body will try to modify.
+    testfile = hg_repo_path / "hello.txt"
+    write_text(testfile, "hello\nworld\n")
+    hg_out("add", "hello.txt")
+    hg_out("commit", "-m", "initial commit")
+
+    repo = Mercurial(str(hg_repo_path))
+
+    # The real diff only touches `target.txt`.
+    real_diff = (
+        "diff --git a/target.txt b/target.txt\n"
+        "new file mode 100644\n"
+        "--- /dev/null\n"
+        "+++ b/target.txt\n"
+        "@@ -0,0 +1 @@\n"
+        "+legitimate change\n"
+    )
+
+    # The body contains a crafted `diff --git` block that tries to inject
+    # malicious content into `hello.txt`. This mirrors a real-world attack
+    # where diff-like content is embedded inside an HTML table in the commit
+    # message.
+    malicious_body = (
+        "Bug 1 - Add suppressed experiments preference\n"
+        "\n"
+        "This patch adds logic which is only activated if the preference\n"
+        "`extensions.experiments.suppressed` is set to `true`.\n"
+        "\n"
+        "<table>\n"
+        "  <colgroup>\n"
+        "diff --git a/hello.txt b/hello.txt\n"
+        "--- a/hello.txt\n"
+        "+++ b/hello.txt\n"
+        "@@ -1,2 +1,2 @@\n"
+        "-hello\n"
+        "-world\n"
+        "+INJECTED\n"
+        "+MALICIOUS CONTENT\n"
+        "  </colgroup>\n"
+        "</table>"
+    )
+
+    repo.apply_patch(
+        real_diff, malicious_body, "Test User <test@example.com>", 1700000000
+    )
+
+    # The malicious diff in the body must NOT have been applied to `hello.txt`.
+    assert testfile.read_text() == "hello\nworld\n", (
+        "Diff-like content embedded in the commit message body should not be applied. "
+        "The file `hello.txt` should be unchanged."
+    )
+
+    # The real diff should have been applied.
+    target_file = hg_repo_path / "target.txt"
+    assert (
+        target_file.exists()
+    ), "The file `target.txt` from the real diff should exist."
+    assert (
+        target_file.read_text() == "legitimate change\n"
+    ), "The file `target.txt` should contain the content from the real diff."
+
+    # The full body (including the embedded diff-like content) should be
+    # preserved verbatim in the commit message.
+    log_desc = hg_out("log", "-r", ".", "-T", "{desc}").strip()
+    assert (
+        "INJECTED" in log_desc
+    ), "The injected diff text should appear in the commit message, not as a file change."
+    assert (
+        log_desc == malicious_body
+    ), "The entire body should be preserved as the commit message."
