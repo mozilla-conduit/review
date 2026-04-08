@@ -4,11 +4,16 @@
 
 import argparse
 import json
+import urllib.error as url_error
+import urllib.request as url_request
 from pathlib import Path
 from typing import Optional
 
 from mozphab.conduit import (
     conduit,
+)
+from mozphab.environment import (
+    USER_AGENT,
 )
 from mozphab.exceptions import (
     Error,
@@ -18,6 +23,9 @@ from mozphab.logger import (
 )
 from mozphab.repository import (
     Repository,
+)
+from mozphab.spinner import (
+    wait_message,
 )
 
 from .submit import (
@@ -79,6 +87,59 @@ def build_assessment_linking_url(
     return url
 
 
+def link_assessment(lando_url: str, revision_id: int, assessment_id: int):
+    """Link an uplift revision to an existing assessment via the Lando API."""
+    api_url = f"{lando_url.rstrip('/')}/api/uplift/assessments/link"
+    api_token = conduit.load_api_token()
+
+    payload = json.dumps(
+        {"revision_id": revision_id, "assessment_id": assessment_id}
+    ).encode()
+
+    request = url_request.Request(
+        url=api_url,
+        method="POST",
+        headers={
+            "User-Agent": USER_AGENT,
+            "Content-Type": "application/json",
+            "X-Phabricator-API-Key": api_token,
+        },
+        data=payload,
+    )
+
+    logger.debug("Linking revision D%s to assessment %s.", revision_id, assessment_id)
+
+    try:
+        with url_request.urlopen(request) as response:
+            return json.load(response)
+    except url_error.HTTPError as err:
+        body = err.read().decode("utf-8", errors="replace")
+
+        # Parse RFC 7807 Problem Details `detail` from Lando.
+        try:
+            detail = json.loads(body).get("detail", body)
+        except (json.JSONDecodeError, TypeError):
+            detail = body
+
+        raise Error(f"Failed to link assessment (HTTP {err.code}): {detail}")
+    except url_error.URLError as err:
+        raise Error(f"Failed to connect to Lando: {err.reason}")
+
+
+def attempt_link_assessment(
+    lando_url: str, revision_id: int, assessment_id: int
+) -> bool:
+    """Attempt to link an uplift revision to an assessment, returning success status."""
+    try:
+        with wait_message(f"Linking assessment {assessment_id} to D{revision_id}"):
+            link_assessment(lando_url, revision_id, assessment_id)
+    except Error as err:
+        logger.warning("Failed to automatically link assessment: %s", err)
+        return False
+    else:
+        return True
+
+
 def uplift(repo: Repository, args: argparse.Namespace):
     if args.list_trains:
         return list_trains()
@@ -101,14 +162,22 @@ def uplift(repo: Repository, args: argparse.Namespace):
         tip_commit = commits[-1]
         tip_commit_id = tip_commit.rev_id
 
-        uplift_assessment_linking_url = build_assessment_linking_url(
+        if args.assessment_id and attempt_link_assessment(
             repo.lando_url, tip_commit_id, args.assessment_id
-        )
+        ):
+            logger.warning(
+                "\nUplift submitted and linked to assessment. "
+                "No further action required."
+            )
+        else:
+            uplift_assessment_linking_url = build_assessment_linking_url(
+                repo.lando_url, tip_commit_id, args.assessment_id
+            )
 
-        logger.warning(
-            f"\nPlease navigate to {uplift_assessment_linking_url} and complete the uplift "
-            "request form."
-        )
+            logger.warning(
+                f"\nPlease navigate to {uplift_assessment_linking_url} and save "
+                "the uplift request form."
+            )
 
     # Output machine-readable data to a file.
     if args.output_file:
@@ -159,6 +228,7 @@ def add_parser(parser):
     )
     uplift_parser.add_argument(
         "--assessment-id",
+        type=int,
         help="Existing assessment ID to link the new uplift revision to.",
     )
     uplift_parser.add_argument(

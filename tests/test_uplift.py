@@ -2,16 +2,24 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import io
+import json
 from unittest import mock
+from urllib.error import HTTPError
+
+import pytest
 
 from mozphab.commands.submit import (
     local_uplift_if_possible,
     update_commits_for_uplift,
 )
 from mozphab.commands.uplift import (
+    attempt_link_assessment,
     build_assessment_linking_url,
+    link_assessment,
 )
 from mozphab.commits import Commit
+from mozphab.exceptions import Error
 from mozphab.helpers import ORIGINAL_DIFF_REV_RE
 
 
@@ -296,3 +304,139 @@ def test_build_assessment_linking_url():
     assert (
         url == "https://lando.moz.tools/uplift/request/?revisions=456&assessment_id=10"
     ), "Trailing slash in Lando URL with assessment ID should produce valid URL."
+
+
+def make_urlopen_response(data: dict) -> mock.MagicMock:
+    """Create a mock context manager matching `urllib.request.urlopen` usage."""
+    response = mock.MagicMock()
+    response.read.return_value = json.dumps(data).encode()
+    response.__enter__ = mock.Mock(return_value=response)
+    response.__exit__ = mock.Mock(return_value=False)
+    return response
+
+
+@mock.patch("mozphab.commands.uplift.conduit")
+@mock.patch("mozphab.commands.uplift.url_request.urlopen")
+def test_link_assessment(m_urlopen, m_conduit):
+    m_conduit.load_api_token.return_value = "test-token"
+
+    response_data = {"revision_id": 123, "assessment_id": 5, "created": True}
+    m_urlopen.return_value = make_urlopen_response(response_data)
+
+    result = link_assessment("https://lando.moz.tools", 123, 5)
+
+    m_urlopen.assert_called_once()
+    request = m_urlopen.call_args[0][0]
+
+    assert (
+        request.full_url == "https://lando.moz.tools/api/uplift/assessments/link"
+    ), "Request URL should point to the Lando assessment linking endpoint."
+    assert (
+        request.get_header("X-phabricator-api-key") == "test-token"
+    ), "Request should include the Phabricator API token header."
+    assert (
+        request.get_header("Content-type") == "application/json"
+    ), "Request should use JSON content type."
+    assert request.get_method() == "POST", "Request should use POST method."
+
+    body = json.loads(request.data)
+    assert body == {
+        "revision_id": 123,
+        "assessment_id": 5,
+    }, "Request body should contain `revision_id` and `assessment_id`."
+
+    assert result == response_data, "`link_assessment` should return the API response."
+
+
+@mock.patch("mozphab.commands.uplift.conduit")
+@mock.patch("mozphab.commands.uplift.url_request.urlopen")
+def test_link_assessment_strips_trailing_slash(m_urlopen, m_conduit):
+    m_conduit.load_api_token.return_value = "test-token"
+
+    response_data = {"revision_id": 456, "assessment_id": 10, "created": True}
+    m_urlopen.return_value = make_urlopen_response(response_data)
+
+    link_assessment("https://lando.moz.tools/", 456, 10)
+
+    request = m_urlopen.call_args[0][0]
+    assert (
+        request.full_url == "https://lando.moz.tools/api/uplift/assessments/link"
+    ), "Trailing slash in Lando URL should be stripped."
+
+
+@mock.patch("mozphab.commands.uplift.conduit")
+@mock.patch("mozphab.commands.uplift.url_request.urlopen")
+def test_link_assessment_http_error_rfc7807(m_urlopen, m_conduit):
+    """Error response with RFC 7807 Problem Details JSON."""
+    m_conduit.load_api_token.return_value = "test-token"
+
+    problem_body = json.dumps(
+        {
+            "type": "about:blank",
+            "title": "Bad Request",
+            "status": 400,
+            "detail": "Revision D123 is not an uplift revision.",
+        }
+    ).encode()
+
+    m_urlopen.side_effect = HTTPError(
+        url="https://lando.moz.tools/api/uplift/assessments/link",
+        code=400,
+        msg="Bad Request",
+        hdrs={},
+        fp=io.BytesIO(problem_body),
+    )
+
+    with pytest.raises(Error, match="Failed to link assessment") as exc_info:
+        link_assessment("https://lando.moz.tools", 123, 5)
+
+    error_message = str(exc_info.value)
+    assert "HTTP 400" in error_message, "Error should include the HTTP status code."
+    assert (
+        "Revision D123 is not an uplift revision." in error_message
+    ), "Error should include the RFC 7807 `detail`."
+
+
+@mock.patch("mozphab.commands.uplift.conduit")
+@mock.patch("mozphab.commands.uplift.url_request.urlopen")
+def test_link_assessment_http_error_non_json(m_urlopen, m_conduit):
+    """Error response with a non-JSON body falls back to raw text."""
+    m_conduit.load_api_token.return_value = "test-token"
+
+    m_urlopen.side_effect = HTTPError(
+        url="https://lando.moz.tools/api/uplift/assessments/link",
+        code=500,
+        msg="Internal Server Error",
+        hdrs={},
+        fp=io.BytesIO(b"Internal Server Error"),
+    )
+
+    with pytest.raises(Error, match="Failed to link assessment") as exc_info:
+        link_assessment("https://lando.moz.tools", 123, 5)
+
+    error_message = str(exc_info.value)
+    assert "HTTP 500" in error_message, "Error should include the HTTP status code."
+    assert (
+        "Internal Server Error" in error_message
+    ), "Error should fall back to the raw response body."
+
+
+@pytest.mark.parametrize(
+    "side_effect, expected",
+    [
+        (None, True),
+        (Error("something went wrong"), False),
+    ],
+    ids=["success", "failure"],
+)
+@mock.patch("mozphab.commands.uplift.link_assessment")
+def test_try_link_assessment(m_link_assessment, side_effect, expected):
+    m_link_assessment.side_effect = side_effect
+
+    result = attempt_link_assessment("https://lando.moz.tools", 123, 5)
+
+    assert result is expected, (
+        f"`try_link_assessment` should return `{expected}` "
+        f"when `link_assessment` {'succeeds' if expected else 'raises `Error`'}."
+    )
+    m_link_assessment.assert_called_once_with("https://lando.moz.tools", 123, 5)
