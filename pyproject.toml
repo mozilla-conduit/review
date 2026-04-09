@@ -48,6 +48,17 @@ packages = ["mozphab", "mozphab.commands"]
 [project.scripts]
 moz-phab = "mozphab.mozphab:run"
 
+[dependency-groups]
+dev = [
+    "black==24.8.0",
+    "callee==0.3.1",
+    "hg-evolve==11.1.4",
+    "immutabledict==4.2.0",
+    "mercurial==6.8.2",
+    "pytest==8.3.3",
+    "ruff==0.14.0",
+]
+
 [build-system]
 build-backend = "setuptools.build_meta"
 requires = [

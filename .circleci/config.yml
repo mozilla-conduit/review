@@ -58,8 +58,6 @@ workflows:
 
 jobs:
   test_3_9: &test_template
-    environment:
-      - REQUIREMENTS_FILE: dev/requirements/python3.9.txt
     docker:
       - image: cimg/python:3.9
     working_directory: ~/repo
@@ -71,10 +69,12 @@ jobs:
             set -e
             mkdir -p ~/test-reports
             mkdir -p ~/coredumps
-            # configure hg
+            # Install project and dev dependencies.
+            uv sync --group dev --locked
+            # Configure hg.
             echo -e "[ui]\nusername=mozphab test <moz-phab@example.com>" > ~/.hgrc
             echo -e "[extensions]\nevolve=" >> ~/.hgrc
-            # configure git
+            # Configure git.
             git config --global user.email "moz-phab-tests@example.com"
             git config --global user.name "moz-phab tests"
             # Install and configure jj.
@@ -88,30 +88,22 @@ jobs:
             sudo mv jj /usr/local/bin
             jj config set --user user.name "moz-phab tests"
             jj config set --user user.email "moz-phab-tests@example.com"
-            # install test dependencies
-            python3 -m venv ~/venv
-            source ~/venv/bin/activate
-            python3 -m pip install --disable-pip-version-check --requirement $(echo $REQUIREMENTS_FILE)
-            python3 -m pip install --disable-pip-version-check --editable .
       - run:
           name: versions
           command: |
             set -e
-            source ~/venv/bin/activate
-            pyenv version
-            python3 --version
-            which python3
+            uv self version
+            uv run python3 --version
             git --version
             jj --version
-            python3 -m pip --disable-pip-version-check list --format freeze
+            uv pip list
       - run:
           name: run tests
           command: |
             set -e
-            source ~/venv/bin/activate
             ulimit -c unlimited
-            for F in tests/test_*.py; do
-              python3 -m pytest --junitxml=~/test-reports/junit-$( basename $F .py ).xml -vv $F
+            for test_file in tests/test_*.py; do
+              uv run python3 -m pytest --junitxml=~/test-reports/junit-$( basename $test_file .py ).xml -vv $test_file
             done
             cp core.* ~/coredumps || true
       - store_test_results:
@@ -122,63 +114,55 @@ jobs:
           path: ~/coredumps
   test_3_10:
     <<: *test_template
-    environment:
-      - REQUIREMENTS_FILE: dev/requirements/python3.10.txt
     docker:
       - image: cimg/python:3.10
   test_3_11:
     <<: *test_template
-    environment:
-      - REQUIREMENTS_FILE: dev/requirements/python3.11.txt
     docker:
       - image: cimg/python:3.11
   test_3_12:
     <<: *test_template
-    environment:
-      - REQUIREMENTS_FILE: dev/requirements/python3.12.txt
     docker:
       - image: cimg/python:3.12
   test_3_13:
     <<: *test_template
-    environment:
-      - REQUIREMENTS_FILE: dev/requirements/python3.13.txt
     docker:
       - image: cimg/python:3.13
   test_3_14:
     <<: *test_template
-    environment:
-      - REQUIREMENTS_FILE: dev/requirements/python3.14.txt
     docker:
       - image: cimg/python:3.14
 
   test_win:
+    environment:
+      - PYTHON_VERSION: "3.9"
     executor:
       name: win/default
     steps:
       - checkout
       - run:
+          name: install uv
+          command: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+      - run:
           name: install dependencies
           command: |
-            python3 -m venv ~/venv
-            source ~/venv/bin/activate
-            pip install --disable-pip-version-check --requirement dev/requirements/windows.txt
-            pip install --disable-pip-version-check --editable .
+            uv python install $env:PYTHON_VERSION
+            uv sync --python $env:PYTHON_VERSION --group dev
             git config --global user.email "moz-phab-tests@example.com"
             git config --global user.name "moz-phab tests"
       - run:
           name: versions
           command: |
-            source ~/venv/bin/activate
-            python --version
+            uv self version
+            uv run python --version
             git --version
-            pip --disable-pip-version-check list --format freeze
+            uv pip list
       - run:
           name: run tests
           command: |
-            source ~/venv/bin/activate
             mkdir test-reports
             function RunTest {
-              & python -m pytest -vv @args
+              & uv run python -m pytest -vv @args
               if ($LASTEXITCODE -ne 0) {
                 exit $LASTEXITCODE
               }
@@ -198,17 +182,13 @@ jobs:
     steps:
       - checkout
       - run:
-          name: setup
+          name: build and verify package
           command: |
-            python3 -m pip install --upgrade build pip
-            python3 -m venv venv
-            python3 -m build
-            ./venv/bin/pip --disable-pip-version-check install dist/mozphab*.tar.gz
-      - run:
-          name: run tests
-          command: |
-            ./venv/bin/pip --disable-pip-version-check show MozPhab
-            ./venv/bin/moz-phab version
+            uv build
+            uv venv verify-venv
+            uv pip install --python verify-venv/bin/python dist/mozphab*.tar.gz
+            uv pip show --python verify-venv/bin/python MozPhab
+            verify-venv/bin/moz-phab version
   publish:
     docker:
       - image: cimg/python:3.9
@@ -216,11 +196,8 @@ jobs:
     steps:
     - checkout
     - run:
-        name: build-and-publish
+        name: build and publish
         # Generate packages and upload to PyPI via `twine`.
         command: |
-            python3 -m pip install --upgrade build pip
-            python3 -m pip install pipenv
-            python3 -m pipenv install twine
-            python3 -m build
-            python3 -m pipenv run twine upload --repository pypi dist/*
+            uv build
+            uv tool run twine upload --repository pypi dist/*

@@ -306,64 +306,40 @@ File bugs in Bugzilla under
 All python code must be formatted with [black](https://github.com/ambv/black)
 using the default settings.
 
-### MacOS / Linux
+### Setup
 
-1. Ensure you have Python 3, Git, and Mercurial installed
+This project uses [uv](https://docs.astral.sh/uv/) for dependency and Python
+version management. Install `uv` by following the
+[installation instructions](https://docs.astral.sh/uv/getting-started/installation/).
+
+1. Ensure you have Git and Mercurial installed
    - E.g. using `homebrew` on macOS, or your Linux distribution's package manager
-   - `python3`, `git`, and `hg` executables must be on the system path
-2. In your clone of this repository run the following commands (adjusting to the
-   version of Python):
+   - `git` and `hg` executables must be on the system path
+2. In your clone of this repository, run:
 
    ```shell
-   python3 -m venv venv
-   source venv/bin/activate
-   pip3 install -r dev/requirements/python3.9.txt
-   pip3 install -e .
+   uv sync --group dev
    ```
 
-3. To run moz-phab after making modifications use `moz-phab`
-4. To run tests use `pytest -vv`
-5. To exit the virtual environment, use `deactivate`
+   This will install the correct Python version, create a virtual environment,
+   and install the project with all dev dependencies.
 
-### Windows
+3. To run moz-phab after making modifications use `uv run moz-phab`
+4. To run tests use `uv run pytest -vv`
+5. To run tests against a specific Python version use `uv run --python 3.12 pytest -vv`
 
-1. Install Python 3, Git, and Mercurial:
-   - Run `python3` from the command prompt and install from the Windows store.
-   - Install Git and Mercurial with their respective installers from the
-     official websites.
-   - `python3`, `git`, and `hg` executables must be on the system path
-2. In your clone of this repository run the following commands:
-   - `python3 -m venv venv`
-   - `venv\Scripts\pip3 install -r dev-requirements.txt`
-   - `venv\Scripts\pip3 install -e .`
-3. To run moz-phab after making modifications use `venv\Scripts\moz-phab`
-4. To run tests use `venv\Scripts\pytest -vv`
+### Updating dependencies
 
-### Regenerating requirements files
+Dependencies are defined in `pyproject.toml` and locked in `uv.lock`. To update
+the lock file after changing dependencies, run:
 
-Requirements files (those found in the `dev/requirements` directory) are automatically
-generated using pip-tools. These requirement files are used in the CircleCI
-configuration to install requirements that run remotely on CircleCI. You can use
-Docker to regenerate these files.
-
-#### On Linux
-
-To generate `dev/requirements/python*.*.txt`, run the following commands while
-in the `dev` directory:
-
-- `docker-compose run generate-python3.9-requirements`
-- `docker-compose run generate-python3.10-requirements`
-
-#### On Windows
-
-To generate `dev/requirements/windows.txt`, make sure you are not running Docker
-in WSL mode then run the following command:
-
-- `docker-compose run generate-windows-requirements`
+```shell
+uv lock
+```
 
 ### Circle CI
 
-`mozphab` uses Circle CI to ensure all tests pass on macOS, Linux, and Windows.
+`mozphab` uses Circle CI to ensure all tests pass on Linux and Windows.
 
 To ensure that your changes work, run `circleci` locally.
 
@@ -372,24 +348,8 @@ To ensure that your changes work, run `circleci` locally.
    `circleci local execute test_3_9`
 
 This will run all the Python 3.9 tests in a dockerized environment.
-This step takes a while, so you might want to run `pytest` for working on your changes,
-as explained above.
-
-#### Circle CI on Windows
-
-As of the time of writing, `circleci-cli` on Windows does not allow you to execute
-Windows tests locally. When CircleCI is running your windows tests remotely, it will
-use a Windows Orb that is configured to use a special Windows executor that is preloaded
-with various development packages. The Windows virtual machine will use Miniconda
-to bootstrap the Python environment, which can cause some problems when installing
-additional requirements. The `generate-windows` container that is used to generate
-requirements files for Windows can be used to run your tests, as well as to test
-package installation. To do that, run the following commands:
-
-- `docker-compose run generate-windows powershell.exe`
-- `cd C:\review`
-- `pip install dev\requirements\windows.txt`
-- `pytest`
+This step takes a while, so you might want to run `uv run pytest` for working on
+your changes, as explained above.
 
 ### Submitting patches
 

@@ -6,4 +6,4 @@ MANIFEST
 build
 dist
 moz-phabc
-venv
+.venv
