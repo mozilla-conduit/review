@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
+import concurrent.futures
 import re
 import subprocess
 from typing import (
@@ -154,15 +155,30 @@ def patch(repo: Repository, args: argparse.Namespace):
     revision = revs[0]
 
     if not args.skip_dependencies:
-        with wait_message("Fetching D%s children.." % args.revision_id):
-            try:
-                children = conduit.get_successor_phids(
-                    revision["phid"], include_abandoned=args.include_abandoned
+        # Fetch children and parents in parallel.
+        with wait_message("Fetching D%s dependency graph.." % args.revision_id):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                successor_future = executor.submit(
+                    conduit.get_successor_phids,
+                    revision["phid"],
+                    include_abandoned=args.include_abandoned,
                 )
-                non_linear = False
-            except NonLinearException:
-                children = []
-                non_linear = True
+                ancestor_future = executor.submit(
+                    conduit.get_ancestor_phids,
+                    revision["phid"],
+                )
+
+        try:
+            children = successor_future.result()
+            non_linear = False
+        except NonLinearException:
+            children = []
+            non_linear = True
+
+        try:
+            phids = ancestor_future.result()
+        except NonLinearException:
+            raise Error("Non linear dependency detected. Unable to patch the stack.")
 
         patch_children = True
         if children:
@@ -195,22 +211,25 @@ def patch(repo: Repository, args: argparse.Namespace):
                     if res == "No":
                         return
 
-        # Get list of PHIDs in the stack
-        try:
-            with wait_message("Fetching D%s parents.." % args.revision_id):
-                phids = conduit.get_ancestor_phids(revision["phid"])
-        except NonLinearException:
-            raise Error("Non linear dependency detected. Unable to patch the stack.")
+        # Pull revisions data for ancestors and children in a single call.
+        # get_revisions preserves input phid order, so we can split by index.
+        ancestor_phids = phids if phids else []
+        child_phids = children if (children and patch_children) else []
+        all_related_phids = ancestor_phids + child_phids
 
-        # Pull revisions data
-        if phids:
+        if all_related_phids:
             with wait_message("Fetching related revisions.."):
-                revs.extend(conduit.get_revisions(phids=phids))
-            revs.reverse()
+                all_related = conduit.get_revisions(phids=all_related_phids)
 
-        if children and patch_children:
-            with wait_message("Fetching related revisions.."):
-                revs.extend(conduit.get_revisions(phids=children))
+            ancestor_revs = all_related[: len(ancestor_phids)]
+            child_revs = all_related[len(ancestor_phids) :]
+
+            if ancestor_revs:
+                revs.extend(ancestor_revs)
+                revs.reverse()
+
+            if child_revs:
+                revs.extend(child_revs)
 
     # Set the target id
     rev_id = revs[-1]["id"]
@@ -273,6 +292,25 @@ def patch(repo: Repository, args: argparse.Namespace):
         branch_name = resolve_branch_name(args, config, rev_id)
         repo.before_patch(base_node, branch_name)
 
+    # Fetch raw diffs in parallel.
+    raw_diffs = {}
+    with wait_message("Downloading patches.."):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {}
+            for rev in revs:
+                diff = diffs[rev["fields"]["diffPHID"]]
+                futures[rev["id"]] = executor.submit(
+                    conduit.call,
+                    "differential.getrawdiff",
+                    {"diffID": diff["id"]},
+                )
+            try:
+                for rev_id_key, future in futures.items():
+                    raw_diffs[rev_id_key] = future.result()
+            except Exception:
+                executor.shutdown(wait=False, cancel_futures=True)
+                raise
+
     for rev in revs:
         # Prepare the body using just the data from Phabricator
         body = prepare_body(
@@ -282,8 +320,7 @@ def patch(repo: Repository, args: argparse.Namespace):
             repo.phab_url,
         )
         diff = diffs[rev["fields"]["diffPHID"]]
-        with wait_message("Downloading D%s.." % rev["id"]):
-            raw = conduit.call("differential.getrawdiff", {"diffID": diff["id"]})
+        raw = raw_diffs[rev["id"]]
 
         if args.no_commit or not config.create_commit:
             with wait_message("Applying D%s.." % rev["id"]):

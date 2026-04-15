@@ -406,12 +406,20 @@ def test_patch(
 
     # ########## multiple revisions
     m_print.reset_mock()
+    m_get_revisions.reset_mock()
     m_get_revisions.side_effect = ([REV_1], [REV_2])
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1, "DIFFPHID-2": DIFF_2}
     m_get_ancestor_phids.return_value = ["PHID-2"]
-    m_call_conduit.side_effect = ("raw2", "raw1")
+    # Use a function-based side_effect so parallel downloads get deterministic
+    # results regardless of thread execution order.
+    m_call_conduit.side_effect = lambda m, a: "raw%s" % a["diffID"]
     # --raw 2 revisions in stack
     patch.patch(git, git.args)
+    # Verify ancestors are fetched via a single batched get_revisions call.
+    assert m_get_revisions.call_args_list == [
+        mock.call(ids=[123]),
+        mock.call(phids=["PHID-2"]),
+    ]
     m_print.assert_has_calls((mock.call("raw2"), mock.call("raw1")))
 
     # node not found
@@ -427,7 +435,7 @@ def test_patch(
     m_get_revisions.side_effect = ([REV_1], [REV_2])
     m_get_successor_phids.side_effect = (["PHID-2"], ["PHID-2"], [])
     m_get_ancestor_phids.return_value = []
-    m_call_conduit.side_effect = ("raw2", "raw1")
+    m_call_conduit.side_effect = lambda m, a: "raw%s" % a["diffID"]
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1, "DIFFPHID-2": DIFF_2}
     git.args = Args(revision_id=1, raw=True, yes=True)
     patch.patch(git, git.args)
@@ -445,6 +453,28 @@ def test_patch(
     patch.patch(git, git.args)
     m_get_revisions.assert_called_once_with(ids=[1])
 
+    # ########## ancestors and children batched in single get_revisions call
+    m_print.reset_mock()
+    m_get_revisions.reset_mock()
+    m_get_revisions.side_effect = ([REV_1], [REV_2, REV_3])
+    m_get_successor_phids.side_effect = None
+    m_get_successor_phids.return_value = ["PHID-3"]
+    m_get_ancestor_phids.return_value = ["PHID-2"]
+    m_call_conduit.side_effect = lambda m, a: "raw%s" % a["diffID"]
+    m_get_diffs.return_value = {
+        "DIFFPHID-1": DIFF_1,
+        "DIFFPHID-2": DIFF_2,
+        "DIFFPHID-3": DIFF_3,
+    }
+    git.args = Args(revision_id=1, raw=True, yes=True)
+    patch.patch(git, git.args)
+    # Verify ancestors and children are fetched in a single batched call.
+    assert m_get_revisions.call_args_list == [
+        mock.call(ids=[1]),
+        mock.call(phids=["PHID-2", "PHID-3"]),
+    ]
+    m_print.assert_has_calls((mock.call("raw2"), mock.call("raw1"), mock.call("raw3")))
+
 
 REV_1 = {
     "phid": "PHID-1",
@@ -456,6 +486,12 @@ REV_2 = {
     "phid": "PHID-2",
     "id": 2,
     "fields": {"diffPHID": "DIFFPHID-2", "title": "title", "summary": "summary"},
+}
+
+REV_3 = {
+    "phid": "PHID-3",
+    "id": 3,
+    "fields": {"diffPHID": "DIFFPHID-3", "title": "title", "summary": "summary"},
 }
 
 DIFF_1 = {

@@ -350,9 +350,12 @@ class ConduitAPI:
         )
 
     def get_related_phids(
-        self, base_phid: str, relation: str = "parent", include_abandoned: bool = False
+        self,
+        base_phid: str,
+        relation: str = "parent",
+        include_abandoned: bool = False,
     ) -> List[str]:
-        """Returns the list of PHIDs with direct dependency"""
+        """Returns the list of PHIDs with direct dependency."""
         result = []
 
         def _get_related(phid):
@@ -362,8 +365,9 @@ class ConduitAPI:
                 if len(edge["data"]) > 1:
                     raise NonLinearException()
 
-                result.append(edge["data"][0]["destinationPHID"])
-                _get_related(result[-1])
+                dest_phid = edge["data"][0]["destinationPHID"]
+                result.append(dest_phid)
+                _get_related(dest_phid)
 
         _get_related(base_phid)
 
