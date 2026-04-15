@@ -449,3 +449,8 @@ def fixture_reset_glean():
 def mock_load_api_token(monkeypatch, request):
     if "no_mock_token" not in request.keywords:
         monkeypatch.setattr("mozphab.conduit.ConduitAPI.load_api_token", mock.MagicMock)
+
+
+def with_stack_graph(rev, stack_graph):
+    """Return a copy of the revision dict with stackGraph added to fields."""
+    return {**rev, "fields": {**rev["fields"], "stackGraph": stack_graph}}

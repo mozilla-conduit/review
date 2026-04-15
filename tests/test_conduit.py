@@ -397,37 +397,6 @@ def test_get_diffs_search_by_diffids_missing(get_diffs, m_call):
     assert not diff_dict.get("PHID-4"), "Should not return dict of non-existent diff"
 
 
-@mock.patch("mozphab.conduit.ConduitAPI.call")
-def test_get_related_phids(m_call):
-    get_related_phids = mozphab.conduit.get_related_phids
-
-    m_call.return_value = {}
-    assert [] == get_related_phids("aaa", include_abandoned=True)
-    m_call.assert_called_once_with(
-        "edge.search", {"sourcePHIDs": ["aaa"], "types": ["revision.parent"]}
-    )
-
-    m_call.side_effect = [
-        {"data": [{"destinationPHID": "bbb"}]},
-        {"data": [{"destinationPHID": "aaa"}]},
-        {},
-    ]
-    assert ["bbb", "aaa"] == get_related_phids("ccc", include_abandoned=True)
-
-    m_call.side_effect = [
-        {"data": [{"destinationPHID": "bbb"}]},
-        {"data": [{"destinationPHID": "aaa"}]},
-        {},
-        {
-            "data": [
-                {"id": 1, "phid": "aaa", "fields": {"status": {"value": "-"}}},
-                {"id": 2, "phid": "bbb", "fields": {"status": {"value": "abandoned"}}},
-            ]
-        },
-    ]
-    assert ["aaa"] == get_related_phids("ccc", include_abandoned=False)
-
-
 def test_has_revision_reviewers(m_call):
     commit = Commit(rev_id=None)
     assert not conduit.has_revision_reviewers(commit)

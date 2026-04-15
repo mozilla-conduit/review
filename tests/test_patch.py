@@ -12,6 +12,8 @@ from mozphab import exceptions, helpers, mozphab
 from mozphab.commands import patch
 from mozphab.config import Config
 
+from .conftest import with_stack_graph
+
 
 def test_resolve_branch_name():
     class Args:
@@ -103,6 +105,51 @@ def test_update_revision_with_new_diff():
         patch.update_revision_with_new_diff(revs, DIFF_4)
 
 
+def test_get_ancestors_from_stack_graph():
+    get_ancestors = patch._get_ancestors_from_stack_graph
+
+    # No parents — empty result.
+    assert get_ancestors({"PHID-1": []}, "PHID-1") == []
+
+    # Linear chain: PHID-3 -> PHID-2 -> PHID-1 (root).
+    stack = {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-2"]}
+    assert get_ancestors(stack, "PHID-3") == ["PHID-2", "PHID-1"]
+
+    # Target in the middle of a chain.
+    assert get_ancestors(stack, "PHID-2") == ["PHID-1"]
+
+    # Non-linear: a revision with two parents raises NonLinearException.
+    stack = {"PHID-1": [], "PHID-2": [], "PHID-3": ["PHID-1", "PHID-2"]}
+    with pytest.raises(exceptions.NonLinearException):
+        get_ancestors(stack, "PHID-3")
+
+    # Target PHID not in graph — empty result.
+    assert get_ancestors({}, "PHID-UNKNOWN") == []
+
+
+def test_get_children_from_stack_graph():
+    get_children = patch._get_children_from_stack_graph
+
+    # No children — empty result.
+    assert get_children({"PHID-1": []}, "PHID-1") == []
+
+    # Linear chain: PHID-1 (root) -> PHID-2 -> PHID-3.
+    stack = {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-2"]}
+    assert get_children(stack, "PHID-1") == ["PHID-2", "PHID-3"]
+
+    # Target in the middle.
+    assert get_children(stack, "PHID-2") == ["PHID-3"]
+
+    # Non-linear: two children of the same parent raises NonLinearException.
+    stack = {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-1"]}
+    with pytest.raises(exceptions.NonLinearException):
+        get_children(stack, "PHID-1")
+
+    # Leaf node — empty result.
+    stack = {"PHID-1": [], "PHID-2": ["PHID-1"]}
+    assert get_children(stack, "PHID-2") == []
+
+
 def test_strip_depends_on():
     strip = helpers.strip_depends_on
 
@@ -156,8 +203,6 @@ def test_base_ref():
 @mock.patch("mozphab.commands.patch.config")
 @mock.patch("mozphab.conduit.ConduitAPI.check")
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
-@mock.patch("mozphab.conduit.ConduitAPI.get_ancestor_phids")
-@mock.patch("mozphab.conduit.ConduitAPI.get_successor_phids")
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
 @mock.patch("mozphab.commands.patch.get_base_ref")
 @mock.patch("mozphab.git.Git.before_patch")
@@ -175,8 +220,6 @@ def test_patch(
     m_git_before_patch,
     m_get_base_ref,
     m_get_diffs,
-    m_get_successor_phids,
-    m_get_ancestor_phids,
     m_get_revisions,
     m_git_check_conduit,
     m_config,
@@ -229,8 +272,6 @@ def test_patch(
         patch.patch(git, git.args)
 
     m_config.always_full_stack = False
-    m_get_successor_phids.return_value = []
-    m_get_ancestor_phids.return_value = []
     m_get_base_ref.return_value = "sha111"
     m_call_conduit.return_value = "raw"  # differential.getrawdiff
     m_get_revisions.return_value = [
@@ -241,6 +282,8 @@ def test_patch(
                 "diffPHID": "DIFFPHID-1",
                 "title": "title",
                 "summary": "summary",
+                "stackGraph": {"PHID-1": []},
+                "status": {"value": "needs-review"},
             },
         }
     ]
@@ -316,10 +359,11 @@ def test_patch(
     m_print.assert_called_with("raw")
 
     # skip-dependencies
+    m_get_revisions.reset_mock()
     git.args = Args(raw=True, skip_dependencies=True)
-    m_get_successor_phids.reset_mock()
     patch.patch(git, git.args)
-    m_get_successor_phids.assert_not_called()
+    # Only the initial revision fetch should happen, no related revisions.
+    m_get_revisions.assert_called_once()
 
     m_git_before_patch.reset_mock()
     # --no_commit
@@ -407,9 +451,10 @@ def test_patch(
     # ########## multiple revisions
     m_print.reset_mock()
     m_get_revisions.reset_mock()
-    m_get_revisions.side_effect = ([REV_1], [REV_2])
+    # REV_2 is parent of REV_1
+    rev1 = with_stack_graph(REV_1, {"PHID-1": ["PHID-2"], "PHID-2": []})
+    m_get_revisions.side_effect = ([rev1], [REV_2])
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1, "DIFFPHID-2": DIFF_2}
-    m_get_ancestor_phids.return_value = ["PHID-2"]
     # Use a function-based side_effect so parallel downloads get deterministic
     # results regardless of thread execution order.
     m_call_conduit.side_effect = lambda m, a: "raw%s" % a["diffID"]
@@ -432,9 +477,9 @@ def test_patch(
 
     # successors
     m_get_revisions.reset_mock()
-    m_get_revisions.side_effect = ([REV_1], [REV_2])
-    m_get_successor_phids.side_effect = (["PHID-2"], ["PHID-2"], [])
-    m_get_ancestor_phids.return_value = []
+    # PHID-2 is a child of PHID-1
+    rev1 = with_stack_graph(REV_1, {"PHID-1": [], "PHID-2": ["PHID-1"]})
+    m_get_revisions.side_effect = ([rev1], [REV_2])
     m_call_conduit.side_effect = lambda m, a: "raw%s" % a["diffID"]
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1, "DIFFPHID-2": DIFF_2}
     git.args = Args(revision_id=1, raw=True, yes=True)
@@ -444,10 +489,13 @@ def test_patch(
         mock.call(phids=["PHID-2"]),
     ]
 
-    # multiple successors
+    # multiple successors (non-linear: PHID-2 and PHID-3 are both children of PHID-1)
     m_get_revisions.reset_mock()
-    m_get_revisions.side_effect = ([REV_1], [REV_2])
-    m_get_successor_phids.side_effect = (exceptions.NonLinearException,)
+    rev1 = with_stack_graph(
+        REV_1,
+        {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-1"]},
+    )
+    m_get_revisions.side_effect = ([rev1],)
     m_call_conduit.side_effect = ("raw",)
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
     patch.patch(git, git.args)
@@ -456,10 +504,12 @@ def test_patch(
     # ########## ancestors and children batched in single get_revisions call
     m_print.reset_mock()
     m_get_revisions.reset_mock()
-    m_get_revisions.side_effect = ([REV_1], [REV_2, REV_3])
-    m_get_successor_phids.side_effect = None
-    m_get_successor_phids.return_value = ["PHID-3"]
-    m_get_ancestor_phids.return_value = ["PHID-2"]
+    # Stack: PHID-2 (root) -> PHID-1 (target) -> PHID-3 (child)
+    rev1 = with_stack_graph(
+        REV_1,
+        {"PHID-2": [], "PHID-1": ["PHID-2"], "PHID-3": ["PHID-1"]},
+    )
+    m_get_revisions.side_effect = ([rev1], [REV_2, REV_3])
     m_call_conduit.side_effect = lambda m, a: "raw%s" % a["diffID"]
     m_get_diffs.return_value = {
         "DIFFPHID-1": DIFF_1,
@@ -479,19 +529,34 @@ def test_patch(
 REV_1 = {
     "phid": "PHID-1",
     "id": 1,
-    "fields": {"diffPHID": "DIFFPHID-1", "title": "title", "summary": "summary"},
+    "fields": {
+        "diffPHID": "DIFFPHID-1",
+        "title": "title",
+        "summary": "summary",
+        "status": {"value": "needs-review"},
+    },
 }
 
 REV_2 = {
     "phid": "PHID-2",
     "id": 2,
-    "fields": {"diffPHID": "DIFFPHID-2", "title": "title", "summary": "summary"},
+    "fields": {
+        "diffPHID": "DIFFPHID-2",
+        "title": "title",
+        "summary": "summary",
+        "status": {"value": "needs-review"},
+    },
 }
 
 REV_3 = {
     "phid": "PHID-3",
     "id": 3,
-    "fields": {"diffPHID": "DIFFPHID-3", "title": "title", "summary": "summary"},
+    "fields": {
+        "diffPHID": "DIFFPHID-3",
+        "title": "title",
+        "summary": "summary",
+        "status": {"value": "needs-review"},
+    },
 }
 
 DIFF_1 = {

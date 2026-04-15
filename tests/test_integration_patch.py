@@ -8,19 +8,15 @@ from unittest import mock
 
 from mozphab import mozphab
 
-from .conftest import git_out, hg_out
+from .conftest import git_out, hg_out, with_stack_graph
 
 
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
 @mock.patch("mozphab.conduit.ConduitAPI.call")
-@mock.patch("mozphab.conduit.ConduitAPI.get_successor_phids")
-@mock.patch("mozphab.conduit.ConduitAPI.get_ancestor_phids")
 @mock.patch("builtins.print")
 def test_patch_raw(
     m_print,
-    m_ancestor_phids,
-    m_get_successor_phids,
     m_call_conduit,
     m_get_diffs,
     m_get_revs,
@@ -30,12 +26,9 @@ def test_patch_raw(
 ):
     def init(path):
         os.chdir(path)
-        m_get_successor_phids.return_value = []
         m_get_revs.return_value = [REV_1]
-        m_ancestor_phids.return_value = []
         m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
         m_get_revs.side_effect = None
-        m_ancestor_phids.side_effect = None
         m_call_conduit.side_effect = None
 
     # `patch --raw` generates different output for hg vs git
@@ -59,8 +52,11 @@ def test_patch_raw(
     assert m_print.call_args_list == [mock.call(BIN_PATCH_DIFF)]
 
     m_print.reset_mock()
-    m_get_revs.side_effect = ([REV_2], [REV_1])
-    m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
+    # Stack: REV_1 (root) -> REV_2 (child). Target is D2.
+    rev2_with_graph = with_stack_graph(
+        REV_2, {"PHID-REV-2": ["PHID-REV-1"], "PHID-REV-1": []}
+    )
+    m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
     m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
     mozphab.main(["patch", "D2", "--raw"], is_development=True)
@@ -85,8 +81,10 @@ def test_patch_raw(
     assert m_print.call_args_list == [mock.call(BIN_PATCH_META + BIN_PATCH_DIFF)]
 
     m_print.reset_mock()
-    m_get_revs.side_effect = ([REV_2], [REV_1])
-    m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
+    rev2_with_graph = with_stack_graph(
+        REV_2, {"PHID-REV-2": ["PHID-REV-1"], "PHID-REV-1": []}
+    )
+    m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
     m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
     mozphab.main(["patch", "D2", "--raw"], is_development=True)
@@ -99,20 +97,14 @@ def test_patch_raw(
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
 @mock.patch("mozphab.conduit.ConduitAPI.call")
-@mock.patch("mozphab.conduit.ConduitAPI.get_successor_phids")
-@mock.patch("mozphab.conduit.ConduitAPI.get_ancestor_phids")
 def test_patch_no_commit(
-    m_ancestor_phids,
-    m_get_successor_phids,
     m_call_conduit,
     m_get_diffs,
     m_get_revs,
     in_process,
     hg_repo_path,
 ):
-    m_get_successor_phids.return_value = []
     m_get_revs.return_value = [REV_1]
-    m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
     m_call_conduit.side_effect = [
         {},
@@ -134,8 +126,10 @@ def test_patch_no_commit(
     test_file = hg_repo_path / "sample.bin"
     test_file.unlink()
 
-    m_get_revs.side_effect = ([REV_2], [REV_1])
-    m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
+    rev2_with_graph = with_stack_graph(
+        REV_2, {"PHID-REV-2": ["PHID-REV-1"], "PHID-REV-1": []}
+    )
+    m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
     m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
     mozphab.main(["patch", "D2", "--no-commit"], is_development=True)
@@ -148,23 +142,17 @@ def test_patch_no_commit(
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
 @mock.patch("mozphab.conduit.ConduitAPI.call")
-@mock.patch("mozphab.conduit.ConduitAPI.get_successor_phids")
-@mock.patch("mozphab.conduit.ConduitAPI.get_ancestor_phids")
 def test_git_patch_with_commit(
-    m_ancestor_phids,
-    m_get_successor_phids,
     m_call_conduit,
     m_get_diffs,
     m_get_revs,
     in_process,
     git_repo_path,
 ):
-    m_get_successor_phids.return_value = []
     sha = git_out("rev-parse", "HEAD").rstrip("\n")
     diff_1 = copy.deepcopy(DIFF_1)
     diff_1["fields"]["refs"][0]["identifier"] = sha
     m_get_revs.return_value = [REV_1]
-    m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": diff_1}
     m_call_conduit.side_effect = [
         {},
@@ -217,8 +205,10 @@ def test_git_patch_with_commit(
     assert "  phab-D1" in result
 
     time.sleep(1)
-    m_get_revs.side_effect = ([REV_2], [REV_1])
-    m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
+    rev2_with_graph = with_stack_graph(
+        REV_2, {"PHID-REV-2": ["PHID-REV-1"], "PHID-REV-1": []}
+    )
+    m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
     m_get_diffs.return_value = {"PHID-DIFF-1": diff_1, "PHID-DIFF-2": DIFF_2}
     m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
     mozphab.main(["patch", "D2"], is_development=True)
@@ -253,20 +243,14 @@ def test_git_patch_with_commit(
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
 @mock.patch("mozphab.conduit.ConduitAPI.call")
-@mock.patch("mozphab.conduit.ConduitAPI.get_successor_phids")
-@mock.patch("mozphab.conduit.ConduitAPI.get_ancestor_phids")
 def test_hg_patch_with_commit(
-    m_ancestor_phids,
-    m_get_successor_phids,
     m_call_conduit,
     m_get_diffs,
     m_get_revs,
     in_process,
     hg_repo_path,
 ):
-    m_get_successor_phids.return_value = []
     m_get_revs.return_value = [REV_1]
-    m_ancestor_phids.return_value = []
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
     m_call_conduit.side_effect = [
         {},
@@ -298,8 +282,10 @@ def test_hg_patch_with_commit(
 
     testfile = hg_repo_path / "unknown"
     testfile.write_text("not added to repository")
-    m_get_revs.side_effect = ([REV_2], [REV_1])
-    m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
+    rev2_with_graph = with_stack_graph(
+        REV_2, {"PHID-REV-2": ["PHID-REV-1"], "PHID-REV-1": []}
+    )
+    m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
     m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
     mozphab.main(["patch", "D2"], is_development=True)
@@ -320,8 +306,10 @@ def test_hg_patch_with_commit(
     assert "|/   bookmark:    phab-D1" in result
 
     # Same, but this time request a specific bookmark name.
-    m_get_revs.side_effect = ([REV_2], [REV_1])
-    m_ancestor_phids.side_effect = [["PHID-REV-1"], []]
+    rev2_with_graph = with_stack_graph(
+        REV_2, {"PHID-REV-2": ["PHID-REV-1"], "PHID-REV-1": []}
+    )
+    m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
     m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
     mozphab.main(["patch", "--name=myfeature", "D2"], is_development=True)
@@ -340,19 +328,37 @@ def test_hg_patch_with_commit(
 REV_1 = {
     "id": 1,
     "phid": "PHID-REV-1",
-    "fields": {"title": "title R1", "summary": "\u0105", "diffPHID": "PHID-DIFF-1"},
+    "fields": {
+        "title": "title R1",
+        "summary": "\u0105",
+        "diffPHID": "PHID-DIFF-1",
+        "stackGraph": {"PHID-REV-1": []},
+        "status": {"value": "needs-review"},
+    },
 }
 
 REV_2 = {
     "id": 2,
     "phid": "PHID-REV-2",
-    "fields": {"title": "title R2", "summary": "\u0105", "diffPHID": "PHID-DIFF-2"},
+    "fields": {
+        "title": "title R2",
+        "summary": "\u0105",
+        "diffPHID": "PHID-DIFF-2",
+        "stackGraph": {"PHID-REV-2": []},
+        "status": {"value": "needs-review"},
+    },
 }
 
 REV_BIN = {
     "id": 3,
     "phid": "PHID-REV-3",
-    "fields": {"title": "title BIN", "summary": "\u0105", "diffPHID": "PHID-DIFF-3"},
+    "fields": {
+        "title": "title BIN",
+        "summary": "\u0105",
+        "diffPHID": "PHID-DIFF-3",
+        "stackGraph": {"PHID-REV-3": []},
+        "status": {"value": "needs-review"},
+    },
 }
 ATTACHMENTS = {
     "commits": {

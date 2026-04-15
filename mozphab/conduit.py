@@ -24,7 +24,6 @@ from .environment import INSTALL_CERT_MSG, USER_AGENT
 from .exceptions import (
     CommandError,
     Error,
-    NonLinearException,
     NotFoundError,
 )
 from .helpers import (
@@ -334,52 +333,6 @@ class ConduitAPI:
             diff_dict[diff["phid"]] = diff
 
         return diff_dict
-
-    def get_successor_phids(
-        self, phid: str, include_abandoned: bool = False
-    ) -> List[str]:
-        return self.get_related_phids(
-            phid, relation="child", include_abandoned=include_abandoned
-        )
-
-    def get_ancestor_phids(
-        self, phid: str, include_abandoned: bool = False
-    ) -> List[str]:
-        return self.get_related_phids(
-            phid, relation="parent", include_abandoned=include_abandoned
-        )
-
-    def get_related_phids(
-        self,
-        base_phid: str,
-        relation: str = "parent",
-        include_abandoned: bool = False,
-    ) -> List[str]:
-        """Returns the list of PHIDs with direct dependency."""
-        result = []
-
-        def _get_related(phid):
-            api_call_args = {"sourcePHIDs": [phid], "types": ["revision.%s" % relation]}
-            edge = self.call("edge.search", api_call_args)
-            if edge.get("data"):
-                if len(edge["data"]) > 1:
-                    raise NonLinearException()
-
-                dest_phid = edge["data"][0]["destinationPHID"]
-                result.append(dest_phid)
-                _get_related(dest_phid)
-
-        _get_related(base_phid)
-
-        if not result or include_abandoned:
-            return result
-
-        revisions = self.get_revisions(phids=result)
-        return [
-            r["phid"]
-            for r in revisions
-            if r["fields"]["status"]["value"] != "abandoned"
-        ]
 
     def get_users(self, usernames: List[str]) -> List[dict]:
         """Get users using the user.query API.
