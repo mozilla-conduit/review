@@ -273,10 +273,8 @@ def patch(repo: Repository, args: argparse.Namespace):
 
         # Fetch all related revisions to get metadata and filter out
         # abandoned or inaccessible ones.
-        ancestor_phids, children_phids, related_by_phid = (
-            _fetch_and_filter_related(
-                ancestor_phids, children_phids, args.include_abandoned
-            )
+        ancestor_phids, children_phids, related_by_phid = _fetch_and_filter_related(
+            ancestor_phids, children_phids, args.include_abandoned
         )
 
         patch_children = True
@@ -286,9 +284,7 @@ def patch(repo: Repository, args: argparse.Namespace):
 
             else:
                 children_msg = (
-                    "a child commit"
-                    if len(children_phids) == 1
-                    else "child commits"
+                    "a child commit" if len(children_phids) == 1 else "child commits"
                 )
                 res = prompt(
                     "Revision D%s has %s.  Would you like to patch the "
