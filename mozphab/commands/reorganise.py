@@ -493,9 +493,20 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
     try:
         # Validate the `stackGraph` field from our remote revisions.
         phabstack = convert_stackgraph_to_linear(stack_graph, phid_to_id)
-    except Error:
-        logger.error("Remote stack is not linear.")
-        raise
+    except Error as e:
+        if args.force:
+            # Lingering links from abandoned revisions can leave a predecessor
+            # with multiple successors, which convert_stackgraph_to_linear
+            # rejects. force_stack_transactions only needs the set of remote
+            # PHIDs (not their order), so fall back to the raw graph keys.
+            logger.warning(
+                "Remote stack has nonlinear links (%s); continuing in force mode.",
+                e,
+            )
+            phabstack = None
+        else:
+            logger.error("Remote stack is not linear.")
+            raise
 
     if phabstack:
         try:
@@ -517,6 +528,8 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
                     )
                 )
                 raise
+    elif phabstack is None and stack_graph:
+        phabstack_phids = list(stack_graph.keys())
     else:
         phabstack_phids = []
 

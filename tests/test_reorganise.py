@@ -847,6 +847,139 @@ def test_force_mode_ignores_remote_stack_errors(
     )
 
 
+@mock.patch("mozphab.commands.reorganise.force_stack_transactions")
+@mock.patch("mozphab.commands.reorganise.convert_stackgraph_to_linear")
+@mock.patch("mozphab.conduit.ConduitAPI.ids_to_phids")
+@mock.patch("mozphab.conduit.ConduitAPI.phids_to_ids")
+@mock.patch("mozphab.conduit.ConduitAPI.apply_transactions_to_revision")
+@mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
+@mock.patch("mozphab.conduit.ConduitAPI.check")
+def test_force_mode_tolerates_nonlinear_stackgraph(
+    _check,
+    _augment,
+    _apply_transactions,
+    _phid2id,
+    m_id2phid,
+    m_convert_stackgraph_to_linear,
+    m_force_trans,
+    git,
+    caplog: pytest.LogCaptureFixture,
+):
+    """convert_stackgraph_to_linear raising Error must not abort --force.
+
+    Abandoned revisions often leave a predecessor with multiple successors
+    in Phabricator's stackGraph. The linearizer rejects that shape; force
+    mode should log a warning and feed force_stack_transactions the raw
+    set of PHIDs so it can still unlink and relink the stack.
+    """
+
+    class Args:
+        yes = True
+        force = True
+        no_abandon = False
+        no_abandon_unconnected = False
+        no_hyperlinks = False
+        verbose = False
+
+    caplog.set_level(logging.WARNING, logger="moz-phab")
+
+    # Two local commits whose fake stackGraph claims the predecessor "A"
+    # has two children ("B" from the live stack, "Z" from an abandoned
+    # revision) -- the exact shape that convert_stackgraph_to_linear
+    # rejects.
+    commits = [Commit(rev_id=1, name="c1"), Commit(rev_id=2, name="c2")]
+    m_id2phid.return_value = ["A", "B"]
+    m_convert_stackgraph_to_linear.side_effect = exceptions.Error(
+        "Revision D99 has multiple children."
+    )
+    m_force_trans.return_value = {"A": [{"type": "children.set", "value": []}]}
+
+    mozphab.conduit.set_repo(git)
+    mozphab.conduit.repo.commit_stack = mock.Mock(return_value=commits)
+
+    with mock.patch("mozphab.conduit.ConduitAPI.get_revisions") as m_get_revs:
+        # First call: preload the local stack. Revisions carry a
+        # stackGraph whose shape will be rejected by the linearizer.
+        # Second call: fetch missing-from-local PHIDs.
+        m_get_revs.side_effect = [
+            [
+                {
+                    "id": 1,
+                    "phid": "A",
+                    "fields": {"stackGraph": {"A": [], "B": ["A"], "Z": ["A"]}},
+                },
+                {
+                    "id": 2,
+                    "phid": "B",
+                    "fields": {"stackGraph": {"A": [], "B": ["A"], "Z": ["A"]}},
+                },
+            ],
+            [
+                {"phid": "A", "id": 1, "fields": {"status": {"value": "needs-review"}}},
+                {"phid": "B", "id": 2, "fields": {"status": {"value": "needs-review"}}},
+                {"phid": "Z", "id": 99, "fields": {"status": {"value": "abandoned"}}},
+            ],
+        ]
+
+        # Must not raise.
+        reorganise.reorganise(git, Args())
+
+    # The warning for the linearizer fallback should have fired. The raw
+    # stack_graph keys ({"A", "B", "Z"}) should have been passed as
+    # remote_phids to force_stack_transactions.
+    assert Contains("nonlinear links") in caplog.messages
+    assert m_force_trans.call_count == 1
+    remote_phids = m_force_trans.call_args[0][0]
+    assert set(remote_phids) == {"A", "B", "Z"}
+
+
+@mock.patch("mozphab.commands.reorganise.convert_stackgraph_to_linear")
+@mock.patch("mozphab.conduit.ConduitAPI.ids_to_phids")
+@mock.patch("mozphab.conduit.ConduitAPI.phids_to_ids")
+@mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
+@mock.patch("mozphab.conduit.ConduitAPI.check")
+def test_non_force_mode_rejects_nonlinear_stackgraph(
+    _check,
+    _augment,
+    _phid2id,
+    _id2phid,
+    m_convert_stackgraph_to_linear,
+    git,
+    caplog: pytest.LogCaptureFixture,
+):
+    """Without --force, a nonlinear stackGraph must still surface as an error."""
+
+    class Args:
+        yes = True
+        force = False
+        no_abandon = False
+        no_abandon_unconnected = False
+        no_hyperlinks = False
+        verbose = False
+
+    caplog.set_level(logging.ERROR, logger="moz-phab")
+
+    m_convert_stackgraph_to_linear.side_effect = exceptions.Error(
+        "Revision D99 has multiple children."
+    )
+
+    mozphab.conduit.set_repo(git)
+    mozphab.conduit.repo.commit_stack = mock.Mock(
+        return_value=[Commit(rev_id=1, name="c1")]
+    )
+
+    with (
+        mock.patch("mozphab.conduit.ConduitAPI.get_revisions") as m_get_revs,
+        pytest.raises(exceptions.Error, match="multiple children"),
+    ):
+        m_get_revs.return_value = [
+            {"id": 1, "phid": "A", "fields": {"stackGraph": {"A": []}}}
+        ]
+        reorganise.reorganise(git, Args())
+
+    assert "Remote stack is not linear." in caplog.messages
+
+
 class TestReorganiseParser:
     """Test the argument parser setup for reorganise command."""
 
