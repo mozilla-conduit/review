@@ -229,12 +229,6 @@ def test_patch(
 ):
     mozphab.conduit.set_repo(git)
 
-    m_git_check_conduit.return_value = False
-    m_config.arc_command = "arc"
-    m_config.branch_name_template = "phab-D{rev_id}"
-    with pytest.raises(exceptions.Error):
-        patch.patch(git, None)
-
     class Args:
         def __init__(
             self,
@@ -261,6 +255,12 @@ def test_patch(
             self.diff_id = diff_id
 
     git.args = Args()
+    m_git_check_conduit.return_value = False
+    m_config.arc_command = "arc"
+    m_config.branch_name_template = "phab-D{rev_id}"
+    with pytest.raises(exceptions.Error):
+        patch.patch(git, git.args)
+
     m_git_check_conduit.return_value = True
     m_git_is_worktree_clean.return_value = False
     with pytest.raises(exceptions.Error):
