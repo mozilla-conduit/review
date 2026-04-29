@@ -96,11 +96,17 @@ class Commits(unittest.TestCase):
         with self.assertRaisesRegex(exceptions.Error, expected):
             callableObj(*args, **kwargs)
 
+    @mock.patch("mozphab.conduit.ConduitAPI.get_groups")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_users")
     @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
     @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
-    def test_commit_stack_validation_errors(self, m_revs, check_reviewers):
+    def test_commit_stack_validation_errors(
+        self, m_revs, check_reviewers, m_get_users, m_get_groups
+    ):
         check_reviewers.return_value = []
         m_revs.return_value = []
+        m_get_users.return_value = []
+        m_get_groups.return_value = []
 
         _, errors = submit.validate_commit_stack([commit("1", (["r"], []))], Args())
         self.assertEqual(errors, {})
@@ -155,13 +161,18 @@ class Commits(unittest.TestCase):
             [[Contains("didn't return a query result for revision D1")]],
         )
 
+    @mock.patch("mozphab.conduit.ConduitAPI.get_groups")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_users")
     @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
     @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
     @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
     @mock.patch("mozphab.conduit.ConduitAPI.whoami")
     def test_invalid_reviewers_fails_the_stack_validation_check(
-        self, m_whoami, m_diffs, m_revs, check_reviewers
+        self, m_whoami, m_diffs, m_revs, check_reviewers, m_get_users, m_get_groups
     ):
+        m_get_users.return_value = []
+        m_get_groups.return_value = []
+
         def fail_gonzo(reviewers):
             # Replace the check_for_invalid_reviewers() function with something that
             # fails for certain reviewers.
@@ -230,14 +241,18 @@ class Commits(unittest.TestCase):
         )
         self.assertEqual(errors, {})
 
+    @mock.patch("mozphab.conduit.ConduitAPI.get_groups")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_users")
     @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
     @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
     @mock.patch("mozphab.conduit.ConduitAPI.whoami")
     @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
     def test_validate_duplicate_revision(
-        self, check_reviewers, m_whoami, m_diffs, m_revs
+        self, check_reviewers, m_whoami, m_diffs, m_revs, m_get_users, m_get_groups
     ):
         check_reviewers.return_value = []
+        m_get_users.return_value = []
+        m_get_groups.return_value = []
         m_revs.return_value = [
             search_rev(rev=1),
             search_rev(rev=2),
@@ -294,6 +309,38 @@ class Commits(unittest.TestCase):
                 "d": [Contains("commit b refers to the same one D2")],
             },
         )
+
+    @mock.patch("mozphab.conduit.ConduitAPI.get_groups")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_users")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+    @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
+    def test_reviewer_lookups_batched_across_commits(
+        self, m_check_reviewers, m_revs, m_get_users, m_get_groups
+    ):
+        """All commit reviewers are preloaded with a single get_users /
+        get_groups call, rather than one per commit."""
+        m_check_reviewers.return_value = []
+        m_revs.return_value = []
+        m_get_users.return_value = []
+        m_get_groups.return_value = []
+
+        submit.validate_commit_stack(
+            [
+                commit("1", (["alice", "bob"], [])),
+                commit("2", (["bob", "#release-managers"], [])),
+                commit("3", (["charlie", "#release-managers!"], [])),
+            ],
+            Args(),
+        )
+
+        # Single batch call for users; deduped across commits.
+        self.assertEqual(m_get_users.call_count, 1)
+        self.assertEqual(
+            sorted(m_get_users.call_args.args[0]), ["alice", "bob", "charlie"]
+        )
+        # Single batch call for groups; deduped across commits.
+        self.assertEqual(m_get_groups.call_count, 1)
+        self.assertEqual(sorted(m_get_groups.call_args.args[0]), ["#release-managers"])
 
     def test_commit_preview(self):
         build = helpers.build_commit_title
@@ -610,13 +657,24 @@ class Commits(unittest.TestCase):
             ],
         )
 
+    @mock.patch("mozphab.conduit.ConduitAPI.get_groups")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_users")
     @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
     @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
     @mock.patch("mozphab.conduit.ConduitAPI.whoami")
     @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
     def test_validate_commit_stack(
-        self, m_check_reviewers, m_whoami, m_get_diffs, m_get_revisions
+        self,
+        m_check_reviewers,
+        m_whoami,
+        m_get_diffs,
+        m_get_revisions,
+        m_get_users,
+        m_get_groups,
     ):
+        m_get_users.return_value = []
+        m_get_groups.return_value = []
+
         def _commit(
             node=None,
             title="A",
