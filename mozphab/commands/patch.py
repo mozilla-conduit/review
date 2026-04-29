@@ -220,26 +220,32 @@ def patch(repo: Repository, args: argparse.Namespace):
     * Error if base commit not found in repository
     * Error if `--diff-id` does not belong to any revision in the stack
     """
-    # Check if raw Conduit API can be used
-    with wait_message("Checking connection to Phabricator."):
-        # Check if raw Conduit API can be used
-        if not conduit.check():
-            raise Error("Failed to use Conduit API")
+    # The Phabricator ping, the VCS check, and the worktree-cleanness check
+    # are independent: run them concurrently when all three are needed.
+    # In --raw mode only the ping runs, so skip the pool overhead.
+    if args.raw:
+        with wait_message("Checking connection to Phabricator."):
+            if not conduit.check():
+                raise Error("Failed to use Conduit API")
+    else:
+        with wait_message("Checking environment.."):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                ping_future = executor.submit(conduit.check)
+                vcs_future = executor.submit(repo.check_vcs)
+                clean_future = executor.submit(repo.is_worktree_clean)
 
-    if not args.raw:
-        # Check if local and remote VCS matches
-        with wait_message("Checking VCS"):
-            repo.check_vcs()
+                if not ping_future.result():
+                    raise Error("Failed to use Conduit API")
 
-        # Look for any uncommitted changes
-        with wait_message("Checking repository.."):
-            clean = repo.is_worktree_clean()
+                # Propagate exceptions from repo.check_vcs.
+                vcs_future.result()
 
-        if not clean:
-            raise Error(
-                "Uncommitted changes present. Please %s them or commit before patching."
-                % ("shelve" if isinstance(repo, Mercurial) else "stash")
-            )
+                if not clean_future.result():
+                    raise Error(
+                        "Uncommitted changes present. Please %s them or commit "
+                        "before patching."
+                        % ("shelve" if isinstance(repo, Mercurial) else "stash")
+                    )
 
     # Get the target revision
     with wait_message("Fetching D%s.." % args.revision_id):
