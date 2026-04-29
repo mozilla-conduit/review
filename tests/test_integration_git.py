@@ -541,6 +541,8 @@ def test_submit_update(in_process, git_repo_path: pathlib.Path, init_sha):
         {"data": [search_rev(rev=123, reviewers=["alice"])]},
         # diffusion.diff.search
         {"data": [search_diff()]},
+        # user.query
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
         # whoami
         {"phid": "PHID-USER-1"},
         # differential.creatediff
@@ -677,6 +679,8 @@ Differential Revision: http://example.test/D123
         {"data": [search_rev(rev=123, reviewers=("test",))]},
         # diffusion.diff.search
         {"data": [search_diff(node=sha)]},
+        # user.query
+        [{"userName": "test", "phid": "PHID-USER-1"}],
         # whoami
         {"phid": "PHID-USER-1"},
     )
@@ -714,6 +718,8 @@ def test_submit_update_test_plan_only(
         {"data": [search_rev(rev=123, reviewers=("test",))]},
         # differential.diff.search
         {"data": [search_diff(node=sha)]},
+        # user.query
+        [{"userName": "test", "phid": "PHID-USER-1"}],
         # whoami
         {"phid": "PHID-USER-1"},
         # differential.creatediff
@@ -1360,6 +1366,8 @@ def test_submit_update_without_test_plan_preserves_existing(
         {"data": [search_rev(rev=123, reviewers=["alice"], test_plan="Existing plan")]},
         # differential.diff.search
         {"data": [search_diff()]},
+        # user.query
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
         # whoami
         {"phid": "PHID-USER-1"},
         # differential.creatediff
