@@ -554,6 +554,40 @@ class ConduitAPI:
             {"revisionID": rev_id},
         )
 
+    # AI review fan-out: 5 keeps wall time bounded for 10+ commit stacks
+    # without slamming the reviewhelper endpoint -- larger pools showed
+    # diminishing returns in benchmarking, and reviewhelper.request is
+    # cheap enough that a handful of in-flight requests is sufficient.
+    AI_REVIEW_MAX_WORKERS = 5
+
+    def request_ai_reviews(
+        self, rev_ids: List[int]
+    ) -> Dict[int, Optional[ConduitAPIError]]:
+        """Request AI reviews for several revisions in parallel.
+
+        Returns a dict mapping each rev_id to ``None`` on success, or to
+        the ``ConduitAPIError`` raised by the underlying call. The
+        threading is hidden here so callers stay in command-layer code.
+        """
+        results: Dict[int, Optional[ConduitAPIError]] = {}
+        if not rev_ids:
+            return results
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=self.AI_REVIEW_MAX_WORKERS
+        ) as executor:
+            futures = {
+                executor.submit(self.request_ai_review, rev_id): rev_id
+                for rev_id in rev_ids
+            }
+            for future in concurrent.futures.as_completed(futures):
+                rev_id = futures[future]
+                try:
+                    future.result()
+                    results[rev_id] = None
+                except ConduitAPIError as exc:
+                    results[rev_id] = exc
+        return results
+
     def get_repository_by_callsign(self, call_sign: str) -> dict:
         """Get repository info for a repo on Phabricator by callsign."""
         return self.repository_search_single("callsigns", call_sign)

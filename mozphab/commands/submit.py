@@ -662,6 +662,10 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
 
     has_new_revisions = any(not commit.rev_id for commit in commits if commit.submit)
 
+    # Collected during the main loop; AI review is requested in parallel
+    # after all revisions have been created/updated.
+    ai_review_commits: List[Commit] = []
+
     # Note: we can use `itertools.pairwise([None, *commits])` once we
     # upgrade our minimum Python version to 3.10.
     for previous_commit, commit in zip([None, *commits], commits):
@@ -716,15 +720,7 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
         commit.rev_phid = rev["object"]["phid"]
 
         if args.ai or (config.ai_review and not is_update):
-            try:
-                with wait_message("Requesting AI review..."):
-                    conduit.request_ai_review(commit.rev_id)
-                commit.ai_review_state = AiReviewState.REQUESTED
-            except ConduitAPIError as e:
-                commit.ai_review_state = AiReviewState.FAILED
-                logger.error(
-                    "Failed to request AI review for D%s: %s", commit.rev_id, e
-                )
+            ai_review_commits.append(commit)
 
         revision_url = "%s/D%s" % (repo.phab_url, commit.rev_id)
 
@@ -747,6 +743,27 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
             with wait_message("Setting diff metadata..."):
                 message = commit.build_arc_commit_message()
                 conduit.set_diff_property(diff.id, commit, message)
+
+    # AI review only needs commit.rev_id (set inside the loop above), so
+    # the requests have no ordering dependency. Threading lives in
+    # conduit.request_ai_reviews so this layer doesn't need to know how
+    # the fan-out is implemented.
+    if ai_review_commits:
+        with wait_message("Requesting AI review..."):
+            ai_results = conduit.request_ai_reviews(
+                [commit.rev_id for commit in ai_review_commits]
+            )
+        for commit in ai_review_commits:
+            error = ai_results.get(commit.rev_id)
+            if error is None:
+                commit.ai_review_state = AiReviewState.REQUESTED
+            else:
+                commit.ai_review_state = AiReviewState.FAILED
+                logger.error(
+                    "Failed to request AI review for D%s: %s",
+                    commit.rev_id,
+                    error,
+                )
 
     # Cleanup (eg. strip nodes) and refresh to ensure the stack is right for the
     # final showing.

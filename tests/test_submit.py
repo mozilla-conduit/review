@@ -1187,6 +1187,21 @@ def m_conduit():
         }
         m.set_diff_property.return_value = None
         m.request_ai_review.return_value = {}
+
+        # Drive the parallel wrapper through the per-rev mock so tests can
+        # keep asserting against ``request_ai_review`` directly while
+        # exercising the public ``request_ai_reviews`` API used by submit.
+        def fake_request_ai_reviews(rev_ids):
+            results = {}
+            for rev_id in rev_ids:
+                try:
+                    m.request_ai_review(rev_id)
+                    results[rev_id] = None
+                except ConduitAPIError as exc:
+                    results[rev_id] = exc
+            return results
+
+        m.request_ai_reviews.side_effect = fake_request_ai_reviews
         yield m
 
 
