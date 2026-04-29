@@ -388,6 +388,7 @@ dependencies = [
     { name = "python-hglib" },
     { name = "sentry-sdk" },
     { name = "setuptools" },
+    { name = "urllib3" },
 ]
 
 [package.dev-dependencies]
@@ -410,6 +411,7 @@ requires-dist = [
     { name = "python-hglib", specifier = ">=2.6.2" },
     { name = "sentry-sdk", specifier = ">=0.14.3" },
     { name = "setuptools" },
+    { name = "urllib3", specifier = ">=1.26" },
 ]
 
 [package.metadata.requires-dev]

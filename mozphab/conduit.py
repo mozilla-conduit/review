@@ -10,15 +10,15 @@ import json
 import operator
 import os
 import time
-import urllib.error as url_error
 import urllib.parse as url_parse
-import urllib.request as url_request
 from typing import (
     Any,
     Dict,
     List,
     Optional,
 )
+
+import urllib3
 
 from .commits import Commit
 from .diff import Diff
@@ -45,12 +45,22 @@ def normalise_reviewer(reviewer: str, strip_group: bool = True) -> str:
     return reviewer
 
 
-# Default socket timeout for Conduit API calls (seconds). Applied to every
-# call via urllib.request.urlopen(..., timeout=...).
+# Default socket timeout for Conduit API calls (seconds).
 CONDUIT_CALL_TIMEOUT = 120
 
 # Max retry attempts on connection-level failures for idempotent methods.
 CONDUIT_MAX_RETRIES = 3
+
+# urllib3 PoolManager sizing. moz-phab talks to a single Phabricator host so
+# one pool is enough in practice; a small num_pools cap leaves headroom for
+# uncommon hosts (e.g. file.querychunks redirects) without unbounded growth.
+# maxsize is the per-host connection cap: the parallel fan-outs in submit
+# (AI review, max_workers=5) and patch (raw diff downloads, max_workers=4)
+# never exceed 10 concurrent in-flight requests, so 10 keeps every worker
+# served from the pool without idle slots.
+CONDUIT_POOL_NUM_POOLS = 4
+CONDUIT_POOL_MAXSIZE = 10
+
 
 # Read-only lookup methods that are safe to retry on transient failures.
 # Mutation methods (differential.revision.edit, differential.creatediff, etc.)
@@ -82,9 +92,25 @@ class ConduitAPIError(Error):
 class ConduitAPI:
     def __init__(self):
         self.repo = None
+        # Lazy-initialised urllib3 pool. Holding it on the instance (rather
+        # than as a module global) keeps test isolation simple and avoids
+        # leaking pool state between successive ConduitAPI instances.
+        # urllib3's own Retry is disabled because call() does method-aware
+        # retries: blindly retrying a POST that actually succeeded could
+        # duplicate mutations.
+        self._http_pool: Optional[urllib3.PoolManager] = None
 
     def set_repo(self, repo):
         self.repo = repo
+
+    def _get_http_pool(self) -> urllib3.PoolManager:
+        if self._http_pool is None:
+            self._http_pool = urllib3.PoolManager(
+                num_pools=CONDUIT_POOL_NUM_POOLS,
+                maxsize=CONDUIT_POOL_MAXSIZE,
+                retries=urllib3.Retry(total=0),
+            )
+        return self._http_pool
 
     @property
     def repo_phid(self) -> str:
@@ -157,17 +183,32 @@ class ConduitAPI:
 
         retryable = api_method in IDEMPOTENT_CONDUIT_METHODS
         max_attempts = CONDUIT_MAX_RETRIES if retryable else 1
-        last_error: Optional[Exception] = None
+        pool = self._get_http_pool()
         for attempt in range(max_attempts):
             try:
-                with url_request.urlopen(
-                    url_request.Request(**req_args),
+                resp = pool.request(
+                    req_args["method"],
+                    req_args["url"],
+                    headers=req_args["headers"],
+                    body=req_args["data"],
                     timeout=CONDUIT_CALL_TIMEOUT,
-                ) as r:
-                    res = json.load(r)
+                )
+                # PoolManager.request does not raise on non-2xx (unlike
+                # urlopen, which would throw HTTPError). Without this check
+                # we'd feed an HTML/empty error body straight into
+                # json.loads. Raising here funnels server errors through
+                # the same retry path as connection failures.
+                if resp.status >= 400:
+                    raise urllib3.exceptions.HTTPError(
+                        f"HTTP {resp.status} from {req_args['url']}"
+                    )
+                res = json.loads(resp.data)
                 break
-            except (url_error.URLError, TimeoutError, ConnectionError) as err:
-                last_error = err
+            except (
+                urllib3.exceptions.HTTPError,
+                TimeoutError,
+                ConnectionError,
+            ) as err:
                 if attempt >= max_attempts - 1:
                     raise
                 backoff = 0.5 * (attempt + 1)

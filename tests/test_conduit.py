@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from unittest import mock
 
 import pytest
+import urllib3
 from immutabledict import immutabledict
 
 from mozphab import exceptions, mozphab, repository, simplecache
@@ -135,68 +136,100 @@ def test_build_request(m_load_api_token):
     }
 
 
-@mock.patch("urllib.request.urlopen")
+def _mock_pool_response(body: dict, status: int = 200) -> mock.MagicMock:
+    resp = mock.MagicMock()
+    resp.status = status
+    resp.data = json.dumps(body).encode()
+    return resp
+
+
+@mock.patch("mozphab.conduit.ConduitAPI._get_http_pool")
 @mock.patch("mozphab.conduit.ConduitAPI.load_api_token")
-def test_call(m_load_api_token, m_urlopen):
+def test_call(m_load_api_token, m_get_pool):
     m_load_api_token.return_value = "token"
     mozphab.conduit.set_repo(Repo())
 
-    # build fake context-manager to mock urlopen
-    cm = mock.MagicMock()
-    cm.getcode.return_value = 200
-    cm.__enter__.return_value = cm
-    m_urlopen.return_value = cm
+    pool = mock.MagicMock()
+    m_get_pool.return_value = pool
 
     # success
-    cm.read.return_value = json.dumps({"result": "result", "error_code": False})
+    pool.request.return_value = _mock_pool_response(
+        {"result": "result", "error_code": False}
+    )
     assert mozphab.conduit.call("method", {"call": "args"}) == "result"
 
     # error
-    cm.read.return_value = json.dumps({"error_info": "aieee", "error_code": 1})
+    pool.request.return_value = _mock_pool_response(
+        {"error_info": "aieee", "error_code": 1}
+    )
     with pytest.raises(ConduitAPIError) as conduit_error:
         mozphab.conduit.call("method", {"call": "args"})
     assert conduit_error.value.args[0].startswith("Phabricator Error: ")
 
 
 @mock.patch("mozphab.conduit.time.sleep")
-@mock.patch("urllib.request.urlopen")
+@mock.patch("mozphab.conduit.ConduitAPI._get_http_pool")
 @mock.patch("mozphab.conduit.ConduitAPI.load_api_token")
-def test_call_retries_idempotent_methods(m_load_api_token, m_urlopen, m_sleep):
+def test_call_retries_idempotent_methods(m_load_api_token, m_get_pool, m_sleep):
     """Transient connection errors are retried for idempotent methods."""
-    import urllib.error
-
     m_load_api_token.return_value = "token"
     mozphab.conduit.set_repo(Repo())
 
-    # First two attempts fail with URLError, third succeeds.
-    cm = mock.MagicMock()
-    cm.__enter__.return_value = cm
-    cm.read.return_value = json.dumps({"result": {}, "error_code": False})
-    m_urlopen.side_effect = [
-        urllib.error.URLError("connection refused"),
-        urllib.error.URLError("connection refused"),
-        cm,
+    pool = mock.MagicMock()
+    m_get_pool.return_value = pool
+
+    # First two attempts fail with a urllib3 error, third succeeds.
+    pool.request.side_effect = [
+        urllib3.exceptions.MaxRetryError(pool, "u", "connection refused"),
+        urllib3.exceptions.MaxRetryError(pool, "u", "connection refused"),
+        _mock_pool_response({"result": {}, "error_code": False}),
     ]
 
     assert mozphab.conduit.call("conduit.ping", {}) == {}
-    assert m_urlopen.call_count == 3
+    assert pool.request.call_count == 3
     assert m_sleep.call_count == 2
 
 
 @mock.patch("mozphab.conduit.time.sleep")
-@mock.patch("urllib.request.urlopen")
+@mock.patch("mozphab.conduit.ConduitAPI._get_http_pool")
 @mock.patch("mozphab.conduit.ConduitAPI.load_api_token")
-def test_call_no_retry_for_mutation_methods(m_load_api_token, m_urlopen, m_sleep):
-    """Mutation methods must not be retried (could create duplicates)."""
-    import urllib.error
-
+def test_call_retries_on_http_error_status(m_load_api_token, m_get_pool, m_sleep):
+    """Non-2xx HTTP responses trigger the retry path for idempotent methods."""
     m_load_api_token.return_value = "token"
     mozphab.conduit.set_repo(Repo())
-    m_urlopen.side_effect = urllib.error.URLError("connection refused")
 
-    with pytest.raises(urllib.error.URLError):
+    pool = mock.MagicMock()
+    m_get_pool.return_value = pool
+
+    # Two 500s, then a 200 success.
+    pool.request.side_effect = [
+        _mock_pool_response({}, status=500),
+        _mock_pool_response({}, status=502),
+        _mock_pool_response({"result": {}, "error_code": False}, status=200),
+    ]
+
+    assert mozphab.conduit.call("conduit.ping", {}) == {}
+    assert pool.request.call_count == 3
+    assert m_sleep.call_count == 2
+
+
+@mock.patch("mozphab.conduit.time.sleep")
+@mock.patch("mozphab.conduit.ConduitAPI._get_http_pool")
+@mock.patch("mozphab.conduit.ConduitAPI.load_api_token")
+def test_call_no_retry_for_mutation_methods(m_load_api_token, m_get_pool, m_sleep):
+    """Mutation methods must not be retried (could create duplicates)."""
+    m_load_api_token.return_value = "token"
+    mozphab.conduit.set_repo(Repo())
+
+    pool = mock.MagicMock()
+    m_get_pool.return_value = pool
+    pool.request.side_effect = urllib3.exceptions.MaxRetryError(
+        pool, "u", "connection refused"
+    )
+
+    with pytest.raises(urllib3.exceptions.MaxRetryError):
         mozphab.conduit.call("differential.revision.edit", {})
-    assert m_urlopen.call_count == 1
+    assert pool.request.call_count == 1
     assert m_sleep.call_count == 0
 
 
