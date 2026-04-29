@@ -9,6 +9,8 @@ import hashlib
 import json
 import operator
 import os
+import time
+import urllib.error as url_error
 import urllib.parse as url_parse
 import urllib.request as url_request
 from typing import (
@@ -41,6 +43,33 @@ def normalise_reviewer(reviewer: str, strip_group: bool = True) -> str:
     if strip_group:
         reviewer = reviewer.lstrip("#")
     return reviewer
+
+
+# Default socket timeout for Conduit API calls (seconds). Applied to every
+# call via urllib.request.urlopen(..., timeout=...).
+CONDUIT_CALL_TIMEOUT = 120
+
+# Max retry attempts on connection-level failures for idempotent methods.
+CONDUIT_MAX_RETRIES = 3
+
+# Read-only lookup methods that are safe to retry on transient failures.
+# Mutation methods (differential.revision.edit, differential.creatediff, etc.)
+# are intentionally excluded: a retry after a successful POST can create
+# duplicate revisions/diffs.
+IDEMPOTENT_CONDUIT_METHODS = frozenset(
+    {
+        "conduit.ping",
+        "user.whoami",
+        "user.query",
+        "project.search",
+        "differential.revision.search",
+        "differential.diff.search",
+        "differential.getrawdiff",
+        "diffusion.repository.search",
+        "file.querychunks",
+        "edge.search",
+    }
+)
 
 
 class ConduitAPIError(Error):
@@ -126,8 +155,32 @@ class ConduitAPI:
         )
         logger.debug("%s %s", req_args["url"], api_call_args)
 
-        with url_request.urlopen(url_request.Request(**req_args)) as r:
-            res = json.load(r)
+        retryable = api_method in IDEMPOTENT_CONDUIT_METHODS
+        max_attempts = CONDUIT_MAX_RETRIES if retryable else 1
+        last_error: Optional[Exception] = None
+        for attempt in range(max_attempts):
+            try:
+                with url_request.urlopen(
+                    url_request.Request(**req_args),
+                    timeout=CONDUIT_CALL_TIMEOUT,
+                ) as r:
+                    res = json.load(r)
+                break
+            except (url_error.URLError, TimeoutError, ConnectionError) as err:
+                last_error = err
+                if attempt >= max_attempts - 1:
+                    raise
+                backoff = 0.5 * (attempt + 1)
+                logger.debug(
+                    "Conduit call %s failed (attempt %d/%d): %s; retrying in %.1fs",
+                    api_method,
+                    attempt + 1,
+                    max_attempts,
+                    err,
+                    backoff,
+                )
+                time.sleep(backoff)
+
         if res["error_code"]:
             raise ConduitAPIError(res.get("error_info", "Error %s" % res["error_code"]))
         return res["result"]
