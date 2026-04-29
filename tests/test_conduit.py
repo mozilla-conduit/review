@@ -397,6 +397,53 @@ def test_get_diffs_search_by_diffids_missing(get_diffs, m_call):
     assert not diff_dict.get("PHID-4"), "Should not return dict of non-existent diff"
 
 
+def test_get_diffs_cached(get_diffs, m_call):
+    """Second call for the same diffs hits the cache and makes no API call."""
+    m_call.return_value = basic_phab_result
+
+    assert get_diffs(phids=["PHID-1"]) == {
+        "PHID-1": {"id": 1, "phid": "PHID-1"}
+    }, "First call populates the cache."
+    assert m_call.call_count == 1
+
+    assert get_diffs(phids=["PHID-1"]) == {
+        "PHID-1": {"id": 1, "phid": "PHID-1"}
+    }, "Second call with the same PHID must be a cache hit (no extra API call)."
+    assert m_call.call_count == 1
+
+    assert get_diffs(ids=[1]) == {
+        "PHID-1": {"id": 1, "phid": "PHID-1"}
+    }, "Lookup by ID also uses the cache after the initial phid-based fetch."
+    assert m_call.call_count == 1
+
+
+def test_get_diffs_partial_cache(get_diffs, m_call):
+    """Only uncached diffs are fetched; cached ones are served from memory."""
+    m_call.return_value = {
+        "data": [
+            {"id": 1, "phid": "PHID-1"},
+            {"id": 2, "phid": "PHID-2"},
+        ]
+    }
+
+    # Prime the cache with PHID-1 + PHID-2.
+    get_diffs(phids=["PHID-1", "PHID-2"])
+    assert m_call.call_count == 1
+
+    # Now request one cached + one uncached. Only PHID-3 should be queried.
+    m_call.return_value = {"data": [{"id": 3, "phid": "PHID-3"}]}
+    result = get_diffs(phids=["PHID-1", "PHID-3"])
+    assert result == {
+        "PHID-1": {"id": 1, "phid": "PHID-1"},
+        "PHID-3": {"id": 3, "phid": "PHID-3"},
+    }
+    assert m_call.call_count == 2
+    _, api_args = m_call.call_args.args
+    assert api_args["constraints"] == {
+        "phids": ["PHID-3"]
+    }, "The second call must have asked only for the uncached PHID."
+
+
 def test_has_revision_reviewers(m_call):
     commit = Commit(rev_id=None)
     assert not conduit.has_revision_reviewers(commit)

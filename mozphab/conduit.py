@@ -316,21 +316,42 @@ class ConduitAPI:
         if (ids and phids) or (ids is None and phids is None):
             raise ValueError("Internal Error: Invalid args to get_diffs")
 
+        # Serve known diffs from the cache and only query Phabricator for the
+        # ones we haven't seen yet. Diffs are immutable once created, so a
+        # per-process cache is safe.
+        cached_diffs: Dict[str, Dict] = {}
         if ids:
-            constraints = {"ids": list(set(ids))}
+            uncached_ids = []
+            for diff_id in set(ids):
+                phid = cache.get("diff-id-%s" % diff_id)
+                if phid and (diff := cache.get("diff-%s" % phid)):
+                    cached_diffs[phid] = diff
+                else:
+                    uncached_ids.append(diff_id)
+            constraints = {"ids": uncached_ids} if uncached_ids else None
         else:
-            constraints = {"phids": list(set(phids))}
+            uncached_phids = []
+            for phid in set(phids):
+                if diff := cache.get("diff-%s" % phid):
+                    cached_diffs[phid] = diff
+                else:
+                    uncached_phids.append(phid)
+            constraints = {"phids": uncached_phids} if uncached_phids else None
 
-        api_call_args = {
-            "constraints": constraints,
-            "attachments": {"commits": True},
-        }
-        response = self.call("differential.diff.search", api_call_args)
-        diff_list = response.get("data", [])
+        diff_dict = dict(cached_diffs)
 
-        diff_dict = {}
-        for diff in diff_list:
-            diff_dict[diff["phid"]] = diff
+        if constraints is not None:
+            api_call_args = {
+                "constraints": constraints,
+                "attachments": {"commits": True},
+            }
+            response = self.call("differential.diff.search", api_call_args)
+            diff_list = response.get("data", [])
+
+            for diff in diff_list:
+                diff_dict[diff["phid"]] = diff
+                cache.set("diff-%s" % diff["phid"], diff)
+                cache.set("diff-id-%s" % diff["id"], diff["phid"])
 
         return diff_dict
 
