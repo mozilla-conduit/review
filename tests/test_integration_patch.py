@@ -58,7 +58,12 @@ def test_patch_raw(
     )
     m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
-    m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
+    # Use a function-based `side_effect` so parallel downloads get deterministic
+    # results regardless of thread execution order.
+    m_call_conduit.side_effect = lambda method, args: {
+        1: PATCH_1_DIFF,
+        2: PATCH_2_DIFF,
+    }[args["diffID"]]
     mozphab.main(["patch", "D2", "--raw"], is_development=True)
     assert m_print.call_args_list == [mock.call(PATCH_1_DIFF), mock.call(PATCH_2_DIFF)]
 
@@ -86,7 +91,10 @@ def test_patch_raw(
     )
     m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
-    m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
+    m_call_conduit.side_effect = lambda method, args: {
+        1: PATCH_1_DIFF,
+        2: PATCH_2_DIFF,
+    }[args["diffID"]]
     mozphab.main(["patch", "D2", "--raw"], is_development=True)
     assert m_print.call_args_list == [
         mock.call(PATCH_1_META + PATCH_1_DIFF),
@@ -106,11 +114,16 @@ def test_patch_no_commit(
 ):
     m_get_revs.return_value = [REV_1]
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
-    m_call_conduit.side_effect = [
-        {},
-        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
-        PATCH_1_DIFF,
-    ]
+    # Dispatch by method so parallel env checks (`conduit.ping` racing
+    # `diffusion.repository.search` from `repo.check_vcs`) don't depend
+    # on an ordered list.
+    m_call_conduit.side_effect = lambda method, args: {
+        "conduit.ping": {},
+        "diffusion.repository.search": {
+            "data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]
+        },
+        "differential.getrawdiff": PATCH_1_DIFF,
+    }[method]
 
     mozphab.main(["patch", "D1", "--no-commit"], is_development=True)
     assert [".arcconfig", ".hg", "X"] == sorted(os.listdir(str(hg_repo_path)))
@@ -131,7 +144,10 @@ def test_patch_no_commit(
     )
     m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
-    m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
+    m_call_conduit.side_effect = lambda method, args: {
+        1: PATCH_1_DIFF,
+        2: PATCH_2_DIFF,
+    }[args["diffID"]]
     mozphab.main(["patch", "D2", "--no-commit"], is_development=True)
     assert [".arcconfig", ".hg", "X"] == sorted(os.listdir(str(hg_repo_path)))
     test_file = hg_repo_path / "X"
@@ -154,11 +170,13 @@ def test_git_patch_with_commit(
     diff_1["fields"]["refs"][0]["identifier"] = sha
     m_get_revs.return_value = [REV_1]
     m_get_diffs.return_value = {"PHID-DIFF-1": diff_1}
-    m_call_conduit.side_effect = [
-        {},
-        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
-        PATCH_1_DIFF,
-    ]
+    m_call_conduit.side_effect = lambda method, args: {
+        "conduit.ping": {},
+        "diffusion.repository.search": {
+            "data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]
+        },
+        "differential.getrawdiff": PATCH_1_DIFF,
+    }[method]
 
     mozphab.main(["patch", "D1", "--apply-to", "here"], is_development=True)
     assert [".arcconfig", ".git", "X"] == sorted(os.listdir(str(git_repo_path)))
@@ -210,7 +228,10 @@ def test_git_patch_with_commit(
     )
     m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
     m_get_diffs.return_value = {"PHID-DIFF-1": diff_1, "PHID-DIFF-2": DIFF_2}
-    m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
+    m_call_conduit.side_effect = lambda method, args: {
+        1: PATCH_1_DIFF,
+        2: PATCH_2_DIFF,
+    }[args["diffID"]]
     mozphab.main(["patch", "D2"], is_development=True)
     assert [".arcconfig", ".git", "X"] == sorted(os.listdir(str(git_repo_path)))
     test_file = git_repo_path / "X"
@@ -252,11 +273,13 @@ def test_hg_patch_with_commit(
 ):
     m_get_revs.return_value = [REV_1]
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
-    m_call_conduit.side_effect = [
-        {},
-        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
-        PATCH_1_DIFF,
-    ]
+    m_call_conduit.side_effect = lambda method, args: {
+        "conduit.ping": {},
+        "diffusion.repository.search": {
+            "data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]
+        },
+        "differential.getrawdiff": PATCH_1_DIFF,
+    }[method]
 
     mozphab.main(["patch", "D1", "--apply-to", "here"], is_development=True)
     assert [".arcconfig", ".hg", "X"] == sorted(os.listdir(str(hg_repo_path)))
@@ -287,7 +310,10 @@ def test_hg_patch_with_commit(
     )
     m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
-    m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
+    m_call_conduit.side_effect = lambda method, args: {
+        1: PATCH_1_DIFF,
+        2: PATCH_2_DIFF,
+    }[args["diffID"]]
     mozphab.main(["patch", "D2"], is_development=True)
     assert [".arcconfig", ".hg", "X", "unknown"] == sorted(
         os.listdir(str(hg_repo_path))
@@ -311,7 +337,10 @@ def test_hg_patch_with_commit(
     )
     m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
     m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
-    m_call_conduit.side_effect = [PATCH_1_DIFF, PATCH_2_DIFF]
+    m_call_conduit.side_effect = lambda method, args: {
+        1: PATCH_1_DIFF,
+        2: PATCH_2_DIFF,
+    }[args["diffID"]]
     mozphab.main(["patch", "--name=myfeature", "D2"], is_development=True)
     result = hg_out("log", "-G")
     assert "@  changeset:   3:" in result
