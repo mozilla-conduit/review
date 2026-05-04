@@ -1,0 +1,129 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["**"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  test:
+    name: test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Setup
+        run: |
+          set -e
+          mkdir -p test-reports coredumps
+          # Install project and dev dependencies.
+          uv sync --group dev --locked
+          # Configure hg.
+          printf "[ui]\nusername=mozphab test <moz-phab@example.com>\n[extensions]\nevolve=\n" > ~/.hgrc
+          # Configure git.
+          git config --global user.email "moz-phab-tests@example.com"
+          git config --global user.name "moz-phab tests"
+          # Install and configure jj.
+          JJ_VERSION="0.33.0"
+          JJ_PLATFORM="x86_64-unknown-linux-musl"
+          JJ_FILENAME="jj-v${JJ_VERSION}-${JJ_PLATFORM}.tar.gz"
+          JJ_EXPECTED_SHA="2703e13b3d5623aa67e19358b257fe5a761faa883bd0bd716d0b1c801a214093"
+          curl -LO "https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/${JJ_FILENAME}"
+          echo "${JJ_EXPECTED_SHA}  ${JJ_FILENAME}" | sha256sum -c
+          tar -xzf "${JJ_FILENAME}"
+          sudo mv jj /usr/local/bin
+          jj config set --user user.name "moz-phab tests"
+          jj config set --user user.email "moz-phab-tests@example.com"
+
+      - name: Versions
+        run: |
+          set -e
+          uv self version
+          uv run python3 --version
+          git --version
+          jj --version
+          uv pip list
+
+      - name: Run tests
+        run: |
+          set -e
+          ulimit -c unlimited
+          for test_file in tests/test_*.py; do
+            uv run python3 -m pytest --junitxml=test-reports/junit-$(basename "$test_file" .py).xml -vv "$test_file"
+          done
+          cp core.* coredumps/ 2>/dev/null || true
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-py${{ matrix.python-version }}
+          path: test-reports
+
+      - name: Upload coredumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coredumps-py${{ matrix.python-version }}
+          path: coredumps
+          if-no-files-found: ignore
+
+  test_package:
+    name: test package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.9"
+
+      - name: Build and verify package
+        run: |
+          set -e
+          uv build
+          uv venv verify-venv
+          uv pip install --python verify-venv/bin/python dist/mozphab*.tar.gz
+          uv pip show --python verify-venv/bin/python MozPhab
+          verify-venv/bin/moz-phab version
+
+  publish:
+    name: publish to PyPI
+    needs: [test, test_package]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.9"
+
+      - name: Build and publish
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          set -e
+          uv build
+          uv tool run twine upload --repository pypi dist/*
