@@ -35,6 +35,7 @@ class Config(object):
             [ui]
             no_ansi = False
             hyperlinks = True
+            open_browser = True
 
             [vcs]
             safe_mode = False
@@ -86,6 +87,7 @@ class Config(object):
 
         self.no_ansi = self._getboolean("ui", "no_ansi")
         self.hyperlinks = self._getboolean("ui", "hyperlinks")
+        self.open_browser = self._getboolean("ui", "open_browser")
         self.safe_mode = self._getboolean("vcs", "safe_mode")
         self.auto_submit = self._getboolean("submit", "auto_submit")
         self.always_blocking = self._getboolean("submit", "always_blocking")
@@ -156,6 +158,7 @@ class Config(object):
             logger.debug("creating %s", self.filename)
             self._set("ui", "no_ansi", self.no_ansi)
             self._set("ui", "hyperlinks", self.hyperlinks)
+            self._set("ui", "open_browser", self.open_browser)
             self._set("vcs", "safe_mode", self.safe_mode)
             self._set("git", "remote", ", ".join(self.git_remote))
             self._set("git", "command_path", ", ".join(self._git_command))

@@ -369,7 +369,10 @@ def safe_environ(monkeypatch):
 def config():
     """Replace the original config with the fake one."""
     with tempfile.NamedTemporaryFile() as temp:
-        return config_module.Config(filename=Path(temp.name))
+        test_config = config_module.Config(filename=Path(temp.name))
+        # Never let tests open a real browser window.
+        test_config.open_browser = False
+        return test_config
 
 
 @pytest.fixture
@@ -378,6 +381,8 @@ def in_process(monkeypatch, safe_environ, request, config):
     monkeypatch.setattr("mozphab.config.config", config)
     monkeypatch.setattr("mozphab.git.config", config)
     monkeypatch.setattr("mozphab.mercurial.config", config)
+    # Defensive: even if a test forces `--open-browser`, never actually open one.
+    monkeypatch.setattr("webbrowser.open", mock.Mock(return_value=False))
     # Make sure other tests didn't leak and mess up the module-level
     # global variables :/
     monkeypatch.setattr(environment, "DEBUG", True)

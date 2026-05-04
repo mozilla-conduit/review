@@ -6,11 +6,15 @@ import argparse
 import json
 import urllib.error as url_error
 import urllib.request as url_request
+import webbrowser
 from pathlib import Path
 from typing import Optional
 
 from mozphab.conduit import (
     conduit,
+)
+from mozphab.config import (
+    config,
 )
 from mozphab.environment import (
     USER_AGENT,
@@ -174,10 +178,22 @@ def uplift(repo: Repository, args: argparse.Namespace):
                 repo.lando_url, tip_commit_id, args.assessment_id
             )
 
-            logger.warning(
-                f"\nPlease navigate to {uplift_assessment_linking_url} and save "
-                "the uplift request form."
+            should_open_browser = (
+                args.open_browser
+                if args.open_browser is not None
+                else config.open_browser
             )
+
+            if should_open_browser and webbrowser.open(uplift_assessment_linking_url):
+                logger.warning(
+                    f"\nOpened {uplift_assessment_linking_url} in your default "
+                    "browser. Please save the uplift request form."
+                )
+            else:
+                logger.warning(
+                    f"\nPlease navigate to {uplift_assessment_linking_url} and save "
+                    "the uplift request form."
+                )
 
     # Output machine-readable data to a file.
     if args.output_file:
@@ -230,6 +246,15 @@ def add_parser(parser):
         "--assessment-id",
         type=int,
         help="Existing assessment ID to link the new uplift revision to.",
+    )
+    uplift_parser.add_argument(
+        "--open-browser",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Open the assessment linking URL in your default browser. "
+            "Overrides the `ui.open_browser` config option for this invocation."
+        ),
     )
     uplift_parser.add_argument(
         "--output-file",
