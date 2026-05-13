@@ -709,9 +709,12 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
                 rev = conduit.create_revision(
                     commit,
                     diff.phid,
-                    # Set the parent revision if one is available.
+                    # Set the parent revision if one is available, unless
+                    # --no-stack was passed.
                     parent_rev_phid=(
-                        previous_commit.rev_phid if previous_commit else None
+                        previous_commit.rev_phid
+                        if previous_commit and not args.no_stack
+                        else None
                     ),
                 )
 

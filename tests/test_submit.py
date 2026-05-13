@@ -1389,5 +1389,35 @@ def test_ai_review_config_hint_not_shown_when_config_set(
         assert "Tip:" not in str(call)
 
 
+@pytest.mark.parametrize(
+    "no_stack, expected_second_parent",
+    [
+        (True, None),
+        (False, "PHID-DREV-123"),
+    ],
+    ids=["no_stack", "stack_default"],
+)
+def test_no_stack_linking(
+    m_conduit,
+    m_repo,
+    m_validate,
+    m_logger,
+    m_config,
+    submit_args,
+    no_stack,
+    expected_second_parent,
+):
+    commits = [commit(bug_id="1"), commit(bug_id="1")]
+    m_repo.commit_stack.return_value = commits
+    submit_args.no_stack = no_stack
+
+    submit._submit(m_repo, submit_args)
+
+    assert m_conduit.create_revision.call_count == 2
+    first_call, second_call = m_conduit.create_revision.call_args_list
+    assert first_call.kwargs["parent_rev_phid"] is None
+    assert second_call.kwargs["parent_rev_phid"] == expected_second_parent
+
+
 if __name__ == "__main__":
     unittest.main()
