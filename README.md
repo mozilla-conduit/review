@@ -337,6 +337,54 @@ the lock file after changing dependencies, run:
 uv lock
 ```
 
+### Benchmarks
+
+Performance benchmarks for the `submit` and `patch` workflows live under
+`tests/benchmarks/` and run via [pytest-codspeed](https://github.com/CodSpeedHQ/pytest-codspeed).
+They drive the real `mozphab.conduit` code paths with `ConduitAPI.call`
+mocked at the HTTP boundary, so the `SimpleCache`, the parallel
+threadpool fan-outs, and the JSON/transaction handling all contribute
+to the measurement.
+
+To run them locally:
+
+```shell
+uv run pytest --codspeed tests/benchmarks/
+```
+
+This uses wall-time mode by default and prints a table of mean times and
+relative stdev per benchmark. For deterministic instruction-count mode
+(what CI uses), install `valgrind` and pass
+`--codspeed-mode=instrumentation`.
+
+If installing `valgrind` on the host is inconvenient (notably on
+macOS), `dev/Dockerfile` ships a small image with `valgrind`,
+`codspeed-runner`, `uv`, and the project's dev dependencies. Build
+once with `docker build -t moz-phab-bench -f dev/Dockerfile .` and
+then run benchmarks in walltime mode:
+
+```shell
+docker run --rm -v "$PWD":/work -w /work moz-phab-bench \
+    uv run pytest --codspeed tests/benchmarks/
+```
+
+Results land in the host's `.codspeed/` directory via the bind-mount.
+
+Deterministic instruction-count runs go through `codspeed run` (the
+container has the binary) and require a `CODSPEED_TOKEN` from the
+moz-phab codspeed.io project, since the runner uploads results to the
+dashboard rather than producing a standalone local report:
+
+```shell
+docker run --rm -v "$PWD":/work -w /work \
+    -e CODSPEED_TOKEN moz-phab-bench \
+    codspeed run --mode=instrumentation -- uv run pytest tests/benchmarks/
+```
+
+The benchmarks also run in CI under a dedicated `benchmarks` job and
+upload results to the moz-phab codspeed.io dashboard for per-branch
+comparison against `main`.
+
 ### Circle CI
 
 `mozphab` uses Circle CI to ensure all tests pass on Linux and Windows.
