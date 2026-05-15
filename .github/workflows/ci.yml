@@ -88,6 +88,9 @@ jobs:
   benchmarks:
     name: benchmarks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -107,7 +110,6 @@ jobs:
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
-          token: ${{ secrets.CODSPEED_TOKEN }}
           run: uv run pytest --codspeed tests/benchmarks/
 
   test_package:

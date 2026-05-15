@@ -371,9 +371,11 @@ docker run --rm -v "$PWD":/work -w /work moz-phab-bench \
 Results land in the host's `.codspeed/` directory via the bind-mount.
 
 Deterministic instruction-count runs go through `codspeed run` (the
-container has the binary) and require a `CODSPEED_TOKEN` from the
-moz-phab codspeed.io project, since the runner uploads results to the
-dashboard rather than producing a standalone local report:
+container has the binary). The runner always uploads to the dashboard
+rather than producing a standalone local report, so local invocations
+need a personal CodSpeed token (`CODSPEED_TOKEN`) issued from the
+project page on codspeed.io. CI does not need one -- the `benchmarks`
+job authenticates via OIDC.
 
 ```shell
 docker run --rm -v "$PWD":/work -w /work \
