@@ -1,6 +1,7 @@
 *,cover
 *pyc
 .coverage
+.codspeed/
 *.egg-info
 MANIFEST
 build
