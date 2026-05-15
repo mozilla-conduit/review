@@ -1,5 +1,7 @@
 # moz-phab
 
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://codspeed.io/mozilla-conduit/review?utm_source=badge)
+
 Phabricator CLI from Mozilla to support submission of a series of commits.
 
 ## Installation
