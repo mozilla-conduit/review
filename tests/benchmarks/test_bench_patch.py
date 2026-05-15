@@ -16,6 +16,7 @@ main optimisation knob and is exactly what we want to measure.
 """
 
 import argparse
+from typing import Any, Callable, Dict, Iterator, List, Optional
 from unittest import mock
 
 import pytest
@@ -29,15 +30,15 @@ REPO_PHID = "PHID-REPO-1"
 BASE_NODE = "basesha000000000000000000000000000000000"
 
 
-def revision_phid(rev_id):
+def revision_phid(rev_id: int) -> str:
     return f"PHID-DREV-{rev_id}"
 
 
-def diff_phid(rev_id):
+def diff_phid(rev_id: int) -> str:
     return f"PHID-DIFF-{rev_id}"
 
 
-def build_revision(rev_id, parent_rev_ids, stack_graph):
+def build_revision(rev_id: int, stack_graph: Dict[str, List[str]]) -> Dict[str, Any]:
     """Return a `differential.revision.search` payload.
 
     `stack_graph` must already contain the linear ancestor chain for
@@ -63,7 +64,7 @@ def build_revision(rev_id, parent_rev_ids, stack_graph):
     }
 
 
-def build_diff(rev_id):
+def build_diff(rev_id: int) -> Dict[str, Any]:
     return {
         "id": rev_id + 5000,
         "phid": diff_phid(rev_id),
@@ -85,7 +86,7 @@ def build_diff(rev_id):
     }
 
 
-def build_stack_graph(num_revisions):
+def build_stack_graph(num_revisions: int) -> Dict[str, List[str]]:
     """Build a linear-chain `stackGraph` for `num_revisions` revisions.
 
     The root (rev_id 101) has no parents; each subsequent revision has
@@ -103,7 +104,7 @@ def build_stack_graph(num_revisions):
     return graph
 
 
-def build_fake_call(num_revisions):
+def build_fake_call(num_revisions: int) -> Callable[..., Any]:
     """Return a `ConduitAPI.call` side-effect for a patch workload.
 
     All revisions share the same `stackGraph` so the helper functions
@@ -112,13 +113,19 @@ def build_fake_call(num_revisions):
     """
     stack_graph = build_stack_graph(num_revisions)
     rev_ids = [100 + index for index in range(1, num_revisions + 1)]
-    revisions = [build_revision(rev_id, [], stack_graph) for rev_id in rev_ids]
+    revisions = [build_revision(rev_id, stack_graph) for rev_id in rev_ids]
     diffs = [build_diff(rev_id) for rev_id in rev_ids]
     revisions_by_id = {r["id"]: r for r in revisions}
     revisions_by_phid = {r["phid"]: r for r in revisions}
     diffs_by_phid = {d["phid"]: d for d in diffs}
 
-    def fake_call(_self, method, args, *, api_token=None):
+    def fake_call(
+        _self: Any,
+        method: str,
+        args: Dict[str, Any],
+        *,
+        api_token: Optional[str] = None,
+    ) -> Any:
         if method == "differential.revision.search":
             constraints = args.get("constraints", {})
             ids = constraints.get("ids")
@@ -162,7 +169,7 @@ def build_fake_call(num_revisions):
     return fake_call
 
 
-def build_args(target_rev_id):
+def build_args(target_rev_id: int) -> argparse.Namespace:
     args = argparse.Namespace()
     args.revision_id = target_rev_id
     args.no_commit = False
@@ -177,7 +184,7 @@ def build_args(target_rev_id):
     return args
 
 
-def build_fake_repo():
+def build_fake_repo() -> mock.MagicMock:
     repo = mock.MagicMock()
     repo.phab_url = PHAB_URL
     repo.phab_vcs = "git"
@@ -196,10 +203,10 @@ def build_fake_repo():
 
 
 @pytest.fixture
-def patch_workload():
+def patch_workload() -> Iterator[Callable[[int], None]]:
     """Yield a callable that runs `patch.patch` for `num_revisions` revisions."""
 
-    def run(num_revisions):
+    def run(num_revisions: int) -> None:
         target_rev_id = 100 + num_revisions
         repo = build_fake_repo()
         args = build_args(target_rev_id)
@@ -232,5 +239,5 @@ def patch_workload():
 
 @pytest.mark.parametrize("num_revisions", [1, 3, 5, 10])
 @pytest.mark.benchmark
-def test_patch_stack(patch_workload, num_revisions):
+def test_patch_stack(patch_workload: Callable[[int], None], num_revisions: int) -> None:
     patch_workload(num_revisions)

@@ -17,6 +17,7 @@ scaling behaviour rather than just a single number.
 """
 
 import argparse
+from typing import Any, Callable, Dict, Iterator, List, Optional
 from unittest import mock
 
 import pytest
@@ -31,7 +32,7 @@ REPO_PHID = "PHID-REPO-1"
 ME_PHID = "PHID-USER-me"
 
 
-def build_commit(index):
+def build_commit(index: int) -> Commit:
     """Return a `Commit` shaped like an update to revision `100 + index`."""
     rev_id = 100 + index
     node = f"newcommit{index:032x}"
@@ -52,7 +53,7 @@ def build_commit(index):
     )
 
 
-def build_args():
+def build_args() -> argparse.Namespace:
     """Return an `argparse.Namespace` populated with every flag `_submit` reads."""
     args = argparse.Namespace()
     args.command = "submit"
@@ -76,7 +77,7 @@ def build_args():
     return args
 
 
-def build_revision(rev_id):
+def build_revision(rev_id: int) -> Dict[str, Any]:
     """Return a revision payload shaped like `differential.revision.search`."""
     return {
         "id": rev_id,
@@ -95,7 +96,7 @@ def build_revision(rev_id):
     }
 
 
-def build_diff(rev_id):
+def build_diff(rev_id: int) -> Dict[str, Any]:
     """Return a diff payload shaped like `differential.diff.search`.
 
     The recorded commit SHA differs from the local commit `node`, so
@@ -119,7 +120,7 @@ def build_diff(rev_id):
     }
 
 
-def build_fake_call(num_commits):
+def build_fake_call(num_commits: int) -> Callable[..., Any]:
     """Return a function suitable for use as `ConduitAPI.call.side_effect`.
 
     Dispatches on the Conduit method name and returns plausible payloads
@@ -130,7 +131,13 @@ def build_fake_call(num_commits):
     diffs = [build_diff(100 + index) for index in range(1, num_commits + 1)]
     next_new_diff_id = [9000]
 
-    def fake_call(_self, method, args, *, api_token=None):
+    def fake_call(
+        _self: Any,
+        method: str,
+        args: Dict[str, Any],
+        *,
+        api_token: Optional[str] = None,
+    ) -> Any:
         if method == "differential.revision.search":
             constraints = args.get("constraints", {})
             ids = constraints.get("ids")
@@ -182,7 +189,7 @@ def build_fake_call(num_commits):
     return fake_call
 
 
-def build_fake_repo():
+def build_fake_repo() -> mock.MagicMock:
     """Return a `MagicMock` shaped like the moz-phab `Repository` layer."""
     repo = mock.MagicMock()
     repo.phab_url = PHAB_URL
@@ -213,7 +220,7 @@ def build_fake_repo():
 
 
 @pytest.fixture
-def submit_workload():
+def submit_workload() -> Iterator[Callable[[int], List[Commit]]]:
     """Yield a callable that runs `_submit` for `num_commits` commits.
 
     Each invocation rebuilds the canned conduit responses for that stack
@@ -221,7 +228,7 @@ def submit_workload():
     the benchmark can iterate without leaking between runs.
     """
 
-    def run(num_commits):
+    def run(num_commits: int) -> List[Commit]:
         commits = [build_commit(index) for index in range(1, num_commits + 1)]
         repo = build_fake_repo()
         repo.commit_stack.return_value = commits
@@ -257,7 +264,9 @@ def submit_workload():
 
 @pytest.mark.parametrize("num_commits", [1, 3, 5, 10])
 @pytest.mark.benchmark
-def test_submit_stack(submit_workload, num_commits):
+def test_submit_stack(
+    submit_workload: Callable[[int], List[Commit]], num_commits: int
+) -> None:
     submitted = submit_workload(num_commits)
     assert (
         len(submitted) == num_commits
