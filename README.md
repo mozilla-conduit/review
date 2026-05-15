@@ -383,9 +383,23 @@ docker run --rm -v "$PWD":/work -w /work \
     codspeed run --mode=instrumentation -- uv run pytest tests/benchmarks/
 ```
 
-The benchmarks also run in CI under a dedicated `benchmarks` job and
-upload results to the moz-phab codspeed.io dashboard for per-branch
-comparison against `main`.
+#### How the CI run is triggered
+
+The `benchmarks` job in `.github/workflows/ci.yml` runs on every push
+to any branch in the upstream repository. It authenticates to
+codspeed.io via OIDC (no `CODSPEED_TOKEN` secret is needed) and
+uploads its results to the moz-phab project on the codspeed.io
+dashboard. There is no `pull_request` trigger -- pushing to any
+branch (or to a throwaway one created just to verify the wiring) is
+enough.
+
+#### Baseline and per-branch comparisons
+
+codspeed.io treats `main` as the baseline. Once a commit has landed
+on `main` and the `benchmarks` job has run against it, every
+subsequent push to any branch produces a per-benchmark delta against
+that baseline on the dashboard. Until then, branch runs show raw
+numbers but no delta.
 
 ### Circle CI
 
