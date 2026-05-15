@@ -85,6 +85,31 @@ jobs:
           path: coredumps
           if-no-files-found: ignore
 
+  benchmarks:
+    name: benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --group dev --locked
+
+      - name: Configure git
+        run: |
+          git config --global user.email "moz-phab-tests@example.com"
+          git config --global user.name "moz-phab tests"
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v3
+        with:
+          token: ${{ secrets.CODSPEED_TOKEN }}
+          run: uv run pytest --codspeed tests/benchmarks/
+
   test_package:
     name: test package
     runs-on: ubuntu-latest
