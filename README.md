@@ -337,6 +337,23 @@ the lock file after changing dependencies, run:
 uv lock
 ```
 
+### Benchmarks
+
+Performance benchmarks for the `submit` and `patch` workflows live under
+`tests/benchmarks/` and run via [pytest-codspeed](https://github.com/CodSpeedHQ/pytest-codspeed),
+complemented by call-count regression tests under `tests/`. To run the
+benchmarks locally:
+
+```shell
+uv run pytest --codspeed tests/benchmarks/
+```
+
+See [BENCHMARKING.md](BENCHMARKING.md) for what the benchmarks
+measure, codspeed's limitations for this tool (git subprocess time
+and network I/O are not directly measurable), how the call-count
+regression tests fill those gaps, the Docker option for `valgrind`
+instrumentation mode, and the dashboard / CI integration details.
+
 ### Circle CI
 
 `mozphab` uses Circle CI to ensure all tests pass on Linux and Windows.
