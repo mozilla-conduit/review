@@ -80,6 +80,37 @@ fixed response sequence, and `git_repo_path` for the real-git
 exercise. See `tests/benchmarks/test_bench_submit.py` for the full
 shape.
 
+## Call-count regression tests
+
+The codspeed benchmarks measure wall time and Python instruction
+count. They don't directly catch *structural* perf regressions like
+"this refactor introduced an extra Phabricator API round-trip" --
+those show up as small wall-time deltas at best, lost in noise.
+
+`tests/test_call_counts.py` complements the benchmarks by asserting
+the exact number and method breakdown of `ConduitAPI.call`
+invocations per workflow. It wraps `ConduitAPI.call` with a `Counter`
+and runs the real `submit` and `patch` flows end-to-end; any change
+that adds, removes, or reshuffles a network round-trip moves at
+least one counter and fails the assertion with a file:line.
+
+What counts is *the network boundary*: `SimpleCache`-served lookups
+(e.g. a `get_revisions([already_preloaded_id])` call) are free and
+don't move the counter. The test catches real perf regressions
+(new uncached API trips, broken cache invariants, batched fetches
+being split into per-revision loops); it stays quiet for harmless
+refactors that touch high-level helpers.
+
+When a change to call counts is intentional -- for example because
+you're explicitly adding a new feature that needs an extra API call
+-- update the expected dict (`SUBMIT_EXPECTED` / `PATCH_EXPECTED`) in
+the same commit. The diff in the expected counts is what signals the
+perf change to reviewers.
+
+Unlike the benchmarks, the call-count tests run in the normal pytest
+job, not under codspeed -- a regression fails CI loudly rather than
+appearing as a silent shift in a dashboard number.
+
 ## Limitations of codspeed for `moz-phab`
 
 Documented so future contributors don't expect signals that aren't
@@ -96,7 +127,9 @@ there:
   entirely (which is why we use walltime -- see above).
 - **Network RTT to Phabricator** is fully mocked in benchmarks.
   Real-world `submit` latency depends heavily on Conduit response
-  time, which we don't attempt to model.
+  time, which we don't attempt to model. The call-count regression
+  test above catches the *structural* part of that cost -- "did we
+  add a round-trip?" -- which is what's actually worth gating on.
 
 ## Acknowledgements
 
