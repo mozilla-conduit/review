@@ -69,6 +69,22 @@ per-run variance -- codspeed recommends their dedicated "Macro
 Runners" for tight walltime measurements; on standard GHA runners,
 deltas under ~10% are usually in the noise floor.
 
+If you do want to experiment with simulation mode locally (for
+example to look at a Python-only hot path that isn't dominated by
+subprocesses), `dev/Dockerfile` ships an image with `valgrind`,
+`codspeed-runner`, `uv`, and the project's dev dependencies:
+
+```shell
+docker build -t moz-phab-bench -f dev/Dockerfile .
+docker run --rm -v "$PWD":/work -w /work moz-phab-bench \
+    uv run pytest --codspeed --codspeed-mode=instrumentation \
+        tests/benchmarks/
+```
+
+Uploading the simulation-mode results to the codspeed.io dashboard
+(via `codspeed run`) requires a personal `CODSPEED_TOKEN` issued
+from the project page; CI does not need one.
+
 ## Adding a new benchmark
 
 Drop a file at `tests/benchmarks/test_bench_<name>.py` with one or
