@@ -49,6 +49,17 @@ See `ruff.toml` for linting configuration; `black` is configured with the defaul
 - Tests set `MOZPHAB_NO_USER_CONFIG=1` to avoid loading user config.
 - `tests/test_style.py` runs `ruff` and `black` as part of the normal test suite.
 
+## Benchmarks
+
+Performance benchmarks and call-count regression tests cover the
+`submit` and `patch` workflows. Run all benchmarks with
+`uv run pytest --codspeed tests/benchmarks/`. The full picture --
+codspeed limitations for this tool (git subprocess time and network
+I/O are not directly measured), how `tests/test_call_counts.py` and
+`tests/test_git_call_counts.py` cover those gaps, and the Docker
+helper for `valgrind` instrumentation mode -- is in
+[BENCHMARKING.md](BENCHMARKING.md).
+
 ## MCP resources
 
 - `@moz:bugzilla://bug/{bug_id}` — retrieve a bug.
