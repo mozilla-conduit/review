@@ -87,32 +87,39 @@ shape.
 
 The codspeed benchmarks measure wall time and Python instruction
 count. They don't directly catch *structural* perf regressions like
-"this refactor introduced an extra Phabricator API round-trip" --
-those show up as small wall-time deltas at best, lost in noise.
+"this refactor introduced an extra Phabricator API round-trip" or
+"this added a `git rev-parse` to the submit hot path" -- those show
+up as small wall-time deltas at best, lost in noise.
 
-`tests/test_call_counts.py` complements the benchmarks by asserting
-the exact number and method breakdown of `ConduitAPI.call`
-invocations per workflow. It wraps `ConduitAPI.call` with a `Counter`
-and runs the real `submit` and `patch` flows end-to-end; any change
-that adds, removes, or reshuffles a network round-trip moves at
-least one counter and fails the assertion with a file:line.
+Two regression tests cover the two boundaries where moz-phab's
+actual perf cost lives:
 
-What counts is *the network boundary*: `SimpleCache`-served lookups
-(e.g. a `get_revisions([already_preloaded_id])` call) are free and
-don't move the counter. The test catches real perf regressions
-(new uncached API trips, broken cache invariants, batched fetches
-being split into per-revision loops); it stays quiet for harmless
-refactors that touch high-level helpers.
+- `tests/test_call_counts.py` -- wraps `ConduitAPI.call` (the HTTP
+  boundary) with a `Counter` and asserts the exact method breakdown
+  per workflow. Catches new uncached API trips, broken cache
+  invariants, and batched fetches being split into per-revision
+  loops. Stays quiet for harmless refactors that only touch
+  `SimpleCache`-served helpers.
+- `tests/test_git_call_counts.py` -- wraps
+  `mozphab.gitcommand.check_call` and `check_output` (the
+  subprocess boundary) with a `Counter` keyed by git subcommand.
+  Catches new `git log` / `git rev-parse` / etc. invocations added
+  to a workflow loop.
 
-When a change to call counts is intentional -- for example because
-you're explicitly adding a new feature that needs an extra API call
--- update the expected dict (`SUBMIT_EXPECTED` / `PATCH_EXPECTED`) in
-the same commit. The diff in the expected counts is what signals the
-perf change to reviewers.
+Both run the real `submit` and `patch` flows end-to-end. Any change
+that moves a counter fails the assertion with a file:line and a
+diff against the expected dict.
 
-Unlike the benchmarks, the call-count tests run in the normal pytest
-job, not under codspeed -- a regression fails CI loudly rather than
-appearing as a silent shift in a dashboard number.
+When a count change is intentional -- you're explicitly adding a
+new feature that needs an extra API or git call -- update the
+expected dict (`SUBMIT_EXPECTED` / `PATCH_EXPECTED` /
+`SUBMIT_CREATE_EXPECTED` / `PATCH_RAW_EXPECTED`) in the same commit.
+The diff in the expected counts is what signals the perf change to
+reviewers.
+
+Both tests run in the normal pytest job, not under codspeed -- a
+regression fails CI loudly rather than appearing as a silent shift
+in a dashboard number.
 
 ## Limitations of codspeed for `moz-phab`
 
