@@ -35,6 +35,7 @@ from mozphab import (  # noqa: E402
 )
 from mozphab.commands import submit  # noqa: E402
 from mozphab.git import Git  # noqa: E402
+from mozphab.logger import logger  # noqa: E402
 from mozphab.mercurial import Mercurial  # noqa: E402
 
 environment.SHOW_SPINNER = False
@@ -448,6 +449,24 @@ def user_data(m_file):
 @pytest.fixture(name="reset_glean", scope="function", autouse=True)
 def fixture_reset_glean():
     testing.reset_glean(application_id="mozphab", application_version="0.1.86")
+
+
+@pytest.fixture(autouse=True)
+def restore_logging():
+    """Restore the global `moz-phab` logger state after each test.
+
+    `mozphab.main` mutates the shared logger as a side effect (for example
+    `patch --raw` lowers its level to `ERROR`). Without this guard that level
+    leaks across the session and breaks `caplog`/`assertLogs` assertions in
+    later, unrelated tests.
+    """
+    original_level = logger.level
+    original_handlers = logger.handlers.copy()
+    try:
+        yield
+    finally:
+        logger.setLevel(original_level)
+        logger.handlers = original_handlers
 
 
 @pytest.fixture(autouse=True)
