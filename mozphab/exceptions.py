@@ -20,7 +20,9 @@ class CommandError(Exception):
     """Errors raised by external commands."""
 
     status: int
+    stderr: str
 
-    def __init__(self, msg: str = "", status: int = 1):
+    def __init__(self, msg: str = "", status: int = 1, stderr: str = ""):
         self.status = status
+        self.stderr = stderr
         super().__init__(msg)

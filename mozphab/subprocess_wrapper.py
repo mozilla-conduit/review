@@ -106,7 +106,9 @@ def check_output(
             logger.debug(e.stderr)
 
         raise CommandError(
-            "command '%s' failed to complete successfully" % command[0], e.returncode
+            "command '%s' failed to complete successfully" % command[0],
+            e.returncode,
+            stderr=e.stderr or "",
         )
 
     if expect_binary:

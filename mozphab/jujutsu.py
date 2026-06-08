@@ -53,14 +53,18 @@ class Jujutsu(Repository):
         resolved_path = Path(path).resolve(strict=True)
         logger.debug(f"resolved_path: {resolved_path}")
 
+        # `.jj` already exists, so a `jj git root` failure means `jj` errored
+        # (commonly a broken config); raise `Error` to surface it rather than a
+        # `ValueError` that `probe_repo` would swallow as "Not a repository".
         try:
             self.git_path = Path(
                 self.__check_output(["jj", "git", "root"], split=False)
             )
-        except Exception:
-            raise ValueError(
-                f"{path}: failed to run `jj git root`, likely not a Jujutsu repository"
-            )
+        except CommandError as exc:
+            message = f"{path}: `jj git root` failed, your `jj` config may be broken."
+            if exc.stderr:
+                message = f"{message}\n{exc.stderr.rstrip()}"
+            raise Error(message)
         logger.debug(f"git_path: {self.git_path}")
 
         try:

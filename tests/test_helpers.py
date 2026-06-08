@@ -24,6 +24,7 @@ from mozphab import (
 )
 from mozphab.commands import submit
 from mozphab.commits import Commit
+from mozphab.jujutsu import Jujutsu
 
 
 class Helpers(unittest.TestCase):
@@ -365,6 +366,33 @@ def test_avoid_jj_find_colocated_git_repo(jj_colocated_repo_path):
     subdir = jj_colocated_repo_path / "test_dir"
     subdir.mkdir()
     assert path == detect_repository.find_repo_root(str(subdir))
+
+
+def test_jj_broken_config_surfaces_error(monkeypatch, jj_colocated_repo_path, tmp_path):
+    # A TOML-valid but revset-invalid alias makes `jj git root` fail while
+    # `jj version` still succeeds, matching the reported failure mode.
+    broken_config = tmp_path / "broken.toml"
+    broken_config.write_text(
+        "[revset-aliases]\n"
+        '"immutable_heads()" = "builtin_immutable_heads() | '
+        "remote_bookmarks(exact:'release'\"\n"
+    )
+    monkeypatch.setenv("JJ_CONFIG", str(broken_config))
+
+    path = str(jj_colocated_repo_path)
+
+    with pytest.raises(exceptions.Error) as excinfo:
+        Jujutsu(path)
+    assert "jj git root" in str(
+        excinfo.value
+    ), "A broken `jj` config should surface a `jj git root` error."
+    assert "Config error" in str(
+        excinfo.value
+    ), "The underlying `jj` config error should be included in the message."
+
+    # `probe_repo` should propagate the `Error` rather than swallow it.
+    with pytest.raises(exceptions.Error):
+        detect_repository.probe_repo(path)
 
 
 def test_fail_find_repo():
