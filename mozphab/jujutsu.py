@@ -76,7 +76,7 @@ class Jujutsu(Repository):
             self.__git_repo = Git(path, bare_path=bare_path)
             logger.debug("Git repo initialized")
         except Exception:
-            raise ValueError(
+            raise Error(
                 f"internal error: failed to initialize Git repo from {self.git_path}"
             )
 
