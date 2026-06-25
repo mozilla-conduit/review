@@ -47,6 +47,7 @@ class Git(Repository):
             raise ValueError("%s: not a git repository" % path)
 
         logger.debug("found git repo in %s", path)
+        logger.debug("bare git repo path: %s", bare_path)
 
         self.git = GitCommand(path, bare_path)
 
