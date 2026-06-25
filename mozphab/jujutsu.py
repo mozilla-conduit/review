@@ -74,6 +74,7 @@ class Jujutsu(Repository):
             logger.debug(f"is_colocated: {is_colocated}")
             bare_path = None if is_colocated else str(self.git_path)
             self.__git_repo = Git(path, bare_path=bare_path)
+            logger.debug("Git repo initialized")
         except Exception:
             raise ValueError(
                 f"internal error: failed to initialize Git repo from {self.git_path}"
