@@ -56,6 +56,24 @@ class Jujutsu(Repository):
         # `.jj` already exists, so further issues are internal to `jj` (commonly a broken config).
         # Raise `Error` to surface them, rather than a `ValueError`. Otherwise, `probe_repo` would
         # swallow them as "Not a repository".
+
+        if version >= Version("0.42.0"):
+            try:
+                backend_name = self.__check_output(
+                    ["jj", "util", "backend", "name"], split=False
+                )
+            except CommandError as exc:
+                message = f"{path}: `jj util backend name` failed, your `jj` config may be broken."
+                if exc.stderr:
+                    message = f"{message}\n{exc.stderr.rstrip()}"
+                raise Error(message)
+
+            if backend_name != "git":
+                raise Error(
+                    "Git backend is not being used for this Jujutsu repository, "
+                    "which is not supported"
+                )
+
         try:
             self.git_path = Path(
                 self.__check_output(["jj", "git", "root"], split=False)
