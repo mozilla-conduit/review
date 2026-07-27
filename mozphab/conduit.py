@@ -394,7 +394,8 @@ class ConduitAPI:
                 if rev_id in phids_by_id
             ]
         else:
-            return [revisions[phid] for phid in phids]
+            # Skip revisions for which we do not have a query result.
+            return [revisions[phid] for phid in phids if phid in revisions]
 
     def get_diffs(
         self, ids: Optional[List[int]] = None, phids: Optional[List[str]] = None

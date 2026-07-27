@@ -383,6 +383,16 @@ def test_get_revisions_search_by_revids_missing(get_revs, m_call):
     ]
 
 
+def test_get_revisions_search_by_phids_missing(get_revs, m_call):
+    """phabricator does not return info on all phids, e.g. restricted access"""
+    m_call.return_value = multiple_phab_result
+    assert get_revs(phids=["PHID-2", "PHID-4", "PHID-1", "PHID-3"]) == [
+        {"id": 2, "phid": "PHID-2"},
+        {"id": 1, "phid": "PHID-1"},
+        {"id": 3, "phid": "PHID-3"},
+    ]
+
+
 @pytest.fixture
 def get_diffs():
     mozphab.conduit.set_repo(repository.Repository("", "", "dummy"))
