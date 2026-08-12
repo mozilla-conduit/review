@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import urllib.request
+from importlib import invalidate_caches
 from pathlib import Path
 from typing import Optional
 
@@ -18,7 +19,7 @@ from setuptools import Distribution
 from mozphab import environment
 
 from .config import config
-from .environment import MOZPHAB_VERSION
+from .environment import MOZPHAB_VERSION, get_mozphab_version
 from .exceptions import Error
 from .logger import logger
 from .subprocess_wrapper import check_call
@@ -148,7 +149,72 @@ def check_for_updates(force_check: bool = False) -> Optional[str]:
     return pypi_version
 
 
+def find_uv_receipt() -> Optional[Path]:
+    """Return the `uv-receipt.toml` for this install, or `None` if not a `uv` tool.
+
+    A `uv tool install` places a `uv-receipt.toml` at the root of the tool's
+    isolated environment, which is `sys.prefix`. Avoid deriving the root from
+    `sys.executable`, since a `uv` venv symlinks its interpreter at the base
+    Python and resolving that symlink leads outside the tool's environment.
+    """
+    receipt = Path(sys.prefix) / "uv-receipt.toml"
+    if receipt.is_file():
+        logger.debug(f"Found `uv` receipt at {receipt}.")
+        return receipt
+
+    return None
+
+
+def is_uv_tool_install() -> bool:
+    """Return `True` if `moz-phab` is running from a `uv tool install`."""
+    return find_uv_receipt() is not None
+
+
 def self_upgrade():
+    """Upgrade ourselves, dispatching to the installer that owns this install."""
+    if is_uv_tool_install():
+        uv_upgrade()
+    else:
+        pip_upgrade()
+
+
+def uv_upgrade():
+    """Upgrade ourselves with `uv tool upgrade`."""
+    command = ["uv", "tool", "upgrade", environment.MOZPHAB_NAME]
+
+    if config.get_pre_releases:
+        # `uv` excludes pre-releases by default; opt in to match the pip path.
+        command += ["--prerelease", "allow"]
+
+    if not environment.DEBUG:
+        command += ["--quiet"]
+
+    try:
+        check_call(command)
+    except FileNotFoundError:
+        raise Error(
+            "Unable to upgrade: `moz-phab` was installed with `uv`, but `uv` was "
+            "not found on your PATH. Please install `uv` or upgrade manually with "
+            "`uv tool upgrade MozPhab`."
+        )
+
+    # `uv tool upgrade` exits successfully when it declines to upgrade, so read
+    # the version back from the environment to confirm the upgrade happened.
+    invalidate_caches()
+    installed_version = get_mozphab_version()
+    logger.debug(f"Version after `uv` upgrade: {installed_version}.")
+
+    if parse_version(installed_version) <= parse_version(MOZPHAB_VERSION):
+        raise Error(
+            f"Unable to upgrade: `uv` did not move `moz-phab` past version "
+            f"{MOZPHAB_VERSION} (now at {installed_version}). This happens when the "
+            "tool was installed with a pinned version, or from a local path rather "
+            "than from PyPI. Reinstall with `uv tool install --force MozPhab` to "
+            "restore self-update."
+        )
+
+
+def pip_upgrade():
     """Upgrade ourselves with pip."""
 
     # Run pip using the current python executable to accommodate for virtualenvs

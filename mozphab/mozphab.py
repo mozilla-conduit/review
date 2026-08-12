@@ -34,6 +34,7 @@ from .spinner import wait_message
 from .telemetry import configure_telemetry, telemetry
 from .updater import (
     check_for_updates,
+    is_uv_tool_install,
     log_windows_update_message,
     self_upgrade,
 )
@@ -101,7 +102,7 @@ def main(argv: List[str], *, is_development: bool):
         elif args.command != "self-update":
             new_version = check_for_updates()
 
-            if new_version and environment.IS_WINDOWS:
+            if new_version and environment.IS_WINDOWS and not is_uv_tool_install():
                 log_windows_update_message()
             elif new_version and config.self_auto_update:
                 try:

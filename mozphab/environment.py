@@ -45,7 +45,8 @@ MAX_CONTEXT_SIZE = 4 * 1024 * 1024
 MOZPHAB_NAME = "MozPhab"  # PyPi package name
 
 
-def _get_mozphab_version() -> str:
+def get_mozphab_version() -> str:
+    """Return the version of the currently installed `mozphab` package."""
     try:
         return version("mozphab")
     except PackageNotFoundError:
@@ -53,6 +54,6 @@ def _get_mozphab_version() -> str:
         return "0.0.0"
 
 
-MOZPHAB_VERSION = _get_mozphab_version()
+MOZPHAB_VERSION = get_mozphab_version()
 
 USER_AGENT = f"{MOZPHAB_NAME}/{MOZPHAB_VERSION}"

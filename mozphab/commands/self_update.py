@@ -10,6 +10,7 @@ from mozphab.logger import logger
 from mozphab.spinner import wait_message
 from mozphab.updater import (
     check_for_updates,
+    is_uv_tool_install,
     log_windows_update_message,
     self_upgrade,
 )
@@ -25,7 +26,9 @@ def self_update(_):
         )
         return
 
-    if IS_WINDOWS:
+    # `uv` can replace its own tool executables on Windows, so only fall back to
+    # the manual upgrade message for non-`uv` Windows installs.
+    if IS_WINDOWS and not is_uv_tool_install():
         log_windows_update_message()
         return
 
