@@ -328,6 +328,10 @@ version management. Install `uv` by following the
 4. To run tests use `uv run pytest -vv`
 5. To run tests against a specific Python version use `uv run --python 3.12 pytest -vv`
 
+Tests run in parallel across all available cores using
+[pytest-xdist](https://pytest-xdist.readthedocs.io/). Add `-n0` to run them
+serially, which is needed when dropping into `--pdb`.
+
 ### Updating dependencies
 
 Dependencies are defined in `pyproject.toml` and locked in `uv.lock`. To update

@@ -27,6 +27,10 @@ module-level `call_conduit`:
 uv run pytest --codspeed tests/benchmarks/
 ```
 
+The suite's default `-n auto` is turned off automatically whenever
+`--codspeed` is in play (see the root `conftest.py`) — benchmarks
+measure nothing inside `pytest-xdist` workers.
+
 Walltime mode is the default; it prints a table of best/mean times,
 relative stdev, and iteration count per benchmark. It's the same
 mode the CI job uses, so local numbers correspond to what the

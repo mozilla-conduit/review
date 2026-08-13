@@ -46,6 +46,8 @@ See `ruff.toml` for linting configuration; `black` is configured with the defaul
 - `conftest.py` provides fixtures: `git_repo_path`, `hg_repo_path`, mocked Conduit responses.
 - The `fresh_global_config` fixture is applied globally via `pytest.ini`.
 - Marker `no_mock_token` skips automatic token mocking for tests that need it.
+- `pytest.ini` sets `addopts = -n auto`, so the suite runs in parallel across all cores via `pytest-xdist`. Pass `-n0` to run serially, which is required for `--pdb` and is forced automatically for `--codspeed` runs by the root `conftest.py`.
+- Tests must stay independent: every fixture is function-scoped, and workers get their own `tmp_path` and `$HOME`. Do not add module- or session-scoped state that tests mutate.
 - Tests set `MOZPHAB_NO_USER_CONFIG=1` to avoid loading user config.
 - `tests/test_style.py` runs `ruff` and `black` as part of the normal test suite.
 
