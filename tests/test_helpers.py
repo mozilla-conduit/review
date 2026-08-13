@@ -369,8 +369,10 @@ def test_avoid_jj_find_colocated_git_repo(jj_colocated_repo_path):
 
 
 def test_jj_broken_config_surfaces_error(monkeypatch, jj_colocated_repo_path, tmp_path):
-    # A TOML-valid but revset-invalid alias makes `jj git root` fail while
-    # `jj version` still succeeds, matching the reported failure mode.
+    # A TOML-valid but revset-invalid alias makes repository commands fail while
+    # `jj version` still succeeds, matching the reported failure mode. Which
+    # command fails first depends on the `jj` version, so only assert that one of
+    # them surfaced the config error.
     broken_config = tmp_path / "broken.toml"
     broken_config.write_text(
         "[revset-aliases]\n"
@@ -383,9 +385,9 @@ def test_jj_broken_config_surfaces_error(monkeypatch, jj_colocated_repo_path, tm
 
     with pytest.raises(exceptions.Error) as excinfo:
         Jujutsu(path)
-    assert "jj git root" in str(
+    assert "your `jj` config may be broken" in str(
         excinfo.value
-    ), "A broken `jj` config should surface a `jj git root` error."
+    ), "A broken `jj` config should surface the failing `jj` command."
     assert "Config error" in str(
         excinfo.value
     ), "The underlying `jj` config error should be included in the message."
