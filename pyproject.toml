@@ -58,6 +58,7 @@ dev = [
     "mercurial==6.8.2",
     "pytest==8.3.3",
     "pytest-codspeed==3.2.0",
+    "pytest-xdist==3.6.1",
     "ruff==0.14.0",
 ]
 
