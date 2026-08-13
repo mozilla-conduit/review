@@ -250,6 +250,7 @@ def test_ping(m_call):
 @mock.patch("mozphab.conduit.os")
 @mock.patch("builtins.open")
 def test_check(m_open, m_os, m_ping, m_call):
+    mozphab.conduit.set_repo(Repo())
     check = mozphab.conduit.check
 
     m_os.path.join.return_value = "x"

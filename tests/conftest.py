@@ -133,6 +133,17 @@ def reset_cache():
     simplecache.cache.reset()
 
 
+@pytest.fixture(autouse=True)
+def reset_conduit_repo():
+    """Clear the repo held by the module-level `conduit` singleton.
+
+    Without this a test can pass only because an earlier test in the same
+    process called `set_repo`. Under `pytest-xdist` that earlier test may run in
+    a different worker, turning the dependency into an intermittent failure.
+    """
+    conduit.conduit.repo = None
+
+
 @pytest.fixture()
 def repo_phab_url():
     with mock.patch("mozphab.repository.Repository._phab_url") as xmock:
