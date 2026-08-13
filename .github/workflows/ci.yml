@@ -65,6 +65,8 @@ jobs:
         run: |
           set -e
           ulimit -c unlimited
+          # One invocation per file keeps the per-file junit reports. Each of
+          # those runs in parallel, as `pytest.ini` sets `-n auto`.
           for test_file in tests/test_*.py; do
             uv run python3 -m pytest --junitxml=test-reports/junit-$(basename "$test_file" .py).xml -vv "$test_file"
           done
