@@ -20,7 +20,7 @@ classifiers = [
 
 dependencies = [
     "distro",
-    "glean-sdk==65.*",
+    "glean-sdk==68.*",
     "packaging",
     "python-hglib>=2.6.2",
     "sentry-sdk>=0.14.3",

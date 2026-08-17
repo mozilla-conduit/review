@@ -169,7 +169,7 @@ resolution-markers = [
     "python_full_version < '3.10'",
 ]
 dependencies = [
-    { name = "colorama", marker = "python_full_version < '3.10' and sys_platform == 'win32'" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/0090cbf739cee7d23781ad4b89a9894a41538e4fcf4c31dcdd705b78eb8b/click-8.1.8.tar.gz", hash = "sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a", size = 226593, upload-time = "2024-12-21T18:38:44.339Z" }
 wheels = [
@@ -184,7 +184,7 @@ resolution-markers = [
     "python_full_version >= '3.10'",
 ]
 dependencies = [
-    { name = "colorama", marker = "python_full_version >= '3.10' and sys_platform == 'win32'" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/57/75/31212c6bf2503fdf920d87fee5d7a86a2e3bcf444984126f13d8e4016804/click-8.3.2.tar.gz", hash = "sha256:14162b8b3b3550a7d479eafa77dfd3c38d9dc8951f6f69c78913a8f9a7540fd5", size = 302856, upload-time = "2026-04-03T19:14:45.118Z" }
 wheels = [
@@ -223,7 +223,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -241,7 +241,7 @@ wheels = [
 
 [[package]]
 name = "glean-parser"
-version = "17.3.0"
+version = "20.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -254,29 +254,29 @@ dependencies = [
     { name = "platformdirs", version = "4.9.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/83/c3/24387435f0bf3def52922a70c3f5aab81c82ab6120ac4db719109f0c8b23/glean_parser-17.3.0.tar.gz", hash = "sha256:f70fb4496436068f81ef786029a1b369f61ae2f9327eeb2fa50335dba59ee214", size = 125596, upload-time = "2025-07-09T09:03:02.026Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/29/4c/7a3cb58dbae606b762dd58e0b486f7e4258b4909f8f8be3070d00cf3413f/glean_parser-20.2.0.tar.gz", hash = "sha256:08fec387c5d2a683a43152d6994200946e6f06973cc905b7c87617fb2d57b0c5", size = 136982, upload-time = "2026-07-21T19:12:37.468Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6d/31/8176e4e77144bae2493d9da708c15da01e403befbf3c9490db001a64da53/glean_parser-17.3.0-py3-none-any.whl", hash = "sha256:84d975d40333e97d9f6e0ce0f22db4e1e3d8e088b2da678e34cc7ab3361f071d", size = 115439, upload-time = "2025-07-09T09:03:00.784Z" },
+    { url = "https://files.pythonhosted.org/packages/1c/ac/29b87d77cc6deaf0f62995d695a5db38ad3bb0b0642a1b173c410bf5e1ca/glean_parser-20.2.0-py3-none-any.whl", hash = "sha256:1d5196d2978b767dbbed77dc98a9747148ecb24a84bd957a5eb47d334ae07187", size = 121896, upload-time = "2026-07-21T19:12:36.373Z" },
 ]
 
 [[package]]
 name = "glean-sdk"
-version = "65.2.3"
+version = "68.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "glean-parser" },
     { name = "semver" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bf/8a/a45f4ee0a98901cd474204587ab6ecf18f141803a11d3c091c1f035fbfed/glean_sdk-65.2.3.tar.gz", hash = "sha256:e8d17d1851b688b242c9de51c9125b41cd87a30a788a2a26be6cdf00e628d1be", size = 260945, upload-time = "2025-11-06T11:15:08.141Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/08/c3/c0872dd8d3c10c5601fdd1595776f033ea7006983c9ab795324de4c37b93/glean_sdk-68.0.1.tar.gz", hash = "sha256:e2ea97bbddf9a44efc963ad6cf4971c1c9bb30fc91a7f818edcc9786b8821e9f", size = 296622, upload-time = "2026-07-07T10:19:48.519Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b6/43/fabb546efe0925ba11c6a1d776507f75c267cfa8401729391e14e2fc3fc6/glean_sdk-65.2.3-py3-none-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:fdb39d22e2a6c095ec8990b71b2eb833cbde4a807e8032a4ae218a2983eb23bd", size = 1686649, upload-time = "2025-11-06T11:12:57.204Z" },
-    { url = "https://files.pythonhosted.org/packages/d4/fa/cd8d6b2f31e96c4fd4e3fe54ad3f3c2ed51bbba18b2a5ff4adeb94970af3/glean_sdk-65.2.3-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:263d1a91f1048261013f11a78073d5e1b9d17f29065f9ef7e296dc995f2f846a", size = 898508, upload-time = "2025-11-06T11:12:59.447Z" },
-    { url = "https://files.pythonhosted.org/packages/d9/ce/76677fa87e58abeb4b016b1870fe1b6a9b616ea857099dc6a95f504e8b99/glean_sdk-65.2.3-py3-none-macosx_11_0_arm64.whl", hash = "sha256:38b90604ae9f55fc522e67b47989ed547ccd35d7dbb871b5f78caffedc9cbae0", size = 866137, upload-time = "2025-11-06T11:13:00.771Z" },
-    { url = "https://files.pythonhosted.org/packages/2c/7e/51f1c15418f7e173bde4d73c06ea153e8447fc10ec05d62fb052098b08cd/glean_sdk-65.2.3-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:182eaa29eba7096c751353eac8faec1916ea6b81445ea688874b732d45727b7a", size = 821146, upload-time = "2025-11-06T11:14:59.985Z" },
-    { url = "https://files.pythonhosted.org/packages/93/65/ed4c48130e3423de9386011796452a81ba552429a6b6f0d6ec14e5aaa14b/glean_sdk-65.2.3-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f8346bd5938218906ad572ab82c5fd4468481dda6a2ba41e5fbe67c9383bbcf9", size = 934818, upload-time = "2025-11-06T11:14:31.725Z" },
-    { url = "https://files.pythonhosted.org/packages/1b/24/ee4285df4a19726be7941bad99daa6d1ef3c581fb1ca54f2fdd68d3ddc2d/glean_sdk-65.2.3-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:45d61656d4eead892cdc2cac7d8b2ba1185a9520a0ca50e8326e8a6c2566519e", size = 934533, upload-time = "2025-11-06T11:15:06.777Z" },
-    { url = "https://files.pythonhosted.org/packages/68/d0/78b6e7d156aa0267b4d65dfc67746254a039d485f6943cce86b2091f9443/glean_sdk-65.2.3-py3-none-win_amd64.whl", hash = "sha256:9e603dc7fca2b6cd739a3a31195d4d564db542de5571d7afbd33a7ca8fb8fdde", size = 878415, upload-time = "2025-11-06T11:14:06.474Z" },
-    { url = "https://files.pythonhosted.org/packages/37/a2/f8bf156045be612d9dbf44c8c63e889050f94da3205ecdb4a836b79948bb/glean_sdk-65.2.3-py3-none-win_arm64.whl", hash = "sha256:70920c20bbf393da807933056e85575598078f8124c44c68257df195b5d8d5f4", size = 741441, upload-time = "2025-11-06T11:15:20.785Z" },
+    { url = "https://files.pythonhosted.org/packages/07/ca/8d8320ac7b22ebf3a382c497d8d2317d9c76010ac1754ef801bdd5aaadfa/glean_sdk-68.0.1-py3-none-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:853a7b5e1ae045e41bf135da7d2a61dd1e4721f483c5e049c1cc4a9a0ebf6d3c", size = 2059058, upload-time = "2026-07-07T10:17:49.647Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/f8/83e1dcf38d964ea148d5043a1bf954d1304f6a7e91e148b21a0188db7bef/glean_sdk-68.0.1-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:3bad6bd8c4fc42b15188fa68874b7cfc19435395715128af9a35f24ef825a67e", size = 1110665, upload-time = "2026-07-07T10:17:51.699Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/d2/d683b48d8b28cde0134331e626766069a932c8da249f0ef79e75f71432b9/glean_sdk-68.0.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:db984a5fb3d4eb32cf3cb2258ed5834ca252695e7196c20cdaa6ac79ac93f18c", size = 1054278, upload-time = "2026-07-07T10:17:52.785Z" },
+    { url = "https://files.pythonhosted.org/packages/79/fe/b21acf51170d5cd3f5efcbbe795567edbcf0d79f00938f36ae3d3924d408/glean_sdk-68.0.1-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:87286d2f0127acf73bbef58c70fc7d1bf1cd14df4c2a2ac340d024e532ddcc88", size = 1840665, upload-time = "2026-07-07T10:22:11.96Z" },
+    { url = "https://files.pythonhosted.org/packages/af/be/dea76b4f1662f6d774f84c9420287bc42b770060af138d699de7766d181b/glean_sdk-68.0.1-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:711006e82011d54fe28af93444e8dd56128b1ec6f3191b2a8d1d907cb8fdd86a", size = 1792777, upload-time = "2026-07-07T10:20:42.465Z" },
+    { url = "https://files.pythonhosted.org/packages/05/c5/0af2ee2f7ebcd5313a4e4732d22ef1d0cce67706de46a27302cb66c7d891/glean_sdk-68.0.1-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:17b51da16b6047e6d82edc322f8b9a90d9a9f6123792bda1da866ecf98177326", size = 1792345, upload-time = "2026-07-07T10:19:47.47Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/78/cf368e2bee640cdb35d24e0c7c1865803191822d255dcf63e2f4bf9474e2/glean_sdk-68.0.1-py3-none-win_amd64.whl", hash = "sha256:814edfc899c397690129e747c1477966f854621c12cc3dd248016098a07d407e", size = 3021850, upload-time = "2026-07-07T10:20:14.152Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/d5/ef5ef681ac782e4e67a708ee8f142a752fa6d58cabec9224ba5ea947a797/glean_sdk-68.0.1-py3-none-win_arm64.whl", hash = "sha256:76f5cb307a6b6b050ba9979df729dc83b74266de1b4bd9d9863ab52d86df56f4", size = 2950525, upload-time = "2026-07-07T10:22:13.209Z" },
 ]
 
 [[package]]
@@ -299,7 +299,7 @@ name = "importlib-metadata"
 version = "8.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.10'" },
+    { name = "zipp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f3/49/3b30cad09e7771a4982d9975a8cbf64f00d4a1ececb53297f1d9a7be1b10/importlib_metadata-8.7.1.tar.gz", hash = "sha256:49fef1ae6440c182052f407c8d34a68f72efc36db9ca90dc0113398f2fdde8bb", size = 57107, upload-time = "2025-12-21T10:00:19.278Z" }
 wheels = [
@@ -350,10 +350,10 @@ resolution-markers = [
     "python_full_version < '3.10'",
 ]
 dependencies = [
-    { name = "attrs", marker = "python_full_version < '3.10'" },
-    { name = "jsonschema-specifications", marker = "python_full_version < '3.10'" },
-    { name = "referencing", version = "0.36.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
-    { name = "rpds-py", version = "0.27.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "attrs" },
+    { name = "jsonschema-specifications" },
+    { name = "referencing", version = "0.36.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "rpds-py", version = "0.27.1", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/74/69/f7185de793a29082a9f3c7728268ffb31cb5095131a9c139a74078e27336/jsonschema-4.25.1.tar.gz", hash = "sha256:e4a9655ce0da0c0b67a085847e00a3a51449e1157f4f75e9fb5aa545e122eb85", size = 357342, upload-time = "2025-08-18T17:03:50.038Z" }
 wheels = [
@@ -368,10 +368,10 @@ resolution-markers = [
     "python_full_version >= '3.10'",
 ]
 dependencies = [
-    { name = "attrs", marker = "python_full_version >= '3.10'" },
-    { name = "jsonschema-specifications", marker = "python_full_version >= '3.10'" },
-    { name = "referencing", version = "0.37.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
-    { name = "rpds-py", version = "0.30.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+    { name = "attrs" },
+    { name = "jsonschema-specifications" },
+    { name = "referencing", version = "0.37.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "rpds-py", version = "0.30.0", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b3/fc/e067678238fa451312d4c62bf6e6cf5ec56375422aee02f9cb5f909b3047/jsonschema-4.26.0.tar.gz", hash = "sha256:0c26707e2efad8aa1bfc5b7ce170f3fccc2e4918ff85989ba9ffa9facb2be326", size = 366583, upload-time = "2026-01-07T13:41:07.246Z" }
 wheels = [
@@ -399,7 +399,7 @@ resolution-markers = [
     "python_full_version < '3.10'",
 ]
 dependencies = [
-    { name = "mdurl", marker = "python_full_version < '3.10'" },
+    { name = "mdurl" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/38/71/3b932df36c1a044d397a1f92d1cf91ee0a503d91e470cbd670aa66b07ed0/markdown-it-py-3.0.0.tar.gz", hash = "sha256:e3f60a94fa066dc52ec76661e37c851cb232d92f9886b15cb560aaada2df8feb", size = 74596, upload-time = "2023-06-03T06:41:14.443Z" }
 wheels = [
@@ -414,7 +414,7 @@ resolution-markers = [
     "python_full_version >= '3.10'",
 ]
 dependencies = [
-    { name = "mdurl", marker = "python_full_version >= '3.10'" },
+    { name = "mdurl" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/06/ff/7841249c247aa650a76b9ee4bbaeae59370dc8bfd2f6c01f3630c35eb134/markdown_it_py-4.2.0.tar.gz", hash = "sha256:04a21681d6fbb623de53f6f364d352309d4094dd4194040a10fd51833e418d49", size = 82454, upload-time = "2026-05-07T12:08:28.36Z" }
 wheels = [
@@ -563,7 +563,7 @@ dev = [
 requires-dist = [
     { name = "colorama", specifier = ">=0.4.6" },
     { name = "distro" },
-    { name = "glean-sdk", specifier = "==65.*" },
+    { name = "glean-sdk", specifier = "==68.*" },
     { name = "packaging" },
     { name = "python-hglib", specifier = ">=2.6.2" },
     { name = "sentry-sdk", specifier = ">=0.14.3" },
@@ -820,9 +820,9 @@ resolution-markers = [
     "python_full_version < '3.10'",
 ]
 dependencies = [
-    { name = "attrs", marker = "python_full_version < '3.10'" },
-    { name = "rpds-py", version = "0.27.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.10'" },
+    { name = "attrs" },
+    { name = "rpds-py", version = "0.27.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2f/db/98b5c277be99dd18bfd91dd04e1b759cad18d1a338188c936e92f921c7e2/referencing-0.36.2.tar.gz", hash = "sha256:df2e89862cd09deabbdba16944cc3f10feb6b3e6f18e902f7cc25609a34775aa", size = 74744, upload-time = "2025-01-25T08:48:16.138Z" }
 wheels = [
@@ -837,9 +837,9 @@ resolution-markers = [
     "python_full_version >= '3.10'",
 ]
 dependencies = [
-    { name = "attrs", marker = "python_full_version >= '3.10'" },
-    { name = "rpds-py", version = "0.30.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
-    { name = "typing-extensions", marker = "python_full_version >= '3.10' and python_full_version < '3.13'" },
+    { name = "attrs" },
+    { name = "rpds-py", version = "0.30.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/22/f5/df4e9027acead3ecc63e50fe1e36aca1523e1719559c499951bb4b53188f/referencing-0.37.0.tar.gz", hash = "sha256:44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8", size = 78036, upload-time = "2025-10-13T15:30:48.871Z" }
 wheels = [
