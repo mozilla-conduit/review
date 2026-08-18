@@ -15,6 +15,7 @@ import uuid
 from contextlib import suppress
 from functools import lru_cache
 from typing import (
+    Any,
     Dict,
     List,
     Optional,
@@ -169,17 +170,23 @@ class Mercurial(Repository):
         return not status["T"]
 
     def hg(self, command: List[str], **kwargs):
-        self.hg_out(command, capture=False, **kwargs)
+        """Run `hg`, printing its output."""
+        self.hg_run(command, capture=False, **kwargs)
 
-    def hg_out(
+    def hg_run(
         self,
         command: List[str],
         capture: bool = True,
         expect_binary: bool = False,
         strip: bool = True,
-        split: bool = True,
         never_log: bool = False,
-    ) -> Optional[bytes | str]:
+    ) -> Any:
+        """Run `hg`, returning its output when `capture` is set.
+
+        Call `hg` or one of the `hg_out*` methods below, which name the type they
+        return.
+        """
+
         def error_handler(exit_code, stdout, stderr):
             if not capture:
                 clear_terminal_line()
@@ -218,16 +225,35 @@ class Mercurial(Repository):
             logger.debug(out)
 
         if capture:
-            return out.splitlines() if split else out
+            return out
 
         clear_terminal_line()
         print(out, end="")
         return None
 
-    def hg_log(
-        self, revset: str, split: bool = True, select: str = "node"
-    ) -> Optional[str]:
-        return self.hg_out(["log", "-T", "{%s}\n" % select, "-r", revset], split=split)
+    def hg_out_binary(self, command: List[str], **kwargs) -> bytes:
+        """Run `hg` and return its raw output."""
+        return self.hg_run(command, expect_binary=True, **kwargs)
+
+    def hg_out_text(self, command: List[str], **kwargs) -> str:
+        """Run `hg` and return its output as a single string."""
+        return self.hg_run(command, **kwargs)
+
+    def hg_out(self, command: List[str], **kwargs) -> List[str]:
+        """Run `hg` and return its output split into lines."""
+        return self.hg_out_text(command, **kwargs).splitlines()
+
+    def hg_log_command(self, revset: str, select: str = "node") -> List[str]:
+        """Build the `hg log` command for the given revset and field."""
+        return ["log", "-T", "{%s}\n" % select, "-r", revset]
+
+    def hg_log(self, revset: str, select: str = "node") -> List[str]:
+        """Return the `hg log` output as lines."""
+        return self.hg_out(self.hg_log_command(revset, select))
+
+    def hg_log_text(self, revset: str, select: str = "node") -> str:
+        """Return the `hg log` output as a single string."""
+        return self.hg_out_text(self.hg_log_command(revset, select))
 
     def before_submit(self):
         self.validate_email()
@@ -244,8 +270,8 @@ class Mercurial(Repository):
                 self.previous_bookmark = bookmark
                 break
         else:
-            self.previous_bookmark = "moz-phab_%s" % self.hg_out(
-                ["id", "-q"], split=False, strip=True
+            self.previous_bookmark = "moz-phab_%s" % self.hg_out_text(
+                ["id", "-q"], strip=True
             )
             self.has_temporary_bookmark = True
             self.hg(["bookmark", self.previous_bookmark])
@@ -281,8 +307,7 @@ class Mercurial(Repository):
         if self.status is None:
             self.status = {"T": [], "U": []}
             for line in self.hg_out(
-                ["status", "--added", "--deleted", "--modified", "--unknown"],
-                split=True,
+                ["status", "--added", "--deleted", "--modified", "--unknown"]
             ):
                 status, path = line.split(" ", 1)
                 self.status["U" if status == "?" else "T"].append(path)
@@ -294,7 +319,7 @@ class Mercurial(Repository):
     def _refresh_commit(self, commit: Commit, node: str, rev: Optional[str] = None):
         """Update commit's node and name from node and rev."""
         if not rev:
-            rev = self.hg_log(node, select="rev", split=False)
+            rev = self.hg_log_text(node, select="rev")
         commit.node = node
         commit.name = f"{rev}:{short_node(node)}"
 
@@ -460,7 +485,7 @@ class Mercurial(Repository):
     def commit_stack(self, **kwargs) -> List[Commit]:
         # Grab all the info we need about the commits, using randomness as a delimiter.
         boundary = "--%s--\n" % uuid.uuid4().hex
-        hg_log = self.hg_out(
+        hg_log = self.hg_out_text(
             ["log"]
             + [
                 "-T",
@@ -468,7 +493,6 @@ class Mercurial(Repository):
                 "{desc}%s" % boundary,
             ]
             + ["-r", self.revset],
-            split=False,
             strip=False,
         )[: -len(boundary)]
 
@@ -617,9 +641,7 @@ class Mercurial(Repository):
             self.hg(["commit", "--amend", "--logfile", body_file])
 
     def _get_parent(self, node: str) -> Optional[str]:
-        return self.hg_out(
-            ["log", "-T", "{node}", "-r", "parents(%s)" % node], split=False
-        )
+        return self.hg_out_text(["log", "-T", "{node}", "-r", "parents(%s)" % node])
 
     def finalize(self, commits: List[Commit]):
         """Rebase stack children commits if needed."""
@@ -642,9 +664,7 @@ class Mercurial(Repository):
 
     def amend_commit(self, commit: Commit, commits: List[Commit]):
         updated_body = "%s\n%s" % (commit.title, commit.body)
-        current_body = self.hg_out(
-            ["log", "-T", "{desc}", "-r", commit.node], split=False
-        )
+        current_body = self.hg_out_text(["log", "-T", "{desc}", "-r", commit.node])
         if current_body == updated_body:
             logger.debug("not amending commit %s, unchanged", commit.name)
             return
@@ -680,7 +700,7 @@ class Mercurial(Repository):
 
             # This should always result in an amended node, but we need to be
             # extra careful not to strip the original node.
-            amended_node = self.hg_log(".", split=False)
+            amended_node = self.hg_log_text(".")
             if amended_node != commit.node:
                 self.strip_nodes.append(commit.node)
 
@@ -701,19 +721,19 @@ class Mercurial(Repository):
                 + ["--message", "dummy"]
                 + ["--config", "ui.allowemptycommit=true"]
             )
-            dummy_node = self.hg_log(".", split=False)
+            dummy_node = self.hg_log_text(".")
 
             # Rebase a copy of this commit onto the dummy.
             self.hg(["rebase", "--keep", "--rev", commit.node, "--dest", dummy_node])
-            rebased_node = self.hg_log("children(.)", split=False)
+            rebased_node = self.hg_log_text("children(.)")
 
             # Amend.
             self._amend_commit_body(rebased_node, updated_body)
-            amended_node = self.hg_log(".", split=False)
+            amended_node = self.hg_log_text(".")
 
             # Rebase back onto parent
             self.hg(["rebase"] + ["--source", amended_node] + ["--dest", parent_node])
-            rebased_amended_node = self.hg_log(".", split=False)
+            rebased_amended_node = self.hg_log_text(".")
 
             # Update the commit object now.
             original_node = commit.node
@@ -736,9 +756,8 @@ class Mercurial(Repository):
     def is_descendant(self, node: str) -> bool:
         # Query the log for all commits that are both in the revset and descendants of
         # `node`. If we get any results, then our revset is already based off of `node`.
-        out = self.hg_out(
+        out = self.hg_out_text(
             ["log", "-r", f"{node}:: and {self.revset}", "-T", "{node}\n"],
-            split=False,
         )
 
         # If the command output is empty, our revset does not descend from `node`.
@@ -761,7 +780,7 @@ class Mercurial(Repository):
 
     def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
         try:
-            out = self.hg_out(
+            out = self.hg_out_text(
                 [
                     "rebase",
                     "-r",
@@ -776,7 +795,6 @@ class Mercurial(Repository):
                     "--config",
                     "ui.message-output=stderr",
                 ],
-                split=False,
             )
         except CommandError as exc:
             raise Error(
@@ -816,7 +834,7 @@ class Mercurial(Repository):
 
     def check_commits_for_submit(self, commits: List[Commit]):
         # 'Greatest Common Ancestor'/'Merge Base' should be included in the revset.
-        ancestor = self.hg_log("ancestor(%s)" % self.revset, split=False)
+        ancestor = self.hg_log_text("ancestor(%s)" % self.revset)
         if not any(commit.node == ancestor for commit in commits):
             raise Error(
                 "Non-linear commit stack (common ancestor %s missing from stack)"
@@ -929,7 +947,7 @@ class Mercurial(Repository):
         # Get changed files.
         file_divider = "--%s--" % uuid.uuid4().hex
         type_divider = "--%s--" % uuid.uuid4().hex
-        all_files = self.hg_out(
+        all_files = self.hg_out_text(
             ["log"]
             + ["-r", commit.node]
             + [
@@ -941,7 +959,6 @@ class Mercurial(Repository):
                     file_divider=file_divider, type_divider=type_divider
                 ),
             ],
-            split=False,
         )
         fn_adds, fn_dels, fn_mods, fn_renames_str = [
             fn.split(file_divider) for fn in all_files.split(type_divider)
@@ -1008,15 +1025,13 @@ class Mercurial(Repository):
 
     @lru_cache(maxsize=None)  # noqa: B019
     def hg_cat(self, filename: str, node: str) -> Optional[bytes]:
-        return self.hg_out(
-            ["cat", "-r", node, filename], split=False, expect_binary=True
-        )
+        return self.hg_out_binary(["cat", "-r", node, filename])
 
     @lru_cache(maxsize=None)  # noqa: B019
     def _file_size(self, filename: str, rev: str) -> int:
         """Get the file size of the file."""
         return int(
-            self.hg_out(
+            self.hg_out_text(
                 [
                     "files",
                     "-v",
@@ -1026,7 +1041,6 @@ class Mercurial(Repository):
                     "-T",
                     "{size}",
                 ],
-                split=False,
             )
         )
 
@@ -1187,7 +1201,7 @@ class Mercurial(Repository):
         start = time.process_time()
 
         # Using binary here to ensure we avoid converting newlines
-        git_diff = self.hg_out(
+        git_diff = self.hg_out_binary(
             [
                 "diff",
                 "--git",
@@ -1197,7 +1211,6 @@ class Mercurial(Repository):
                 parent,
                 filename,
             ],
-            expect_binary=True,
         ).decode("utf-8")
         change.from_git_diff(git_diff)
 

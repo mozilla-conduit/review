@@ -346,7 +346,7 @@ def test_is_node(m_hg_out, hg):
     assert not hg.is_node("aaa")
 
 
-@mock.patch("mozphab.mercurial.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out_text")
 def test_is_descendant(m_hg_out, hg):
     m_hg_out.return_value = ""
     assert (
@@ -372,23 +372,19 @@ def test_check_node(m_is_node, hg):
     assert "" == str(e.value)
 
 
-@mock.patch("mozphab.mercurial.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out_binary")
 def test_hg_cat(m_hg, hg):
     cat = m_hg.return_value = b"some text"
     hg.hg_cat("fn", "node")
-    m_hg.assert_called_once_with(
-        ["cat", "-r", "node", "fn"], expect_binary=True, split=False
-    )
+    m_hg.assert_called_once_with(["cat", "-r", "node", "fn"])
     assert cat == b"some text"
 
 
-@mock.patch("mozphab.mercurial.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out_text")
 def test_file_size(m_hg, hg):
     m_hg.return_value = "123\n"
     res = hg._file_size("fn", "rev")
-    m_hg.assert_called_once_with(
-        ["files", "-v", "-r", "rev", mock.ANY, "-T", "{size}"], split=False
-    )
+    m_hg.assert_called_once_with(["files", "-v", "-r", "rev", mock.ANY, "-T", "{size}"])
     assert res == 123
 
 
@@ -559,7 +555,7 @@ def test_change_del(m_set_as_binary, m_get_file_meta, hg):
 @mock.patch("mozphab.mercurial.Mercurial._get_file_meta")
 @mock.patch("mozphab.diff.Diff.Change.set_as_binary")
 @mock.patch("mozphab.diff.Diff.Change.from_git_diff")
-@mock.patch("mozphab.mercurial.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out_binary")
 def test_change_mod(m_hg_out, m_from_git_diff, m_set_as_binary, m_get_file_meta, hg):
     class Args:
         def __init__(self, lesscontext=False):
@@ -587,8 +583,7 @@ diff --git a/fn b/fn
         + ["--git"]
         + ["--unified", str(environment.MAX_CONTEXT_SIZE)]
         + ["--rev", "parent"]
-        + ["fn"],
-        expect_binary=True,
+        + ["fn"]
     )
     m_from_git_diff.assert_called_once()
 
@@ -598,8 +593,7 @@ diff --git a/fn b/fn
     hg.args = Args(lesscontext=True)
     hg._change_mod(change, "fn", "old_fn", "parent", "node")
     m_hg_out.assert_called_once_with(
-        ["diff", "--git", "--unified", "100", "--rev", "parent", "fn"],
-        expect_binary=True,
+        ["diff", "--git", "--unified", "100", "--rev", "parent", "fn"]
     )
 
     # binary

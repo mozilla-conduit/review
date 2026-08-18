@@ -164,13 +164,13 @@ def test_change_empty(m_git_out, m_cat_file, m_file_size, git):
     ), "The file's current mode should be set to 100755"
 
 
-@mock.patch("mozphab.mercurial.Mercurial.hg_out")
+@mock.patch("mozphab.mercurial.Mercurial.hg_run")
 @mock.patch("mozphab.mercurial.Mercurial._get_file_meta")
 @mock.patch("mozphab.mercurial.Mercurial._get_parent")
 @mock.patch("mozphab.mercurial.Mercurial._get_file_modes")
 @mock.patch("uuid.uuid4")
 def test_change_empty_hg(
-    m_uuid4, m_get_file_modes, m_get_parent, m_get_file_meta, m_hg_out, hg
+    m_uuid4, m_get_file_modes, m_get_parent, m_get_file_meta, m_hg_run, hg
 ):
     commit = Commit(
         name="78981922613b",
@@ -191,7 +191,7 @@ def test_change_empty_hg(
         mock.Mock(hex="abc123"),
         mock.Mock(hex="def456"),
     ]
-    m_hg_out.side_effect = [
+    m_hg_run.side_effect = [
         # hg checkout
         "",
         # hg log
