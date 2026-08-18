@@ -636,11 +636,27 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
     telemetry().submission.process_time.start()
 
     with wait_message("Applying transactions..."):
-        for phid, rev_transactions in transactions.items():
-            conduit.apply_transactions_to_revision(
-                rev_id=phid,
-                transactions=rev_transactions,
-            )
+        for index, (phid, rev_transactions) in enumerate(transactions.items()):
+            try:
+                conduit.apply_transactions_to_revision(
+                    rev_id=phid,
+                    transactions=rev_transactions,
+                )
+            except Error as e:
+                # Name the revision the failing transactions belong to, as
+                # Phabricator's error message doesn't mention it. Revisions
+                # earlier in the loop have already been mutated and are not
+                # rolled back, so say the stack is now half-reorganised.
+                node_id = f"D{phid_to_id[phid]}" if phid in phid_to_id else phid
+                partial = (
+                    "\nThe stack has been left partially reorganised: "
+                    f"{index} revision(s) were updated before this failure. "
+                    "Re-run `moz-phab reorg` once the problem above is "
+                    "resolved."
+                    if index
+                    else ""
+                )
+                raise Error(f"{node_id}: {e}{partial}") from e
 
     telemetry().submission.process_time.stop()
     logger.info("Stack has been reorganised.")

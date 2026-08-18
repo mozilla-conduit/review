@@ -12,6 +12,7 @@ from callee import Contains
 from mozphab import exceptions, mozphab
 from mozphab.commands import reorganise
 from mozphab.commits import Commit
+from mozphab.conduit import ConduitAPIError
 
 
 @pytest.mark.parametrize(
@@ -809,6 +810,99 @@ def test_no_abandon_unconnected_requires_force(_check):
         reorganise.reorganise(None, Args())
 
     assert str(e.value) == "--no-abandon-unconnected can only be used with --force"
+
+
+VALIDATION_ERROR = (
+    "Validation errors:\n"
+    "  - You can not abandon this revision because it has already been closed."
+)
+
+
+@pytest.mark.parametrize(
+    "transactions,side_effect,expected",
+    [
+        # The very first revision fails: nothing has been changed yet, so no
+        # partial-reorganisation warning.
+        (
+            {"PHID-A": [{"type": "abandon", "value": True}]},
+            [ConduitAPIError(VALIDATION_ERROR)],
+            f"D314841: Phabricator Error: {VALIDATION_ERROR}",
+        ),
+        # A later revision fails: the earlier one has already been mutated
+        # server-side and isn't rolled back.
+        (
+            {
+                "PHID-A": [{"type": "abandon", "value": True}],
+                "PHID-B": [{"type": "abandon", "value": True}],
+            },
+            [None, ConduitAPIError(VALIDATION_ERROR)],
+            f"PHID-B: Phabricator Error: {VALIDATION_ERROR}\n"
+            "The stack has been left partially reorganised: 1 revision(s) "
+            "were updated before this failure. Re-run `moz-phab reorg` once "
+            "the problem above is resolved.",
+        ),
+        # The failing PHID has no known revision ID (it wasn't in the
+        # `differential.revision.search` response): fall back to the PHID.
+        (
+            {"PHID-B": [{"type": "abandon", "value": True}]},
+            [ConduitAPIError(VALIDATION_ERROR)],
+            f"PHID-B: Phabricator Error: {VALIDATION_ERROR}",
+        ),
+    ],
+    ids=["first-revision", "later-revision", "unknown-phid"],
+)
+@mock.patch("mozphab.commands.reorganise.stack_transactions")
+@mock.patch("mozphab.conduit.ConduitAPI.check")
+@mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
+@mock.patch("mozphab.commands.reorganise.convert_stackgraph_to_linear")
+@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+@mock.patch("mozphab.conduit.ConduitAPI.ids_to_phids")
+@mock.patch("mozphab.conduit.ConduitAPI.apply_transactions_to_revision")
+def test_apply_transactions_error_names_revision(
+    m_apply_transactions,
+    m_id2phid,
+    m_get_revs,
+    m_convert_stackgraph_to_linear,
+    _augment_commits,
+    _check,
+    m_stack_trans,
+    git,
+    transactions,
+    side_effect,
+    expected,
+):
+    """A failing transaction reports which revision it belongs to."""
+
+    class Args:
+        yes = True
+        no_abandon = False
+        force = False
+        no_abandon_unconnected = False
+        no_hyperlinks = True
+        verbose = False
+
+    m_convert_stackgraph_to_linear.return_value = {"PHID-A": None}
+    m_get_revs.return_value = [
+        {
+            "phid": "PHID-A",
+            "id": 314841,
+            "fields": {
+                "status": {"value": "closed"},
+                "stackGraph": {"PHID-A": []},
+            },
+        }
+    ]
+    m_id2phid.return_value = ["PHID-A"]
+    mozphab.conduit.set_repo(git)
+    mozphab.conduit.repo.commit_stack = mock.Mock()
+    mozphab.conduit.repo.commit_stack.return_value = [Commit(rev_id=314841, name="A")]
+    m_stack_trans.return_value = transactions
+    m_apply_transactions.side_effect = side_effect
+
+    with pytest.raises(exceptions.Error) as e:
+        reorganise.reorganise(git, Args())
+
+    assert str(e.value) == expected
 
 
 @mock.patch("mozphab.commands.reorganise.walk_llist")
