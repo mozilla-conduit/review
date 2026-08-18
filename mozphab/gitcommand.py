@@ -9,15 +9,15 @@ import re
 from pathlib import Path
 from shutil import which
 from typing import (
+    Any,
     List,
     Optional,
-    Union,
 )
 
 from .config import config
 from .exceptions import Error
 from .helpers import parse_config, which_path
-from .subprocess_wrapper import check_call, check_output
+from .subprocess_wrapper import check_call, command_output
 
 
 class GitCommand:
@@ -47,14 +47,12 @@ class GitCommand:
         ]
         check_call(self.command + unicode_args + git_args, env=self._env, **kwargs)
 
-    def output(
+    def command_output(
         self, git_args: List[str], extra_env: Optional[dict] = None, **kwargs
-    ) -> Union[List[str], str]:
-        """
-        Run git command and return its output
+    ) -> Any:
+        """Run git command and return its output.
 
-        Returns: EITHER a list of str if `kwargs.split` is True (the default)
-                 OR a single string if `kwargs.split` is False
+        Call one of the `output*` methods below, which name the type they return.
         """
         env = dict(self._env)
         if extra_env:
@@ -66,7 +64,33 @@ class GitCommand:
             "-c",
             "i18n.commitEncoding=UTF-8",
         ]
-        return check_output(self.command + unicode_args + git_args, env=env, **kwargs)
+        return command_output(self.command + unicode_args + git_args, env=env, **kwargs)
+
+    def output_binary(
+        self, git_args: List[str], extra_env: Optional[dict] = None, **kwargs
+    ) -> bytes:
+        """Run git command and return its raw output."""
+        return self.command_output(
+            git_args, extra_env=extra_env, expect_binary=True, **kwargs
+        )
+
+    def output_text(
+        self, git_args: List[str], extra_env: Optional[dict] = None, **kwargs
+    ) -> str:
+        """Run git command and return its output as a single string."""
+        return self.command_output(git_args, extra_env=extra_env, **kwargs)
+
+    def output(
+        self,
+        git_args: List[str],
+        extra_env: Optional[dict] = None,
+        keep_ends: bool = False,
+        **kwargs,
+    ) -> List[str]:
+        """Run git command and return its output split into lines."""
+        return self.output_text(git_args, extra_env=extra_env, **kwargs).splitlines(
+            keep_ends
+        )
 
     def set_args(self, args: argparse.Namespace):
         """Read and set the configuration."""
@@ -114,7 +138,7 @@ class GitCommand:
             # included in the `git help --all` output, nor is it necessarily
             # on the path.
             if not self._cinnabar_installed:
-                exec_path = Path(self.output(["--exec-path"], split=False))
+                exec_path = Path(self.output_text(["--exec-path"]))
                 if (exec_path / "git-cinnabar").exists():
                     self._cinnabar_installed = True
 

@@ -329,9 +329,7 @@ def test_check_output(m_check_output, caplog: pytest.LogCaptureFixture):
     )
 
     m_check_output.side_effect = ("response \nline \n",)
-    assert "response \nline" == subprocess_wrapper.check_output(
-        ["command"], split=False
-    )
+    assert "response \nline" == subprocess_wrapper.check_output_text(["command"])
 
 
 def test_git_find_repo(git_repo_path):

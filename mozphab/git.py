@@ -14,7 +14,6 @@ from functools import lru_cache
 from typing import (
     List,
     Optional,
-    Union,
 )
 
 from mozphab import environment
@@ -53,14 +52,12 @@ class Git(Repository):
 
         if os.path.isfile(dot_path):
             # We're working from a worktree. Let's find the dot_path directory.
-            dot_path = self.git_out(
-                ["rev-parse", "--git-common-dir"], path=path, split=False
-            )
+            dot_path = self.git_out_text(["rev-parse", "--git-common-dir"], path=path)
 
         super().__init__(path, dot_path)
 
         self.vcs = "git"
-        m = re.search(r"\d+\.\d+\.\d+", self.git.output(["--version"], split=False))
+        m = re.search(r"\d+\.\d+\.\d+", self.git.output_text(["--version"]))
         if not m:
             raise Error("Failed to determine Git version.")
 
@@ -83,7 +80,7 @@ class Git(Repository):
         if not self.is_cinnabar_required:
             return None
 
-        return self.git_out(["cinnabar", "hg2git", node], split=False)
+        return self.git_out_text(["cinnabar", "hg2git", node])
 
     @lru_cache(maxsize=None)  # noqa: B019
     def _git_to_hg(self, node: str) -> Optional[str]:
@@ -91,7 +88,7 @@ class Git(Repository):
         if not self.is_cinnabar_required:
             return None
 
-        hg_node = self.git_out(["cinnabar", "git2hg", node], split=False)
+        hg_node = self.git_out_text(["cinnabar", "git2hg", node])
         return hg_node if hg_node != NULL_SHA1 else None
 
     @lru_cache(maxsize=128)  # noqa: B019
@@ -142,19 +139,32 @@ class Git(Repository):
         """Call git from the repository path."""
         self.git.call(command, cwd=self.path, **kwargs)
 
+    def git_out_binary(
+        self, command: List[str], path: Optional[str] = None, **kwargs
+    ) -> bytes:
+        """Call git from the repository path and return its raw output."""
+        return self.git.output_binary(command, cwd=path or self.path, **kwargs)
+
+    def git_out_text(
+        self,
+        command: List[str],
+        path: Optional[str] = None,
+        extra_env: Optional[dict] = None,
+        **kwargs,
+    ) -> str:
+        """Call git from the repository path and return its output as one string."""
+        return self.git.output_text(
+            command, cwd=path or self.path, extra_env=extra_env, **kwargs
+        )
+
     def git_out(
         self,
         command: List[str],
         path: Optional[str] = None,
         extra_env: Optional[dict] = None,
         **kwargs,
-    ) -> Union[List[str], str]:
-        """
-        Call git from the repository path and return the result.
-
-        Returns: EITHER a list of str if `kwargs.split` is True (the default)
-                 OR a single string if `kwargs.split` is False
-        """
+    ) -> List[str]:
+        """Call git from the repository path and return its output as lines."""
         return self.git.output(
             command, cwd=path or self.path, extra_env=extra_env, **kwargs
         )
@@ -340,7 +350,7 @@ class Git(Repository):
             > Failed to download update: HTTP Error 404: Not Found
         """
         boundary = "--%s--\n" % uuid.uuid4().hex
-        log = self.git_out(
+        log = self.git_out_text(
             [
                 "log",
                 "--reverse",
@@ -349,10 +359,8 @@ class Git(Repository):
                 "--format=%aD%n%an%n%ae%n%p%n%T%n%H%n%s%n%n%b{}".format(boundary),
                 "{}..{}".format(start, end),
             ],
-            split=False,
             strip=False,
         )[: -len(boundary) - 1]
-        # We have split=False above, so log is indeed a string.
         return log.split("%s\n" % boundary)
 
     def _is_child(self, parent: str, node: str, rev_list: List[str]) -> bool:
@@ -461,8 +469,8 @@ class Git(Repository):
 
     def is_node(self, node: str) -> bool:
         try:
-            node_type = self.git_out(
-                ["cat-file", "-t", node], split=False, stderr=subprocess.STDOUT
+            node_type = self.git_out_text(
+                ["cat-file", "-t", node], stderr=subprocess.STDOUT
             )
         except CommandError:
             return False
@@ -576,7 +584,7 @@ class Git(Repository):
 
     def _get_current_head(self) -> str:
         """Return current's HEAD symbolic link."""
-        symbolic = self.git_out(["symbolic-ref", "HEAD"], split=False)
+        symbolic = self.git_out_text(["symbolic-ref", "HEAD"])
         return symbolic.split("refs/heads/")[1]
 
     def _is_head_on_branch(self, branch: str) -> bool:
@@ -597,7 +605,7 @@ class Git(Repository):
 
     def _revparse(self, branch: str) -> str:
         """Return the SHA1 of given branch."""
-        return self.git_out(["rev-parse", branch], split=False)
+        return self.git_out_text(["rev-parse", branch])
 
     def _commit_tree(
         self,
@@ -620,9 +628,8 @@ class Git(Repository):
             str: SHA1 of the new commit.
         """
         with temporary_file(message) as message_file:
-            return self.git_out(
+            return self.git_out_text(
                 ["commit-tree", "-p", parent, "-F", message_file, tree_hash],
-                split=False,
                 extra_env={
                     "GIT_AUTHOR_NAME": author_name,
                     "GIT_AUTHOR_EMAIL": author_email,
@@ -643,9 +650,7 @@ class Git(Repository):
         """
         updated_body = f"{commit.title}\n{commit.body}"
 
-        current_body = self.git_out(
-            ["show", "-s", "--format=%s%n%b", commit.node], split=False
-        )
+        current_body = self.git_out_text(["show", "-s", "--format=%s%n%b", commit.node])
         if current_body == updated_body:
             logger.debug("not amending commit %s, unchanged", commit.name)
             return
@@ -789,11 +794,11 @@ class Git(Repository):
 
     @lru_cache(maxsize=128)  # noqa: B019
     def _file_size(self, blob: str) -> int:
-        return int(self.git_out(["cat-file", "-s", blob], split=False))
+        return int(self.git_out_text(["cat-file", "-s", blob]))
 
     @lru_cache(maxsize=128)  # noqa: B019
     def _cat_file(self, blob: str) -> str:
-        return self.git_out(["cat-file", "blob", blob], split=False, expect_binary=True)
+        return self.git_out_binary(["cat-file", "blob", blob])
 
     def _parse_diff_change(self, raw: str, diff: Diff) -> Diff.Change:
         """Parse the changes provided in raw `git` response.
@@ -919,7 +924,7 @@ class Git(Repository):
                     a_blob,
                     b_blob,
                 ]
-                git_diff = self.git_out(diff_args, expect_binary=True).decode("utf-8")
+                git_diff = self.git_out_binary(diff_args).decode("utf-8")
                 change.from_git_diff(git_diff)
 
         diff.set_change_kind(change, kind_l[0], a_mode, b_mode, a_path, b_path)
@@ -928,7 +933,7 @@ class Git(Repository):
 
     def get_diff(self, commit: Commit) -> Diff:
         """Create a Diff object with changes."""
-        raw = self.git_out(
+        raw = self.git_out_text(
             [
                 "diff-tree",
                 "-r",
@@ -939,7 +944,6 @@ class Git(Repository):
                 "--no-abbrev",
                 commit.node,
             ],
-            split=False,
         )
 
         diff = Diff()

@@ -163,7 +163,7 @@ def git_command():
 
 
 @pytest.fixture
-@mock.patch("mozphab.gitcommand.GitCommand.output")
+@mock.patch("mozphab.gitcommand.GitCommand.output_text")
 @mock.patch("mozphab.git.Git._get_current_head")
 @mock.patch("mozphab.repository.os.path")
 @mock.patch("mozphab.helpers.which")

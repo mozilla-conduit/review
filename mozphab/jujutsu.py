@@ -4,7 +4,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 from packaging.version import Version
 
@@ -24,7 +24,12 @@ from .helpers import (
 from .logger import logger
 from .repository import Repository
 from .spinner import wait_message
-from .subprocess_wrapper import check_call, check_output, subprocess
+from .subprocess_wrapper import (
+    check_call,
+    check_output,
+    check_output_text,
+    subprocess,
+)
 
 
 class Jujutsu(Repository):
@@ -59,8 +64,8 @@ class Jujutsu(Repository):
 
         if version >= Version("0.42.0"):
             try:
-                backend_name = self.__check_output(
-                    ["jj", "util", "backend", "name"], split=False
+                backend_name = self.__check_output_text(
+                    ["jj", "util", "backend", "name"]
                 )
             except CommandError as exc:
                 message = f"{path}: `jj util backend name` failed, your `jj` config may be broken."
@@ -75,9 +80,7 @@ class Jujutsu(Repository):
                 )
 
         try:
-            self.git_path = Path(
-                self.__check_output(["jj", "git", "root"], split=False)
-            )
+            self.git_path = Path(self.__check_output_text(["jj", "git", "root"]))
         except CommandError as exc:
             message = f"{path}: `jj git root` failed, your `jj` config may be broken."
             if exc.stderr:
@@ -106,8 +109,8 @@ class Jujutsu(Repository):
         self.revset = None
         self.branch = None
 
-        self.__email = self.__check_output(
-            ["jj", "config", "get", "user.email"], split=False
+        self.__email = self.__check_output_text(
+            ["jj", "config", "get", "user.email"]
         ).rstrip()
 
     def __check_and_get_version(self) -> Tuple[str, Version]:
@@ -115,7 +118,7 @@ class Jujutsu(Repository):
 
         version_re = re.compile(r"jj (\d+\.\d+\.\d+)(?:-[a-fA-F0-9]{40})?")
         try:
-            jj_version_output = self.__check_output(["jj", "version"], split=False)
+            jj_version_output = self.__check_output_text(["jj", "version"])
         except FileNotFoundError as exc:
             if exc.filename == "jj":
                 raise Error("`jj` executable was not found.")
@@ -186,7 +189,7 @@ class Jujutsu(Repository):
             return None
 
         boundary = "--%s--\n" % uuid.uuid4().hex
-        log = self.__cli_log(
+        log = self.__cli_log_text(
             use_reversed=True,
             template="".join(
                 [
@@ -204,7 +207,6 @@ class Jujutsu(Repository):
                 ]
             ),
             revset="({})::({})".format(self.revset[0], self.revset[1]),
-            split=False,
             strip=False,
         )[: -len(boundary)]
         changes = log.split(boundary)
@@ -273,10 +275,9 @@ class Jujutsu(Repository):
         pass
 
     def untracked(self) -> List[str]:
-        is_working_copy_descriptionless_but_changed = self.__cli_log(
+        is_working_copy_descriptionless_but_changed = self.__cli_log_text(
             revset="@",
             template="self.description().len() == 0 && !self.empty()",
-            split=False,
         )
         is_working_copy_descriptionless_but_changed = Jujutsu.__parse_log_bool(
             "check for descriptionless-but-changed working copy",
@@ -310,7 +311,7 @@ class Jujutsu(Repository):
 
         # # TODO: apply this optimization
         # current_body = self.git_out(
-        #     ["show", "-s", "--format=%s%n%b", commit.node], split=False
+        #     ["show", "-s", "--format=%s%n%b", commit.node]
         # )
         # if current_body == updated_body:
         #     logger.debug("not amending commit %s, unchanged", commit.name)
@@ -473,13 +474,14 @@ class Jujutsu(Repository):
     # Methods private to this abstraction.
     # ----
 
-    def __cli_log(
-        self, *, revset: str, template: str, use_reversed: bool = False, **kwargs
-    ) -> Union[List[str], str]:
+    def __cli_log_command(
+        self, *, revset: str, template: str, use_reversed: bool = False
+    ) -> List[str]:
+        """Build the `jj log` command for the given revset and template."""
         options = []
         if use_reversed:
             options.append("--reversed")
-        return self.__check_output(
+        return (
             [
                 "jj",
                 "log",
@@ -491,7 +493,28 @@ class Jujutsu(Repository):
                 template,
             ]
             + options
-            + ["--"],
+            + ["--"]
+        )
+
+    def __cli_log(
+        self, *, revset: str, template: str, use_reversed: bool = False, **kwargs
+    ) -> List[str]:
+        """Return the `jj log` output as lines."""
+        return self.__check_output(
+            self.__cli_log_command(
+                revset=revset, template=template, use_reversed=use_reversed
+            ),
+            **kwargs,
+        )
+
+    def __cli_log_text(
+        self, *, revset: str, template: str, use_reversed: bool = False, **kwargs
+    ) -> str:
+        """Return the `jj log` output as a single string."""
+        return self.__check_output_text(
+            self.__cli_log_command(
+                revset=revset, template=template, use_reversed=use_reversed
+            ),
             **kwargs,
         )
 
@@ -545,5 +568,10 @@ class Jujutsu(Repository):
             raise Error(f"internal error: {name} was not `true` or `false`")
         return s == "true"
 
-    def __check_output(self, *args, **kwargs) -> Union[List[str], str]:
-        return check_output(*args, stderr=subprocess.PIPE, **kwargs)
+    def __check_output(self, command: List[str], **kwargs) -> List[str]:
+        """Run `command` and return its output as lines."""
+        return check_output(command, stderr=subprocess.PIPE, **kwargs)
+
+    def __check_output_text(self, command: List[str], **kwargs) -> str:
+        """Run `command` and return its output as a single string."""
+        return check_output_text(command, stderr=subprocess.PIPE, **kwargs)

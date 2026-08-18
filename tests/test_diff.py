@@ -56,7 +56,7 @@ def test_create(m_git_out, m_cat_file, m_file_size, git):
 
 @mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
-@mock.patch("mozphab.git.Git.git_out")
+@mock.patch("mozphab.git.Git.git_out_binary")
 def test_change_file(m_git_out, m_cat_file, m_file_size, git):
     raw = (
         "100644 100644 78981922613b2afb6025042ff6bd878ac1994e85 "
@@ -88,7 +88,6 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
             "78981922613b2afb6025042ff6bd878ac1994e85",
             "422c2b7ab3b3c668038da977e4e93a5fc623169c",
         ],
-        expect_binary=True,
     )
     assert change.file_type.name == "TEXT"
     assert change.kind.name == "CHANGE"
@@ -337,7 +336,7 @@ def test_recognize_long_text_as_binary(m_git_out, m_cat_file, m_file_size, git):
 
 @mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
-@mock.patch("mozphab.git.Git.git_out")
+@mock.patch("mozphab.git.Git.git_out_binary")
 def test_less_context(m_git_out, m_cat_file, m_file_size, git):
     raw = (
         "100644 100644 78981922613b2afb6025042ff6bd878ac1994e85 "
@@ -369,7 +368,6 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
             "78981922613b2afb6025042ff6bd878ac1994e85",
             "422c2b7ab3b3c668038da977e4e93a5fc623169c",
         ],
-        expect_binary=True,
     )
 
     git.args = Args(less_context=False)
@@ -389,7 +387,6 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
             "78981922613b2afb6025042ff6bd878ac1994e85",
             "422c2b7ab3b3c668038da977e4e93a5fc623169c",
         ],
-        expect_binary=True,
     )
 
 

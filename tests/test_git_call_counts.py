@@ -54,26 +54,26 @@ def git_call_counter(monkeypatch: pytest.MonkeyPatch) -> Iterator[Counter]:
     """Yield a `Counter` keyed by git subcommand for the duration of the test.
 
     Both `check_call` (used for side-effectful git like `commit`) and
-    `check_output` (used for read-only queries like `log` and
+    `command_output` (used for read-only queries like `log` and
     `rev-parse`) are wrapped. The real implementations still run, so
     the git repo is exercised exactly as in production.
     """
     calls: Counter = Counter()
     original_check_call = gitcommand.check_call
-    original_check_output = gitcommand.check_output
+    original_command_output = gitcommand.command_output
 
     def counting_check_call(command: List[str], **kwargs: Any) -> Any:
         if command and Path(command[0]).name == "git":
             calls[extract_git_subcommand(command)] += 1
         return original_check_call(command, **kwargs)
 
-    def counting_check_output(command: List[str], **kwargs: Any) -> Any:
+    def counting_command_output(command: List[str], **kwargs: Any) -> Any:
         if command and Path(command[0]).name == "git":
             calls[extract_git_subcommand(command)] += 1
-        return original_check_output(command, **kwargs)
+        return original_command_output(command, **kwargs)
 
     monkeypatch.setattr(gitcommand, "check_call", counting_check_call)
-    monkeypatch.setattr(gitcommand, "check_output", counting_check_output)
+    monkeypatch.setattr(gitcommand, "command_output", counting_command_output)
     yield calls
 
 

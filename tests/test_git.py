@@ -502,7 +502,7 @@ def test_apply_patch(m_commit, m_git, m_temp_fn, git):
     m_temp_fn.assert_called_once_with(b"diff")
 
 
-@mock.patch("mozphab.git.Git.git_out")
+@mock.patch("mozphab.git.Git.git_out_text")
 def test_is_node(m_git_out, git):
     m_git_out.return_value = "commit"
     assert git.is_node("aaa")
@@ -538,8 +538,9 @@ def test_is_descendant(m_git_out, git):
 
 
 @mock.patch("mozphab.gitcommand.which")
+@mock.patch("mozphab.gitcommand.GitCommand.output_text")
 @mock.patch("mozphab.gitcommand.GitCommand.output")
-def test_is_cinnabar_installed(m_git_out, m_which, git, tmp_path):
+def test_is_cinnabar_installed(m_git_out, m_git_out_text, m_which, git, tmp_path):
     def _without_str(calls):
         # Debuggers call __str__ on mocked functions, strip them
         return [c for c in calls if c[0] != "__str__"]
@@ -562,56 +563,39 @@ def test_is_cinnabar_installed(m_git_out, m_which, git, tmp_path):
 
     # cinnabar installed in exec-path
     m_git_out.reset_mock()
-    m_git_out.side_effect = [
-        ["External commands", "   revise"],  # git help --all
-        tmp_path,  # git --exec-path
-    ]
+    m_git_out.return_value = ["External commands", "   revise"]
+    m_git_out_text.return_value = str(tmp_path)
     git.git._cinnabar_installed = None
     assert git.is_cinnabar_installed
-    assert _without_str(m_git_out.mock_calls) == [
-        mock.call(["help", "--all"]),
-        mock.call(["--exec-path"], split=False),
-    ]
+    assert _without_str(m_git_out.mock_calls) == [mock.call(["help", "--all"])]
+    m_git_out_text.assert_called_once_with(["--exec-path"])
 
     # remove cinnabar from exec-path so we fall back to looking on the path
     cinnabar.unlink()
 
     # cinnabar installed somewhere on path
     m_git_out.reset_mock()
-    m_git_out.side_effect = [
-        ["External commands", "   revise"],  # git help --all
-        tmp_path,  # git --exec-path
-    ]
+    m_git_out.return_value = ["External commands", "   revise"]
     m_which.return_value = str(cinnabar)
     git.git._cinnabar_installed = None
     assert git.is_cinnabar_installed
-    assert _without_str(m_git_out.mock_calls) == [
-        mock.call(["help", "--all"]),
-        mock.call(["--exec-path"], split=False),
-    ]
+    assert _without_str(m_git_out.mock_calls) == [mock.call(["help", "--all"])]
 
     # cinnabar not installed
     m_git_out.reset_mock()
-    m_git_out.side_effect = [
-        ["External commands", "   revise"],  # git help --all
-        tmp_path,  # git --exec-path
-    ]
+    m_git_out.return_value = ["External commands", "   revise"]
     m_which.return_value = None
     git.git._cinnabar_installed = None
     assert not git.is_cinnabar_installed
-    assert _without_str(m_git_out.mock_calls) == [
-        mock.call(["help", "--all"]),
-        mock.call(["--exec-path"], split=False),
-    ]
+    assert _without_str(m_git_out.mock_calls) == [mock.call(["help", "--all"])]
 
 
-@mock.patch("mozphab.git.Git.git_out")
+@mock.patch("mozphab.git.Git.git_out_text")
 def test_unicode_in_windows_env(m_git_out, git, monkeypatch):
     monkeypatch.setattr(environment, "IS_WINDOWS", True)
     git._commit_tree("parent", "tree_hash", "message", "ćwikła", "ćwikła", "date")
     m_git_out.assert_called_once_with(
         ["commit-tree", "-p", "parent", "-F", mock.ANY, "tree_hash"],
-        split=False,
         extra_env={
             "GIT_AUTHOR_NAME": "ćwikła",
             "GIT_AUTHOR_EMAIL": "ćwikła",
