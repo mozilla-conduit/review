@@ -86,7 +86,7 @@ class Repository(object):
     def after_submit(self):
         """Executed after the submit commit."""
 
-    def _get_setting(self, key):
+    def _get_setting(self, key: str):
         """Read settings from .arcconfig"""
         value = read_json_field(self._arcconfig_files, [key])
         return value
@@ -123,7 +123,7 @@ class Repository(object):
         May be called multiple times.
         If an exception is raised this is NOT called (to avoid dataloss)."""
 
-    def finalize(self, commits):
+    def finalize(self, commits: List[Commit]):
         """Update the history after node changed."""
 
     def set_args(self, args):
@@ -139,7 +139,7 @@ class Repository(object):
     def untracked(self) -> List[str]:
         """Return a list of untracked files."""
 
-    def commit_stack(self, **kwargs) -> Optional[List[Commit]]:
+    def commit_stack(self, single: bool = False) -> Optional[List[Commit]]:
         """Return list of commits.
 
         List of `Commit`s:
@@ -163,16 +163,16 @@ class Repository(object):
     def get_diff(self, commit: Commit) -> Diff:
         """Create a Diff object with changes."""
 
-    def refresh_commit_stack(self, commits):
+    def refresh_commit_stack(self, commits: List[Commit]):
         """Update the stack following an altering change (eg rebase)."""
 
-    def is_node(self, node):
+    def is_node(self, node: str) -> bool:
         """Check if node exists.
 
         Returns a Boolean.
         """
 
-    def check_node(self, node):
+    def check_node(self, node: str) -> str:
         """Check if node exists.
 
         Returns a node if found.
@@ -180,13 +180,13 @@ class Repository(object):
         Raises NotFoundError if node not found in the repository.
         """
 
-    def checkout(self, node):
+    def checkout(self, node: str):
         """Checkout/Update to specified node."""
 
-    def commit(self, body):
+    def commit(self, body: str):
         """Commit the changes in the working directory."""
 
-    def amend_commit(self, commit, commits):
+    def amend_commit(self, commit: Commit, commits: List[Commit]):
         """Amend commit description from `title` and `desc` fields"""
 
     def is_descendant(self, node: str) -> bool:
@@ -201,7 +201,7 @@ class Repository(object):
     def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
         """Uplift the repo's revset onto `dest` and returns the refreshed `commits`."""
 
-    def rebase_commit(self, source_commit, dest_commit):
+    def rebase_commit(self, source_commit: Commit, dest_commit: Commit):
         """Rebase source onto destination."""
 
     def before_patch(self, node, name):
@@ -214,13 +214,13 @@ class Repository(object):
 
     def format_patch(
         self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
-    ):
+    ) -> str:
         """Format a patch appropriate for importing."""
 
     def check_commits_for_submit(self, commits: List[Commit]):
         """Validate the list of commits are okay to submit."""
 
-    def _api_url(self):
+    def _api_url(self) -> str:
         """Return a base URL for conduit API call"""
         url = urllib.parse.urljoin(self.phab_url, "api/")
 
@@ -232,7 +232,7 @@ class Repository(object):
         return url
 
     @property
-    def phab_repo(self):
+    def phab_repo(self) -> dict:
         """Representation of the Repository in Phabricator API."""
         if not self._phab_repo:
             with wait_message("Reading repository data"):
@@ -271,7 +271,7 @@ class Repository(object):
 
         return self._phid
 
-    def check_vcs(self):
+    def check_vcs(self) -> bool:
         """`Git.check_vcs` raises if cinnabar required and not installed."""
         if self.args.force_vcs:
             return True
@@ -310,7 +310,7 @@ class Repository(object):
         """Return the Lando URL for this repository."""
         return get_lando_url_for_phabricator(self.phab_url)
 
-    def get_public_node(self, node):
+    def get_public_node(self, node: str) -> str:
         """Hashtag in a remote VCS."""
         return node
 
