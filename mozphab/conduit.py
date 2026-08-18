@@ -16,6 +16,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Tuple,
 )
 
 import urllib3
@@ -35,6 +36,11 @@ from .helpers import (
 )
 from .logger import logger
 from .simplecache import cache
+
+# How many diffs `ConduitAPI.create_diffs` creates concurrently. Bounded by
+# `urllib3.PoolManager(maxsize=10)`, leaving headroom for the nested
+# `upload_files_from_diff` pools (5 workers each).
+DIFF_CREATION_MAX_WORKERS = 5
 
 
 def normalise_reviewer(reviewer: str, strip_group: bool = True) -> str:
@@ -763,6 +769,58 @@ class ConduitAPI:
             creation_method.append("lando")
 
         return "-".join(creation_method)
+
+    def create_diff(self, diff: Diff, commit: Commit) -> Diff:
+        """Upload a diff's attachments and create it on Phabricator.
+
+        `diff` is updated in place with the `phid` and `id` returned by
+        `differential.creatediff`, and returned for convenience.
+        """
+        self.upload_files_from_diff(diff)
+        result = self.submit_diff(diff, commit)
+        diff.phid = result["phid"]
+        diff.id = result["diffid"]
+        return diff
+
+    def create_diffs(self, commit_diffs: List[Tuple[Commit, Diff]]):
+        """Create several diffs on Phabricator, overlapping the round-trips.
+
+        Each `Diff` is updated in place, exactly as `create_diff` does for a
+        single one. Nothing is returned.
+
+        `differential.creatediff` has no inter-commit dependency -- every call
+        carries its own commit's payload and gets back only that diff's
+        PHID/ID -- so running a stack's calls concurrently just overlaps their
+        latency. The revision create/update phase that consumes these diffs
+        still has to run serially, because it chains revisions via
+        `parent_rev_phid` and amends commits in place.
+
+        A worker raising aborts the whole batch: pending calls are cancelled
+        and in-flight ones are joined before the error propagates, so Ctrl-C
+        doesn't leave a stack's worth of `creatediff` calls still firing.
+        Diffs created by workers that already succeeded stay on the server
+        with no revision attached; Phabricator garbage-collects those.
+        """
+        workers = min(DIFF_CREATION_MAX_WORKERS, len(commit_diffs))
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
+        try:
+            futures = {
+                executor.submit(self.create_diff, diff, commit): commit
+                for commit, diff in commit_diffs
+            }
+            for future in concurrent.futures.as_completed(futures):
+                commit = futures[future]
+                try:
+                    future.result()
+                except Error as e:
+                    # The failure happens before the main submit loop has
+                    # named any commit on screen, so say which one it was.
+                    raise Error(f"{commit.name}: {e}") from e
+        finally:
+            # `cancel_futures` drops calls that haven't started; without it
+            # the implicit `shutdown(wait=True)` would run every queued
+            # `creatediff` to completion after the user hit Ctrl-C.
+            executor.shutdown(cancel_futures=True)
 
     def submit_diff(self, diff: Diff, commit: Commit) -> dict:
         files_changed = sorted(

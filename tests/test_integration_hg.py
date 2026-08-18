@@ -738,19 +738,19 @@ def test_submit_create_no_checkout(in_process, hg_repo_path):
         # diffusion.repository.search
         {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
         [{"userName": "alice", "phid": "PHID-USER-1"}],
-        # First diff
-        # differential.creatediff
+        # Diffs are created up front in parallel, then revisions are
+        # edited serially.
+        # differential.creatediff (commit 1)
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.revision.edit
-        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
-        # differential.setdiffproperty
-        {},
-        # Second diff
-        # differential.creatediff
+        # differential.creatediff (commit 2)
         {"phid": "PHID-DIFF-2", "diffid": "2"},
-        # differential.revision.edit
+        # differential.revision.edit (commit 1)
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
+        # differential.setdiffproperty (commit 1)
+        {},
+        # differential.revision.edit (commit 2)
         {"object": {"id": "124", "phid": "PHID-DREV-124"}},
-        # differential.setdiffproperty
+        # differential.setdiffproperty (commit 2)
         {},
     )
     a_rename = hg_repo_path / "A to rename"
@@ -996,15 +996,23 @@ def test_submit_create_no_checkout(in_process, hg_repo_path):
     ]
 
     # Match expectations to the specific call to compare them to.
-    # This makes failure reporting more helpful for debugging.
+    # This makes failure reporting more helpful for debugging. The diffs
+    # are created in parallel, so the calls can arrive in either order --
+    # pair them up by the paths they touch rather than by arrival.
+    def changed_paths(call):
+        return tuple(change["currentPath"] for change in call[1]["changes"])
+
     matched_calls = list(
         zip(
-            expected_calls,
-            [
-                c[0]
-                for c in call_conduit.call_args_list
-                if c[0][0] == "differential.creatediff"
-            ],
+            sorted(expected_calls, key=changed_paths),
+            sorted(
+                (
+                    c[0]
+                    for c in call_conduit.call_args_list
+                    if c[0][0] == "differential.creatediff"
+                ),
+                key=changed_paths,
+            ),
         )
     )
     # Make sure we've got something to assert!

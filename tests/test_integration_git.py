@@ -471,19 +471,19 @@ def test_submit_create_no_checkout(in_process, git_repo_path: pathlib.Path, init
         {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
         # user search
         [{"userName": "alice", "phid": "PHID-USER-1"}],
-        # First diff
-        # differential.creatediff
+        # Diffs are created up front in parallel, then revisions are
+        # edited serially.
+        # differential.creatediff (commit 1)
         {"phid": "PHID-DIFF-1", "diffid": "1"},
-        # differential.revision.edit
-        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
-        # differential.setdiffproperty
-        {},
-        # Second diff
-        # differential.creatediff
+        # differential.creatediff (commit 2)
         {"phid": "PHID-DIFF-2", "diffid": "2"},
-        # differential.revision.edit
+        # differential.revision.edit (commit 1)
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
+        # differential.setdiffproperty (commit 1)
+        {},
+        # differential.revision.edit (commit 2)
         {"object": {"id": "124", "phid": "PHID-DREV-124"}},
-        # differential.setdiffproperty
+        # differential.setdiffproperty (commit 2)
         {},
     )
 

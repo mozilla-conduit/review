@@ -760,6 +760,53 @@ def test_get_project_phid(m_get_projects):
     assert phid == "PHID-PROJ-1"
 
 
+@mock.patch("mozphab.conduit.ConduitAPI.submit_diff")
+@mock.patch("mozphab.conduit.ConduitAPI.upload_files_from_diff")
+def test_create_diff(m_upload, m_submit_diff, git):
+    mozphab.conduit.set_repo(git)
+    diff = Diff()
+    commit = Commit(name="abc-name")
+    m_submit_diff.return_value = {"phid": "PHID-DIFF-1", "diffid": "1"}
+
+    assert mozphab.conduit.create_diff(diff, commit) is diff
+    m_upload.assert_called_once_with(diff)
+    m_submit_diff.assert_called_once_with(diff, commit)
+    assert diff.phid == "PHID-DIFF-1"
+    assert diff.id == "1"
+
+
+@mock.patch("mozphab.conduit.ConduitAPI.create_diff")
+def test_create_diffs(m_create_diff, git):
+    """Every diff in the batch is created, whichever order they finish in."""
+    mozphab.conduit.set_repo(git)
+    commit_diffs = [(Commit(name=f"commit-{i}"), Diff()) for i in range(8)]
+
+    mozphab.conduit.create_diffs(commit_diffs)
+
+    assert sorted(call.args[1].name for call in m_create_diff.call_args_list) == sorted(
+        commit.name for commit, _ in commit_diffs
+    )
+
+
+@mock.patch("mozphab.conduit.ConduitAPI.create_diff")
+def test_create_diffs_names_failing_commit(m_create_diff, git):
+    """A worker failure is reported against the commit that caused it."""
+    mozphab.conduit.set_repo(git)
+    commit_diffs = [(Commit(name=f"commit-{i}"), Diff()) for i in range(3)]
+
+    def create_diff(diff, commit):
+        if commit.name == "commit-1":
+            raise ConduitAPIError("no soup for you")
+        return diff
+
+    m_create_diff.side_effect = create_diff
+
+    with pytest.raises(exceptions.Error) as e:
+        mozphab.conduit.create_diffs(commit_diffs)
+
+    assert str(e.value) == "commit-1: Phabricator Error: no soup for you"
+
+
 @mock.patch("mozphab.repository.conduit.call")
 def test_submit_diff(m_call, git):
     mozphab.conduit.set_repo(git)

@@ -57,11 +57,18 @@ def _conduit_side_effect(calls=1):
         {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "hg"}}]},
     ]
 
+    # Diffs are now created up front in parallel, then revisions are
+    # edited serially. Group all creatediff responses first, then per-commit
+    # revision.edit + setdiffproperty pairs.
+    for i in range(calls):
+        side_effect.append(
+            # differential.creatediff
+            {"phid": "PHID-DIFF-{}".format(i), "diffid": str(i)}
+        )
+
     for i in range(calls):
         side_effect.extend(
             [
-                # differential.creatediff
-                {"phid": "PHID-DIFF-{}".format(i), "diffid": str(i)},
                 # differential.revision.edit
                 {"object": {"id": str(123 + i), "phid": f"PHID-DREV-{str(123 + 1)}"}},
                 # differential.setdiffproperty

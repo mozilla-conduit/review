@@ -5,12 +5,13 @@
 import argparse
 import logging
 import textwrap
-from typing import List
+from typing import Dict, List
 
 from mozphab import environment
 from mozphab.commits import AiReviewState, Commit
 from mozphab.conduit import conduit, normalise_reviewer
 from mozphab.config import config
+from mozphab.diff import Diff
 from mozphab.exceptions import Error
 from mozphab.helpers import (
     BLOCKING_REVIEWERS_RE,
@@ -543,6 +544,53 @@ def local_uplift_if_possible(
     return False
 
 
+def _prepare_diffs(repo: Repository, commits: List[Commit]) -> Dict[int, Diff]:
+    """Build and create the diff for every submittable commit up front.
+
+    Returns the prepared diffs (with ``phid`` and ``id`` populated), keyed by
+    the commit's index in ``commits``. Commits that aren't being submitted
+    have no entry.
+
+    Local diff extraction (``repo.get_diff``) runs serially because the
+    Mercurial backend issues an ``hg update`` to the target rev — concurrent
+    workers would fight over the working directory. The pure-network steps
+    are handed to ``conduit.create_diffs``, which overlaps them.
+
+    Note that every diff in the stack is now held in memory simultaneously,
+    binary payloads (``change.uploads[...]["value"]``) included, where the
+    old serial loop only ever had one live at a time. Peak memory therefore
+    scales with stack depth; revisit this if submitting stacks of large
+    binaries becomes a problem.
+    """
+    submittable = [
+        (index, commit) for index, commit in enumerate(commits) if commit.submit
+    ]
+    if not submittable:
+        return {}
+
+    # Build the local diffs serially: Hg's get_diff calls `hg update`, which
+    # mutates the shared working directory and isn't safe to run
+    # concurrently. Git's get_diff is read-only plumbing but it's cheap, so
+    # we serialise both backends for symmetry.
+    diffs: Dict[int, Diff] = {}
+    for index, commit in submittable:
+        with wait_message("Creating local diff..."):
+            diffs[index] = repo.get_diff(commit)
+
+    count = len(submittable)
+    if count == 1:
+        index, commit = submittable[0]
+        with wait_message("Submitting the diff..."):
+            conduit.create_diff(diffs[index], commit)
+    else:
+        with wait_message(f"Submitting {count} diffs in parallel..."):
+            conduit.create_diffs(
+                [(commit, diffs[index]) for index, commit in submittable]
+            )
+
+    return diffs
+
+
 def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
     telemetry().submission.preparation_time.start()
     with wait_message("Checking connection to Phabricator."):
@@ -662,13 +710,19 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
 
     has_new_revisions = any(not commit.rev_id for commit in commits if commit.submit)
 
+    # Prepare every diff (get_diff + upload + creatediff) up front, creating
+    # them on Phabricator in parallel. The revision phase below still runs
+    # serially due to parent_rev_phid chaining and amend_commit mutating
+    # downstream commits.
+    prepared_diffs = _prepare_diffs(repo, commits)
+
     # Collected during the main loop; AI review is requested in parallel
     # after all revisions have been created/updated.
     ai_review_commits: List[Commit] = []
 
     # Note: we can use `itertools.pairwise([None, *commits])` once we
     # upgrade our minimum Python version to 3.10.
-    for previous_commit, commit in zip([None, *commits], commits):
+    for index, (previous_commit, commit) in enumerate(zip([None, *commits], commits)):
         if not commit.submit:
             continue
 
@@ -683,19 +737,9 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
 
         logger.info("%s %s", commit.name, commit.revision_title())
 
-        # Create a diff if needed
-        with wait_message("Creating local diff..."):
-            diff = repo.get_diff(commit)
-
-        if diff:
-            telemetry().submission.files_count.add(len(diff.changes))
-            with wait_message("Uploading binary file(s)..."):
-                conduit.upload_files_from_diff(diff)
-
-            with wait_message("Submitting the diff..."):
-                result = conduit.submit_diff(diff, commit)
-                diff.phid = result["phid"]
-                diff.id = result["diffid"]
+        # Diff was prepared up front in parallel; just consume it here.
+        diff = prepared_diffs[index]
+        telemetry().submission.files_count.add(len(diff.changes))
 
         if is_update:
             with wait_message("Updating revision..."):
