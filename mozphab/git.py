@@ -161,7 +161,7 @@ class Git(Repository):
 
     def cleanup(self):
         self.git_call(["gc", "--auto", "--quiet"])
-        if self.branch:
+        if self.branch and not self._is_head_on_branch(self.branch):
             self.checkout(self.branch)
 
     def _find_branches_to_rebase(self, commits: List[Commit]) -> dict:
@@ -192,8 +192,13 @@ class Git(Repository):
         for branch, (newbase, upstream) in branches_to_rebase.items():
             self._rebase_branch(branch, newbase, upstream)
 
-        # Return to the newly-updated branch. This should be a noop file-mtime-wise
-        self.checkout(self.branch)
+        # Skip the restoring checkout when HEAD is still on the original branch.
+        # Normal submit never moves HEAD: amend/rebase rewrite via commit-tree +
+        # update-ref, leaving HEAD, index, and worktree mtimes untouched. Only
+        # paths that actually moved HEAD (e.g. uplift's `git switch -c`) need the
+        # checkout to restore.
+        if self.branch and not self._is_head_on_branch(self.branch):
+            self.checkout(self.branch)
 
     def refresh_commit_stack(self, commits: List[Commit]):
         """Update revset and names of the commits."""
@@ -573,6 +578,18 @@ class Git(Repository):
         """Return current's HEAD symbolic link."""
         symbolic = self.git_out(["symbolic-ref", "HEAD"], split=False)
         return symbolic.split("refs/heads/")[1]
+
+    def _is_head_on_branch(self, branch: str) -> bool:
+        """Return True if HEAD is a symbolic ref to the given branch.
+
+        Returns False when HEAD can't be resolved to a branch name at all
+        (detached HEAD makes `symbolic-ref` fail, an unexpected ref shape
+        makes the split fail), so callers fall back to an explicit checkout.
+        """
+        try:
+            return self._get_current_head() == branch
+        except (CommandError, IndexError):
+            return False
 
     def _get_current_hash(self) -> str:
         """Return the SHA1 of the current commit."""

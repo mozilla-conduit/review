@@ -175,15 +175,22 @@ def make_patch_raw_dispatcher() -> Callable[..., Any]:
 
 
 # Expected git invocations for `moz-phab submit` of a single new commit
-# against a fresh `git_repo_path`. 14 distinct subcommands, 18 calls
+# against a fresh `git_repo_path`. 13 distinct subcommands, 18 calls
 # total: a lot for a one-commit submit, and exactly the kind of cost
 # this test exists to pin so future reductions surface explicitly.
+#
+# Note the absence of `checkout`: the three restoring checkouts in
+# `Git.cleanup` / `Git.finalize` are guarded by `_is_head_on_branch`,
+# which submit never trips because it rewrites commits via
+# `commit-tree` + `update-ref` rather than moving HEAD. Each guard
+# spends one cheap `symbolic-ref` read instead (hence `symbolic-ref: 4`
+# rather than 1).
+#
 # Re-derive if the workflow is refactored intentionally.
 SUBMIT_CREATE_EXPECTED: Dict[str, int] = {
     "--version": 1,
     "branch": 1,
     "cat-file": 2,
-    "checkout": 3,
     "commit-tree": 1,
     "config": 1,
     "diff-index": 1,
@@ -192,7 +199,7 @@ SUBMIT_CREATE_EXPECTED: Dict[str, int] = {
     "log": 2,
     "rev-list": 1,
     "show": 1,
-    "symbolic-ref": 1,
+    "symbolic-ref": 4,
     "update-ref": 1,
 }
 

@@ -707,6 +707,60 @@ def test_git_get_repo_head_branch(
     ), "beta did not correctly map to a branch"
 
 
+@mock.patch("mozphab.git.Git._get_current_head")
+def test_is_head_on_branch(m_get_current_head, git):
+    m_get_current_head.return_value = "branch"
+    assert git._is_head_on_branch("branch") is True
+    assert git._is_head_on_branch("other") is False
+
+    # A detached HEAD makes `git symbolic-ref HEAD` fail, and an
+    # unexpected ref shape makes the `refs/heads/` split fail. Both mean
+    # "HEAD isn't on that branch", so the caller restores explicitly.
+    m_get_current_head.side_effect = exceptions.CommandError("detached HEAD")
+    assert git._is_head_on_branch("branch") is False
+
+    m_get_current_head.side_effect = IndexError
+    assert git._is_head_on_branch("branch") is False
+
+
+@mock.patch("mozphab.git.Git.checkout")
+@mock.patch("mozphab.git.Git._is_head_on_branch")
+@mock.patch("mozphab.git.Git.git_call")
+def test_cleanup_skips_checkout_when_head_on_branch(
+    m_git_call, m_is_head_on_branch, m_checkout, git
+):
+    git.branch = "branch"
+
+    # HEAD is still on the branch: the restoring checkout is pointless.
+    m_is_head_on_branch.return_value = True
+    git.cleanup()
+    m_checkout.assert_not_called()
+    m_git_call.assert_called_once_with(["gc", "--auto", "--quiet"])
+
+    # Something moved HEAD (e.g. uplift's `git switch -c`): restore it.
+    m_is_head_on_branch.return_value = False
+    git.cleanup()
+    m_checkout.assert_called_once_with("branch")
+
+
+@mock.patch("mozphab.git.Git.checkout")
+@mock.patch("mozphab.git.Git._is_head_on_branch")
+@mock.patch("mozphab.git.Git._find_branches_to_rebase")
+def test_finalize_skips_checkout_when_head_on_branch(
+    m_find_branches, m_is_head_on_branch, m_checkout, git
+):
+    m_find_branches.return_value = {}
+    git.branch = "branch"
+
+    m_is_head_on_branch.return_value = True
+    git.finalize([])
+    m_checkout.assert_not_called()
+
+    m_is_head_on_branch.return_value = False
+    git.finalize([])
+    m_checkout.assert_called_once_with("branch")
+
+
 def test_git_validate_email(git):
     with pytest.raises(exceptions.Error):
         git.validate_email()

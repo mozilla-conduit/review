@@ -168,6 +168,49 @@ Differential Revision: http://example.test/D123
     )
 
 
+def test_submit_leaves_worktree_untouched(
+    in_process, git_repo_path: pathlib.Path, init_sha
+):
+    """Submit must not touch worktree files or rewrite the index.
+
+    `Git.cleanup` / `Git.finalize` used to `git checkout` the branch
+    unconditionally to restore HEAD. Submit never moves HEAD (it rewrites
+    commits with `commit-tree` + `update-ref`), so that checkout only ever
+    re-stat'd the worktree and rewrote `.git/index`, which is enough to
+    invalidate a build system's caches on a large tree.
+    """
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        {},
+        # diffusion.repository.search
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
+        # user search
+        [{"userName": "alice", "phid": "PHID-USER-1"}],
+        # differential.creatediff
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
+        # differential.revision.edit
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
+        # differential.setdiffproperty
+        {},
+    )
+    (git_repo_path / "X").write_text("a\nb\nc\n")
+    git_out("add", ".")
+    git_out("commit", "-m", "Bug 1 - mtime test r?alice")
+
+    index = git_repo_path / ".git" / "index"
+    watched = [git_repo_path / "X", index]
+    before = {path: path.stat().st_mtime_ns for path in watched}
+
+    mozphab.main(["submit", "--yes", "--bug", "1", init_sha], is_development=True)
+
+    after = {path: path.stat().st_mtime_ns for path in watched}
+    assert after == before, (
+        "submit modified files it has no business modifying: "
+        f"{[str(path) for path in watched if after[path] != before[path]]}"
+    )
+
+
 def test_submit_create_added_not_commited(
     in_process, git_repo_path: pathlib.Path, init_sha
 ):
