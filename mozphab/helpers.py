@@ -524,7 +524,7 @@ def create_hunk_lines(
     return lines, eof_missing_newline if check_eof else None
 
 
-def split_lines(body: bytes | str) -> List[bytes | str]:
+def split_lines(body: str) -> List[str]:
     """Split a string on line separators, and keep line endings.
 
     This method behaves the same as `str.splitlines(True)`, but only splits on POSIX
@@ -541,12 +541,15 @@ def split_lines(body: bytes | str) -> List[bytes | str]:
         >>> split_lines(test)
         >>> ["line1", "\n", "line2", "\r\n", "line3"]
     """
-    binary = isinstance(body, bytes)
-    pattern = b"(\n|\r\n)"
-    if not binary:
-        pattern = pattern.decode("utf-8")
+    return re.split("(\n|\r\n)", body)
 
-    return re.split(pattern, body)
+
+def split_binary_lines(body: bytes) -> List[bytes]:
+    """Split bytes on line separators, and keep line endings.
+
+    See `split_lines`, which this mirrors for binary content.
+    """
+    return re.split(b"(\n|\r\n)", body)
 
 
 def join_lineseps(lines: List[str]) -> List[str]:
