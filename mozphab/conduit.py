@@ -17,6 +17,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Union,
 )
 
 import urllib3
@@ -166,8 +167,11 @@ class ConduitAPI:
 
     def call(
         self, api_method: str, api_call_args: dict, *, api_token: Optional[str] = None
-    ) -> dict:
+    ) -> Any:
         """Call Conduit API and return the JSON API call result.
+
+        The result is whatever the called method returns: a dict for most
+        methods, but also a list or a raw string for some.
 
         Args:
             api_method: The API method name to call, like 'differential.revision.edit'.
@@ -595,8 +599,8 @@ class ConduitAPI:
         self,
         transactions: Optional[List[dict]] = None,
         diff_phid: Optional[str] = None,
-        rev_id: Optional[str] = None,
-        wip: bool = False,
+        rev_id: Optional[Union[int, str]] = None,
+        wip: Optional[bool] = False,
         parent_rev_phid: Optional[str] = None,
     ) -> dict:
         """Edit (create or update) a revision."""
@@ -643,7 +647,7 @@ class ConduitAPI:
             trans.append({"type": "request-review", "value": True})
 
         # Call differential.revision.edit
-        api_call_args = {"transactions": trans}
+        api_call_args: Dict[str, Any] = {"transactions": trans}
         if rev_id:
             api_call_args["objectIdentifier"] = rev_id
         revision = self.call("differential.revision.edit", api_call_args)
