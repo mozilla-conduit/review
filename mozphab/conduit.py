@@ -12,6 +12,7 @@ import os
 import time
 import urllib.parse as url_parse
 from typing import (
+    TYPE_CHECKING,
     Any,
     Dict,
     List,
@@ -37,6 +38,11 @@ from .helpers import (
 )
 from .logger import logger
 from .simplecache import cache
+
+if TYPE_CHECKING:
+    # `repository` imports this module, so the import can only happen when
+    # a type checker resolves the annotations below.
+    from .repository import Repository
 
 # How many diffs `ConduitAPI.create_diffs` creates concurrently. Bounded by
 # `urllib3.PoolManager(maxsize=10)`, leaving headroom for the nested
@@ -98,7 +104,7 @@ class ConduitAPIError(Error):
 
 class ConduitAPI:
     def __init__(self):
-        self.repo = None
+        self._repo: Optional["Repository"] = None
         # Lazy-initialised urllib3 pool. Holding it on the instance (rather
         # than as a module global) keeps test isolation simple and avoids
         # leaking pool state between successive ConduitAPI instances.
@@ -107,7 +113,18 @@ class ConduitAPI:
         # duplicate mutations.
         self._http_pool: Optional[urllib3.PoolManager] = None
 
-    def set_repo(self, repo):
+    @property
+    def repo(self) -> "Repository":
+        """Return the repository the API calls are made against."""
+        if self._repo is None:
+            raise Error("Phabricator API used before the repository was set.")
+        return self._repo
+
+    @repo.setter
+    def repo(self, repo: Optional["Repository"]):
+        self._repo = repo
+
+    def set_repo(self, repo: Optional["Repository"]):
         self.repo = repo
 
     def _get_http_pool(self) -> urllib3.PoolManager:

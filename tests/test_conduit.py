@@ -18,12 +18,18 @@ from mozphab.diff import Diff
 from tests.conftest import search_rev
 
 
-class Repo:
+class Repo(repository.Repository):
+    """`Repository` stand-in holding only the attributes Conduit reads."""
+
     api_url = "https://api_url"
     dot_path = "dot_path"
     phab_url = "phab_url"
     path = "path"
     cvs = "git"
+
+    def __init__(self):
+        # `Repository.__init__` reads `.arcconfig` files and the Phabricator URL.
+        pass
 
 
 def test_set_args_from_repo():

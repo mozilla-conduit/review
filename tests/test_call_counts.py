@@ -383,14 +383,15 @@ def call_harness(
     monkeypatch.setattr(ConduitAPI, "call", make_fake_call(state, calls))
     monkeypatch.setattr(ConduitAPI, "check", lambda self: True)
 
-    previous_repo = conduit.repo
     conduit.set_repo(repo)
     cache.reset()
     try:
         yield state, calls, repo
     finally:
         cache.reset()
-        conduit.repo = previous_repo
+        # The autouse `reset_conduit_repo` fixture clears the repo for the next
+        # test, so there is nothing to restore here.
+        conduit.repo = None
 
 
 # Expected ConduitAPI.call shape for `_submit` of an N-commit stack of
