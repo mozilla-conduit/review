@@ -5,6 +5,7 @@
 import argparse
 import io
 import json
+from typing import List, Optional
 from unittest import mock
 from urllib.error import HTTPError
 
@@ -22,23 +23,29 @@ from mozphab.commands.uplift import (
 from mozphab.commits import Commit
 from mozphab.exceptions import Error
 from mozphab.helpers import ORIGINAL_DIFF_REV_RE
+from mozphab.repository import Repository
 
 
-class Repo:
+class Repo(Repository):
+    """`Repository` stand-in recording whether an uplift was attempted."""
+
     def __init__(self, unified_head="beta", is_descendant=True, phid="PHID-beta"):
+        # `Repository.__init__` reads `.arcconfig` files and the Phabricator URL.
         self.unified_head = unified_head
         self._is_descendant = is_descendant
         self.uplift_called = False
-        self.phid = phid
+        # Read back by the `Repository.phid` property.
+        self._phid = phid
 
-    def get_repo_head_branch(self):
+    def get_repo_head_branch(self) -> Optional[str]:
         return self.unified_head
 
-    def is_descendant(self, *args, **kwargs):
+    def is_descendant(self, node: str) -> bool:
         return self._is_descendant
 
-    def uplift_commits(self, *args, **kwargs):
+    def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
         self.uplift_called = True
+        return commits
 
 
 def test_local_uplift_if_possible():
