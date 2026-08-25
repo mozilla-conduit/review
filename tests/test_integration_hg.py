@@ -11,6 +11,7 @@ import pytest
 from callee import Contains, Matching, StartsWith
 
 from mozphab import mozphab
+from mozphab.commits import Commit
 from mozphab.mercurial import Mercurial
 
 from .conftest import hg_out, write_text
@@ -1226,6 +1227,25 @@ def test_multiple_copy(in_process, hg_repo_path):
         )
         in call_conduit.call_args_list
     )
+
+
+@pytest.mark.skipif(
+    platform.system() == "Windows",
+    reason="Skipped because Windows does not support symlinks",
+)
+def test_symlink_file_mode(in_process, hg_repo_path):
+    """Bug 1898339: a symlink is submitted as a symlink, not as a text file."""
+    os.symlink("X", hg_repo_path / "X_symlink")
+    hg_out("add", "X_symlink")
+    hg_out("commit", "-m", "add symlink")
+
+    hg = Mercurial(str(hg_repo_path))
+    commit = Commit(node=hg_out("log", "-r", ".", "-T", "{node}").rstrip())
+    change = hg.get_diff(commit).changes["X_symlink"]
+
+    assert (
+        change.cur_mode == "120000"
+    ), "An added symlink should be submitted with the `120000` file mode."
 
 
 # To re-enable this test for Windows we would need a way to modify

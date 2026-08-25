@@ -670,6 +670,28 @@ def test_get_file_modes(m_hg, hg):
     assert actual == expected
 
 
+@mock.patch("mozphab.mercurial.Mercurial.hg_out")
+def test_get_file_modes_symlink(m_hg, hg):
+    """Bug 1898339: a symlink is reported with the `120000` file mode."""
+    m_hg.side_effect = (
+        ["A file name"],  # status
+        [],  # files - parent
+        ["l:file name"],  # files - node
+    )
+    assert hg._get_file_modes(Commit(node="aaa", parent="bbb")) == {
+        "file name": {"new_mode": "120000"}
+    }, "An added symlink should have a new mode of `120000`."
+
+    m_hg.side_effect = (
+        ["M file name"],  # status
+        ["l:file name"],  # files - parent
+        [" :file name"],  # files - node
+    )
+    assert hg._get_file_modes(Commit(node="aaa", parent="bbb")) == {
+        "file name": {"old_mode": "120000", "new_mode": "100644"}
+    }, "A symlink replaced by a regular file should change mode from `120000`."
+
+
 def test_check_vcs(hg):
     class Args(argparse.Namespace):
         def __init__(self, force_vcs=False):

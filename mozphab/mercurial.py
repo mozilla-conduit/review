@@ -52,6 +52,13 @@ from .telemetry import telemetry
 
 MINIMUM_MERCURIAL_VERSION = Version("4.3.3")
 
+# Map the flags reported by `hg files -T {flags}` onto `git` file modes.
+HG_FLAGS_TO_FILE_MODE = {
+    "l": "120000",
+    "x": "100755",
+}
+DEFAULT_FILE_MODE = "100644"
+
 
 @dataclass(frozen=True)
 class FileChange:
@@ -897,7 +904,9 @@ class Mercurial(Repository):
             mode_dict = {}
             for line in mode_list:
                 flag, mode_path = line.split(":", 1)
-                mode_dict[mode_path] = "100755" if flag == "x" else "100644"
+                mode_dict[mode_path] = HG_FLAGS_TO_FILE_MODE.get(
+                    flag, DEFAULT_FILE_MODE
+                )
             return mode_dict
 
         # get before/after file modes
