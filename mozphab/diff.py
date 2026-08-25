@@ -240,7 +240,7 @@ class Diff:
     def set_change_kind(
         self,
         change: Change,
-        kind: Kind,
+        kind: str,
         a_mode: str,
         b_mode: str,
         a_path: str,

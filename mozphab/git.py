@@ -297,7 +297,7 @@ class Git(Repository):
             end = start_rev if is_single else self.args.end_rev
             self.revset = (start, end)
 
-    def _git_get_children(self, node: str) -> str:
+    def _git_get_children(self, node: str) -> List[str]:
         """Get commits SHA1 with their children.
 
         Args:
@@ -510,9 +510,13 @@ class Git(Repository):
         self.git_call(["checkout", "--quiet", node])
 
     def commit(
-        self, body: str, author: Optional[str] = None, author_date: Optional[str] = None
+        self, body: str, author: Optional[str] = None, author_date: Optional[int] = None
     ):
-        """Commit the changes in the working directory."""
+        """Commit the changes in the working directory.
+
+        `author_date` is the epoch the patch was created at, as `apply_patch`
+        receives it from Phabricator.
+        """
         commands = ["commit", "-a"]
         if author:
             commands.append('--author="%s"' % author)
@@ -797,7 +801,7 @@ class Git(Repository):
         return int(self.git_out_text(["cat-file", "-s", blob]))
 
     @lru_cache(maxsize=128)  # noqa: B019
-    def _cat_file(self, blob: str) -> str:
+    def _cat_file(self, blob: str) -> bytes:
         return self.git_out_binary(["cat-file", "blob", blob])
 
     def _parse_diff_change(self, raw: str, diff: Diff) -> Diff.Change:

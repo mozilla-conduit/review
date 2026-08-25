@@ -23,6 +23,7 @@ from typing import (
 )
 
 import hglib
+import hglib.client
 from packaging.version import Version
 
 from mozphab import environment
@@ -97,7 +98,7 @@ class Mercurial(Repository):
         os.chdir(self._repo_path)
 
     @property
-    def repository(self) -> hglib.hgclient:
+    def repository(self) -> hglib.client.hgclient:
         """Returns the hglib.hgclient instance.
 
         If the config has changed, recreate the instance.
@@ -482,7 +483,7 @@ class Mercurial(Repository):
 
             self.revset = "%s::%s" % (short_node(start), short_node(end))
 
-    def commit_stack(self, **kwargs) -> List[Commit]:
+    def commit_stack(self, single: bool = False) -> List[Commit]:
         # Grab all the info we need about the commits, using randomness as a delimiter.
         boundary = "--%s--\n" % uuid.uuid4().hex
         hg_log = self.hg_out_text(
@@ -640,7 +641,7 @@ class Mercurial(Repository):
             self.checkout(node)
             self.hg(["commit", "--amend", "--logfile", body_file])
 
-    def _get_parent(self, node: str) -> Optional[str]:
+    def _get_parent(self, node: str) -> str:
         return self.hg_out_text(["log", "-T", "{node}", "-r", "parents(%s)" % node])
 
     def finalize(self, commits: List[Commit]):
@@ -1024,7 +1025,7 @@ class Mercurial(Repository):
         return diff
 
     @lru_cache(maxsize=None)  # noqa: B019
-    def hg_cat(self, filename: str, node: str) -> Optional[bytes]:
+    def hg_cat(self, filename: str, node: str) -> bytes:
         return self.hg_out_binary(["cat", "-r", node, filename])
 
     @lru_cache(maxsize=None)  # noqa: B019
