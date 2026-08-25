@@ -248,6 +248,8 @@ class ConduitAPI:
                     backoff,
                 )
                 time.sleep(backoff)
+        else:
+            raise ConduitAPIError(f"Conduit call {api_method} was not attempted.")
 
         if res["error_code"]:
             raise ConduitAPIError(res.get("error_info", "Error %s" % res["error_code"]))
@@ -357,7 +359,7 @@ class ConduitAPI:
         raise NotFoundError("revision {} not found".format(phid))
 
     def get_revisions(
-        self, ids: Optional[List[int]] = None, phids: Optional[List[int]] = None
+        self, ids: Optional[List[int]] = None, phids: Optional[List[str]] = None
     ) -> List[dict]:
         """Get revisions info from Phabricator.
 
@@ -367,28 +369,30 @@ class ConduitAPI:
 
         Returns a list of revisions ordered by ids or phids
         """
-        if (ids and phids) or (ids is None and phids is None):
+        if (ids and phids) or (not ids and not phids):
             raise ValueError("Internal Error: Invalid args to get_revisions")
 
+        rev_ids = [str(rev_id) for rev_id in ids or []]
+        rev_phids = phids or []
+
         # Initialise depending on if we're passed revision IDs or PHIDs.
-        if ids:
-            ids = [str(rev_id) for rev_id in ids]
+        if rev_ids:
             phids_by_id = {
                 rev_id: cache.get("rev-id-%s" % rev_id)
-                for rev_id in ids
+                for rev_id in rev_ids
                 if "rev-id-%s" % rev_id in cache
             }
             found_phids = list(phids_by_id.values())
             query_field = "ids"
             query_values = [
-                int(rev_id) for rev_id in set(ids) - set(phids_by_id.keys())
+                int(rev_id) for rev_id in set(rev_ids) - set(phids_by_id.keys())
             ]
 
         else:
             phids_by_id = {}
-            found_phids = phids.copy()
+            found_phids = rev_phids.copy()
             query_field = "phids"
-            query_values = {phid for phid in phids if "rev-%s" % phid not in cache}
+            query_values = {phid for phid in rev_phids if "rev-%s" % phid not in cache}
 
         # Revisions metadata keyed by PHID.
         revisions = {
@@ -404,25 +408,24 @@ class ConduitAPI:
                 "attachments": {"reviewers": True},
             }
             response = self.call("differential.revision.search", api_call_args)
-            rev_list = response.get("data")
 
-            for r in rev_list:
+            for r in response.get("data") or []:
                 phids_by_id[str(r["id"])] = r["phid"]
                 revisions[r["phid"]] = r
                 cache.set("rev-id-%s" % r["id"], r["phid"])
                 cache.set("rev-%s" % r["phid"], r)
 
         # Return revisions in the same order requested.
-        if ids:
+        if rev_ids:
             # Skip revisions for which we do not have a query result.
             return [
                 revisions[phids_by_id[rev_id]]
-                for rev_id in ids
+                for rev_id in rev_ids
                 if rev_id in phids_by_id
             ]
         else:
             # Skip revisions for which we do not have a query result.
-            return [revisions[phid] for phid in phids if phid in revisions]
+            return [revisions[phid] for phid in rev_phids if phid in revisions]
 
     def get_diffs(
         self, ids: Optional[List[int]] = None, phids: Optional[List[str]] = None
@@ -435,7 +438,7 @@ class ConduitAPI:
 
         Returns a dict of diffs identified by their PHID
         """
-        if (ids and phids) or (ids is None and phids is None):
+        if (ids and phids) or (not ids and not phids):
             raise ValueError("Internal Error: Invalid args to get_diffs")
 
         # Serve known diffs from the cache and only query Phabricator for the
@@ -453,7 +456,7 @@ class ConduitAPI:
             constraints = {"ids": uncached_ids} if uncached_ids else None
         else:
             uncached_phids = []
-            for phid in set(phids):
+            for phid in set(phids or []):
                 if diff := cache.get("diff-%s" % phid):
                     cached_diffs[phid] = diff
                 else:
@@ -599,7 +602,7 @@ class ConduitAPI:
             self.update_revision_reviewers(transactions, commit)
 
         # Update bug id if different
-        if commit.bug_id:
+        if commit.bug_id and commit.rev_id:
             revision = conduit.get_revisions(ids=[commit.rev_id])[0]
             if revision["fields"]["bugzilla.bug-id"] != commit.bug_id:
                 transactions.append({"type": "bugzilla.bug-id", "value": commit.bug_id})
@@ -635,10 +638,13 @@ class ConduitAPI:
         existing_status = None
         if rev_id:
             try:
-                args = {"ids": [int(rev_id)]}
+                revision_id = int(rev_id)
             except ValueError:
-                args = {"phids": [rev_id]}
-            existing_revision = conduit.get_revisions(**args)[0]
+                # `rev_id` holds a PHID rather than a revision id.
+                existing_revision = conduit.get_revisions(phids=[str(rev_id)])[0]
+            else:
+                existing_revision = conduit.get_revisions(ids=[revision_id])[0]
+
             existing_status = existing_revision["fields"]["status"]["value"]
 
         # Set revision for changes-planned or needs-review as required.
