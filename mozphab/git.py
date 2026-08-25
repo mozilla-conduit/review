@@ -14,6 +14,7 @@ from functools import lru_cache
 from typing import (
     List,
     Optional,
+    Tuple,
 )
 
 from mozphab import environment
@@ -62,8 +63,17 @@ class Git(Repository):
             raise Error("Failed to determine Git version.")
 
         self.vcs_version = m.group(0)
-        self.revset = None
-        self.branch = None
+        # Set by `set_args` once the commit range is known.
+        self.revset: Optional[Tuple[str, str]] = None
+        # Set by `before_submit` to the branch to return to afterwards.
+        self.branch = ""
+
+    @property
+    def required_revset(self) -> Tuple[str, str]:
+        """Return the commit range, which `set_args` sets before the stack is used."""
+        if not self.revset:
+            raise Error("Internal error: the commit range has not been set.")
+        return self.revset
 
     @property
     def is_cinnabar_installed(self) -> bool:
@@ -91,9 +101,11 @@ class Git(Repository):
         hg_node = self.git_out_text(["cinnabar", "git2hg", node])
         return hg_node if hg_node != NULL_SHA1 else None
 
-    @lru_cache(maxsize=128)  # noqa: B019
     def get_public_node(self, node: str) -> str:
-        """Return a Mercurial node if Cinnabar is required."""
+        """Return a Mercurial node if Cinnabar is required.
+
+        The `git` lookup behind this is cached by `_git_to_hg`.
+        """
         public_node = node
         if self.is_cinnabar_required:
             hg_node = self._git_to_hg(node)
@@ -392,8 +404,8 @@ class Git(Repository):
             return None
 
         commits = []
-        rev_list = None
-        first_node = None
+        rev_list: List[str] = []
+        first_node = ""
         for log_line in self._get_commits_info(*self.revset):
             if not log_line:
                 continue
@@ -402,7 +414,7 @@ class Git(Repository):
 
             if not single:
                 # Check if the commit is a child of the first one
-                if rev_list is None:
+                if not first_node:
                     rev_list = self._git_get_children(commit.node)
                     first_node = commit.node
                 elif not self._is_child(first_node, commit.node, rev_list):
@@ -692,8 +704,8 @@ class Git(Repository):
             )
             stack_commit.node = new_parent_sha
 
-    def rebase_commit(self, source_commit: dict, dest_commit: dict):
-        self._rebase(dest_commit["node"], source_commit["node"])
+    def rebase_commit(self, source_commit: Commit, dest_commit: Commit):
+        self._rebase(dest_commit.node, source_commit.node)
 
     def is_descendant(self, node: str) -> bool:
         try:
@@ -701,7 +713,7 @@ class Git(Repository):
             # Note that this function is trying to determine if a commit is a
             # descendant, but `merge-base` supports checking for an ancestor. These
             # are the inverse of each other.
-            self.git_out(["merge-base", "--is-ancestor", node, self.revset[0]])
+            self.git_out(["merge-base", "--is-ancestor", node, self.required_revset[0]])
         except CommandError as e:
             # Exit code 1 means the commit is not a descendant.
             if e.status == 1:
@@ -733,13 +745,13 @@ class Git(Repository):
         mozphab_uplift_branch = f"{self.branch}_uplift"
 
         # Create a new branch at the location of the tip of the revset.
-        self.git_call(["switch", "-c", mozphab_uplift_branch, self.revset[-1]])
+        self.git_call(["switch", "-c", mozphab_uplift_branch, self.required_revset[-1]])
 
         try:
             # Rebase from the other end of the revset onto our target, specifying
             # our revset start rev as the base, since moz-phab on Git uses the base
             # commit as the revset start, unlike Mercurial.
-            self.git_call(["rebase", "--onto", dest, f"{self.revset[0]}"])
+            self.git_call(["rebase", "--onto", dest, self.required_revset[0]])
         except CommandError as exc:
             raise Error(
                 f"Rebasing your uplift commits {self.revset} onto {dest} failed.\n\n"
