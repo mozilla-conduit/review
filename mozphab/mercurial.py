@@ -13,9 +13,11 @@ import sys
 import time
 import uuid
 from contextlib import suppress
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import (
     Any,
+    Callable,
     Dict,
     List,
     Optional,
@@ -47,6 +49,16 @@ from .subprocess_wrapper import debug_log_command
 from .telemetry import telemetry
 
 MINIMUM_MERCURIAL_VERSION = Version("4.3.3")
+
+
+@dataclass(frozen=True)
+class FileChange:
+    """A file touched by a commit, with the method that describes it in a `Diff`."""
+
+    filename: str
+    kind: str
+    func: Callable[[Diff.Change, str, str, str, str], None]
+    old_filename: Optional[str] = None
 
 
 class Mercurial(Repository):
@@ -942,7 +954,8 @@ class Mercurial(Repository):
     def get_diff(self, commit: Commit) -> Diff:
         """Create a Diff object containing all changes for this commit."""
         self.checkout(commit.node)
-        commit.parent = self._get_parent(commit.node)
+        parent = self._get_parent(commit.node)
+        commit.parent = parent
         file_modes = self._get_file_modes(commit)
 
         # Get changed files.
@@ -977,12 +990,12 @@ class Mercurial(Repository):
                 # A file can be mved only once.
                 is_move = old_fn in fn_dels and old_fn not in fn_renamed
                 changes.append(
-                    {
-                        "fn": new_fn,
-                        "old_fn": old_fn,
-                        "kind": "R" if is_move else "C",
-                        "func": self._change_mod,
-                    }
+                    FileChange(
+                        filename=new_fn,
+                        old_filename=old_fn,
+                        kind="R" if is_move else "C",
+                        func=self._change_mod,
+                    )
                 )
                 fn_renames.append((new_fn, old_fn))
                 fn_renamed.append(old_fn)
@@ -995,32 +1008,35 @@ class Mercurial(Repository):
         fn_mods = [fn for fn in fn_mods if fn]
 
         changes.extend(
-            [{"fn": fn, "kind": "A", "func": self._change_add} for fn in fn_adds]
+            FileChange(filename=fn, kind="A", func=self._change_add) for fn in fn_adds
         )
         changes.extend(
-            [{"fn": fn, "kind": "D", "func": self._change_del} for fn in fn_dels]
+            FileChange(filename=fn, kind="D", func=self._change_del) for fn in fn_dels
         )
         changes.extend(
-            [{"fn": fn, "kind": "M", "func": self._change_mod} for fn in fn_mods]
+            FileChange(filename=fn, kind="M", func=self._change_mod) for fn in fn_mods
         )
 
         # Create changes.
         diff = Diff()
-        for c in changes:
-            change = diff.change_for(c["fn"])
-            old_fn = c["old_fn"] if "old_fn" in c else c["fn"]
-            c["func"](change, c["fn"], old_fn, commit.parent, commit.node)
+        for file_change in changes:
+            filename = file_change.filename
+            change = diff.change_for(filename)
+            old_fn = file_change.old_filename or filename
+            file_change.func(change, filename, old_fn, parent, commit.node)
             a_mode = (
                 file_modes[old_fn]["old_mode"]
                 if old_fn in file_modes and "old_mode" in file_modes[old_fn]
                 else "000000"
             )
             b_mode = (
-                file_modes[c["fn"]]["new_mode"]
-                if c["fn"] in file_modes and "new_mode" in file_modes[c["fn"]]
+                file_modes[filename]["new_mode"]
+                if filename in file_modes and "new_mode" in file_modes[filename]
                 else "000000"
             )
-            diff.set_change_kind(change, c["kind"], a_mode, b_mode, old_fn, c["fn"])
+            diff.set_change_kind(
+                change, file_change.kind, a_mode, b_mode, old_fn, filename
+            )
 
         return diff
 
