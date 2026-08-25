@@ -472,7 +472,10 @@ def test_patch(
     git.args = Args(apply_to=node)
     with pytest.raises(exceptions.Error) as e:
         patch.patch(git, git.args)
-        assert "Unknown revision: %s\nERROR" % node in e.msg
+
+    assert "Unknown revision: %s" % node in str(
+        e.value
+    ), "A missing base node should be named in the error."
 
     # successors
     m_get_revisions.reset_mock()

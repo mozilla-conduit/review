@@ -322,10 +322,10 @@ def test_new_telemetry_ids_are_valid(m_whoami, m_file, user_data):
 
     user_data.set_user_data()
 
-    assert (
-        len(user_data.installation_id) == 36
-    ), "`installation_id` should have len of 36."
-    assert "-" in user_data.installation_id, "`installation_id` should contain hyphens."
+    installation_id = user_data.installation_id
+    assert installation_id, "`set_user_data` should set `installation_id`."
+    assert len(installation_id) == 36, "`installation_id` should have len of 36."
+    assert "-" in installation_id, "`installation_id` should contain hyphens."
 
     assert len(user_data.user_code) == 36, "`user_code` should have len of 36."
     assert "-" in user_data.user_code, "`user_code` should contain hyphens."

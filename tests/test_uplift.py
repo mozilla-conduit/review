@@ -211,7 +211,9 @@ def test_update_commits_for_uplift_sets_original_revision():
     rev_id = commits[2].rev_id
 
     assert "Differential Revision:" not in body
-    assert ORIGINAL_DIFF_REV_RE.search(body).group("rev") == "3"
+    original_revision = ORIGINAL_DIFF_REV_RE.search(body)
+    assert original_revision, "The body should carry an `Original Revision` line."
+    assert original_revision.group("rev") == "3"
     assert rev_id is None
 
 
@@ -241,7 +243,9 @@ def test_uplift_beta_commit_to_esr():
     assert not reviewers["request"]
     assert not reviewers["granted"]
     assert "Differential Revision:" not in body
-    assert ORIGINAL_DIFF_REV_RE.search(body).group("rev") == "1"
+    original_revision = ORIGINAL_DIFF_REV_RE.search(body)
+    assert original_revision, "The body should carry an `Original Revision` line."
+    assert original_revision.group("rev") == "1"
     assert rev_id is None
 
 

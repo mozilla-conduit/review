@@ -533,9 +533,10 @@ def test_is_descendant(m_git_out, git):
     with pytest.raises(exceptions.CommandError) as e:
         git.is_descendant("aabbcc")
 
-        assert (
-            e.args == "test"
-        ), "Original command exception was not raised to the caller."
+    assert (
+        e.value.status == 255
+    ), "Original command exception was not raised to the caller."
+    assert str(e.value) == "test", "The original error message should be preserved."
 
 
 @mock.patch("mozphab.gitcommand.which")

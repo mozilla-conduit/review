@@ -547,7 +547,7 @@ class Commits(unittest.TestCase):
 
     @unittest.skip("These tests should pass we should fix the function")
     def test_badly_replaced_reviewers(self):
-        replace = mozphab.replace_reviewers
+        replace = helpers.replace_reviewers
         # r?two
         self.assertEqual("r?one", replace("r?two", reviewers_dict([["one"], []])))
         # r=one
