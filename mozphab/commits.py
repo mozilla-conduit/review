@@ -58,14 +58,15 @@ class Commit:
     author_name: str = ""
     author_email: str = ""
 
-    author_date: Optional[str] = None
-    parent: Optional[str] = None
+    # Set by the backends that can provide them; empty otherwise.
+    author_date: str = ""
+    parent: str = ""
+    tree_hash: str = ""
     bug_id: Optional[str] = None
     bug_id_orig: Optional[str] = None
     rev_id: Optional[int] = None
     rev_phid: Optional[str] = None
     wip: Optional[bool] = None
-    tree_hash: Optional[str] = None
     ai_review_state: AiReviewState = AiReviewState.NOT_REQUESTED
     reviewers: Dict[str, List[str]] = field(default_factory=dict)
 

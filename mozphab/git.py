@@ -444,9 +444,9 @@ class Git(Repository):
             )
 
         # Tue, 14 Apr 2020 12:02:20 +0000
-        commit_epoch = datetime.strptime(
-            author_date, "%a, %d %b %Y %H:%M:%S %z"
-        ).timestamp()
+        commit_epoch = int(
+            datetime.strptime(author_date, "%a, %d %b %Y %H:%M:%S %z").timestamp()
+        )
 
         return Commit(
             name=short_node(node),

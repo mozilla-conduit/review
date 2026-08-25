@@ -244,7 +244,7 @@ class Jujutsu(Repository):
             if is_conflicted:
                 raise Error(f"Change {change_id} is conflicted, unable to continue")
 
-            commit_epoch = datetime.fromisoformat(author_date).timestamp()
+            commit_epoch = int(datetime.fromisoformat(author_date).timestamp())
             commits.append(
                 Commit(
                     name=change_id,

@@ -894,7 +894,7 @@ class ConduitAPI:
                 "parents": [conduit.repo.get_public_node(commit.parent)],
             }
         }
-        if commit.tree_hash is not None:
+        if commit.tree_hash:
             data[commit.node]["tree"] = commit.tree_hash
 
         if self.repo.phab_vcs == "hg":
