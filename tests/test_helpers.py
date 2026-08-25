@@ -395,6 +395,22 @@ def test_jj_broken_config_surfaces_error(monkeypatch, jj_colocated_repo_path, tm
         detect_repository.probe_repo(path)
 
 
+def test_jj_invalid_email_error(monkeypatch, jj_colocated_repo_path, tmp_path):
+    """Reporting an invalid `jj` email should not raise `AttributeError`."""
+    config = tmp_path / "invalid-email.toml"
+    config.write_text('[user]\nemail = "not-an-email"\nname = "moz-phab tests"\n')
+    monkeypatch.setenv("JJ_CONFIG", str(config))
+
+    repo = Jujutsu(str(jj_colocated_repo_path))
+
+    with pytest.raises(exceptions.Error) as excinfo:
+        repo.before_submit()
+
+    assert "not-an-email" in str(
+        excinfo.value
+    ), "The invalid email should be quoted in the error message."
+
+
 def test_fail_find_repo():
     path = "/non/existing/path"
     assert detect_repository.find_repo_root(path) is None

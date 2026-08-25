@@ -434,18 +434,16 @@ class Jujutsu(Repository):
         with temporary_file(body) as message_path:
             with open(message_path) as message_file:
                 check_call(["jj", "describe", "--quiet", "--stdin"], stdin=message_file)
-        author_date = datetime.fromtimestamp(author_date, tz=timezone.utc).isoformat()
-        check_call(
-            [
-                "jj",
-                "metaedit",
-                "--quiet",
-                "--author",
-                author,
-                "--author-timestamp",
-                author_date,
-            ]
-        )
+        # Only set the fields Phabricator gave us, as `git` and `hg` do.
+        metaedit_command = ["jj", "metaedit", "--quiet"]
+        if author:
+            metaedit_command.extend(["--author", author])
+        if author_date is not None:
+            timestamp = datetime.fromtimestamp(author_date, tz=timezone.utc).isoformat()
+            metaedit_command.extend(["--author-timestamp", timestamp])
+
+        if len(metaedit_command) > 3:
+            check_call(metaedit_command)
 
         check_call(["jj", "new", "--quiet"])
 
@@ -523,7 +521,7 @@ class Jujutsu(Repository):
 
         if not is_valid_email(self.__email):
             raise Error(
-                f"Your email configured with Jujutsu ({self.git.email}) is not a valid "
+                f"Your email configured with Jujutsu ({self.__email}) is not a valid "
                 f"format.\n"
                 f"Please run `jj config set user.email someone@example.com …` to set "
                 f"the correct value.\n"
