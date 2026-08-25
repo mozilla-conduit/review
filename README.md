@@ -332,6 +332,25 @@ Tests run in parallel across all available cores using
 [pytest-xdist](https://pytest-xdist.readthedocs.io/). Add `-n0` to run them
 serially, which is needed when dropping into `--pdb`.
 
+### Type checking
+
+Types are checked with [pyrefly](https://pyrefly.org/), configured by
+`pyrefly.toml` to check `mozphab`, `tests` and `conftest.py` against the oldest
+supported Python version. To check types locally:
+
+```shell
+uv run pyrefly check --baseline pyrefly-baseline.json
+```
+
+`pyrefly-baseline.json` records the known type errors, so
+`tests/test_style.py::test_pyrefly` only fails on newly introduced ones. If a
+change legitimately alters the set of known errors, regenerate the baseline from
+the repository root, since it stores repository-relative paths:
+
+```shell
+uv run pyrefly check --baseline pyrefly-baseline.json --update-baseline
+```
+
 ### Updating dependencies
 
 Dependencies are defined in `pyproject.toml` and locked in `uv.lock`. To update

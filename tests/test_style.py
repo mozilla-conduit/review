@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import subprocess
+import sys
 from pathlib import Path
 
 from .conftest import find_script_path
@@ -27,3 +28,29 @@ def test_ruff():
     paths in the `ruff.toml` file.
     """
     subprocess.check_call((find_script_path("ruff"), "check", ROOT))
+
+
+def test_pyrefly():
+    """Fail on type errors that are not already recorded in the baseline.
+
+    Regenerate the baseline after fixing or knowingly introducing errors with
+    `uv run pyrefly check --baseline pyrefly-baseline.json --update-baseline`.
+    """
+    command = (
+        find_script_path("pyrefly"),
+        "check",
+        "--config",
+        str(ROOT / "pyrefly.toml"),
+        "--baseline",
+        str(ROOT / "pyrefly-baseline.json"),
+        # Resolve imports against the environment running the tests, rather
+        # than letting pyrefly auto-detect a virtualenv.
+        "--python-interpreter-path",
+        sys.executable,
+        "--summary=none",
+    )
+    # The baseline records paths relative to the repository root, so pyrefly
+    # only matches them when run from there.
+    assert (
+        subprocess.call(command, cwd=ROOT) == 0
+    ), "pyrefly should report no type errors missing from `pyrefly-baseline.json`."

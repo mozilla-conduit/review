@@ -1,0 +1,16 @@
+# Pyrefly type checking configuration.
+#
+# Without this file Pyrefly falls back to the `basic` preset, which reports
+# almost nothing (it stays silent on a `-> int` function returning `str`), so
+# editors and CI would both appear clean while checking nothing.
+preset = "default"
+
+# Check the oldest supported interpreter, so version-gated code paths and
+# stdlib APIs that only exist in newer releases are caught here.
+python-version = "3.9"
+
+project-includes = ["mozphab", "tests", "conftest.py"]
+project-excludes = [
+    "**/__pycache__/**",
+    "**/node_modules/**",
+]

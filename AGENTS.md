@@ -19,11 +19,22 @@ uv run ruff check .
 
 # Format
 uv run black .
+
+# Type check
+uv run pyrefly check --baseline pyrefly-baseline.json
+
+# Record the current type errors in the baseline
+uv run pyrefly check --baseline pyrefly-baseline.json --update-baseline
 ```
 
 ## Code Style
 
 See `ruff.toml` for linting configuration; `black` is configured with the default line length of 88.
+
+## Type Checking
+
+- `pyrefly.toml` configures `pyrefly`, which checks `mozphab`, `tests` and `conftest.py` against the oldest supported Python version.
+- `pyrefly-baseline.json` records the type errors that predate type checking, so `tests/test_style.py::test_pyrefly` only fails on newly introduced ones. Regenerate it with `uv run pyrefly check --baseline pyrefly-baseline.json --update-baseline` from the repository root, since the baseline stores repository-relative paths.
 
 ## Architecture
 
