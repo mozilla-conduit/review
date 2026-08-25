@@ -38,6 +38,18 @@ def test_build_request(m_conduit):
     }
 
 
+@mock.patch("mozphab.bmo.conduit")
+def test_build_request_without_bmo_url(m_conduit):
+    m_conduit.repo.bmo_url = None
+
+    with pytest.raises(BMOAPIError) as err:
+        bmo._build_request(method="test_method")
+
+    assert "No Bugzilla URL is configured" in str(
+        err.value
+    ), "A repository without a Bugzilla URL should raise `BMOAPIError`."
+
+
 def test_sanitised_req():
     assert bmo._sanitise_req(
         {

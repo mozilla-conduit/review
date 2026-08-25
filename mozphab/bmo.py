@@ -31,7 +31,7 @@ class BMOAPI:
             with url_request.urlopen(url_request.Request(**req_args)) as r:
                 res = json.load(r)
         except (url_error.HTTPError, OSError) as err:
-            raise BMOAPIError(err)
+            raise BMOAPIError(str(err))
         except json.JSONDecodeError:
             raise BMOAPIError("Malformed JSON")
 
@@ -45,6 +45,9 @@ class BMOAPI:
     def _build_request(*, method: str, headers: Optional[dict] = None) -> dict:
         """Return dict with Request args for calling the specified BMO method."""
         bmo_url = conduit.repo.bmo_url
+        if not bmo_url:
+            raise BMOAPIError("No Bugzilla URL is configured for this repository.")
+
         headers = headers or {}
         return {
             "url": url_parse.urljoin(bmo_url, "rest/%s" % method),
@@ -53,9 +56,9 @@ class BMOAPI:
         }
 
     @staticmethod
-    def _sanitise_req(req_args: dict):
+    def _sanitise_req(req_args: dict) -> dict:
         sanitised = copy.deepcopy(req_args)
-        if "X-PHABRICATOR-TOKEN" in sanitised.get("headers"):
+        if "X-PHABRICATOR-TOKEN" in sanitised.get("headers", {}):
             sanitised["headers"]["X-PHABRICATOR-TOKEN"] = "cli-XXXX"
         return sanitised
 
