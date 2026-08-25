@@ -611,6 +611,15 @@ def test_parse_git_diff():
     assert parse("@@ -40,9 +50,3 @@ packaging==19.1 \\") == (40, 50, 9, 3)
 
 
+def test_parse_git_diff_invalid_header():
+    with pytest.raises(exceptions.Error) as err:
+        Diff.parse_git_diff("not a hunk header")
+
+    assert "Failed to parse hunk header" in str(
+        err.value
+    ), "An unparseable header should raise `Error`."
+
+
 @mock.patch("mozphab.repository.conduit.call")
 def test_diff_property(m_call, git, hg):
     git.get_public_node = lambda x: x

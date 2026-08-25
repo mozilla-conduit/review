@@ -11,6 +11,8 @@ from typing import (
     Tuple,
 )
 
+from .exceptions import Error
+
 
 class Diff:
     """Representation of the Diff used to submit to the Phabricator."""
@@ -94,7 +96,8 @@ class Diff:
             """Generate hunks from the provided git_diff output."""
 
             # Process each hunk
-            hunk = {}
+            header: Optional[Tuple[int, int, int, int]] = None
+            lines: List[str] = []
             in_header = True
             for line in git_diff.splitlines(keepends=True):
                 # Skip lines before the start of the first hunk header
@@ -106,23 +109,31 @@ class Diff:
                 # Start of hunk
                 if line.startswith("@@"):
                     # Store previously collected hunk
-                    if hunk and hunk["lines"]:
-                        self.hunks.append(Diff.Hunk(**hunk))
+                    if header and lines:
+                        self.hunks.append(self.build_hunk(header, lines))
 
                     # Start a new collection
-                    (old_off, new_off, old_len, new_len) = Diff.parse_git_diff(line)
-                    hunk = {
-                        "old_off": old_off,
-                        "new_off": new_off,
-                        "old_len": old_len,
-                        "new_len": new_len,
-                        "lines": [],
-                    }
+                    header = Diff.parse_git_diff(line)
+                    lines = []
 
                 else:
-                    hunk["lines"].append(line)
-            if hunk and hunk["lines"]:
-                self.hunks.append(Diff.Hunk(**hunk))
+                    lines.append(line)
+            if header and lines:
+                self.hunks.append(self.build_hunk(header, lines))
+
+        @staticmethod
+        def build_hunk(
+            header: Tuple[int, int, int, int], lines: List[str]
+        ) -> "Diff.Hunk":
+            """Build a `Hunk` from a parsed `@@` header and the lines that follow it."""
+            old_off, new_off, old_len, new_len = header
+            return Diff.Hunk(
+                old_off=old_off,
+                old_len=old_len,
+                new_off=new_off,
+                new_len=new_len,
+                lines=lines,
+            )
 
         def set_as_binary(self, *, a_body: str, a_mime: str, b_body: str, b_mime: str):
             """Updates Change contents to the provided binary data."""
@@ -229,8 +240,9 @@ class Diff:
 
     def __init__(self):
         self.changes = {}
-        self.phid = None
-        self.id = None
+        # Set from the `differential.creatediff` response once the diff is sent.
+        self.phid = ""
+        self.id = ""
 
     def change_for(self, path: str):
         if path not in self.changes:
@@ -297,13 +309,16 @@ class Diff:
 
     @staticmethod
     def parse_git_diff(hdr: str) -> Tuple[int, int, int, int]:
-        m = re.match(
+        match = re.match(
             r"@@ -(?P<old_off>\d+)(?:,(?P<old_len>\d+))? "
             r"\+(?P<new_off>\d+)(?:,(?P<new_len>\d+))? @@",
             hdr,
         )
-        old_off = int(m.group("old_off"))
-        old_len = int(m.group("old_len") or 1)
-        new_off = int(m.group("new_off"))
-        new_len = int(m.group("new_len") or 1)
+        if not match:
+            raise Error(f"Failed to parse hunk header: {hdr}")
+
+        old_off = int(match.group("old_off"))
+        old_len = int(match.group("old_len") or 1)
+        new_off = int(match.group("new_off"))
+        new_len = int(match.group("new_len") or 1)
         return old_off, new_off, old_len, new_len
