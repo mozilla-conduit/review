@@ -46,6 +46,9 @@ def check_call_by_line(
         cwd=cwd,
         universal_newlines=True,
     )
+    # `stdout` is only `None` when the pipe above was not requested.
+    assert process.stdout is not None, "`stdout` should be a pipe."
+
     try:
         for line in iter(process.stdout.readline, ""):
             line = line.rstrip()

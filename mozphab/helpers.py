@@ -16,6 +16,7 @@ from itertools import zip_longest
 from shutil import which
 from typing import (
     Callable,
+    Dict,
     List,
     Optional,
     Tuple,
@@ -273,6 +274,7 @@ def prompt(question: str, options: Optional[List[str]] = None):
     if environment.HAS_ANSI:
         question = "\033[33m%s\033[0m" % question
     prompt_str = question
+    options_map: Dict[str, str] = {}
     if options:
         prompt_options = list(options)
         prompt_options[0] = prompt_options[0].upper()
@@ -400,9 +402,9 @@ def replace_reviewers(commit_description: str, reviewers: dict) -> str:
     if commit_description == "":
         return reviewers_str
 
-    commit_description = commit_description.splitlines()
-    commit_title = commit_description.pop(0)
-    commit_description = "\n".join(commit_description)
+    description_lines = commit_description.splitlines()
+    commit_title = description_lines.pop(0)
+    commit_description = "\n".join(description_lines)
 
     if not R_SPECIFIER_RE.search(commit_title):
         commit_title += " " + reviewers_str
