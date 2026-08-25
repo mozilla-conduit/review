@@ -249,6 +249,9 @@ def pip_upgrade():
     i.prefix = i.exec_prefix = i.home = i.install_base = i.install_platbase = None
     i.finalize_options()
     # Checking if the moz-phab script is installed in user's scripts directory
+    if not i.install_scripts:
+        raise Error("Failed to determine the user scripts directory.")
+
     user_dir = Path(i.install_scripts).resolve()
 
     # Prevent self-update from failing when installing over OS-managed
