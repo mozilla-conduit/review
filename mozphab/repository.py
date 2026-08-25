@@ -79,6 +79,7 @@ class Repository(object):
 
     def is_worktree_clean(self) -> bool:
         """Check if the working tree is clean."""
+        raise NotImplementedError()
 
     def before_submit(self):
         """Executed before the submit commit."""
@@ -137,7 +138,11 @@ class Repository(object):
         self.args = args
 
     def untracked(self) -> List[str]:
-        """Return a list of untracked files."""
+        """Return a list of untracked files.
+
+        Backends that can't report untracked files inherit this empty default.
+        """
+        return []
 
     def commit_stack(self, single: bool = False) -> Optional[List[Commit]]:
         """Return list of commits.
@@ -162,23 +167,21 @@ class Repository(object):
 
     def get_diff(self, commit: Commit) -> Diff:
         """Create a Diff object with changes."""
+        raise NotImplementedError()
 
     def refresh_commit_stack(self, commits: List[Commit]):
         """Update the stack following an altering change (eg rebase)."""
 
     def is_node(self, node: str) -> bool:
-        """Check if node exists.
-
-        Returns a Boolean.
-        """
+        """Check if node exists."""
+        raise NotImplementedError()
 
     def check_node(self, node: str) -> str:
-        """Check if node exists.
-
-        Returns a node if found.
+        """Return the node if it exists.
 
         Raises NotFoundError if node not found in the repository.
         """
+        raise NotImplementedError()
 
     def checkout(self, node: str):
         """Checkout/Update to specified node."""
@@ -191,6 +194,7 @@ class Repository(object):
 
     def is_descendant(self, node: str) -> bool:
         """Return `True` if the repository revset is descendant from `node`."""
+        raise NotImplementedError()
 
     def get_repo_head_branch(self) -> Optional[str]:
         """Return the expected branch/head for the current Phabricator repo.
@@ -200,6 +204,7 @@ class Repository(object):
 
     def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
         """Uplift the repo's revset onto `dest` and returns the refreshed `commits`."""
+        raise NotImplementedError()
 
     def rebase_commit(self, source_commit: Commit, dest_commit: Commit):
         """Rebase source onto destination."""
@@ -216,6 +221,7 @@ class Repository(object):
         self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
     ) -> str:
         """Format a patch appropriate for importing."""
+        raise NotImplementedError()
 
     def check_commits_for_submit(self, commits: List[Commit]):
         """Validate the list of commits are okay to submit."""
