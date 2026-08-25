@@ -23,6 +23,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    cast,
 )
 
 import hglib
@@ -97,7 +98,9 @@ class Mercurial(Repository):
         self._extra_options = {}
         self._safe_mode = False
         self._repo_path = path
-        hglib.HGPATH = self._hg_binary
+        # `hglib` spawns `hg` from this global, which it types as its default
+        # value, so the configured path needs a cast to be assignable.
+        hglib.HGPATH = cast(Any, self._hg_binary)
         self._repo = None
         self._configs = []
         major, minor, micro, *_ = self.repository.version
