@@ -3,7 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
-from typing import Optional
+from typing import Any, Dict, Optional
 from unittest import mock
 
 import pytest
@@ -72,19 +72,18 @@ def test_check_revision_id():
 
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
 def test_get_diff_by_id(m_get_diffs):
-    args = {}
-    with pytest.raises(exceptions.Error):
-        patch.get_diff_by_id(args.get("diff_id"))
-
-    args = {"diff_id": 1}
     m_get_diffs.return_value = {"DIFFPHID-1": {"id": 1}}
-    phid, diff = patch.get_diff_by_id(args.get("diff_id"))
+    phid, diff = patch.get_diff_by_id(1)
     assert phid == "DIFFPHID-1", "Should return PHID as first element"
     assert diff["id"] == 1, "Should return diff dict as second element"
 
     m_get_diffs.return_value = {}
     with pytest.raises(exceptions.NotFoundError):
-        patch.get_diff_by_id(args.get("diff_id"))
+        patch.get_diff_by_id(1)
+
+    m_get_diffs.return_value = {"DIFFPHID-1": {"id": 1}, "DIFFPHID-2": {"id": 2}}
+    with pytest.raises(exceptions.Error):
+        patch.get_diff_by_id(1)
 
 
 def test_update_revision_with_new_diff():
@@ -526,7 +525,7 @@ def test_patch(
     m_print.assert_has_calls((mock.call("raw2"), mock.call("raw1"), mock.call("raw3")))
 
 
-REV_1 = {
+REV_1: Dict[str, Any] = {
     "phid": "PHID-1",
     "id": 1,
     "fields": {
@@ -537,7 +536,7 @@ REV_1 = {
     },
 }
 
-REV_2 = {
+REV_2: Dict[str, Any] = {
     "phid": "PHID-2",
     "id": 2,
     "fields": {
@@ -548,7 +547,7 @@ REV_2 = {
     },
 }
 
-REV_3 = {
+REV_3: Dict[str, Any] = {
     "phid": "PHID-3",
     "id": 3,
     "fields": {
@@ -559,7 +558,7 @@ REV_3 = {
     },
 }
 
-DIFF_1 = {
+DIFF_1: Dict[str, Any] = {
     "id": 1,
     "phid": "DIFFPHID-1",
     "fields": {"revisionPHID": "PHID-1", "dateCreated": 1547806078},
@@ -578,7 +577,7 @@ DIFF_1 = {
     },
 }
 
-DIFF_2 = {
+DIFF_2: Dict[str, Any] = {
     "id": 2,
     "phid": "DIFFPHID-2",
     "attachments": {
@@ -588,7 +587,7 @@ DIFF_2 = {
     },
 }
 
-DIFF_3 = {
+DIFF_3: Dict[str, Any] = {
     "id": 3,
     "phid": "DIFFPHID-3",
     "fields": {"revisionPHID": "PHID-1", "dateCreated": 1547806078},

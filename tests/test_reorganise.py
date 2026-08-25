@@ -363,7 +363,7 @@ def test_conduit_broken(m_check):
         verbose = False
 
     with pytest.raises(exceptions.Error) as e:
-        reorganise.reorganise(None, Args())
+        reorganise.reorganise(mock.MagicMock(), Args())
 
     assert str(e.value) == "Failed to use Conduit API"
 
@@ -816,7 +816,7 @@ def test_no_abandon_unconnected_requires_force(_check):
     _check.return_value = True
 
     with pytest.raises(exceptions.Error) as e:
-        reorganise.reorganise(None, Args())
+        reorganise.reorganise(mock.MagicMock(), Args())
 
     assert str(e.value) == "--no-abandon-unconnected can only be used with --force"
 

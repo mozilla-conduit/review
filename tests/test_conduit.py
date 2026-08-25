@@ -186,8 +186,12 @@ def test_call_retries_idempotent_methods(m_load_api_token, m_get_pool, m_sleep):
 
     # First two attempts fail with a urllib3 error, third succeeds.
     pool.request.side_effect = [
-        urllib3.exceptions.MaxRetryError(pool, "u", "connection refused"),
-        urllib3.exceptions.MaxRetryError(pool, "u", "connection refused"),
+        urllib3.exceptions.MaxRetryError(
+            pool, "u", ConnectionError("connection refused")
+        ),
+        urllib3.exceptions.MaxRetryError(
+            pool, "u", ConnectionError("connection refused")
+        ),
         _mock_pool_response({"result": {}, "error_code": False}),
     ]
 
@@ -230,7 +234,7 @@ def test_call_no_retry_for_mutation_methods(m_load_api_token, m_get_pool, m_slee
     pool = mock.MagicMock()
     m_get_pool.return_value = pool
     pool.request.side_effect = urllib3.exceptions.MaxRetryError(
-        pool, "u", "connection refused"
+        pool, "u", ConnectionError("connection refused")
     )
 
     with pytest.raises(urllib3.exceptions.MaxRetryError):

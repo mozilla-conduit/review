@@ -573,7 +573,7 @@ def test_change_mod(m_hg_out, m_from_git_diff, m_set_as_binary, m_get_file_meta,
             self.lesscontext = lesscontext
 
     # file contents changed
-    change = diff.Diff.Change(None)
+    change = diff.Diff.Change("fn")
     text_side_effect = (
         {"binary": False, "bin_body": b"abc\n", "body": "abc\n", "file_size": 4},
         {"binary": False, "bin_body": b"def\n", "body": "def\n", "file_size": 4},

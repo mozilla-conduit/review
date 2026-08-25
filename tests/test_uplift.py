@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
+import email.message
 import io
 import json
 from typing import List, Optional
@@ -391,7 +392,7 @@ def test_link_assessment_http_error_rfc7807(m_urlopen, m_conduit):
         url="https://lando.moz.tools/api/uplift/assessments/link",
         code=400,
         msg="Bad Request",
-        hdrs={},
+        hdrs=email.message.Message(),
         fp=io.BytesIO(problem_body),
     )
 
@@ -415,7 +416,7 @@ def test_link_assessment_http_error_non_json(m_urlopen, m_conduit):
         url="https://lando.moz.tools/api/uplift/assessments/link",
         code=500,
         msg="Internal Server Error",
-        hdrs={},
+        hdrs=email.message.Message(),
         fp=io.BytesIO(b"Internal Server Error"),
     )
 
