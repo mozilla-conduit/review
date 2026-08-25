@@ -796,19 +796,21 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
     # conduit.request_ai_reviews so this layer doesn't need to know how
     # the fan-out is implemented.
     if ai_review_commits:
+        # The loop above set `rev_id` on each of these commits.
+        reviewed = [
+            (commit, commit.rev_id) for commit in ai_review_commits if commit.rev_id
+        ]
         with wait_message("Requesting AI review..."):
-            ai_results = conduit.request_ai_reviews(
-                [commit.rev_id for commit in ai_review_commits]
-            )
-        for commit in ai_review_commits:
-            error = ai_results.get(commit.rev_id)
+            ai_results = conduit.request_ai_reviews([rev_id for _, rev_id in reviewed])
+        for commit, rev_id in reviewed:
+            error = ai_results.get(rev_id)
             if error is None:
                 commit.ai_review_state = AiReviewState.REQUESTED
             else:
                 commit.ai_review_state = AiReviewState.FAILED
                 logger.error(
                     "Failed to request AI review for D%s: %s",
-                    commit.rev_id,
+                    rev_id,
                     error,
                 )
 

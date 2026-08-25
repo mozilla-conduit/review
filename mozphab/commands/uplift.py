@@ -162,10 +162,10 @@ def uplift(repo: Repository, args: argparse.Namespace):
     # Run the usual submit command with our patched arg values.
     commits = submit(repo, args)
 
-    if commits:
-        tip_commit = commits[-1]
-        tip_commit_id = tip_commit.rev_id
+    # The tip commit has a revision id once `submit` has sent the stack.
+    tip_commit_id = commits[-1].rev_id if commits else None
 
+    if tip_commit_id:
         if args.assessment_id and attempt_link_assessment(
             repo.lando_url, tip_commit_id, args.assessment_id
         ):
