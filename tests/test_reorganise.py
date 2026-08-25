@@ -3,6 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 import logging
 from unittest import mock
 
@@ -333,7 +334,7 @@ def test_reorg_calling_stack_transactions(
 ):
     *args, kwargs = expected
 
-    class Args:
+    class Args(argparse.Namespace):
         yes = True
         no_abandon = kwargs["no_abandon"]
         force = False
@@ -355,7 +356,7 @@ def test_reorg_calling_stack_transactions(
 def test_conduit_broken(m_check):
     m_check.return_value = False
 
-    class Args:
+    class Args(argparse.Namespace):
         force = False
         no_abandon_unconnected = False
         no_hyperlinks = False
@@ -370,7 +371,7 @@ def test_conduit_broken(m_check):
 @mock.patch("mozphab.conduit.ConduitAPI.check")
 @mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
 def test_commits_invalid(_augment, _check, git):
-    class Args:
+    class Args(argparse.Namespace):
         force = False
         no_abandon_unconnected = False
         no_hyperlinks = False
@@ -395,7 +396,7 @@ def test_commits_invalid(_augment, _check, git):
 @mock.patch("mozphab.conduit.ConduitAPI.phids_to_ids")
 @mock.patch("mozphab.commands.reorganise.walk_llist")
 def test_remote_stack_invalid(m_walk, m_ids, git, caplog: pytest.LogCaptureFixture):
-    class Args:
+    class Args(argparse.Namespace):
         force = False
         no_abandon_unconnected = False
         no_hyperlinks = False
@@ -748,7 +749,7 @@ def test_reorg_force_mode(
     """Test that force mode calls force_stack_transactions instead of stack_transactions."""
     phabstack, commits, rev_ids, force_mode = stacks
 
-    class Args:
+    class Args(argparse.Namespace):
         yes = True
         no_abandon = False
         force = force_mode
@@ -783,7 +784,7 @@ def test_reorg_force_mode(
 def test_force_mode_requires_all_local_revisions_on_phabricator(_augment, _check, git):
     """Test that force mode requires all local revisions to be present on Phabricator."""
 
-    class Args:
+    class Args(argparse.Namespace):
         force = True
         no_abandon_unconnected = False
         no_hyperlinks = False
@@ -806,7 +807,7 @@ def test_force_mode_requires_all_local_revisions_on_phabricator(_augment, _check
 def test_no_abandon_unconnected_requires_force(_check):
     """Test that --no-abandon-unconnected requires --force flag."""
 
-    class Args:
+    class Args(argparse.Namespace):
         force = False
         no_abandon_unconnected = True
         no_hyperlinks = False
@@ -881,7 +882,7 @@ def test_apply_transactions_error_names_revision(
 ):
     """A failing transaction reports which revision it belongs to."""
 
-    class Args:
+    class Args(argparse.Namespace):
         yes = True
         no_abandon = False
         force = False
@@ -919,7 +920,7 @@ def test_force_mode_ignores_remote_stack_errors(
 ):
     """Test that force mode ignores remote stack structure issues."""
 
-    class Args:
+    class Args(argparse.Namespace):
         force = True
         yes = True
         no_abandon_unconnected = False
@@ -975,7 +976,7 @@ def test_force_mode_tolerates_nonlinear_stackgraph(
     set of PHIDs so it can still unlink and relink the stack.
     """
 
-    class Args:
+    class Args(argparse.Namespace):
         yes = True
         force = True
         no_abandon = False
@@ -1051,7 +1052,7 @@ def test_non_force_mode_rejects_nonlinear_stackgraph(
 ):
     """Without --force, a nonlinear stackGraph must still surface as an error."""
 
-    class Args:
+    class Args(argparse.Namespace):
         yes = True
         force = False
         no_abandon = False

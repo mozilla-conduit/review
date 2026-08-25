@@ -4,6 +4,7 @@
 
 # coding=utf-8
 
+import argparse
 import textwrap
 from unittest import mock
 
@@ -14,7 +15,7 @@ from mozphab.diff import Diff
 from .conftest import assert_attributes
 
 
-class Args:
+class Args(argparse.Namespace):
     def __init__(self, less_context=False):
         self.lesscontext = less_context
 

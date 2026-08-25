@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 import io
 import json
 from unittest import mock
@@ -41,7 +42,7 @@ class Repo:
 
 
 def test_local_uplift_if_possible():
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(self, no_rebase=False, train="train"):
             self.no_rebase = no_rebase
             self.train = train

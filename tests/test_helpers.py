@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 import builtins
 import datetime
 import logging
@@ -449,7 +450,7 @@ def test_repo_from_args(m_probe):
 
     m_probe.side_effect = probe_repo
 
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(self, path=None):
             self.path = path
 

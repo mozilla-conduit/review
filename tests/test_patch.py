@@ -16,7 +16,7 @@ from .conftest import with_stack_graph
 
 
 def test_resolve_branch_name():
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(self, name: Optional[str] = None, no_commit: bool = False):
             self.name = name
             self.no_commit = no_commit
@@ -229,7 +229,7 @@ def test_patch(
 ):
     mozphab.conduit.set_repo(git)
 
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(
             self,
             revision_id=123,

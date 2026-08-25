@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 import copy
 from unittest import mock
 
@@ -107,7 +108,7 @@ def test_finalize_no_evolve(m_hg_rebase, hg):
 @mock.patch("mozphab.mercurial.Mercurial.hg_log")
 @mock.patch("mozphab.mercurial.hglib.open")
 def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(self, start="(auto)", end=".", safe_mode=False, single=False):
             self.start_rev = start
             self.end_rev = end
@@ -232,7 +233,7 @@ def test_commit(m_hg, hg):
 @mock.patch("mozphab.mercurial.Mercurial.hg")
 @mock.patch("mozphab.mercurial.config")
 def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(
             self,
             rev_id="D123",
@@ -567,7 +568,7 @@ def test_change_del(m_set_as_binary, m_get_file_meta, hg):
 @mock.patch("mozphab.diff.Diff.Change.from_git_diff")
 @mock.patch("mozphab.mercurial.Mercurial.hg_out_binary")
 def test_change_mod(m_hg_out, m_from_git_diff, m_set_as_binary, m_get_file_meta, hg):
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(self, lesscontext=False):
             self.lesscontext = lesscontext
 
@@ -670,7 +671,7 @@ def test_get_file_modes(m_hg, hg):
 
 
 def test_check_vcs(hg):
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(self, force_vcs=False):
             self.force_vcs = force_vcs
 
@@ -710,7 +711,7 @@ def test_repository_cached(m_which, m_is_dir, m_os_chdir, m_phab_url, m_open, *p
 
     hg = Mercurial("x")
 
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(self):
             self.start_rev = "(auto)"
             self.end_rev = "."

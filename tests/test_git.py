@@ -3,6 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 import logging
 from pathlib import Path
 from unittest import mock
@@ -251,7 +252,7 @@ def test_is_child(git):
 @mock.patch("mozphab.git.Git.git_out")
 @mock.patch("mozphab.mozphab.config")
 def test_range(m_config, m_git_git_out, git):
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(self, start="start", end="."):
             self.start_rev = start
             self.end_rev = end
@@ -269,7 +270,7 @@ def test_range(m_config, m_git_git_out, git):
 @mock.patch("mozphab.git.Git._get_first_unpublished_node")
 @mock.patch("mozphab.git.Git.git_out")
 def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git):
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(
             self,
             start=environment.DEFAULT_START_REV,
@@ -415,7 +416,7 @@ def test_before_patch(
     git,
     caplog: pytest.LogCaptureFixture,
 ):
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(
             self,
             rev_id="D123",
@@ -605,7 +606,7 @@ def test_unicode_in_windows_env(m_git_out, git, monkeypatch):
 
 
 def test_check_vcs(git):
-    class Args:
+    class Args(argparse.Namespace):
         def __init__(self, force_vcs=False):
             self.safe_mode = False
             self.force_vcs = force_vcs

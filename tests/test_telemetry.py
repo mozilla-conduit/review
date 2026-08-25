@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 import uuid
 from unittest import mock
 
@@ -16,7 +17,7 @@ def get_telemetry():
     return telemetry.Telemetry()
 
 
-class Args:
+class Args(argparse.Namespace):
     def __init__(self, needs_repo=False, command="submit", force=None, force_vcs=None):
         self.needs_repo = needs_repo
         self.command = command
