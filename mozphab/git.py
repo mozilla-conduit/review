@@ -715,7 +715,7 @@ class Git(Repository):
         return True
 
     def get_repo_head_branch(self) -> Optional[str]:
-        default_branch = self._phab_repo["fields"]["defaultBranch"]
+        default_branch = self.phab_repo["fields"]["defaultBranch"]
 
         remotes = self.get_base_remotes()
 

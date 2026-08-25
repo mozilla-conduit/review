@@ -244,6 +244,12 @@ class Repository(object):
     def phab_repo(self) -> dict:
         """Representation of the Repository in Phabricator API."""
         if not self._phab_repo:
+            if not self.call_sign:
+                raise Error(
+                    "Failed to determine the Phabricator callsign for this repository "
+                    "(missing .arcconfig?)"
+                )
+
             with wait_message("Reading repository data"):
                 self._phab_repo = conduit.get_repository_by_callsign(self.call_sign)
 
@@ -325,6 +331,11 @@ class Repository(object):
     def get_public_node(self, node: str) -> str:
         """Hashtag in a remote VCS."""
         return node
+
+    @property
+    def is_cinnabar_required(self) -> bool:
+        """Only the Git based backends can need Cinnabar to talk to a hg repo."""
+        return False
 
     def validate_email(self):
         """Validate a user's configured email address."""
