@@ -42,10 +42,13 @@ def linkify_revision_id(
 
 
 def linkify_bugs_in_text(
-    text: str, bmo_url: str, hyperlinks_enabled: bool = True
+    text: str, bmo_url: Optional[str], hyperlinks_enabled: bool = True
 ) -> str:
-    """Find bug numbers in text and make them clickable Bugzilla links."""
-    if not hyperlinks_enabled:
+    """Find bug numbers in text and make them clickable Bugzilla links.
+
+    Text is returned unchanged when the repository has no Bugzilla to link to.
+    """
+    if not hyperlinks_enabled or not bmo_url:
         return text
 
     def replace_bug(match):
@@ -96,7 +99,7 @@ def walk_llist(
         raise Error("Failed to find head.")
 
     # Walk list, checking for loops
-    nodes = []
+    nodes: List[str] = []
     while head:
         nodes.append(head)
         child = llist.get(head)
@@ -223,7 +226,7 @@ def convert_stackgraph_to_linear(
 
     Ensures each revision has only a single successor revision.
     """
-    linear_stackgraph = {}
+    linear_stackgraph: Dict[str, Optional[str]] = {}
 
     for successor_phid, predecessor_phid_list in stack_graph.items():
         for predecessor_phid in predecessor_phid_list:
@@ -244,7 +247,7 @@ def convert_stackgraph_to_linear(
         # Use `list` here to avoid inspecting the list while we iterate over it,
         # causing a `RuntimeError: dictionary changed size during iteration`.
         for successor in list(linear_stackgraph.values())
-        if successor not in linear_stackgraph
+        if successor and successor not in linear_stackgraph
     )
     for head in heads:
         linear_stackgraph[head] = None
@@ -446,8 +449,7 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
     with wait_message("Loading commits.."):
         augment_commits_from_body(commits)
 
-    localstack_ids = [commit.rev_id for commit in commits]
-    if not all(localstack_ids):
+    if not all(commit.rev_id for commit in commits):
         if args.force:
             raise Error(
                 "Force mode requires all local revisions to be present on Phabricator."
@@ -462,6 +464,9 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
                 names=", ".join(names),
             )
         )
+
+    # Every commit has a revision id, as the check above would have raised otherwise.
+    localstack_ids = [commit.rev_id for commit in commits if commit.rev_id]
 
     logger.warning(
         "Reorganisation based on {} commit{}:".format(

@@ -15,6 +15,14 @@ from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError
 
 
+def test_linkify_bugs_in_text_without_bmo_url():
+    text = "Bug 1 - do a thing"
+
+    assert (
+        reorganise.linkify_bugs_in_text(text, None) == text
+    ), "Text should be unchanged when the repository has no Bugzilla URL."
+
+
 @pytest.mark.parametrize(
     "phids,transactions,abandoned",
     [

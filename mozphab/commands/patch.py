@@ -372,7 +372,7 @@ def patch(repo: Repository, args: argparse.Namespace):
         elif args.apply_to != "here":
             base_node = args.apply_to
 
-        if args.apply_to != "here":
+        if base_node:
             try:
                 with wait_message("Checking %s.." % short_node(base_node)):
                     base_node = repo.check_node(base_node)
