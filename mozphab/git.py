@@ -825,41 +825,46 @@ class Git(Repository):
 
         # Extract the bodies of blobs to compare
         if a_blob == NULL_SHA1:
-            a_blob, a_body, a_size = None, b"", 0
+            a_blob, a_bytes, a_size = None, b"", 0
         else:
-            a_body = self._cat_file(a_blob)
+            a_bytes = self._cat_file(a_blob)
             a_size = self._file_size(a_blob)
 
         if b_blob == NULL_SHA1:
-            b_blob, b_body, b_size = None, b"", 0
+            b_blob, b_bytes, b_size = None, b"", 0
         else:
-            b_body = self._cat_file(b_blob)
+            b_bytes = self._cat_file(b_blob)
             b_size = self._file_size(b_blob)
 
         file_size = max(a_size, b_size)
         telemetry().submission.files_size.accumulate(file_size)
 
         # Detect if we're binary, and generate a unified diff
-        if b"\0" in a_body or b"\0" in b_body or file_size > environment.MAX_TEXT_SIZE:
+        if (
+            b"\0" in a_bytes
+            or b"\0" in b_bytes
+            or file_size > environment.MAX_TEXT_SIZE
+        ):
             change.binary = True
 
-        if not change.binary and a_body:
+        a_body = b_body = ""
+        if not change.binary and a_bytes:
             try:
-                a_body = str(a_body, "utf-8")
+                a_body = str(a_bytes, "utf-8")
             except UnicodeDecodeError:
                 change.binary = True
 
-        if not change.binary and b_body:
+        if not change.binary and b_bytes:
             try:
-                b_body = str(b_body, "utf-8")
+                b_body = str(b_bytes, "utf-8")
             except UnicodeDecodeError:
                 change.binary = True
 
         if change.binary:
             change.set_as_binary(
-                a_body=a_body,
+                a_body=a_bytes,
                 a_mime=mimetypes.guess_type(a_path)[0] or "",
-                b_body=b_body,
+                b_body=b_bytes,
                 b_mime=mimetypes.guess_type(b_path)[0] or "",
             )
 

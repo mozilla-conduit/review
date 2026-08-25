@@ -1049,20 +1049,25 @@ class Mercurial(Repository):
     def _get_file_meta(self, filename: str, rev: str) -> dict:
         """Collect information about the file."""
         binary = False
-        body = self.hg_cat(filename, rev)
-        meta = {"mime": "TEXT", "bin_body": body}
+        bin_body = self.hg_cat(filename, rev)
+        file_size = self._file_size(filename, rev)
+        meta: Dict[str, Any] = {
+            "mime": "TEXT",
+            "bin_body": bin_body,
+            "file_size": file_size,
+        }
 
-        meta["file_size"] = self._file_size(filename, rev)
-        if meta["file_size"] > environment.MAX_TEXT_SIZE:
+        if file_size > environment.MAX_TEXT_SIZE:
             binary = True
 
         if not binary:
-            if b"\0" in body:
+            if b"\0" in bin_body:
                 binary = True
 
+        body: bytes | str = bin_body
         if not binary:
             try:
-                body = str(body, "utf-8")
+                body = str(bin_body, "utf-8")
             except UnicodeDecodeError:
                 binary = True
 
@@ -1088,7 +1093,7 @@ class Mercurial(Repository):
 
         if meta["binary"]:
             change.set_as_binary(
-                a_body="",
+                a_body=b"",
                 a_mime="",
                 b_body=meta["bin_body"],
                 b_mime=meta["mime"],
@@ -1130,7 +1135,7 @@ class Mercurial(Repository):
             change.set_as_binary(
                 a_body=meta["bin_body"],
                 a_mime=meta["mime"],
-                b_body="",
+                b_body=b"",
                 b_mime="",
             )
             return

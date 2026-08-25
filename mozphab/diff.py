@@ -135,7 +135,9 @@ class Diff:
                 lines=lines,
             )
 
-        def set_as_binary(self, *, a_body: str, a_mime: str, b_body: str, b_mime: str):
+        def set_as_binary(
+            self, *, a_body: bytes, a_mime: str, b_body: bytes, b_mime: str
+        ):
             """Updates Change contents to the provided binary data."""
             self.binary = True
 

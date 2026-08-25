@@ -475,7 +475,7 @@ def test_change_add(m_set_as_binary, m_get_file_meta, hg):
     hg._change_add(change, "fn", None, "parent", "node")
     assert not change.hunks
     m_set_as_binary.assert_called_once_with(
-        a_body="",
+        a_body=b"",
         a_mime="",
         b_body=b"abc\n",
         b_mime="MIME",
@@ -534,7 +534,7 @@ def test_change_del(m_set_as_binary, m_get_file_meta, hg):
     m_set_as_binary.assert_called_once_with(
         a_body=b"abc\n",
         a_mime="MIME",
-        b_body="",
+        b_body=b"",
         b_mime="",
     )
 
