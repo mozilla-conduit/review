@@ -16,13 +16,23 @@ from mozphab.mercurial import Mercurial
 from .conftest import assert_attributes, create_temp_fn
 
 
+def test_get_extensions():
+    assert Mercurial._get_extensions(
+        ["extensions.mq", "extensions.hgext.evolve", "ui.username"]
+    ) == ["evolve", "mq"], "Only `extensions.*` settings should be reported, sorted."
+
+    assert Mercurial._get_extensions(
+        name for name, _value in [("extensions.mq", "")]
+    ) == ["mq"], "The safe mode config pairs should be accepted as names."
+
+
 @mock.patch("mozphab.mercurial.Mercurial.hg_out")
 def test_get_successor(m_hg_hg_out, hg):
     m_hg_hg_out.return_value = []
     assert (None, None) == hg._get_successor("x")
 
     m_hg_hg_out.return_value = ["1 abcde"]
-    assert ["1", "abcde"] == hg._get_successor("x")
+    assert ("1", "abcde") == hg._get_successor("x")
 
     m_hg_hg_out.return_value = ["a", "b"]
     with pytest.raises(exceptions.Error):

@@ -19,6 +19,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Iterable,
     List,
     Optional,
     Tuple,
@@ -71,16 +72,19 @@ class Mercurial(Repository):
         super().__init__(path, dot_path)
         self.vcs = "hg"
         self._hg_binary = config.hg_command[0]
-        self.revset = None
+        # Set by `set_args` once the commit range is known.
+        self.revset = ""
         self.strip_nodes = []
         self.status = None
-        self.obsstore = None
+        # Set by `set_args` when the obsstore has to be removed on cleanup.
+        self.obsstore = ""
         self.unlink_obsstore = False
         self.use_evolve = False
         self.use_topic = False
         self.has_mq = False
         self.has_shelve = False
-        self.previous_bookmark = None
+        # Set by `before_submit` to the commit to restore afterwards.
+        self.previous_bookmark = ""
         self.has_temporary_bookmark = False
         self.username = ""
 
@@ -152,31 +156,13 @@ class Mercurial(Repository):
         return None
 
     @staticmethod
-    def _get_extensions(
-        *,
-        from_config: Optional[List[str]] = None,
-        from_args: Optional[List[str]] = None,
-    ) -> List[str]:
-        assert from_config or from_args
-
-        extensions = []
-        if from_config:
-            for name in from_config:
-                if name.startswith("extensions."):
-                    extensions.append(re.sub(r"^extensions\.(?:hgext\.)?", "", name))
-
-        else:
-            args = from_args.copy()
-            while len(args) >= 2:
-                arg = args.pop(0)
-                if arg != "--config":
-                    continue
-                arg = args.pop(0)
-                if arg.startswith("extensions."):
-                    name, value = arg.split("=", maxsplit=1)
-                    extensions.append(re.sub(r"^extensions\.(?:hgext\.)?", "", name))
-
-        return sorted(extensions)
+    def _get_extensions(setting_names: Iterable[str]) -> List[str]:
+        """Return the extensions enabled by the given `hg` setting names."""
+        return sorted(
+            re.sub(r"^extensions\.(?:hgext\.)?", "", name)
+            for name in setting_names
+            if name.startswith("extensions.")
+        )
 
     def is_worktree_clean(self) -> bool:
         status = self._status()
@@ -311,7 +297,7 @@ class Mercurial(Repository):
             bookmarks = self.hg_out(["bookmark", "-T", "{bookmark}\n"])
             if self.previous_bookmark in bookmarks:
                 self.hg(["bookmark", "--delete", self.previous_bookmark])
-            self.previous_bookmark = None
+            self.previous_bookmark = ""
             self.has_temporary_bookmark = False
 
     def _status(self) -> Dict[str, List[str]]:
@@ -354,7 +340,8 @@ class Mercurial(Repository):
         if len(hg_log) > 1:
             raise Error("Multiple successors found for %s, unable to continue" % node)
 
-        return hg_log[0].split(" ", 1)
+        rev, successor_node = hg_log[0].split(" ", 1)
+        return rev, successor_node
 
     def refresh_commit_stack(self, commits: List[Commit]):
         """Update all commits to point to their superseded commit."""
@@ -452,12 +439,12 @@ class Mercurial(Repository):
             options = self._get_config_options()
             logger.debug(
                 "hg extensions (safe mode): %s",
-                ", ".join(self._get_extensions(from_args=options)),
+                ", ".join(self._get_extensions(name for name, _value in options)),
             )
         else:
             logger.debug(
                 "hg extensions: %s",
-                ", ".join(self._get_extensions(from_config=hg_config)),
+                ", ".join(self._get_extensions(hg_config)),
             )
 
         if hasattr(self.args, "start_rev"):
