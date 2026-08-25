@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 import json
 import os
 import urllib.parse
@@ -54,15 +55,17 @@ class Repository(object):
     def __init__(self, path: str, dot_path: str, phab_url: Optional[str] = None):
         self._phid = None
         self._phab_repo = None
-        self._phab_vcs = None
-        self.vcs = None
+        self._phab_vcs: Optional[str] = None
+        # Short name of the local VCS, set by each backend.
+        self.vcs = ""
         self.path = path  # base repository directory
         self.dot_path = dot_path  # .hg/.git directory
         self._arcconfig_files = [
             os.path.join(self.dot_path, ".arcconfig"),
             os.path.join(self.path, ".arcconfig"),
         ]
-        self.args = None
+        # Replaced by `set_args` once the command line has been parsed.
+        self.args = argparse.Namespace()
         self.phab_url = (phab_url or self._phab_url()).rstrip("/")
         self.api_url = self._api_url()
         self.call_sign = self._get_setting("repository.callsign")
@@ -127,7 +130,7 @@ class Repository(object):
     def finalize(self, commits: List[Commit]):
         """Update the history after node changed."""
 
-    def set_args(self, args):
+    def set_args(self, args: argparse.Namespace):
         if (
             hasattr(args, "single")
             and args.single
@@ -292,24 +295,27 @@ class Repository(object):
         return True
 
     @property
-    def phab_vcs(self):
+    def phab_vcs(self) -> str:
         """Version Control System short name stored in Phabricator.
 
         This value does not change over time.
         It is stored in a file to avoid calling the API on every run.
         """
-        if not self._phab_vcs:
-            # check file
-            path = os.path.join(self.dot_path, ".moz-phab_vcs_cache")
-            if os.path.isfile(path):
-                with open(path) as f:
-                    self._phab_vcs = f.readline()
-            else:
-                self._phab_vcs = self.phab_repo["fields"]["vcs"]
-                with open(path, "w") as f:
-                    f.write(self._phab_vcs)
+        if self._phab_vcs:
+            return self._phab_vcs
 
-        return self._phab_vcs
+        # check file
+        path = os.path.join(self.dot_path, ".moz-phab_vcs_cache")
+        if os.path.isfile(path):
+            with open(path) as f:
+                phab_vcs = f.readline()
+        else:
+            phab_vcs = self.phab_repo["fields"]["vcs"]
+            with open(path, "w") as f:
+                f.write(phab_vcs)
+
+        self._phab_vcs = phab_vcs
+        return phab_vcs
 
     @property
     def lando_url(self) -> str:
