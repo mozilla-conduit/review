@@ -657,8 +657,10 @@ class Commits(unittest.TestCase):
             ],
         )
 
-    def test_show_review_queue_reminder(self):
+    @mock.patch("mozphab.conduit.ConduitAPI.get_pending_reviews")
+    def test_show_review_queue_reminder(self, m_get_pending_reviews):
         submit.conduit.set_repo(repository.Repository("", "", "http://phab"))
+        m_get_pending_reviews.return_value = (3, False)
 
         def is_reminded(commits, is_employee=True, enabled=True):
             with (
@@ -672,9 +674,38 @@ class Commits(unittest.TestCase):
         with mock.patch.object(submit.user_data, "is_employee", True):
             with self.assertLogs() as logging_watcher:
                 submit.show_review_queue_reminder([commit(rev_id=1)])
-        self.assertEqual(
-            logging_watcher.output, [Contains("http://phab/differential/")]
-        )
+            self.assertEqual(
+                logging_watcher.output,
+                [
+                    Contains("3 revisions waiting on your review")
+                    & Contains("http://phab/differential/")
+                ],
+            )
+
+            # A capped count is shown as "100+", and one review is singular.
+            m_get_pending_reviews.return_value = (100, True)
+            with self.assertLogs() as logging_watcher:
+                submit.show_review_queue_reminder([commit(rev_id=1)])
+            self.assertEqual(
+                logging_watcher.output, [Contains("100+ revisions waiting")]
+            )
+
+            m_get_pending_reviews.return_value = (1, False)
+            with self.assertLogs() as logging_watcher:
+                submit.show_review_queue_reminder([commit(rev_id=1)])
+            self.assertEqual(logging_watcher.output, [Contains("1 revision waiting")])
+
+        # An empty review queue is not worth mentioning.
+        m_get_pending_reviews.return_value = (0, False)
+        self.assertFalse(is_reminded([commit(rev_id=1)]))
+
+        # A failure to check the queue must not be shown after a successful
+        # submission.
+        m_get_pending_reviews.side_effect = ConduitAPIError("nope")
+        self.assertFalse(is_reminded([commit(rev_id=1)]))
+        m_get_pending_reviews.side_effect = None
+
+        m_get_pending_reviews.return_value = (3, False)
 
         # Work In Progress revisions don't ask for anyone's time.
         self.assertFalse(is_reminded([commit(rev_id=1, wip=True)]))
@@ -690,6 +721,12 @@ class Commits(unittest.TestCase):
         self.assertFalse(is_reminded([commit(rev_id=1)], is_employee=False))
         self.assertFalse(is_reminded([commit(rev_id=1)], is_employee=None))
         self.assertFalse(is_reminded([commit(rev_id=1)], enabled=False))
+
+        # The review queue isn't queried when the reminder wouldn't be shown.
+        m_get_pending_reviews.reset_mock()
+        is_reminded([commit(rev_id=1)], is_employee=False)
+        is_reminded([commit(rev_id=1, wip=True)])
+        m_get_pending_reviews.assert_not_called()
 
     @mock.patch("mozphab.conduit.ConduitAPI.get_groups")
     @mock.patch("mozphab.conduit.ConduitAPI.get_users")
@@ -1221,6 +1258,7 @@ def m_conduit():
         }
         m.set_diff_property.return_value = None
         m.request_ai_review.return_value = {}
+        m.get_pending_reviews.return_value = (0, False)
 
         # Drive the parallel wrapper through the per-rev mock so tests can
         # keep asserting against ``request_ai_review`` directly while

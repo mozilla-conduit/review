@@ -415,6 +415,12 @@ def in_process(monkeypatch, safe_environ, request, config):
     # is safe to skip and doing so makes it easier to test other conduit call sites.
     monkeypatch.setattr(submit, "update_revision_description", mock.MagicMock())
 
+    # Pretend the review queue is empty, so the post-submit reminder doesn't add
+    # a conduit call to the sequences the tests below expect.
+    monkeypatch.setattr(
+        conduit.ConduitAPI, "get_pending_reviews", mock.Mock(return_value=(0, False))
+    )
+
     # Modify user_data object to not touch the file
     user.USER_INFO_FILE = mock.Mock()
     user.USER_INFO_FILE.exists.return_value = False

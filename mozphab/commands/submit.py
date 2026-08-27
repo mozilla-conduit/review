@@ -9,7 +9,7 @@ from typing import Dict, List
 
 from mozphab import environment
 from mozphab.commits import AiReviewState, Commit
-from mozphab.conduit import conduit, normalise_reviewer
+from mozphab.conduit import ConduitAPIError, conduit, normalise_reviewer
 from mozphab.config import config
 from mozphab.diff import Diff
 from mozphab.exceptions import Error
@@ -112,11 +112,12 @@ def show_commit_stack(commits: List[Commit]):
 
 
 def show_review_queue_reminder(commits: List[Commit]):
-    """Remind the user to check their own review queue.
+    """Remind the user of the reviews waiting on them.
 
     Only shown when something was submitted for review; Work In Progress
     revisions aren't asking for anyone else's time yet.  Limited to
-    employees, as contributors aren't expected to keep a review queue.
+    employees, as contributors aren't expected to keep a review queue, and
+    to users who actually have reviews pending.
     """
     if not config.remind_review_queue or not user_data.is_employee:
         return
@@ -124,10 +125,27 @@ def show_review_queue_reminder(commits: List[Commit]):
     if not any(commit.submit and not commit.wip for commit in commits):
         return
 
+    try:
+        with wait_message("Checking your review queue..."):
+            count, has_more = conduit.get_pending_reviews()
+    except ConduitAPIError as e:
+        # The submission itself succeeded; a reminder isn't worth failing for.
+        logger.debug("Failed to check the review queue: %s", e)
+        return
+
+    if not count:
+        return
+
+    # `has_more` means the search hit its limit, so the queue is "100+" long.
+    pending = f"{count}+" if has_more else str(count)
+    plural = "" if count == 1 else "s"
+
     logger.warning(
-        "\nYou asked others for review; please check your own review queue:\n"
+        "\nYou have %s revision%s waiting on your review:\n"
         "-> %s/differential/\n"
         "(set submit.remind_review_queue to false in %s to hide this)",
+        pending,
+        plural,
         conduit.repo.phab_url,
         config.filename,
     )

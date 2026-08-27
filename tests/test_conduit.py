@@ -540,6 +540,82 @@ def test_get_diffs_partial_cache(get_diffs, m_call):
     }, "The second call must have asked only for the uncached PHID."
 
 
+@mock.patch("mozphab.conduit.ConduitAPI.whoami")
+def test_get_pending_reviews(m_whoami, m_call):
+    mozphab.conduit.set_repo(repository.Repository("", "", "dummy"))
+    m_whoami.return_value = {"phid": "PHID-USER-me"}
+
+    def reviewer(phid, status):
+        return {"reviewerPHID": phid, "status": status}
+
+    def rev(rev_id, reviewers, author="PHID-USER-other"):
+        revision = search_rev(rev=rev_id, author=author)
+        revision["attachments"]["reviewers"]["reviewers"] = reviewers
+        return revision
+
+    revision_search = {"data": []}
+
+    def fake_call(method, args):
+        if method == "project.search":
+            assert args == {"constraints": {"members": ["PHID-USER-me"]}}
+            return {"data": [{"phid": "PHID-PROJ-mine"}]}
+        assert method == "differential.revision.search"
+        return revision_search
+
+    m_call.side_effect = fake_call
+
+    # The groups the user belongs to are searched alongside the user.
+    assert mozphab.conduit.get_pending_reviews() == (0, False)
+    assert m_call.call_args.args == (
+        "differential.revision.search",
+        {
+            "constraints": {
+                "reviewerPHIDs": ["PHID-USER-me", "PHID-PROJ-mine"],
+                "statuses": ["needs-review"],
+            },
+            "attachments": {"reviewers": True},
+            "limit": 100,
+        },
+    )
+
+    revision_search = {
+        "data": [
+            # Waiting on us.
+            rev(1, [reviewer("PHID-USER-me", "added")]),
+            rev(2, [reviewer("PHID-USER-me", "blocking")]),
+            # We accepted an earlier diff, so the new one needs another look.
+            rev(3, [reviewer("PHID-USER-me", "accepted-older")]),
+            # Requested from a group we're a member of.
+            rev(4, [reviewer("PHID-PROJ-mine", "added")]),
+            # Waiting on someone else; we've had our say.
+            rev(
+                5,
+                [
+                    reviewer("PHID-USER-me", "accepted"),
+                    reviewer("PHID-USER-other", "added"),
+                ],
+            ),
+            rev(6, [reviewer("PHID-USER-me", "resigned")]),
+            rev(7, [reviewer("PHID-PROJ-mine", "accepted")]),
+            # Requested from a group we don't belong to.
+            rev(8, [reviewer("PHID-PROJ-other", "added")]),
+            # Our own revision, in the queue of a group we belong to.
+            rev(9, [reviewer("PHID-PROJ-mine", "added")], author="PHID-USER-me"),
+        ]
+    }
+    assert mozphab.conduit.get_pending_reviews() == (4, False)
+
+    # A capped result set is flagged as such.
+    revision_search = {
+        "data": [rev(1, [reviewer("PHID-USER-me", "added")])],
+        "cursor": {"after": "1"},
+    }
+    assert mozphab.conduit.get_pending_reviews(limit=1) == (1, True)
+
+    # The user's groups are only looked up once.
+    assert [call.args[0] for call in m_call.call_args_list].count("project.search") == 1
+
+
 def test_has_revision_reviewers(m_call):
     commit = Commit(rev_id=None)
     assert not conduit.has_revision_reviewers(commit)

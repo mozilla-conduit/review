@@ -95,6 +95,12 @@ IDEMPOTENT_CONDUIT_METHODS = frozenset(
 )
 
 
+# Reviewer statuses that mean the reviewer has acted on the current diff, as
+# opposed to `added`, `blocking`, `commented` or the `-older` statuses left
+# behind when a new diff voids an earlier review.
+REVIEWED_REVIEWER_STATUSES = frozenset({"accepted", "rejected", "resigned"})
+
+
 class ConduitAPIError(Error):
     """Raised when the Phabricator Conduit API returns an error response."""
 
@@ -973,6 +979,70 @@ class ConduitAPI:
         who = self.call("user.whoami", {}, api_token=api_token)
         cache.set("whoami", who)
         return who
+
+    def get_reviewer_phids(self) -> List[str]:
+        """Return the PHIDs the current user can be asked for review as.
+
+        That's the user themselves, plus every project (review group) they are
+        a member of.
+        """
+        if "reviewer-phids" in cache:
+            return cache.get("reviewer-phids")
+
+        user_phid = self.whoami()["phid"]
+        response = self.call(
+            "project.search", {"constraints": {"members": [user_phid]}}
+        )
+        phids = [user_phid] + [
+            project["phid"] for project in response.get("data") or []
+        ]
+        cache.set("reviewer-phids", phids)
+        return phids
+
+    def get_pending_reviews(self, limit: int = 100) -> Tuple[int, bool]:
+        """Return how many revisions are waiting on the current user's review.
+
+        Revisions requested from a review group the user is a member of are
+        counted too, matching what Differential shows the user.
+
+        Returns a tuple of the number of revisions found and a bool indicating
+        that the count was capped by `limit`.
+        """
+        user_phid = self.whoami()["phid"]
+        reviewer_phids = self.get_reviewer_phids()
+        response = self.call(
+            "differential.revision.search",
+            {
+                "constraints": {
+                    "reviewerPHIDs": reviewer_phids,
+                    "statuses": ["needs-review"],
+                },
+                "attachments": {"reviewers": True},
+                "limit": limit,
+            },
+        )
+
+        count = 0
+        reviewer_phid_set = set(reviewer_phids)
+        for revision in response.get("data") or []:
+            # The user's own revisions are waiting on their reviewers, not on
+            # them; they can show up here via a group they're a member of.
+            if revision["fields"]["authorPHID"] == user_phid:
+                continue
+
+            reviewers = revision["attachments"]["reviewers"]["reviewers"]
+            # A revision needing review from someone else isn't pending on
+            # this user if they, or a group they're in, have already had their
+            # say on this diff.
+            if any(
+                reviewer["reviewerPHID"] in reviewer_phid_set
+                and reviewer.get("status") not in REVIEWED_REVIEWER_STATUSES
+                for reviewer in reviewers
+            ):
+                count += 1
+
+        has_more = bool((response.get("cursor") or {}).get("after"))
+        return count, has_more
 
     def has_revision_reviewers(self, commit: Commit) -> bool:
         """Return True if the commit has a remote revision with reviewers.

@@ -85,9 +85,11 @@ report_to_sentry = True
     for newly created revisions. AI review is not requested for updates to existing
     revisions; use the `--ai` flag to explicitly request AI review on updates
     (default: `False`).
-- `submit.remind_review_queue` : When `True` remind Mozilla employees to check their
-    own review queue after submitting revisions for review. Submissions consisting
-    solely of Work In Progress revisions never show the reminder (default: `True`).
+- `submit.remind_review_queue` : When `True` remind Mozilla employees of the
+    revisions waiting on their review, including those requested from their review
+    groups, after submitting revisions for review. The reminder is skipped when the
+    review queue is empty, and when the submission consists solely of Work In
+    Progress revisions (default: `True`).
 - `patch.apply_to` : [base/here] Where to apply the patches by default. If `"base"`
     `moz-phab` will look for the SHA1 in the first commit. If `"here"` - current
     commit/checkout will be used (default: base).
