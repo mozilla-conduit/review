@@ -657,6 +657,40 @@ class Commits(unittest.TestCase):
             ],
         )
 
+    def test_show_review_queue_reminder(self):
+        submit.conduit.set_repo(repository.Repository("", "", "http://phab"))
+
+        def is_reminded(commits, is_employee=True, enabled=True):
+            with (
+                mock.patch.object(submit, "logger") as m_logger,
+                mock.patch.object(submit.user_data, "is_employee", is_employee),
+                mock.patch.object(submit.config, "remind_review_queue", enabled),
+            ):
+                submit.show_review_queue_reminder(commits)
+            return m_logger.warning.called
+
+        with mock.patch.object(submit.user_data, "is_employee", True):
+            with self.assertLogs() as logging_watcher:
+                submit.show_review_queue_reminder([commit(rev_id=1)])
+        self.assertEqual(
+            logging_watcher.output, [Contains("http://phab/differential/")]
+        )
+
+        # Work In Progress revisions don't ask for anyone's time.
+        self.assertFalse(is_reminded([commit(rev_id=1, wip=True)]))
+        self.assertTrue(
+            is_reminded([commit(rev_id=1, wip=True), commit(rev_id=2)]),
+            "A stack with a single non-WIP commit should still remind.",
+        )
+
+        # Commits that aren't being submitted don't count.
+        self.assertFalse(is_reminded([commit(rev_id=1, submit=False)]))
+
+        # Contributors and opted-out users are left alone.
+        self.assertFalse(is_reminded([commit(rev_id=1)], is_employee=False))
+        self.assertFalse(is_reminded([commit(rev_id=1)], is_employee=None))
+        self.assertFalse(is_reminded([commit(rev_id=1)], enabled=False))
+
     @mock.patch("mozphab.conduit.ConduitAPI.get_groups")
     @mock.patch("mozphab.conduit.ConduitAPI.get_users")
     @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")

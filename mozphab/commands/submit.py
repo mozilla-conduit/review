@@ -27,6 +27,7 @@ from mozphab.logger import logger
 from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
+from mozphab.user import user_data
 
 
 def morph_blocking_reviewers(commits: List[Commit]):
@@ -108,6 +109,28 @@ def show_commit_stack(commits: List[Commit]):
             urls[commit.name][0] += f" (AI review {commit.ai_review_state.value})"
 
     log_commit_stack_with_messages(submitted_commits, urls, "-> ")
+
+
+def show_review_queue_reminder(commits: List[Commit]):
+    """Remind the user to check their own review queue.
+
+    Only shown when something was submitted for review; Work In Progress
+    revisions aren't asking for anyone else's time yet.  Limited to
+    employees, as contributors aren't expected to keep a review queue.
+    """
+    if not config.remind_review_queue or not user_data.is_employee:
+        return
+
+    if not any(commit.submit and not commit.wip for commit in commits):
+        return
+
+    logger.warning(
+        "\nYou asked others for review; please check your own review queue:\n"
+        "-> %s/differential/\n"
+        "(set submit.remind_review_queue to false in %s to hide this)",
+        conduit.repo.phab_url,
+        config.filename,
+    )
 
 
 def validate_commit_stack(
@@ -825,6 +848,7 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
 
     logger.warning("\nCompleted")
     show_commit_stack(commits)
+    show_review_queue_reminder(commits)
 
     if args.ai and not config.ai_review and has_new_revisions:
         logger.info(

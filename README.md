@@ -45,6 +45,7 @@ auto_submit = False
 always_blocking = False
 warn_untracked = True
 ai_review = False
+remind_review_queue = True
 
 [patch]
 apply_to = base
@@ -84,6 +85,9 @@ report_to_sentry = True
     for newly created revisions. AI review is not requested for updates to existing
     revisions; use the `--ai` flag to explicitly request AI review on updates
     (default: `False`).
+- `submit.remind_review_queue` : When `True` remind Mozilla employees to check their
+    own review queue after submitting revisions for review. Submissions consisting
+    solely of Work In Progress revisions never show the reminder (default: `True`).
 - `patch.apply_to` : [base/here] Where to apply the patches by default. If `"base"`
     `moz-phab` will look for the SHA1 in the first commit. If `"here"` - current
     commit/checkout will be used (default: base).
