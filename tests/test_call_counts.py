@@ -455,6 +455,8 @@ def test_submit_call_count(
         fake_config.always_blocking = False
         fake_config.always_full_stack = False
         fake_config.filename = "/fake/.moz-phab-config"
+        # The review queue reminder would add a call of its own.
+        fake_config.review_queue_reminder_frequency = 0
 
         submit._submit(repo, build_submit_args())
 

@@ -50,7 +50,16 @@ class UserData:
     user_code = None
     installation_id = None
     last_check = None
-    keys = ["is_employee", "user_code", "installation_id", "last_check"]
+    # Defaults to 0 rather than None so that a user who has never been
+    # reminded still counts as `is_data_collected`.
+    review_queue_last_reminder = 0
+    keys = [
+        "is_employee",
+        "user_code",
+        "installation_id",
+        "last_check",
+        "review_queue_last_reminder",
+    ]
 
     def __init__(self):
         self.set_from_file()

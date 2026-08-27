@@ -5,6 +5,7 @@
 import argparse
 import logging
 import textwrap
+import time
 from typing import Dict, List
 
 from mozphab import environment
@@ -118,11 +119,24 @@ def show_review_queue_reminder(commits: List[Commit]):
     revisions aren't asking for anyone else's time yet.  Limited to
     employees, as contributors aren't expected to keep a review queue, and
     to users who actually have reviews pending.
+
+    Shown at most once every `submit.review_queue_reminder_frequency`
+    seconds, so that submitting a series of stacks doesn't repeat it every
+    time.  Setting that to zero turns the reminder off entirely.
     """
-    if not config.remind_review_queue or not user_data.is_employee:
+    frequency = config.review_queue_reminder_frequency
+    if frequency <= 0 or not user_data.is_employee:
         return
 
     if not any(commit.submit and not commit.wip for commit in commits):
+        return
+
+    # A stamp in the future means the clock moved backwards; remind rather
+    # than stay quiet until it catches up.
+    now = int(time.time())
+    elapsed = now - (user_data.review_queue_last_reminder or 0)
+    if 0 <= elapsed < frequency:
+        logger.debug("Review queue reminder shown recently, skipping.")
         return
 
     try:
@@ -132,6 +146,10 @@ def show_review_queue_reminder(commits: List[Commit]):
         # The submission itself succeeded; a reminder isn't worth failing for.
         logger.debug("Failed to check the review queue: %s", e)
         return
+
+    # Save it here so that we don't recheck over-and-over for people that have
+    # no outstanding reviews.
+    user_data.save_user_info(review_queue_last_reminder=now)
 
     if not count:
         return
@@ -143,7 +161,7 @@ def show_review_queue_reminder(commits: List[Commit]):
     logger.warning(
         "\nYou have %s revision%s waiting on your review:\n"
         "-> %s/differential/\n"
-        "(set submit.remind_review_queue to false in %s to hide this)",
+        "(set submit.review_queue_reminder_frequency to 0 in %s to hide this)",
         pending,
         plural,
         conduit.repo.phab_url,

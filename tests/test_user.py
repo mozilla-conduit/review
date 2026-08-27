@@ -32,20 +32,27 @@ def test_save_user_info(m_json, m_file, user_data):
         "last_check": 1,
     }
     user_data.save_user_info(**user_info)
-    m_json.dump.assert_called_once_with(user_info, None, sort_keys=True, indent=2)
+    m_json.dump.assert_called_once_with(
+        # Untouched fields are saved with their current value.
+        {**user_info, "review_queue_last_reminder": 0},
+        None,
+        sort_keys=True,
+        indent=2,
+    )
 
     # update file
     m_file.exists.return_value = True
     m_json.reset_mock()
     m_json.load.return_value = user_info
     new_user_code = str(uuid.uuid4())
-    user_data.save_user_info(user_code=new_user_code)
+    user_data.save_user_info(user_code=new_user_code, review_queue_last_reminder=12)
     m_json.dump.assert_called_once_with(
         {
             "is_employee": True,
             "user_code": new_user_code,
             "installation_id": installation_id,
             "last_check": 1,
+            "review_queue_last_reminder": 12,
         },
         None,
         sort_keys=True,
@@ -158,6 +165,7 @@ def test_set_user_data(m_time, m_file, m_save, m_whoami, m_hashlib, user_data):
         "is_employee": False,
         "installation_id": "installation11111111111111111111",
         "last_check": 123,
+        "review_queue_last_reminder": 0,
     } == user_data.to_dict()
 
     # Create user_data file, employee

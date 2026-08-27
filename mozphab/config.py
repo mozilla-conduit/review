@@ -52,7 +52,7 @@ class Config(object):
             always_blocking = False
             warn_untracked = True
             ai_review = False
-            remind_review_queue = True
+            review_queue_reminder_frequency = 3600
 
             [patch]
             apply_to = base
@@ -94,7 +94,9 @@ class Config(object):
         self.always_blocking = self._getboolean("submit", "always_blocking")
         self.warn_untracked = self._getboolean("submit", "warn_untracked")
         self.ai_review = self._getboolean("submit", "ai_review")
-        self.remind_review_queue = self._getboolean("submit", "remind_review_queue")
+        self.review_queue_reminder_frequency = self._getint(
+            "submit", "review_queue_reminder_frequency"
+        )
         self.apply_patch_to = self._config.get("patch", "apply_to")
         self.create_bookmark = self._getboolean("patch", "create_bookmark")
         self.create_topic = self._getboolean("patch", "create_topic")
@@ -169,7 +171,11 @@ class Config(object):
             self._set("submit", "always_blocking", self.always_blocking)
             self._set("submit", "warn_untracked", self.warn_untracked)
             self._set("submit", "ai_review", self.ai_review)
-            self._set("submit", "remind_review_queue", self.remind_review_queue)
+            self._set(
+                "submit",
+                "review_queue_reminder_frequency",
+                self.review_queue_reminder_frequency,
+            )
             self._set("patch", "apply_to", self.apply_patch_to)
             self._set("patch", "create_bookmark", self.create_bookmark)
             self._set("patch", "create_topic", self.create_topic)

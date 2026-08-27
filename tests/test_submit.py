@@ -662,38 +662,40 @@ class Commits(unittest.TestCase):
         submit.conduit.set_repo(repository.Repository("", "", "http://phab"))
         m_get_pending_reviews.return_value = (3, False)
 
-        def is_reminded(commits, is_employee=True, enabled=True):
+        def reminder_text(commits, is_employee=True, frequency=3600):
+            """Return what the reminder logged, empty if it stayed quiet."""
             with (
                 mock.patch.object(submit, "logger") as m_logger,
                 mock.patch.object(submit.user_data, "is_employee", is_employee),
-                mock.patch.object(submit.config, "remind_review_queue", enabled),
+                mock.patch.object(
+                    submit.config, "review_queue_reminder_frequency", frequency
+                ),
+                # Start every case outside the "reminded recently" window.
+                mock.patch.object(submit.user_data, "review_queue_last_reminder", 0),
+                mock.patch.object(submit.user_data, "save_user_info"),
             ):
                 submit.show_review_queue_reminder(commits)
-            return m_logger.warning.called
 
-        with mock.patch.object(submit.user_data, "is_employee", True):
-            with self.assertLogs() as logging_watcher:
-                submit.show_review_queue_reminder([commit(rev_id=1)])
-            self.assertEqual(
-                logging_watcher.output,
-                [
-                    Contains("3 revisions waiting on your review")
-                    & Contains("http://phab/differential/")
-                ],
-            )
+            if not m_logger.warning.called:
+                return ""
+            args = m_logger.warning.call_args.args
+            return args[0] % args[1:]
 
-            # A capped count is shown as "100+", and one review is singular.
-            m_get_pending_reviews.return_value = (100, True)
-            with self.assertLogs() as logging_watcher:
-                submit.show_review_queue_reminder([commit(rev_id=1)])
-            self.assertEqual(
-                logging_watcher.output, [Contains("100+ revisions waiting")]
-            )
+        def is_reminded(commits, **kwargs):
+            return bool(reminder_text(commits, **kwargs))
 
-            m_get_pending_reviews.return_value = (1, False)
-            with self.assertLogs() as logging_watcher:
-                submit.show_review_queue_reminder([commit(rev_id=1)])
-            self.assertEqual(logging_watcher.output, [Contains("1 revision waiting")])
+        self.assertIn(
+            "3 revisions waiting on your review",
+            reminder_text([commit(rev_id=1)]),
+        )
+        self.assertIn("http://phab/differential/", reminder_text([commit(rev_id=1)]))
+
+        # A capped count is shown as "100+", and one review is singular.
+        m_get_pending_reviews.return_value = (100, True)
+        self.assertIn("100+ revisions waiting", reminder_text([commit(rev_id=1)]))
+
+        m_get_pending_reviews.return_value = (1, False)
+        self.assertIn("1 revision waiting", reminder_text([commit(rev_id=1)]))
 
         # An empty review queue is not worth mentioning.
         m_get_pending_reviews.return_value = (0, False)
@@ -720,13 +722,77 @@ class Commits(unittest.TestCase):
         # Contributors and opted-out users are left alone.
         self.assertFalse(is_reminded([commit(rev_id=1)], is_employee=False))
         self.assertFalse(is_reminded([commit(rev_id=1)], is_employee=None))
-        self.assertFalse(is_reminded([commit(rev_id=1)], enabled=False))
+        self.assertFalse(is_reminded([commit(rev_id=1)], frequency=0))
 
         # The review queue isn't queried when the reminder wouldn't be shown.
         m_get_pending_reviews.reset_mock()
         is_reminded([commit(rev_id=1)], is_employee=False)
         is_reminded([commit(rev_id=1, wip=True)])
         m_get_pending_reviews.assert_not_called()
+
+    @mock.patch("mozphab.commands.submit.time.time")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_pending_reviews")
+    def test_review_queue_reminder_frequency(self, m_get_pending_reviews, m_time):
+        submit.conduit.set_repo(repository.Repository("", "", "http://phab"))
+        m_get_pending_reviews.return_value = (3, False)
+        commits = [commit(rev_id=1)]
+        now = 1000000
+        m_time.return_value = now
+
+        frequency = 3600
+
+        with (
+            mock.patch.object(submit, "logger") as m_logger,
+            mock.patch.object(submit.user_data, "is_employee", True),
+            mock.patch.object(
+                submit.config, "review_queue_reminder_frequency", frequency
+            ),
+            mock.patch.object(submit.user_data, "review_queue_last_reminder", 0),
+            mock.patch.object(submit.user_data, "save_user_info") as m_save,
+        ):
+            # The first submission reminds, and records when it did.
+            submit.show_review_queue_reminder(commits)
+            self.assertTrue(m_logger.warning.called)
+            m_save.assert_called_once_with(review_queue_last_reminder=now)
+            submit.user_data.review_queue_last_reminder = now
+
+            # Submitting again within the hour stays quiet, without even
+            # checking the queue.
+            m_logger.reset_mock()
+            m_get_pending_reviews.reset_mock()
+            m_time.return_value = now + frequency - 1
+            submit.show_review_queue_reminder(commits)
+            self.assertFalse(m_logger.warning.called)
+            m_get_pending_reviews.assert_not_called()
+
+            # Once the window has passed, remind again.
+            m_time.return_value = now + frequency
+            submit.show_review_queue_reminder(commits)
+            self.assertTrue(m_logger.warning.called)
+            self.assertEqual(
+                m_save.call_args.kwargs,
+                {"review_queue_last_reminder": m_time.return_value},
+            )
+            submit.user_data.review_queue_last_reminder = m_time.return_value
+
+            # A stamp in the future, e.g. after the clock moved backwards,
+            # doesn't silence the reminder until the clock catches up.
+            m_logger.reset_mock()
+            submit.user_data.review_queue_last_reminder = m_time.return_value + 10000
+            submit.show_review_queue_reminder(commits)
+            self.assertTrue(m_logger.warning.called)
+
+            # Finding an empty queue also uses up the window, so that people
+            # with nothing to review aren't re-queried on every submit.
+            m_logger.reset_mock()
+            m_save.reset_mock()
+            m_get_pending_reviews.return_value = (0, False)
+            submit.user_data.review_queue_last_reminder = 0
+            submit.show_review_queue_reminder(commits)
+            self.assertFalse(m_logger.warning.called)
+            m_save.assert_called_once_with(
+                review_queue_last_reminder=m_time.return_value
+            )
 
     @mock.patch("mozphab.conduit.ConduitAPI.get_groups")
     @mock.patch("mozphab.conduit.ConduitAPI.get_users")
@@ -1310,6 +1376,7 @@ def m_logger():
 def m_config():
     with mock.patch("mozphab.commands.submit.config") as m:
         m.ai_review = False
+        m.review_queue_reminder_frequency = 3600
         yield m
 
 

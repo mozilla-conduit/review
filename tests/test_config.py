@@ -21,7 +21,7 @@ def test_defaults(config):
     assert config.auto_submit is False
     assert config.always_blocking is False
     assert config.warn_untracked is True
-    assert config.remind_review_queue is True
+    assert config.review_queue_reminder_frequency == 3600
     assert config.apply_patch_to == "base"
     assert config.create_bookmark is True
     assert config.create_topic is False
@@ -46,7 +46,7 @@ def test_write(config):
     config.auto_submit = True
     config.always_blocking = True
     config.warn_untracked = False
-    config.remind_review_queue = False
+    config.review_queue_reminder_frequency = 0
     config.apply_patch_to = "here"
     config.create_bookmark = False
     config.create_topic = True
@@ -69,7 +69,7 @@ def test_write(config):
     assert new_config.auto_submit is True
     assert new_config.always_blocking is True
     assert new_config.warn_untracked is False
-    assert new_config.remind_review_queue is False
+    assert new_config.review_queue_reminder_frequency == 0
     assert new_config.apply_patch_to == "here"
     assert new_config.create_bookmark is False
     assert new_config.create_topic is True
