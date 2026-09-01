@@ -433,6 +433,49 @@ class ConduitAPI:
             # Skip revisions for which we do not have a query result.
             return [revisions[phid] for phid in rev_phids if phid in revisions]
 
+    def get_revisions_for_author(
+        self,
+        authorphid: str,
+        statuses: Optional[List[str]] = None,
+        order: str = "updated",
+    ) -> List[dict]:
+        """Get revisions info from Phabricator.
+
+        Args:
+            authorphid - target user's phid
+
+        Returns a list of revisions created by authorphid.
+        Note: the endpoint returns at most 100 results (one page).
+        """
+        api_call_args = {
+            "constraints": {
+                "authorPHIDs": [authorphid],
+            },
+            "attachments": {"reviewers": True},
+            "order": order,
+        }
+        if statuses is not None:
+            api_call_args["constraints"]["statuses"] = statuses
+
+        response = self.call("differential.revision.search", api_call_args)
+        return response.get("data")
+
+    def get_usernames_for_phids(self, phids: List[str]) -> Dict[str, str]:
+        """Get a PHID-to-username mapping for the given user PHIDs.
+
+        Args:
+            phids - list of user PHIDs to resolve
+
+        Returns a dict mapping PHID to username.
+        """
+        if not phids:
+            return {}
+        response = self.call("user.search", {"constraints": {"phids": phids}})
+        return {
+            user["phid"]: user["fields"]["username"]
+            for user in response.get("data", [])
+        }
+
     def get_diffs(
         self, ids: Optional[List[int]] = None, phids: Optional[List[str]] = None
     ) -> Dict[str, Dict]:

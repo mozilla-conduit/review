@@ -405,6 +405,43 @@ def test_get_revisions_search_by_phids_missing(get_revs, m_call):
 
 
 @pytest.fixture
+def get_revs_for_author():
+    mozphab.conduit.set_repo(repository.Repository("", "", "dummy"))
+    return mozphab.conduit.get_revisions_for_author
+
+
+def test_get_revisions_for_author(get_revs_for_author, m_call):
+    """differential.revision.search by author phid"""
+    m_call.return_value = basic_phab_result
+
+    assert len(get_revs_for_author("PHID-USER-1")) == 1
+    m_call.assert_called_with(
+        "differential.revision.search",
+        {
+            "constraints": {"authorPHIDs": ["PHID-USER-1"]},
+            "attachments": {"reviewers": True},
+            "order": "updated",
+        },
+    )
+
+
+@pytest.mark.parametrize("statuses", ([], ["accepted"], ["published", "needs-review"]))
+def test_get_revisions_for_author_with_status(get_revs_for_author, m_call, statuses):
+    """differential.revision.search by author phid and status"""
+    m_call.return_value = basic_phab_result
+
+    assert len(get_revs_for_author("PHID-USER-1", statuses=statuses)) == 1
+    m_call.assert_called_with(
+        "differential.revision.search",
+        {
+            "constraints": {"authorPHIDs": ["PHID-USER-1"], "statuses": statuses},
+            "attachments": {"reviewers": True},
+            "order": "updated",
+        },
+    )
+
+
+@pytest.fixture
 def get_diffs():
     mozphab.conduit.set_repo(repository.Repository("", "", "dummy"))
     return mozphab.conduit.get_diffs

@@ -72,6 +72,18 @@ def assert_api_token_is_present(repo: Repository, args: argparse.Namespace):
         logger.info("Token installed, resuming original command")
 
 
+def should_disable_logging(args: argparse.Namespace) -> bool:
+    # Ensure that `patch --raw ..` only outputs the patch
+    if args.command == "patch" and getattr(args, "raw", False):
+        return True
+
+    # Ensure that `list --format json` only outputs JSON
+    if args.command == "list" and getattr(args, "format", None) == "json":
+        return True
+
+    return False
+
+
 def main(argv: List[str], *, is_development: bool):
     try:
         if not is_development and config.report_to_sentry:
@@ -94,8 +106,7 @@ def main(argv: List[str], *, is_development: bool):
 
         logger.debug("%s (%s)", environment.MOZPHAB_NAME, environment.MOZPHAB_VERSION)
 
-        # Ensure that `patch --raw ..` only outputs the patch
-        if args.command == "patch" and getattr(args, "raw", False):
+        if should_disable_logging(args):
             environment.SHOW_SPINNER = False
             logger.setLevel(logging.ERROR)
 
