@@ -107,7 +107,7 @@ def list_revisions(repo: Repository, args: argparse.Namespace):
     logger.info("Revisions:\n")
 
     # Resolve reviewer PHIDs to usernames up front if verbose
-    phid_to_username = {}
+    phid_to_username: dict[str, str] = {}
     if args.verbose:
         all_phids = set()
         for revision in revisions:

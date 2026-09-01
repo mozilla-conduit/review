@@ -5,12 +5,14 @@
 import argparse
 import json
 import logging
+from typing import cast
 from unittest import mock
 
 import pytest
 
 from mozphab import exceptions
 from mozphab.commands import list as list_command
+from mozphab.repository import Repository
 
 
 def test_format_known_statuses():
@@ -30,6 +32,12 @@ def test_format_unknown_status():
 
 
 @pytest.fixture
+def repo() -> Repository:
+    """`list_revisions` never touches the repository, so a stub is enough."""
+    return cast(Repository, mock.MagicMock(spec=Repository))
+
+
+@pytest.fixture
 def args():
     return argparse.Namespace(
         include_published=False,
@@ -42,7 +50,7 @@ def args():
 
 @pytest.fixture
 def mock_get_revisions():
-    revisions = [
+    revisions: list[dict] = [
         {
             "id": 123,
             "phid": "PHID-DREV-123",
@@ -136,13 +144,13 @@ def mock_conduit(mock_get_revisions):
         yield m
 
 
-def test_list_revisions_success(mock_conduit, args, caplog):
+def test_list_revisions_success(repo, mock_conduit, args, caplog):
     """Test successful listing of revisions."""
     # Setup mocks
     caplog.set_level(logging.INFO, logger="moz-phab")
 
     # Call function
-    list_command.list_revisions(None, args)
+    list_command.list_revisions(repo, args)
 
     # Verify API calls
     mock_conduit.check.assert_called_once()
@@ -163,7 +171,7 @@ def test_list_revisions_success(mock_conduit, args, caplog):
     assert "D126" not in caplog.text, "Published revision D126 should not be listed"
 
 
-def test_list_revisions_include_published(mock_conduit, args, caplog):
+def test_list_revisions_include_published(repo, mock_conduit, args, caplog):
     """Test listing with --include-published flag includes closed revisions."""
     caplog.set_level(logging.INFO, logger="moz-phab")
 
@@ -171,7 +179,7 @@ def test_list_revisions_include_published(mock_conduit, args, caplog):
     args.include_published = True
 
     # Call function
-    list_command.list_revisions(None, args)
+    list_command.list_revisions(repo, args)
 
     call_args = mock_conduit.get_revisions_for_author.call_args
     statuses = call_args[1]["statuses"]
@@ -179,7 +187,7 @@ def test_list_revisions_include_published(mock_conduit, args, caplog):
     assert "D126" in caplog.text, "Published revision D126 should be listed"
 
 
-def test_list_revisions_include_abandoned(mock_conduit, args, caplog):
+def test_list_revisions_include_abandoned(repo, mock_conduit, args, caplog):
     """Test listing with --include-abandoned flag."""
     caplog.set_level(logging.INFO, logger="moz-phab")
 
@@ -187,20 +195,20 @@ def test_list_revisions_include_abandoned(mock_conduit, args, caplog):
     args.include_abandoned = True
 
     # Call function
-    list_command.list_revisions(None, args)
+    list_command.list_revisions(repo, args)
 
     statuses = mock_conduit.get_revisions_for_author.call_args[1]["statuses"]
     assert "abandoned" in statuses, "Status filter should include 'abandoned'"
     assert "D125" in caplog.text, "Abandoned revision D125 should be listed"
 
 
-def test_list_revisions_status_filter(mock_conduit, args):
+def test_list_revisions_status_filter(repo, mock_conduit, args):
     """Test listing with status filter."""
     # Modify args to filter by status
     args.status = ["accepted"]
 
     # Call function
-    list_command.list_revisions(None, args)
+    list_command.list_revisions(repo, args)
 
     # Verify the API call includes status constraint
     assert mock_conduit.get_revisions_for_author.call_args[1]["statuses"] == [
@@ -208,41 +216,41 @@ def test_list_revisions_status_filter(mock_conduit, args):
     ]
 
 
-def test_list_revisions_no_results(mock_conduit, args, caplog):
+def test_list_revisions_no_results(repo, mock_conduit, args, caplog):
     """Test listing when no revisions are found."""
     caplog.set_level(logging.INFO, logger="moz-phab")
 
     args.status = ["not-a-real-status"]
 
     # Call function
-    list_command.list_revisions(None, args)
+    list_command.list_revisions(repo, args)
 
     assert mock_conduit.get_revisions_for_author.call_args[1]["statuses"] == args.status
     assert "No revisions found" in caplog.text, "Should report no revisions found"
 
 
-def test_list_revisions_connection_failure(mock_conduit, args):
+def test_list_revisions_connection_failure(repo, mock_conduit, args):
     """Test handling of connection failures."""
     mock_conduit.check.return_value = False
 
     with pytest.raises(exceptions.Error, match="Failed to use Conduit API"):
-        list_command.list_revisions(None, args)
+        list_command.list_revisions(repo, args)
 
 
-def test_list_revisions_no_user_phid(mock_conduit, args):
+def test_list_revisions_no_user_phid(repo, mock_conduit, args):
     """Test handling when user PHID cannot be determined."""
     mock_conduit.whoami.return_value = {}  # No PHID
 
     with pytest.raises(exceptions.Error, match="Unable to determine current user"):
-        list_command.list_revisions(None, args)
+        list_command.list_revisions(repo, args)
 
 
-def test_list_revisions_verbose(mock_conduit, args, caplog):
+def test_list_revisions_verbose(repo, mock_conduit, args, caplog):
     """Test listing with verbose flag shows reviewers."""
     caplog.set_level(logging.INFO, logger="moz-phab")
 
     args.verbose = True
-    list_command.list_revisions(None, args)
+    list_command.list_revisions(repo, args)
 
     assert (
         "Reviewers:" in caplog.text
@@ -257,10 +265,10 @@ def json_args(args):
 
 
 @mock.patch("builtins.print")
-def test_list_json_format(mock_print, mock_conduit, json_args):
+def test_list_json_format(mock_print, repo, mock_conduit, json_args):
     """Test JSON output format."""
     # Call function
-    list_command.list_revisions(None, json_args)
+    list_command.list_revisions(repo, json_args)
 
     # Verify print was called with JSON
     mock_print.assert_called_once()
@@ -276,13 +284,13 @@ def test_list_json_format(mock_print, mock_conduit, json_args):
 
 
 @mock.patch("builtins.print")
-def test_list_json_format_verbose(mock_print, mock_conduit, json_args):
+def test_list_json_format_verbose(mock_print, repo, mock_conduit, json_args):
     """Test JSON output format with verbose flag."""
     # Modify args to be verbose
     json_args.verbose = True
 
     # Call function
-    list_command.list_revisions(None, json_args)
+    list_command.list_revisions(repo, json_args)
 
     # Verify print was called with JSON
     mock_print.assert_called_once()
@@ -298,12 +306,12 @@ def test_list_json_format_verbose(mock_print, mock_conduit, json_args):
 
 
 @mock.patch("builtins.print")
-def test_list_json_empty_results(mock_print, mock_conduit, json_args):
+def test_list_json_empty_results(mock_print, repo, mock_conduit, json_args):
     """Test JSON output with no results."""
     json_args.status = ["not-a-real-status"]
 
     # Call function
-    list_command.list_revisions(None, json_args)
+    list_command.list_revisions(repo, json_args)
 
     # Verify print was called with empty JSON array
     mock_print.assert_called_once()
@@ -313,12 +321,12 @@ def test_list_json_empty_results(mock_print, mock_conduit, json_args):
 
 
 @mock.patch("builtins.print")
-def test_list_json_no_spinner(mock_print, mock_conduit, json_args, caplog):
+def test_list_json_no_spinner(mock_print, repo, mock_conduit, json_args, caplog):
     """Test that JSON format doesn't produce spinner output."""
     caplog.set_level(logging.DEBUG, logger="moz-phab")
 
     # Call function - should not produce logs
-    list_command.list_revisions(None, json_args)
+    list_command.list_revisions(repo, json_args)
 
     assert caplog.text == ""
 
