@@ -810,7 +810,7 @@ class Git(Repository):
     def fetch_from_upstream(self):
         """Fetch latest changes from upstream remote without merging."""
         try:
-            self.git_call(["fetch"] + self.get_base_remotes())
+            self.git_call(["fetch", "--multiple"] + self.get_base_remotes())
         except CommandError as e:
             raise Error(f"Failed to fetch from upstream: {str(e)}")
 
