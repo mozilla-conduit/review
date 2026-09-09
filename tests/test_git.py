@@ -466,6 +466,7 @@ def test_check_node(m_phab_vcs, m_git_is_node, m_hg2git, git):
     assert "git_aabbcc" == git.check_node(node)
 
 
+@mock.patch("mozphab.git.Git._is_detached_head")
 @mock.patch("mozphab.git.Git.git_out")
 @mock.patch("mozphab.git.Git.checkout")
 @mock.patch("mozphab.git.Git.git_call")
@@ -477,9 +478,12 @@ def test_before_patch(
     m_git,
     m_checkout,
     m_git_out,
+    m_is_detached_head,
     git,
     caplog: pytest.LogCaptureFixture,
 ):
+    m_is_detached_head.return_value = False
+
     class Args(argparse.Namespace):
         def __init__(
             self,
@@ -551,9 +555,41 @@ def test_before_patch(
     m_prompt.assert_called_once()
     assert Contains("git checkout -b") in caplog.messages
 
+    # HEAD is already detached, eg. when applying at another base after a
+    # failed attempt: there's nothing left to ask about.
+    m_prompt.reset_mock()
+    m_is_detached_head.return_value = True
+    git.args = Args(no_branch=True)
+    git.before_patch("abcdef", "name")
+    m_prompt.assert_not_called()
+    m_is_detached_head.return_value = False
+
     m_prompt.return_value = "No"
     with pytest.raises(SystemExit):
         git.before_patch("abcdef", "name")
+
+
+@mock.patch("mozphab.git.Git.git_call")
+@mock.patch("mozphab.git.Git.checkout")
+def test_discard_patch_attempt(m_checkout, m_git_call, git):
+    # Nothing to delete when `before_patch` didn't create a branch.
+    git.patch_branch_name = None
+    git.discard_patch_attempt("sha111")
+    m_checkout.assert_called_once_with("sha111")
+    m_git_call.assert_not_called()
+
+    git.patch_branch_name = "phab-D1"
+    git.discard_patch_attempt("sha111")
+    m_git_call.assert_called_once_with(["branch", "--delete", "--force", "phab-D1"])
+    assert git.patch_branch_name is None
+
+
+@mock.patch("mozphab.git.Git.git_call")
+def test_abort_rebase(m_git_call, git):
+    # A rebase that never started leaves nothing to abort.
+    m_git_call.side_effect = exceptions.CommandError("no rebase in progress")
+    git.abort_rebase()
+    m_git_call.assert_called_once_with(["rebase", "--abort"])
 
 
 @mock.patch("mozphab.git.temporary_binary_file")

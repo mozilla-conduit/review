@@ -211,6 +211,13 @@ This behavior can be modified with the following options:
   - `here` use the current commit,
   - `{NODE}` use a commit identified by SHA1 or (in Mercurial) revision number
 
+  moz-phab applies the patch directly at that target, as it has always done. When
+  creating commits (ie. without `--no-commit`) and that isn't possible -- the
+  diff's base commit is missing locally, or only exists as part of another,
+  unlanded patch stack, or the patch doesn't apply at the target -- it applies the
+  patch at the closest public (landed) commit instead, then rebases onto the
+  target.
+
 - `--raw` Print out the diffs of each revision starting from the oldest
    ancestor instead of applying to the repository. It can be used to patch the
    working directory with an external tool:

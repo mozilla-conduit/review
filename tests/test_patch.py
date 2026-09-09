@@ -244,7 +244,7 @@ def repo_mock():
             None,
             None,
             True,
-            id="base unresolvable and nothing landed to fall back to: raises",
+            id="base unresolvable and nothing landed to fall back to: no base",
         ),
     ),
 )
@@ -255,11 +255,7 @@ def test_resolve_base_node(
     repo_mock.is_public.return_value = is_public
     repo_mock.get_latest_landing_node.return_value = landing_node
 
-    if expected is None:
-        with pytest.raises(exceptions.Error):
-            patch.resolve_base_node(repo_mock, "sha111")
-    else:
-        assert patch.resolve_base_node(repo_mock, "sha111") == expected
+    assert patch.resolve_base_node(repo_mock, "sha111") == expected
 
     assert repo_mock.fetch_from_upstream.called is fetches
     # The landing node is only looked up when the base can't be used.
@@ -307,6 +303,8 @@ def test_get_patch_date():
 @mock.patch("mozphab.git.Git.is_public")
 @mock.patch("mozphab.git.Git.get_current_node")
 @mock.patch("mozphab.git.Git.rebase_node")
+@mock.patch("mozphab.git.Git.abort_rebase")
+@mock.patch("mozphab.git.Git.discard_patch_attempt")
 @mock.patch("mozphab.git.Git.fetch_from_upstream")
 @mock.patch("mozphab.git.Git.get_latest_landing_node")
 @mock.patch("builtins.print")
@@ -314,6 +312,8 @@ def test_patch(
     m_print,
     m_git_get_latest_landing_node,
     m_git_fetch_from_upstream,
+    m_git_discard_patch_attempt,
+    m_git_abort_rebase,
     m_git_rebase_node,
     m_git_get_current_node,
     m_git_is_public,
@@ -512,14 +512,16 @@ def test_patch(
     m_get_base_ref.reset_mock()
     m_apply_patch.reset_mock()
     m_git_rebase_node.reset_mock()
-    # check_node resolves whatever it's given, so base ("sha111") and
-    # target ("head") resolve to distinct values, and a rebase is needed.
+    m_git_before_patch.reset_mock()
+    # check_node resolves whatever it's given (identity).
     m_git_check_node.side_effect = lambda n: n
-    # --apply_to head: the patch is still applied at the diff's resolved base;
-    # "head" only becomes the rebase target, applied after patching.
+    # --apply_to head: the patch applies directly at the target on the first
+    # (optimistic) attempt, since the mocked `apply_patch` never fails --
+    # no base resolution or rebase is needed.
     git.args = Args(apply_to="head")
     patch.patch(git, git.args)
     m_get_base_ref.assert_called_once()
+    m_git_before_patch.assert_called_once_with("head", "phab-D1")
     m_git_apply_patch.assert_called_once_with(
         "raw",
         "commit message",
@@ -527,54 +529,104 @@ def test_patch(
         1547806078,
     )
     m_apply_patch.assert_not_called()
-    m_git_rebase_node.assert_called_once()
+    m_git_rebase_node.assert_not_called()
 
     m_git_before_patch.reset_mock()
-    m_git_rebase_node.reset_mock()
     node = "abcdef"
-    # check_node keeps resolving whatever it's given (identity), so the
-    # base stays "sha111" (from get_base_ref) while the target below
-    # resolves to whatever `--apply-to` names -- distinct values, so a
-    # rebase is needed.
+    # --apply-to NODE: same as above, applied directly at `node`.
     git.args = Args(apply_to=node)
     patch.patch(git, git.args)
-    m_git_before_patch.assert_called_once_with("sha111", "phab-D1")
-    m_git_rebase_node.assert_called_once_with("sha111", node)
+    m_git_before_patch.assert_called_once_with(node, "phab-D1")
+    m_git_rebase_node.assert_not_called()
 
     m_git_before_patch.reset_mock()
-    m_git_rebase_node.reset_mock()
     m_git_get_current_node.return_value = "current_sha"
-    # --applyto here: the patch is applied at the resolved base, then
-    # rebased onto whatever is currently checked out.
+    # --applyto here: applied directly at whatever is currently checked out.
     git.args = Args(apply_to="here")
     patch.patch(git, git.args)
-    m_git_before_patch.assert_called_once_with("sha111", "phab-D1")
-    m_git_rebase_node.assert_called_once_with("sha111", "current_sha")
+    m_git_before_patch.assert_called_once_with("current_sha", "phab-D1")
+    m_git_rebase_node.assert_not_called()
 
     m_git_before_patch.reset_mock()
-    m_git_rebase_node.reset_mock()
-    # --name NAME
+    # --name NAME: default apply-to (base) uses the diff's own base commit.
     git.args = Args(name="feature")
     patch.patch(git, git.args)
     m_git_before_patch.assert_called_once_with("sha111", "feature")
     m_git_rebase_node.assert_not_called()
 
-    # A failure applying the patch surfaces as a clean Error (previously
-    # this caught `subprocess.CalledProcessError`, which `Git.apply_patch`
-    # never raises -- the real `CommandError` fell through to a generic,
-    # Sentry-reported crash).
+    # --apply-to base, with a base commit that isn't in the repository (eg. it
+    # belongs to another, unlanded stack): the patch is applied at the latest
+    # landed revision instead, and there's nothing to rebase onto.
+    m_git_before_patch.reset_mock()
+    m_git_check_node.side_effect = exceptions.NotFoundError
+    m_git_get_latest_landing_node.return_value = "landing_sha"
+    git.args = Args()
+    patch.patch(git, git.args)
+    m_git_before_patch.assert_called_once_with("landing_sha", "phab-D1")
+    m_git_rebase_node.assert_not_called()
+
+    # Same, with --no-commit: nothing is committed, so nothing could be
+    # rebased from another base later on -- the missing base is an error.
+    m_git_before_patch.reset_mock()
+    git.args = Args(no_commit=True)
+    with pytest.raises(exceptions.Error):
+        patch.patch(git, git.args)
+    m_git_before_patch.assert_not_called()
+    m_git_check_node.side_effect = lambda n: n
+    m_git_fetch_from_upstream.reset_mock()
+
+    # If the application fails, moz-phab applies at a resolved public base
+    # instead, and rebases onto the target.
+    m_git_before_patch.reset_mock()
+    m_git_apply_patch.reset_mock()
+    m_git_apply_patch.side_effect = [exceptions.CommandError("boom"), mock.DEFAULT]
+    m_git_is_public.return_value = True
+    git.args = Args(apply_to="current_sha")
+    patch.patch(git, git.args)
+    assert m_git_before_patch.call_args_list == [
+        mock.call("current_sha", "phab-D1"),
+        mock.call("sha111", "phab-D1"),
+    ]
+    # The failed attempt is undone rather than left behind.
+    m_git_discard_patch_attempt.assert_called_once_with("current_sha")
+    m_git_rebase_node.assert_called_once_with("sha111", "current_sha")
+    m_git_apply_patch.side_effect = None
+    m_git_discard_patch_attempt.reset_mock()
+    m_git_rebase_node.reset_mock()
+
+    # A conflicting rebase is aborted rather than left in progress.
+    m_git_apply_patch.side_effect = [exceptions.CommandError("boom"), mock.DEFAULT]
+    m_git_rebase_node.side_effect = exceptions.CommandError("boom")
+    git.args = Args(apply_to="current_sha")
+    with pytest.raises(exceptions.Error):
+        patch.patch(git, git.args)
+    m_git_abort_rebase.assert_called_once()
+    m_git_apply_patch.side_effect = None
+    m_git_rebase_node.side_effect = None
+    m_git_rebase_node.reset_mock()
+    m_git_discard_patch_attempt.reset_mock()
+
+    # `--apply-to base` applies at the diff's own base, so there's no other
+    # commit to try: the original failure propagates.
+    m_git_before_patch.reset_mock()
     m_git_apply_patch.side_effect = exceptions.CommandError("boom")
     git.args = Args()
     with pytest.raises(exceptions.Error):
         patch.patch(git, git.args)
-    m_git_apply_patch.side_effect = None
+    m_git_before_patch.assert_called_once_with("sha111", "phab-D1")
+    m_git_discard_patch_attempt.assert_not_called()
 
-    # Same for a failed rebase.
-    m_git_rebase_node.side_effect = exceptions.CommandError("boom")
-    git.args = Args(apply_to="head")
+    # Same when the diff has no base ref at all (eg. an older diff, or a
+    # web-UI upload).
+    m_git_before_patch.reset_mock()
+    m_get_base_ref.return_value = None
+    git.args = Args(apply_to="here")
     with pytest.raises(exceptions.Error):
         patch.patch(git, git.args)
-    m_git_rebase_node.side_effect = None
+    m_git_before_patch.assert_called_once()
+    m_git_discard_patch_attempt.assert_not_called()
+    m_git_apply_patch.side_effect = None
+    m_get_base_ref.return_value = "sha111"
 
     # ########## no commit info in diffs
     m_get_diffs.return_value = {
@@ -617,18 +669,23 @@ def test_patch(
     ]
     m_print.assert_has_calls((mock.call("raw2"), mock.call("raw1")))
 
-    # node not found, and no landed revision to fall back to either
+    # Optimistic apply fails; the base can't be resolved to a public commit
+    # either (not found, even after fetching), and there's no landed
+    # revision to fall back to -- the fallback itself raises.
     m_get_revisions.side_effect = None
+    m_git_apply_patch.side_effect = exceptions.CommandError("boom")
     m_git_check_node.side_effect = exceptions.NotFoundError
     m_git_get_latest_landing_node.return_value = None
-    git.args = Args(apply_to=node)
+    git.args = Args(apply_to="here")
     with pytest.raises(exceptions.Error) as e:
         patch.patch(git, git.args)
     m_git_fetch_from_upstream.assert_called_once()
+    m_git_apply_patch.side_effect = None
+    m_git_check_node.side_effect = lambda n: n
 
-    assert "could not be resolved to a public commit" in str(
+    assert "Patch failed to apply" in str(
         e.value
-    ), "An unresolvable base node should be explained in the error."
+    ), "The original apply failure should be the one reported."
 
     # successors
     m_get_revisions.reset_mock()

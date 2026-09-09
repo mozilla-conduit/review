@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import uuid
+from contextlib import suppress
 from datetime import datetime
 from functools import lru_cache
 from typing import (
@@ -85,6 +86,8 @@ class Git(Repository):
         self.revset: Optional[Tuple[str, str]] = None
         # Set by `before_submit` to the branch to return to afterwards.
         self.branch = ""
+        # Name of the branch created by `before_patch`, if any.
+        self.patch_branch_name = None
 
     @property
     def required_revset(self) -> Tuple[str, str]:
@@ -586,7 +589,9 @@ class Git(Repository):
             name - name of the branch to be created
         """
         is_detached_head = (self.args.no_branch or not config.create_branch) and node
-        if is_detached_head and not self.args.yes:
+        # HEAD is already detached when applying at another base after a failed
+        # attempt, so there's nothing left to ask about the second time around.
+        if is_detached_head and not self.args.yes and not self._is_detached_head():
             res = prompt(
                 "Switching to the 'detached HEAD' state. Do you wish to continue?",
                 ["Yes", "No"],
@@ -620,6 +625,19 @@ class Git(Repository):
 
             self.git_call(["checkout", "-q", "-b", branch_name])
             logger.info("Created branch %s", branch_name)
+            self.patch_branch_name = branch_name
+
+    def discard_patch_attempt(self, node: str):
+        """Undo a failed patch attempt, returning the repository to `node`.
+
+        Deletes the branch `before_patch` created, leaving the commits of the
+        failed attempt unreachable rather than named by a branch nobody asked
+        for.
+        """
+        self.checkout(node)
+        if self.patch_branch_name:
+            self.git_call(["branch", "--delete", "--force", self.patch_branch_name])
+            self.patch_branch_name = None
 
     def apply_patch(
         self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
@@ -652,6 +670,10 @@ class Git(Repository):
             return self._get_current_head() == branch
         except (CommandError, IndexError):
             return False
+
+    def _is_detached_head(self) -> bool:
+        """Return `True` if HEAD doesn't point at a branch."""
+        return self.git_out_text(["rev-parse", "--abbrev-ref", "HEAD"]) == "HEAD"
 
     def get_current_node(self) -> str:
         """Return the node currently checked out in the working directory."""
@@ -744,6 +766,13 @@ class Git(Repository):
 
     def rebase_node(self, source_node: str, dest_node: str):
         self._rebase(dest_node, source_node)
+
+    def abort_rebase(self):
+        """Abort the rebase left in progress by a conflict."""
+        # A rebase that failed before starting (eg. on invalid arguments)
+        # leaves nothing to abort.
+        with suppress(CommandError):
+            self.git_call(["rebase", "--abort"])
 
     def is_descendant(self, node: str) -> bool:
         try:

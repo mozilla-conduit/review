@@ -235,8 +235,21 @@ class Repository(object):
     def rebase_node(self, source_node: str, dest_node: str):
         """Rebase the commits after `source_node`, up to the current tip, onto `dest_node`."""
 
+    def abort_rebase(self):
+        """Abort an interrupted rebase, if the VCS leaves one behind on failure."""
+
     def before_patch(self, node, name):
         """Prepare repository to apply the patches."""
+
+    def discard_patch_attempt(self, node: str):
+        """Undo a failed patch attempt, returning the repository to `node`.
+
+        Drops the branch/bookmark `before_patch` created, and the commits
+        applied since, so applying at another base starts from a clean state.
+        VCSs that don't implement this leave the failed attempt in place: the
+        next attempt gets a fresh branch/bookmark name, and the commits are
+        collected by the VCS as usual.
+        """
 
     def apply_patch(
         self, diff: str, body: str, author: Optional[str], author_date: Optional[int]

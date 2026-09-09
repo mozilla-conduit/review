@@ -843,6 +843,13 @@ class Mercurial(Repository):
             return
         self.hg(["rebase", "-r", revset, "-d", dest_node])
 
+    def abort_rebase(self):
+        """Abort the rebase left in progress by a conflict."""
+        # A rebase that failed before starting (eg. on invalid arguments)
+        # leaves nothing to abort.
+        with suppress(CommandError):
+            self.hg(["rebase", "--abort"])
+
     def fetch_from_upstream(self):
         """Fetch latest changes from upstream remote without merging."""
         try:

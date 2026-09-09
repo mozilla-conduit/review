@@ -19,6 +19,7 @@ def jj():
     """
     jj = object.__new__(Jujutsu)
     jj._Jujutsu__git_repo = mock.Mock()  # type: ignore
+    jj._Jujutsu__patch_branch_name = ""  # type: ignore
     return jj
 
 
@@ -36,6 +37,24 @@ def test_delegates_to_git(jj, method, args, kwargs, return_value):
 
     assert getattr(jj, method)(*args, **kwargs) == return_value
     git_method.assert_called_once_with(*args, **kwargs)
+
+
+@mock.patch("mozphab.jujutsu.check_call")
+def test_discard_patch_attempt_abandons_bookmark_and_commits(m_check_call, jj):
+    jj._Jujutsu__patch_branch_name = "phab-D1"
+
+    jj.discard_patch_attempt("sha111")
+    assert m_check_call.call_args_list == [
+        mock.call(["jj", "bookmark", "delete", "--quiet", "phab-D1"]),
+        mock.call(["jj", "abandon", "--quiet", "sha111..@"]),
+    ]
+    assert jj._Jujutsu__patch_branch_name == ""
+
+
+@mock.patch("mozphab.jujutsu.check_call")
+def test_discard_patch_attempt_without_a_bookmark(m_check_call, jj):
+    jj.discard_patch_attempt("sha111")
+    m_check_call.assert_called_once_with(["jj", "abandon", "--quiet", "sha111..@"])
 
 
 @mock.patch.object(Jujutsu, "_Jujutsu__cli_log_text")

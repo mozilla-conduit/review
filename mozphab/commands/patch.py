@@ -65,7 +65,7 @@ def find_public_base(repo: Repository, base_node: str) -> Optional[str]:
 
 def resolve_base_node(
     repo: Repository, base_node: str, before: Optional[int] = None
-) -> str:
+) -> Optional[str]:
     """Resolve the commit to apply a patch to when using the rebase strategy.
 
     Uses the diff's original base commit if it's public (landed). The base
@@ -74,6 +74,9 @@ def resolve_base_node(
     known to have landed on mozilla-central at or before `before` (the
     patch's own timestamp), so we don't rebase onto changes that landed
     after the patch was written.
+
+    Returns `None` if neither can be found, eg. in a repository that has no
+    autoland-to-mozilla-central merges at all.
     """
     resolved = find_public_base(repo, base_node)
     if resolved is not None:
@@ -83,11 +86,12 @@ def resolve_base_node(
         landing_node = repo.get_latest_landing_node(before=before)
 
     if not landing_node:
-        raise Error(
-            "Base revision %s could not be resolved to a public commit, "
-            "and no landed mozilla-central revision could be found to "
-            "rebase onto." % short_node(base_node)
+        logger.warning(
+            "Base revision %s could not be resolved to a public commit, and no "
+            "landed mozilla-central revision could be found to rebase onto.",
+            short_node(base_node),
         )
+        return None
 
     logger.warning(
         "Base revision %s is not public (it may belong to another, unlanded "
@@ -96,6 +100,20 @@ def resolve_base_node(
         short_node(landing_node),
     )
     return landing_node
+
+
+def get_diff_author_and_date(diff: dict) -> tuple[Optional[str], Optional[int]]:
+    """Return the author (as `name <email>`) and creation date of `diff`."""
+    try:
+        diff_commits = diff["attachments"]["commits"]["commits"]
+        author = "%s <%s>" % (
+            diff_commits[0]["author"]["name"],
+            diff_commits[0]["author"]["email"],
+        )
+    except (IndexError, KeyError):
+        author = None
+
+    return author, diff.get("fields", {}).get("dateCreated")
 
 
 def get_diff_by_id(diff_id: int) -> tuple[str, dict]:
@@ -265,6 +283,34 @@ def _fetch_and_filter_related(
     return ancestor_phids, children_phids, related_by_phid
 
 
+def _apply_commits(
+    repo: Repository, revs: list[dict], diffs: dict, raw_diffs: dict
+) -> None:
+    """Apply each diff in `revs` as a new commit on the currently checked out base.
+
+    Raises Error if a patch fails to apply.
+    """
+    for rev in revs:
+        body = prepare_body(
+            rev["fields"]["title"],
+            rev["fields"]["summary"],
+            rev["id"],
+            repo.phab_url,
+        )
+        diff = diffs[rev["fields"]["diffPHID"]]
+        raw = raw_diffs[rev["id"]]
+        author, date_created = get_diff_author_and_date(diff)
+
+        try:
+            with wait_message("Applying D%s.." % rev["id"]):
+                repo.apply_patch(raw, body, author, date_created)
+        except CommandError:
+            raise Error("Patch failed to apply")
+
+        if rev["id"] != revs[-1]["id"]:
+            logger.info("D%s applied", rev["id"])
+
+
 def patch(repo: Repository, args: argparse.Namespace):
     """Patch repository from Phabricator's revisions.
 
@@ -275,25 +321,29 @@ def patch(repo: Repository, args: argparse.Namespace):
     * apply the patches and commit the changes
 
     args.no_commit or config.create_commit is False - no commit will be created after
-        applying diffs; patches are applied directly at the target, without
-        resolving a public base or rebasing.
+        applying diffs; patches are applied directly at the target, without any of
+        the base-resolution or rebasing described below.
     args.apply_to - <base|here|NODE> (default: base)
         base - apply on top of the diff's own base commit
         here - apply on top of the current commit/checkout
         NODE - apply on top of the given commit
     args.raw is True - only print out the diffs (--force doesn't change anything)
 
-    When creating commits, the patch always applies at the diff's original base
-    commit first (resolved to the nearest public ancestor, or the latest landed
-    revision if the base itself isn't public), then rebases onto the target
-    above, if different.
+    The patch is applied directly at the target above whenever that's possible.
+    When creating commits and it isn't -- the diff's base commit is missing
+    locally (eg. it only exists as part of another, unlanded patch stack), or the
+    patch doesn't apply at the target -- moz-phab applies at the closest public
+    (landed) base instead, then rebases onto the target. This avoids failing
+    outright, at the cost of a rebase in that case.
 
     Raises:
     * Error if uncommitted changes are present in the working tree
     * Error if Phabricator revision is not found
     * Error if `--apply-to base` and no base commit found in the first diff
-    * Error if the base commit can't be resolved to a public commit and no
-      landed revision could be found to rebase onto
+    * Error if `--apply-to base`, the base commit isn't in the repository, and no
+      public commit could be resolved to apply at instead
+    * Error if the patch doesn't apply, and applying at a public base isn't an
+      option or doesn't help either
     * Error if `--diff-id` does not belong to any revision in the stack
     """
     # The Phabricator ping, the VCS check, and the worktree-cleanness check
@@ -433,54 +483,68 @@ def patch(repo: Repository, args: argparse.Namespace):
                     "Use `--no-commit` to patch the working tree." % rev["id"]
                 )
 
-    base_node = ""
     target_node = ""
+    branch_name = None
+    no_commit = args.no_commit or not config.create_commit
+
+    base_diff = diffs[revs[0]["fields"]["diffPHID"]]
+    diff_base_node = None
 
     if not args.raw:
         args.apply_to = args.apply_to or config.apply_patch_to
-        no_commit = args.no_commit or not config.create_commit
-
-        base_diff = diffs[revs[0]["fields"]["diffPHID"]]
         diff_base_node = get_base_ref(base_diff)
 
-        def resolve_target() -> str:
-            """Where the patch should end up, per `--apply-to`."""
-            if args.apply_to == "base":
-                if not diff_base_node:
+        if args.apply_to == "base":
+            if not diff_base_node:
+                raise Error(
+                    "Base commit not found in diff. "
+                    "Use `--apply-to here` to patch current commit."
+                )
+
+            # The diff's base commit isn't necessarily in the repository: it
+            # can belong to another, unlanded patch stack, or simply have
+            # never been fetched. Resolve it here, so `before_patch` is never
+            # handed a node that can't be checked out.
+            try:
+                with wait_message("Checking base %s.." % short_node(diff_base_node)):
+                    target_node = repo.check_node(diff_base_node)
+            except NotFoundError as e:
+                if no_commit:
+                    # Nothing is committed, so there's nothing that could be
+                    # rebased from a different base later on.
+                    msg = "Unknown revision: %s" % short_node(diff_base_node)
+                    if str(e):
+                        msg += "\n%s" % str(e)
+                    msg += "\nUse --apply-to to set the base commit."
+                    raise Error(msg)
+
+                # Apply at the closest public (landed) commit instead. This is
+                # also where the patch stays: `--apply-to base` has no
+                # separate target to rebase onto.
+                target_node = resolve_base_node(
+                    repo, diff_base_node, before=get_patch_date(base_diff)
+                )
+                if not target_node:
                     raise Error(
-                        "Base commit not found in diff. "
-                        "Use `--apply-to here` to patch current commit."
+                        "Unable to find a commit to apply D%s at.\n"
+                        "Use `--apply-to here` to patch the current commit."
+                        % args.revision_id
                     )
-                return diff_base_node
-            if args.apply_to == "here":
-                return repo.get_current_node()
+        elif args.apply_to == "here":
+            target_node = repo.get_current_node()
+        else:
             try:
                 with wait_message("Checking target %s.." % short_node(args.apply_to)):
-                    return repo.check_node(args.apply_to)
+                    target_node = repo.check_node(args.apply_to)
             except NotFoundError as e:
                 msg = "Unknown target revision: %s" % short_node(args.apply_to)
                 if str(e):
                     msg += "\n%s" % str(e)
                 raise Error(msg)
 
-        if no_commit or not diff_base_node:
-            # No commits are created, so there's nothing to rebase and no
-            # safe way to retry at a different base on a dirty working
-            # tree; or there's no base ref to resolve in the first place
-            # (eg. an older diff, or a web-UI upload). Apply directly at
-            # the target.
-            base_node = resolve_target()
-        else:
-            # Always apply to the diff's original base first, then rebase
-            # to target.
-            base_node = resolve_base_node(
-                repo, diff_base_node, before=get_patch_date(base_diff)
-            )
-            if args.apply_to != "base":
-                target_node = resolve_target()
-
         branch_name = resolve_branch_name(args, config, rev_id)
-        repo.before_patch(base_node, branch_name)
+
+        repo.before_patch(target_node, branch_name)
 
     # Fetch raw diffs in parallel.
     raw_diffs = {}
@@ -501,62 +565,77 @@ def patch(repo: Repository, args: argparse.Namespace):
                 executor.shutdown(wait=False, cancel_futures=True)
                 raise
 
-    for rev in revs:
-        # Prepare the body using just the data from Phabricator
-        body = prepare_body(
-            rev["fields"]["title"],
-            rev["fields"]["summary"],
-            rev["id"],
-            repo.phab_url,
-        )
-        diff = diffs[rev["fields"]["diffPHID"]]
-        raw = raw_diffs[rev["id"]]
-
-        if args.no_commit or not config.create_commit:
+    if no_commit:
+        for rev in revs:
+            raw = raw_diffs[rev["id"]]
             with wait_message("Applying D%s.." % rev["id"]):
                 apply_patch(raw, repo.path)
-        else:
-            try:
-                diff_commits = diff["attachments"]["commits"]["commits"]
-                author = "%s <%s>" % (
-                    diff_commits[0]["author"]["name"],
-                    diff_commits[0]["author"]["email"],
-                )
-            except (IndexError, KeyError):
-                author = None
-            try:
-                date_created = diff["fields"]["dateCreated"]
-            except KeyError:
-                date_created = None
+            if rev["id"] != revs[-1]["id"]:
+                logger.info("D%s applied", rev["id"])
 
-            if args.raw:
-                # print rather than use logger.info; there's no need for this
-                # to be in our logs.
-                print(repo.format_patch(raw, body, author, date_created))
+    elif args.raw:
+        for rev in revs:
+            diff = diffs[rev["fields"]["diffPHID"]]
+            raw = raw_diffs[rev["id"]]
+            body = prepare_body(
+                rev["fields"]["title"],
+                rev["fields"]["summary"],
+                rev["id"],
+                repo.phab_url,
+            )
+            author, date_created = get_diff_author_and_date(diff)
 
-            else:
-                try:
-                    with wait_message("Applying D%s.." % rev["id"]):
-                        repo.apply_patch(raw, body, author, date_created)
-                except CommandError:
-                    raise Error("Patch failed to apply")
+            # print rather than use logger.info; there's no need for this
+            # to be in our logs.
+            print(repo.format_patch(raw, body, author, date_created))
 
-        if rev["id"] != revs[-1]["id"]:
-            logger.info("D%s applied", rev["id"])
+            if rev["id"] != revs[-1]["id"]:
+                logger.info("D%s applied", rev["id"])
 
-    logger.warning("D%s applied", rev_id)
-
-    # If the target is different from the base, rebase the applied patches
-    # (base_node..HEAD) onto it. Nothing to do if they're already the same
-    # commit (eg. `--apply-to here` right after applying at that base).
-    if not args.raw and target_node and target_node != base_node:
+    else:
+        # Applying at the target is cheap, and avoids rebuilds from files
+        # touched only by a rebase, but it fails when the target and the
+        # diff's base have diverged.
         try:
-            with wait_message("Rebasing to %s.." % short_node(target_node)):
-                repo.rebase_node(base_node, target_node)
+            _apply_commits(repo, revs, diffs, raw_diffs)
+        except Error:
+            base_node = (
+                resolve_base_node(
+                    repo, diff_base_node, before=get_patch_date(base_diff)
+                )
+                if args.apply_to != "base" and diff_base_node
+                else None
+            )
+            if base_node is None or base_node == target_node:
+                # Nothing else to try: the patch was already applied at the
+                # diff's own base, the diff has no base ref (eg. an older
+                # diff, or a web-UI upload), or no public commit could be
+                # resolved. The original failure is the useful one.
+                raise
+
+            logger.warning(
+                "Failed to apply at %s; retrying at %s, then rebasing.",
+                short_node(target_node),
+                short_node(base_node),
+            )
+
+            repo.discard_patch_attempt(target_node)
+            repo.before_patch(base_node, branch_name)
+            _apply_commits(repo, revs, diffs, raw_diffs)
+
+            try:
+                with wait_message("Rebasing to %s.." % short_node(target_node)):
+                    repo.rebase_node(base_node, target_node)
+            except CommandError:
+                repo.abort_rebase()
+                raise Error(
+                    "Failed to rebase the patches to %s; they have been left "
+                    "applied at %s." % (short_node(target_node), short_node(base_node))
+                )
 
             logger.info("Successfully rebased patches to %s", short_node(target_node))
-        except CommandError:
-            raise Error("Failed to rebase patches to target revision")
+
+    logger.warning("D%s applied", rev_id)
 
 
 def check_revision_id(value: str) -> int:
