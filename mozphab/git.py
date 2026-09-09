@@ -39,6 +39,24 @@ from .telemetry import telemetry
 
 NULL_SHA1 = "0" * 40
 
+# Commit messages used by the bots that merge autoland into mozilla-central.
+# The naming changed when the repos were renamed from mozilla-central/autoland
+# to firefox-main/firefox-autoland.
+#
+# We match on these specific messages rather than walking back for the first
+# multi-parent commit: most merges in mozilla-central's history are the reverse
+# direction ("Merge mozilla-central to autoland"), and the remote branches we
+# search also carry release-branch merges ("Update beta to main"), so a generic
+# "first merge commit" walk usually finds one of those instead.
+#
+# Only the start of the subject is matched: landings until 2025-04 used
+# "Merge autoland to mozilla-central. a=merge" and other suffixed variants,
+# which are the bulk of the landings in mozilla-central's history.
+LANDING_MERGE_MESSAGE_PATTERNS = (
+    r"^Merge autoland to mozilla-central",
+    r"^Merge firefox-autoland to firefox-main",
+)
+
 
 class Git(Repository):
     def __init__(self, path: str, bare_path: Optional[str] = None):
@@ -281,6 +299,26 @@ class Git(Repository):
             return ref
 
         return None
+
+    def is_public(self, node: str) -> bool:
+        """Return `True` if `node` is an ancestor of an official remote branch."""
+        remote_args = self.get_base_remote_args()
+        unpublished = self.git_out(["rev-list", "-1", node, "--not", *remote_args])
+        return not unpublished
+
+    def get_latest_landing_node(self, before: Optional[int] = None) -> Optional[str]:
+        """Return the most recent autoland-to-mozilla-central merge on a remote."""
+        remote_args = self.get_base_remote_args()
+        grep_args = []
+        for pattern in LANDING_MERGE_MESSAGE_PATTERNS:
+            grep_args += ["--grep", pattern]
+
+        before_args = [f"--before=@{before}"] if before else []
+
+        node = self.git_out_text(
+            ["log", *remote_args, *before_args, "-1", "-E", *grep_args, "--format=%H"]
+        )
+        return node or None
 
     def set_args(self, args: argparse.Namespace):
         """Store moz-phab command line args and set the revset."""
@@ -615,8 +653,8 @@ class Git(Repository):
         except (CommandError, IndexError):
             return False
 
-    def _get_current_hash(self) -> str:
-        """Return the SHA1 of the current commit."""
+    def get_current_node(self) -> str:
+        """Return the node currently checked out in the working directory."""
         return self._revparse("HEAD")
 
     def _revparse(self, branch: str) -> str:
@@ -704,8 +742,8 @@ class Git(Repository):
             )
             stack_commit.node = new_parent_sha
 
-    def rebase_commit(self, source_commit: Commit, dest_commit: Commit):
-        self._rebase(dest_commit.node, source_commit.node)
+    def rebase_node(self, source_node: str, dest_node: str):
+        self._rebase(dest_node, source_node)
 
     def is_descendant(self, node: str) -> bool:
         try:
@@ -740,6 +778,13 @@ class Git(Repository):
             if self.is_node(unified_head):
                 return unified_head
 
+    def fetch_from_upstream(self):
+        """Fetch latest changes from upstream remote without merging."""
+        try:
+            self.git_call(["fetch"] + self.get_base_remotes())
+        except CommandError as e:
+            raise Error(f"Failed to fetch from upstream: {str(e)}")
+
     def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
         # Branch name for the uplift.
         mozphab_uplift_branch = f"{self.branch}_uplift"
@@ -762,7 +807,7 @@ class Git(Repository):
             ) from exc
 
         # Update revset.
-        current = self._get_current_hash()
+        current = self.get_current_node()
         base_rev = f"{current}~{len(commits)}"
         self.revset = self._revparse(base_rev), current
 

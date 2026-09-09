@@ -186,6 +186,25 @@ class Repository(object):
         """
         raise NotImplementedError()
 
+    def is_public(self, node: str) -> bool:
+        """Return `True` if `node` has landed on an official remote/branch.
+
+        A node that only exists locally (eg. part of another, unlanded
+        patch stack) is not public, even if it's present in the repository.
+        """
+        raise NotImplementedError()
+
+    def get_latest_landing_node(self, before: Optional[int] = None) -> Optional[str]:
+        """Return the most recent node known to have landed on mozilla-central.
+
+        Used as a rebase target when a patch's original base commit isn't a
+        public node, eg. because it's part of a different, unlanded stack.
+        If `before` (a Unix timestamp) is given, only consider nodes that
+        landed at or before that time. Returns `None` if no such node can be
+        determined.
+        """
+        raise NotImplementedError()
+
     def checkout(self, node: str):
         """Checkout/Update to specified node."""
 
@@ -199,6 +218,10 @@ class Repository(object):
         """Return `True` if the repository revset is descendant from `node`."""
         raise NotImplementedError()
 
+    def get_current_node(self) -> str:
+        """Return the node currently checked out in the working directory."""
+        raise NotImplementedError()
+
     def get_repo_head_branch(self) -> Optional[str]:
         """Return the expected branch/head for the current Phabricator repo.
 
@@ -209,8 +232,8 @@ class Repository(object):
         """Uplift the repo's revset onto `dest` and returns the refreshed `commits`."""
         raise NotImplementedError()
 
-    def rebase_commit(self, source_commit: Commit, dest_commit: Commit):
-        """Rebase source onto destination."""
+    def rebase_node(self, source_node: str, dest_node: str):
+        """Rebase the commits after `source_node`, up to the current tip, onto `dest_node`."""
 
     def before_patch(self, node, name):
         """Prepare repository to apply the patches."""
@@ -225,6 +248,9 @@ class Repository(object):
     ) -> str:
         """Format a patch appropriate for importing."""
         raise NotImplementedError()
+
+    def fetch_from_upstream(self):
+        """Fetch latest changes from upstream remote without merging."""
 
     def check_commits_for_submit(self, commits: List[Commit]):
         """Validate the list of commits are okay to submit."""

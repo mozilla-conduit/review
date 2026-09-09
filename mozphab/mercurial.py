@@ -14,6 +14,7 @@ import time
 import uuid
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import (
     Any,
@@ -58,6 +59,15 @@ HG_FLAGS_TO_FILE_MODE = {
     "x": "100755",
 }
 DEFAULT_FILE_MODE = "100644"
+
+# Commit messages used by the bots that merge autoland into mozilla-central.
+# The naming changed when the repos were renamed from mozilla-central/autoland
+# to firefox-main/firefox-autoland. Only the start of the description is
+# matched: landings until 2025-04 used "Merge autoland to mozilla-central.
+# a=merge" and other suffixed variants.
+LANDING_MERGE_DESC_REVSET = (
+    "re:^Merge (autoland to mozilla-central|firefox-autoland to firefox-main)"
+)
 
 
 @dataclass(frozen=True)
@@ -572,6 +582,31 @@ class Mercurial(Repository):
 
         return node
 
+    def is_public(self, node: str) -> bool:
+        """Return `True` if `node` is a public (landed) commit."""
+        return self.hg_log_text(node, select="phase") == "public"
+
+    def get_latest_landing_node(self, before: Optional[int] = None) -> Optional[str]:
+        """Return the most recent autoland-to-mozilla-central merge in the repo."""
+        branch = self.get_repo_head_branch()
+        scope = f"ancestors({branch})" if branch else "public()"
+        if before:
+            before_str = datetime.fromtimestamp(before, tz=timezone.utc).strftime(
+                "%Y-%m-%d %H:%M:%S+0000"
+            )
+            scope = f"{scope} and date('<{before_str}')"
+        revset = f"last({scope} and desc('{LANDING_MERGE_DESC_REVSET}'))"
+        try:
+            return self.hg_log_text(revset) or None
+        except CommandError:
+            # `branch` may not be present locally (eg. this checkout never
+            # pulled it), which makes the revset invalid.
+            return None
+
+    def get_current_node(self) -> str:
+        """Return the node currently checked out in the working directory."""
+        return self.hg_log_text(".")
+
     def checkout(self, node: str):
         self.hg(["update", "--quiet", node])
 
@@ -787,6 +822,34 @@ class Mercurial(Repository):
         self.hg(
             ["rebase"] + ["--source", source_commit.node] + ["--dest", dest_commit.node]
         )
+
+    def rebase_node(self, source_node: str, dest_node: str):
+        # `--source`/`--base` both move `source_node` itself along with its
+        # descendants. We only want the descendants (source_node is a shared
+        # ancestor, eg. a public commit, that must stay put), so select the
+        # exact range with a revset instead: everything reachable from the
+        # working copy but not from `source_node`.
+        revset = f"({source_node}::.)-{source_node}"
+        if not self.hg_log_text(revset):
+            # Nothing to move.
+            return
+
+        # The range's parent may already be `dest_node` (possibly spelled
+        # differently, eg. a revision number vs. its full node hash), in
+        # which case there's nothing to move either; `hg rebase` would
+        # error with "nothing to rebase" instead of no-oping like `git
+        # rebase` does.
+        if not self.hg_log_text(f"parents(min({revset})) - {dest_node}"):
+            return
+        self.hg(["rebase", "-r", revset, "-d", dest_node])
+
+    def fetch_from_upstream(self):
+        """Fetch latest changes from upstream remote without merging."""
+        try:
+            # Pull without updating working directory
+            self.hg(["pull"])
+        except CommandError as e:
+            raise Error(f"Failed to fetch from upstream: {str(e)}")
 
     def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
         try:

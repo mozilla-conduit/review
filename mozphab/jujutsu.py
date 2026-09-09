@@ -33,7 +33,8 @@ from .subprocess_wrapper import (
 
 
 class Jujutsu(Repository):
-    MIN_VERSION = Version("0.33.0")
+    # 0.36.0 is required for `jj rebase --onto`, used by `rebase_node`.
+    MIN_VERSION = Version("0.36.0")
 
     @classmethod
     def is_repo(cls, path: str) -> bool:
@@ -352,6 +353,24 @@ class Jujutsu(Repository):
         """Return a Mercurial node if Cinnabar is required."""
         return self.__git_repo.get_public_node(node)
 
+    def is_public(self, node: str) -> bool:
+        """Return `True` if `node` is an ancestor of an official remote branch."""
+        return self.__git_repo.is_public(node)
+
+    def get_latest_landing_node(self, before: Optional[int] = None) -> Optional[str]:
+        """Return the most recent autoland-to-mozilla-central merge on a remote."""
+        return self.__git_repo.get_latest_landing_node(before=before)
+
+    def get_current_node(self) -> str:
+        """Return the node currently checked out in the working directory."""
+        return self.__cli_log_text(template='commit_id ++ "\\n"', revset="@")
+
+    def rebase_node(self, source_node: str, dest_node: str):
+        # `source_node` is a shared ancestor (eg. a public commit) that must
+        # stay put, so select the exact range to move with a revset instead
+        # of `--source`/`--branch`, which would also move `source_node`.
+        check_call(["jj", "rebase", "-r", f"{source_node}..@", "--onto", dest_node])
+
     # TODO: Functionality to make `local_uplift_if_possible` work?
 
     def is_worktree_clean(self) -> bool:
@@ -467,6 +486,13 @@ class Jujutsu(Repository):
         self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
     ) -> str:
         return diff
+
+    def fetch_from_upstream(self):
+        """Fetch latest changes from upstream remote without merging."""
+        try:
+            check_call(["jj", "git", "fetch"])
+        except CommandError as e:
+            raise Error(f"Failed to fetch from upstream: {str(e)}")
 
     # ----
     # Methods private to this abstraction.

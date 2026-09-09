@@ -132,6 +132,70 @@ def test_get_base_remote_args_empty(mock_get_base_remotes, git):
 
 
 @mock.patch("mozphab.git.Git.git_out")
+@mock.patch("mozphab.git.Git.get_base_remote_args")
+def test_is_public(mock_get_base_remote_args, m_git_out, git):
+    mock_get_base_remote_args.return_value = ["--remotes=origin"]
+
+    m_git_out.return_value = []
+    assert git.is_public("sha111") is True
+
+    m_git_out.return_value = ["sha111"]
+    assert git.is_public("sha111") is False
+
+    m_git_out.assert_called_with(
+        ["rev-list", "-1", "sha111", "--not", "--remotes=origin"]
+    )
+
+
+@mock.patch("mozphab.git.Git.git_out_text")
+@mock.patch("mozphab.git.Git.get_base_remote_args")
+def test_get_latest_landing_node(mock_get_base_remote_args, m_git_out_text, git):
+    mock_get_base_remote_args.return_value = ["--remotes=origin"]
+
+    m_git_out_text.return_value = "sha222"
+    assert git.get_latest_landing_node() == "sha222"
+    m_git_out_text.assert_called_with(
+        [
+            "log",
+            "--remotes=origin",
+            "-1",
+            "-E",
+            "--grep",
+            r"^Merge autoland to mozilla-central",
+            "--grep",
+            r"^Merge firefox-autoland to firefox-main",
+            "--format=%H",
+        ]
+    )
+
+    m_git_out_text.return_value = ""
+    assert git.get_latest_landing_node() is None
+
+
+@mock.patch("mozphab.git.Git.git_out_text")
+@mock.patch("mozphab.git.Git.get_base_remote_args")
+def test_get_latest_landing_node_before(mock_get_base_remote_args, m_git_out_text, git):
+    mock_get_base_remote_args.return_value = ["--remotes=origin"]
+    m_git_out_text.return_value = "sha222"
+
+    assert git.get_latest_landing_node(before=1547806078) == "sha222"
+    m_git_out_text.assert_called_with(
+        [
+            "log",
+            "--remotes=origin",
+            "--before=@1547806078",
+            "-1",
+            "-E",
+            "--grep",
+            r"^Merge autoland to mozilla-central",
+            "--grep",
+            r"^Merge firefox-autoland to firefox-main",
+            "--format=%H",
+        ]
+    )
+
+
+@mock.patch("mozphab.git.Git.git_out")
 def test_branches_to_rebase(m_git_git_out, git):
     git_find = git._find_branches_to_rebase
 

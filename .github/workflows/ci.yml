@@ -41,10 +41,10 @@ jobs:
           git config --global user.email "moz-phab-tests@example.com"
           git config --global user.name "moz-phab tests"
           # Install and configure jj.
-          JJ_VERSION="0.33.0"
+          JJ_VERSION="0.36.0"
           JJ_PLATFORM="x86_64-unknown-linux-musl"
           JJ_FILENAME="jj-v${JJ_VERSION}-${JJ_PLATFORM}.tar.gz"
-          JJ_EXPECTED_SHA="2703e13b3d5623aa67e19358b257fe5a761faa883bd0bd716d0b1c801a214093"
+          JJ_EXPECTED_SHA="b9526754d35ee643dd7f91a927d0e5650563e1092ffa599765624a3f212277ab"
           curl -LO "https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/${JJ_FILENAME}"
           echo "${JJ_EXPECTED_SHA}  ${JJ_FILENAME}" | sha256sum -c
           tar -xzf "${JJ_FILENAME}"
