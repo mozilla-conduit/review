@@ -588,10 +588,17 @@ class Git(Repository):
             node - SHA1 of the base commit
             name - name of the branch to be created
         """
-        is_detached_head = (self.args.no_branch or not config.create_branch) and node
+        # Checking out the commit that is already checked out is a no-op that
+        # detaches HEAD from the branch it's on, so don't (eg. `--apply-to
+        # here`, or a target that resolves to the current commit).
+        needs_checkout = bool(node) and self._revparse(node) != self.get_current_node()
+
+        no_new_branch = self.args.no_branch or not config.create_branch
+        is_detached_head = self._is_detached_head()
+        will_detach_head = no_new_branch and needs_checkout
         # HEAD is already detached when applying at another base after a failed
         # attempt, so there's nothing left to ask about the second time around.
-        if is_detached_head and not self.args.yes and not self._is_detached_head():
+        if will_detach_head and not self.args.yes and not is_detached_head:
             res = prompt(
                 "Switching to the 'detached HEAD' state. Do you wish to continue?",
                 ["Yes", "No"],
@@ -599,17 +606,19 @@ class Git(Repository):
             if res == "No":
                 sys.exit(1)
 
-        if is_detached_head and self.args.yes:
+        if will_detach_head and self.args.yes:
             logger.warning("Switching to the 'detached HEAD' state.")
 
-        if is_detached_head:
+        # The commits end up on a detached HEAD either way, whether this call
+        # detaches it or it already was.
+        if no_new_branch and (will_detach_head or is_detached_head):
             logger.warning(
                 "If you want to create a new branch to retain created commits,\n"
                 "you may do so by calling `git checkout -b <new-branch-name>`"
             )
 
         # Checkout sha
-        if node:
+        if needs_checkout:
             with wait_message("Checking out %s.." % short_node(node)):
                 self.checkout(node)
             logger.info("Checked out %s", short_node(node))
@@ -634,10 +643,18 @@ class Git(Repository):
         failed attempt unreachable rather than named by a branch nobody asked
         for.
         """
-        self.checkout(node)
         if self.patch_branch_name:
+            self.checkout(node)
             self.git_call(["branch", "--delete", "--force", self.patch_branch_name])
             self.patch_branch_name = None
+        else:
+            # Without a branch of our own, the commits landed on whatever HEAD
+            # pointed at, which can be a branch `before_patch` left in place
+            # (`--apply-to here`), so move that back rather than just detaching.
+            self.git_call(["reset", "--hard", "--quiet", node])
+            # Detach at `node`: the next attempt applies at another base, and
+            # would otherwise prompt about detaching mid-operation.
+            self.checkout(node)
 
     def apply_patch(
         self, diff: str, body: str, author: Optional[str], author_date: Optional[int]

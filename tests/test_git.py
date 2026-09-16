@@ -466,6 +466,8 @@ def test_check_node(m_phab_vcs, m_git_is_node, m_hg2git, git):
     assert "git_aabbcc" == git.check_node(node)
 
 
+@mock.patch("mozphab.git.Git.get_current_node")
+@mock.patch("mozphab.git.Git._revparse")
 @mock.patch("mozphab.git.Git._is_detached_head")
 @mock.patch("mozphab.git.Git.git_out")
 @mock.patch("mozphab.git.Git.checkout")
@@ -479,10 +481,14 @@ def test_before_patch(
     m_checkout,
     m_git_out,
     m_is_detached_head,
+    m_revparse,
+    m_get_current_node,
     git,
     caplog: pytest.LogCaptureFixture,
 ):
     m_is_detached_head.return_value = False
+    m_revparse.side_effect = lambda node: node
+    m_get_current_node.return_value = "current_sha"
 
     class Args(argparse.Namespace):
         def __init__(
@@ -568,18 +574,42 @@ def test_before_patch(
     with pytest.raises(SystemExit):
         git.before_patch("abcdef", "name")
 
+    # The target is already checked out (eg. `--apply-to here`): checking it
+    # out again would only detach HEAD from the branch it's on.
+    m_prompt.reset_mock()
+    m_checkout.reset_mock()
+    caplog.clear()
+    git.args = Args(applyto="here", no_branch=True)
+    git.before_patch("current_sha", "name")
+    m_checkout.assert_not_called()
+    m_prompt.assert_not_called()
+    assert Contains("git checkout -b") not in caplog.messages
+
+    # Same, but HEAD is already detached: the commits still end up on a
+    # detached HEAD, so the hint about retaining them is still relevant.
+    caplog.clear()
+    m_is_detached_head.return_value = True
+    git.before_patch("current_sha", "name")
+    m_prompt.assert_not_called()
+    assert Contains("git checkout -b") in caplog.messages
+    m_is_detached_head.return_value = False
+
 
 @mock.patch("mozphab.git.Git.git_call")
 @mock.patch("mozphab.git.Git.checkout")
 def test_discard_patch_attempt(m_checkout, m_git_call, git):
-    # Nothing to delete when `before_patch` didn't create a branch.
+    # Without a branch of our own the commits may have advanced the branch
+    # HEAD is on, so reset it before detaching at `node`.
     git.patch_branch_name = None
     git.discard_patch_attempt("sha111")
+    m_git_call.assert_called_once_with(["reset", "--hard", "--quiet", "sha111"])
     m_checkout.assert_called_once_with("sha111")
-    m_git_call.assert_not_called()
 
+    m_git_call.reset_mock()
+    m_checkout.reset_mock()
     git.patch_branch_name = "phab-D1"
     git.discard_patch_attempt("sha111")
+    m_checkout.assert_called_once_with("sha111")
     m_git_call.assert_called_once_with(["branch", "--delete", "--force", "phab-D1"])
     assert git.patch_branch_name is None
 

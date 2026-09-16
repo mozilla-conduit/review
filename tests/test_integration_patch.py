@@ -265,6 +265,46 @@ def test_git_patch_with_commit(
     assert line == "\u0105"
 
 
+@mock.patch("mozphab.git.prompt")
+@mock.patch("mozphab.git.Git.is_public", return_value=True)
+@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+@mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
+@mock.patch("mozphab.conduit.ConduitAPI.call")
+def test_git_patch_here_no_branch(
+    m_call_conduit,
+    m_get_diffs,
+    m_get_revs,
+    m_git_is_public,
+    m_prompt,
+    in_process,
+    git_repo_path,
+):
+    """`--apply-to here --no-branch` applies on the current branch, as-is."""
+    branch = git_out("rev-parse", "--abbrev-ref", "HEAD").rstrip("\n")
+    diff_1 = copy.deepcopy(DIFF_1)
+    diff_1["fields"]["refs"][0]["identifier"] = git_out("rev-parse", "HEAD").rstrip(
+        "\n"
+    )
+    m_get_revs.return_value = [REV_1]
+    m_get_diffs.return_value = {"PHID-DIFF-1": diff_1}
+    m_call_conduit.side_effect = lambda method, args: {
+        "conduit.ping": {},
+        "diffusion.repository.search": {
+            "data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]
+        },
+        "differential.getrawdiff": PATCH_1_DIFF,
+    }[method]
+
+    mozphab.main(
+        ["patch", "D1", "--apply-to", "here", "--no-branch"], is_development=True
+    )
+
+    # No detached HEAD, hence nothing to ask about.
+    m_prompt.assert_not_called()
+    assert branch == git_out("rev-parse", "--abbrev-ref", "HEAD").rstrip("\n")
+    assert "title R1" in git_out("log", "-1", "--format=%s")
+
+
 @mock.patch("mozphab.mercurial.Mercurial.is_public", return_value=True)
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
