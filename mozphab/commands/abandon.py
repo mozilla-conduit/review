@@ -4,7 +4,6 @@
 
 import argparse
 import re
-from typing import List
 
 from mozphab.conduit import conduit
 from mozphab.exceptions import Error, NotFoundError
@@ -35,7 +34,7 @@ def check_revision_id(value: str) -> int:
     )
 
 
-def abandon_revisions(revision_ids: List[int], args: argparse.Namespace):
+def abandon_revisions(revision_ids: list[int], args: argparse.Namespace):
     """Abandon the specified revisions in Phabricator."""
 
     # Check connection to Phabricator

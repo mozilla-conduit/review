@@ -16,7 +16,6 @@ import ssl
 import subprocess
 import sys
 import traceback
-from typing import List
 
 from packaging.version import Version
 
@@ -84,7 +83,7 @@ def should_disable_logging(args: argparse.Namespace) -> bool:
     return False
 
 
-def main(argv: List[str], *, is_development: bool):
+def main(argv: list[str], *, is_development: bool):
     try:
         if not is_development and config.report_to_sentry:
             init_sentry()

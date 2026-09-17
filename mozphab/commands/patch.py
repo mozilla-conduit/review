@@ -5,7 +5,6 @@
 import argparse
 import concurrent.futures
 import re
-from typing import Optional
 
 from mozphab.conduit import conduit
 from mozphab.config import (
@@ -23,19 +22,19 @@ from mozphab.repository import (
 from mozphab.spinner import wait_message
 
 
-def get_base_ref(diff: dict) -> Optional[str]:
+def get_base_ref(diff: dict) -> str | None:
     """Given a diff, return the base revision SHA the diff was based on."""
     for ref in diff["fields"].get("refs", []):
         if ref["type"] == "base":
             return ref["identifier"]
 
 
-def get_patch_date(diff: dict) -> Optional[int]:
+def get_patch_date(diff: dict) -> int | None:
     """Return the diff's creation date, used as the rebase-fallback cutoff."""
     return diff["fields"].get("dateCreated")
 
 
-def find_public_base(repo: Repository, base_node: str) -> Optional[str]:
+def find_public_base(repo: Repository, base_node: str) -> str | None:
     """Try to resolve `base_node` to a public (landed) commit.
 
     Makes two symmetric attempts around a single fetch: check whether
@@ -64,8 +63,8 @@ def find_public_base(repo: Repository, base_node: str) -> Optional[str]:
 
 
 def resolve_base_node(
-    repo: Repository, base_node: str, before: Optional[int] = None
-) -> Optional[str]:
+    repo: Repository, base_node: str, before: int | None = None
+) -> str | None:
     """Resolve the commit to apply a patch to when using the rebase strategy.
 
     Uses the diff's original base commit if it's public (landed). The base
@@ -102,7 +101,7 @@ def resolve_base_node(
     return landing_node
 
 
-def get_diff_author_and_date(diff: dict) -> tuple[Optional[str], Optional[int]]:
+def get_diff_author_and_date(diff: dict) -> tuple[str | None, int | None]:
     """Return the author (as `name <email>`) and creation date of `diff`."""
     try:
         diff_commits = diff["attachments"]["commits"]["commits"]
@@ -161,7 +160,7 @@ def update_revision_with_new_diff(revs: list[dict], diff: dict) -> None:
 
 def resolve_branch_name(
     args: argparse.Namespace, config: Config, rev_id: str
-) -> Optional[str]:
+) -> str | None:
     """Resolve the branch name for the resulting patch.
 
     Use the value passed from `--name` on the CLI if possible. If

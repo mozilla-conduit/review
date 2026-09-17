@@ -5,10 +5,6 @@
 import re
 from typing import (
     Any,
-    Dict,
-    List,
-    Optional,
-    Tuple,
 )
 
 from .exceptions import Error
@@ -25,7 +21,7 @@ class Diff:
             old_len: int,
             new_off: int,
             new_len: int,
-            lines: List[str],
+            lines: list[str],
         ):
             """
             Hunk object, encapsulates hunk metadata and diff lines.
@@ -73,9 +69,9 @@ class Diff:
 
     class Change:
         def __init__(self, path: str):
-            self.old_mode: Optional[str] = None
-            self.cur_mode: Optional[str] = None
-            self.old_path: Optional[str] = None
+            self.old_mode: str | None = None
+            self.cur_mode: str | None = None
+            self.old_path: str | None = None
             self.cur_path = path
             self.away_paths = []
             self.kind = Diff.Kind("CHANGE")
@@ -96,8 +92,8 @@ class Diff:
             """Generate hunks from the provided git_diff output."""
 
             # Process each hunk
-            header: Optional[Tuple[int, int, int, int]] = None
-            lines: List[str] = []
+            header: tuple[int, int, int, int] | None = None
+            lines: list[str] = []
             in_header = True
             for line in git_diff.splitlines(keepends=True):
                 # Skip lines before the start of the first hunk header
@@ -123,7 +119,7 @@ class Diff:
 
         @staticmethod
         def build_hunk(
-            header: Tuple[int, int, int, int], lines: List[str]
+            header: tuple[int, int, int, int], lines: list[str]
         ) -> "Diff.Hunk":
             """Build a `Hunk` from a parsed `@@` header and the lines that follow it."""
             old_off, new_off, old_len, new_len = header
@@ -151,7 +147,7 @@ class Diff:
             else:
                 self.file_type = Diff.FileType("BINARY")
 
-        def to_conduit(self, node: str) -> Dict[str, Any]:
+        def to_conduit(self, node: str) -> dict[str, Any]:
             # Record upload information
             metadata = {}
             for upload in self.uploads:
@@ -310,7 +306,7 @@ class Diff:
             raise Exception(f"unsupported change type {kind} for {a_path}")
 
     @staticmethod
-    def parse_git_diff(hdr: str) -> Tuple[int, int, int, int]:
+    def parse_git_diff(hdr: str) -> tuple[int, int, int, int]:
         match = re.match(
             r"@@ -(?P<old_off>\d+)(?:,(?P<old_len>\d+))? "
             r"\+(?P<new_off>\d+)(?:,(?P<new_len>\d+))? @@",

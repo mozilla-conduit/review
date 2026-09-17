@@ -14,3 +14,6 @@ project-excludes = [
     "**/__pycache__/**",
     "**/node_modules/**",
 ]
+
+[errors]
+deprecated = "error"

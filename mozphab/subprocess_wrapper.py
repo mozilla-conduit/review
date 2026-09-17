@@ -7,19 +7,17 @@ import subprocess
 from shlex import quote
 from typing import (
     Any,
-    List,
-    Optional,
 )
 
 from .exceptions import CommandError
 from .logger import logger
 
 
-def debug_log_command(command: List[str]):
+def debug_log_command(command: list[str]):
     logger.debug("$ %s", " ".join(quote(s.replace("\n", r"\n")) for s in command))
 
 
-def check_call(command: List[str], **kwargs):
+def check_call(command: list[str], **kwargs):
     # wrapper around subprocess.check_call with debug output
     debug_log_command(command)
     kwargs["encoding"] = "UTF-8"
@@ -32,7 +30,7 @@ def check_call(command: List[str], **kwargs):
 
 
 def check_call_by_line(
-    command: List[str], cwd: Optional[str] = None, never_log: bool = False
+    command: list[str], cwd: str | None = None, never_log: bool = False
 ):
     # similar to check_call, yields for line-by-line processing
     debug_log_command(command)
@@ -67,13 +65,13 @@ def check_call_by_line(
 
 
 def command_output(
-    command: List[str],
-    cwd: Optional[str] = None,
+    command: list[str],
+    cwd: str | None = None,
     strip: bool = True,
     never_log: bool = False,
     stdin=None,
     stderr=None,
-    env: Optional[dict] = None,
+    env: dict | None = None,
     search_error=None,
     expect_binary: bool = False,
 ) -> Any:
@@ -123,16 +121,16 @@ def command_output(
     return output
 
 
-def check_output_binary(command: List[str], **kwargs) -> bytes:
+def check_output_binary(command: list[str], **kwargs) -> bytes:
     """Run `command` and return its raw output. See `command_output`."""
     return command_output(command, expect_binary=True, **kwargs)
 
 
-def check_output_text(command: List[str], **kwargs) -> str:
+def check_output_text(command: list[str], **kwargs) -> str:
     """Run `command` and return its output as a single string. See `command_output`."""
     return command_output(command, **kwargs)
 
 
-def check_output(command: List[str], keep_ends: bool = False, **kwargs) -> List[str]:
+def check_output(command: list[str], keep_ends: bool = False, **kwargs) -> list[str]:
     """Run `command` and return its output split into lines. See `command_output`."""
     return check_output_text(command, **kwargs).splitlines(keep_ends)

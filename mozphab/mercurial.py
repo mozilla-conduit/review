@@ -12,18 +12,13 @@ import re
 import sys
 import time
 import uuid
+from collections.abc import Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import (
     Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
     cast,
 )
 
@@ -77,7 +72,7 @@ class FileChange:
     filename: str
     kind: str
     func: Callable[[Diff.Change, str, str, str, str], None]
-    old_filename: Optional[str] = None
+    old_filename: str | None = None
 
 
 class Mercurial(Repository):
@@ -152,7 +147,7 @@ class Mercurial(Repository):
         self._repo = hglib.open(self._repo_path, encoding="UTF-8", configs=configs)
         return self._repo
 
-    def _get_config_options(self) -> List[tuple]:
+    def _get_config_options(self) -> list[tuple]:
         """Returns the --config options for hg
 
         Updated with the safe ones when safe mode is used.
@@ -168,7 +163,7 @@ class Mercurial(Repository):
         return os.path.exists(os.path.join(path, ".hg"))
 
     @staticmethod
-    def _get_extension(extension: str, hg_config: dict) -> Optional[str]:
+    def _get_extension(extension: str, hg_config: dict) -> str | None:
         for prefix in ("extensions.%s", "extensions.hgext.%s"):
             field = prefix % extension
             if field in hg_config:
@@ -176,7 +171,7 @@ class Mercurial(Repository):
         return None
 
     @staticmethod
-    def _get_extensions(setting_names: Iterable[str]) -> List[str]:
+    def _get_extensions(setting_names: Iterable[str]) -> list[str]:
         """Return the extensions enabled by the given `hg` setting names."""
         return sorted(
             re.sub(r"^extensions\.(?:hgext\.)?", "", name)
@@ -188,13 +183,13 @@ class Mercurial(Repository):
         status = self._status()
         return not status["T"]
 
-    def hg(self, command: List[str], **kwargs):
+    def hg(self, command: list[str], **kwargs):
         """Run `hg`, printing its output."""
         self.hg_run(command, capture=False, **kwargs)
 
     def hg_run(
         self,
-        command: List[str],
+        command: list[str],
         capture: bool = True,
         expect_binary: bool = False,
         strip: bool = True,
@@ -250,23 +245,23 @@ class Mercurial(Repository):
         print(out, end="")
         return None
 
-    def hg_out_binary(self, command: List[str], **kwargs) -> bytes:
+    def hg_out_binary(self, command: list[str], **kwargs) -> bytes:
         """Run `hg` and return its raw output."""
         return self.hg_run(command, expect_binary=True, **kwargs)
 
-    def hg_out_text(self, command: List[str], **kwargs) -> str:
+    def hg_out_text(self, command: list[str], **kwargs) -> str:
         """Run `hg` and return its output as a single string."""
         return self.hg_run(command, **kwargs)
 
-    def hg_out(self, command: List[str], **kwargs) -> List[str]:
+    def hg_out(self, command: list[str], **kwargs) -> list[str]:
         """Run `hg` and return its output split into lines."""
         return self.hg_out_text(command, **kwargs).splitlines()
 
-    def hg_log_command(self, revset: str, select: str = "node") -> List[str]:
+    def hg_log_command(self, revset: str, select: str = "node") -> list[str]:
         """Build the `hg log` command for the given revset and field."""
         return ["log", "-T", "{%s}\n" % select, "-r", revset]
 
-    def hg_log(self, revset: str, select: str = "node") -> List[str]:
+    def hg_log(self, revset: str, select: str = "node") -> list[str]:
         """Return the `hg log` output as lines."""
         return self.hg_out(self.hg_log_command(revset, select))
 
@@ -320,7 +315,7 @@ class Mercurial(Repository):
             self.previous_bookmark = ""
             self.has_temporary_bookmark = False
 
-    def _status(self) -> Dict[str, List[str]]:
+    def _status(self) -> dict[str, list[str]]:
         # `hg status` is slow on large repos.  As we'll need both uncommitted changes
         # and untracked files separately, run it once and cache results.
         if self.status is None:
@@ -332,17 +327,17 @@ class Mercurial(Repository):
                 self.status["U" if status == "?" else "T"].append(path)
         return self.status
 
-    def untracked(self) -> List[str]:
+    def untracked(self) -> list[str]:
         return self._status()["U"]
 
-    def _refresh_commit(self, commit: Commit, node: str, rev: Optional[str] = None):
+    def _refresh_commit(self, commit: Commit, node: str, rev: str | None = None):
         """Update commit's node and name from node and rev."""
         if not rev:
             rev = self.hg_log_text(node, select="rev")
         commit.node = node
         commit.name = f"{rev}:{short_node(node)}"
 
-    def _get_successor(self, node: str) -> Tuple[Optional[str], Optional[str]]:
+    def _get_successor(self, node: str) -> tuple[str | None, str | None]:
         """Get the successor of the commit represented by its node.
 
         Returns: a tuple containing rev and node.
@@ -363,7 +358,7 @@ class Mercurial(Repository):
         rev, successor_node = hg_log[0].split(" ", 1)
         return rev, successor_node
 
-    def refresh_commit_stack(self, commits: List[Commit]):
+    def refresh_commit_stack(self, commits: list[Commit]):
         """Update all commits to point to their superseded commit."""
         for commit in commits:
             (rev, node) = self._get_successor(commit.node)
@@ -502,7 +497,7 @@ class Mercurial(Repository):
 
             self.revset = "%s::%s" % (short_node(start), short_node(end))
 
-    def commit_stack(self, single: bool = False) -> List[Commit]:
+    def commit_stack(self, single: bool = False) -> list[Commit]:
         # Grab all the info we need about the commits, using randomness as a delimiter.
         boundary = "--%s--\n" % uuid.uuid4().hex
         hg_log = self.hg_out_text(
@@ -586,7 +581,7 @@ class Mercurial(Repository):
         """Return `True` if `node` is a public (landed) commit."""
         return self.hg_log_text(node, select="phase") == "public"
 
-    def get_latest_landing_node(self, before: Optional[int] = None) -> Optional[str]:
+    def get_latest_landing_node(self, before: int | None = None) -> str | None:
         """Return the most recent autoland-to-mozilla-central merge in the repo."""
         branch = self.get_repo_head_branch()
         scope = f"ancestors({branch})" if branch else "public()"
@@ -652,7 +647,7 @@ class Mercurial(Repository):
             self.hg(["topic", topic_name])
 
     def apply_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
+        self, diff: str, body: str, author: str | None, author_date: int | None
     ):
         # Import the diff to apply the changes then commit separately to
         # ensure correct parsing of the commit message.
@@ -670,7 +665,7 @@ class Mercurial(Repository):
             self.hg(commit_cmd)
 
     def format_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
+        self, diff: str, body: str, author: str | None, author_date: int | None
     ) -> str:
         changeset = ["# HG changeset patch"]
         if author:
@@ -688,7 +683,7 @@ class Mercurial(Repository):
     def _get_parent(self, node: str) -> str:
         return self.hg_out_text(["log", "-T", "{node}", "-r", "parents(%s)" % node])
 
-    def finalize(self, commits: List[Commit]):
+    def finalize(self, commits: list[Commit]):
         """Rebase stack children commits if needed."""
         # Currently we do all rebases in `amend_commit` if the evolve extension
         # is not installed.
@@ -707,7 +702,7 @@ class Mercurial(Repository):
 
             parent = commit
 
-    def amend_commit(self, commit: Commit, commits: List[Commit]):
+    def amend_commit(self, commit: Commit, commits: list[Commit]):
         updated_body = "%s\n%s" % (commit.title, commit.body)
         current_body = self.hg_out_text(["log", "-T", "{desc}", "-r", commit.node])
         if current_body == updated_body:
@@ -811,7 +806,7 @@ class Mercurial(Repository):
 
         return True
 
-    def get_repo_head_branch(self) -> Optional[str]:
+    def get_repo_head_branch(self) -> str | None:
         shortname = self.phab_repo["fields"]["shortName"]
         if not self.is_node(shortname):
             return None
@@ -858,7 +853,7 @@ class Mercurial(Repository):
         except CommandError as e:
             raise Error(f"Failed to fetch from upstream: {str(e)}")
 
-    def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
+    def uplift_commits(self, dest: str, commits: list[Commit]) -> list[Commit]:
         try:
             out = self.hg_out_text(
                 [
@@ -912,7 +907,7 @@ class Mercurial(Repository):
 
         return commits
 
-    def check_commits_for_submit(self, commits: List[Commit]):
+    def check_commits_for_submit(self, commits: list[Commit]):
         # 'Greatest Common Ancestor'/'Merge Base' should be included in the revset.
         ancestor = self.hg_log_text("ancestor(%s)" % self.revset)
         if not any(commit.node == ancestor for commit in commits):
@@ -1136,7 +1131,7 @@ class Mercurial(Repository):
         binary = False
         bin_body = self.hg_cat(filename, rev)
         file_size = self._file_size(filename, rev)
-        meta: Dict[str, Any] = {
+        meta: dict[str, Any] = {
             "mime": "TEXT",
             "bin_body": bin_body,
             "file_size": file_size,

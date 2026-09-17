@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from typing import Any, Dict, List
+from typing import Any
 from unittest import mock
 
 from mozphab import mozphab
@@ -51,7 +51,7 @@ def _submit(repo, start, end, expected, wip=False):
 
 
 def _conduit_side_effect(calls=1):
-    side_effect: List[Dict[str, Any]] = [
+    side_effect: list[dict[str, Any]] = [
         # ping
         {},
         # diffusion.repository.search

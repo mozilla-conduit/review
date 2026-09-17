@@ -9,11 +9,6 @@ from dataclasses import (
     field,
 )
 from enum import Enum
-from typing import (
-    Dict,
-    List,
-    Optional,
-)
 
 from mozphab.logger import logger
 
@@ -62,13 +57,13 @@ class Commit:
     author_date: str = ""
     parent: str = ""
     tree_hash: str = ""
-    bug_id: Optional[str] = None
-    bug_id_orig: Optional[str] = None
-    rev_id: Optional[int] = None
-    rev_phid: Optional[str] = None
-    wip: Optional[bool] = None
+    bug_id: str | None = None
+    bug_id_orig: str | None = None
+    rev_id: int | None = None
+    rev_phid: str | None = None
+    wip: bool | None = None
     ai_review_state: AiReviewState = AiReviewState.NOT_REQUESTED
-    reviewers: Dict[str, List[str]] = field(default_factory=dict)
+    reviewers: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def has_reviewers(self) -> bool:

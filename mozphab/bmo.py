@@ -7,7 +7,6 @@ import time
 import urllib.error as url_error
 import urllib.parse as url_parse
 import urllib.request as url_request
-from typing import Optional
 
 from .conduit import conduit
 from .environment import USER_AGENT
@@ -18,12 +17,12 @@ from .logger import logger
 class BMOAPIError(Error):
     """Raised when the Bugzilla API returns an error response."""
 
-    def __init__(self, msg: Optional[str] = None):
+    def __init__(self, msg: str | None = None):
         super().__init__(f"Bugzilla Error: {msg if msg else 'Unknown Error'}")
 
 
 class BMOAPI:
-    def get(self, method: str, headers: Optional[dict] = None) -> dict:
+    def get(self, method: str, headers: dict | None = None) -> dict:
         req_args = self._build_request(method=method, headers=headers)
         logger.debug("%s %s", req_args["url"], self._sanitise_req(req_args))
 
@@ -42,7 +41,7 @@ class BMOAPI:
         return res
 
     @staticmethod
-    def _build_request(*, method: str, headers: Optional[dict] = None) -> dict:
+    def _build_request(*, method: str, headers: dict | None = None) -> dict:
         """Return dict with Request args for calling the specified BMO method."""
         bmo_url = conduit.repo.bmo_url
         if not bmo_url:
@@ -63,7 +62,7 @@ class BMOAPI:
         return sanitised
 
     def _req_with_retries(
-        self, endpoint: str, headers: Optional[dict] = None, retries: int = 3
+        self, endpoint: str, headers: dict | None = None, retries: int = 3
     ) -> dict:
         for attempt in range(retries):
             try:

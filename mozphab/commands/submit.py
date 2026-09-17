@@ -6,7 +6,6 @@ import argparse
 import logging
 import textwrap
 import time
-from typing import Dict, List
 
 from mozphab import environment
 from mozphab.commits import AiReviewState, Commit
@@ -31,7 +30,7 @@ from mozphab.telemetry import telemetry
 from mozphab.user import user_data
 
 
-def morph_blocking_reviewers(commits: List[Commit]):
+def morph_blocking_reviewers(commits: list[Commit]):
     """Automatically fix common typo by replacing r!user with r=user!"""
 
     def morph_reviewer(matchobj):
@@ -67,7 +66,7 @@ def amend_revision_url(body: str, new_url: str) -> str:
 
 
 def log_commit_stack_with_messages(
-    commits: List[Commit],
+    commits: list[Commit],
     messages=None,
     initial_indent="",
     subsequent_indent="",
@@ -96,7 +95,7 @@ def log_commit_stack_with_messages(
             )
 
 
-def show_commit_stack(commits: List[Commit]):
+def show_commit_stack(commits: list[Commit]):
     """Show the commits that were submitted and their URLs."""
     submitted_commits = []
     urls = {}
@@ -112,7 +111,7 @@ def show_commit_stack(commits: List[Commit]):
     log_commit_stack_with_messages(submitted_commits, urls, "-> ")
 
 
-def show_review_queue_reminder(commits: List[Commit]):
+def show_review_queue_reminder(commits: list[Commit]):
     """Remind the user of the reviews waiting on them.
 
     Only shown when something was submitted for review; Work In Progress
@@ -170,7 +169,7 @@ def show_review_queue_reminder(commits: List[Commit]):
 
 
 def validate_commit_stack(
-    commits: List[Commit], args: argparse.Namespace
+    commits: list[Commit], args: argparse.Namespace
 ) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     """Validate commit stack is suitable for review.
 
@@ -361,12 +360,12 @@ def validate_commit_stack(
     return warnings, errors
 
 
-def make_blocking(reviewers: List[str]) -> List[str]:
+def make_blocking(reviewers: list[str]) -> list[str]:
     """Convert a list of reviewer strings into a list of blocking reviewer strings."""
     return ["%s!" % r.rstrip("!") for r in reviewers]
 
 
-def remove_duplicates(reviewers: List[str]) -> List[str]:
+def remove_duplicates(reviewers: list[str]) -> list[str]:
     """Remove all duplicate items from the list.
 
     Args:
@@ -391,7 +390,7 @@ def remove_duplicates(reviewers: List[str]) -> List[str]:
     return unique
 
 
-def update_commits_from_args(commits: List[Commit], args: argparse.Namespace):
+def update_commits_from_args(commits: list[Commit], args: argparse.Namespace):
     """Modify commit description based on args and configuration.
 
     Args:
@@ -501,7 +500,7 @@ def update_commits_from_args(commits: List[Commit], args: argparse.Namespace):
             }
 
 
-def update_commits_for_uplift(commits: List[Commit], repo: Repository):
+def update_commits_for_uplift(commits: list[Commit], repo: Repository):
     """Prepares a set of commits for uplifting."""
     with wait_message("Loading revision data..."):
         rev_ids = [commit.rev_id for commit in commits if commit.rev_id]
@@ -532,7 +531,7 @@ def update_commits_for_uplift(commits: List[Commit], repo: Repository):
 
 
 def update_revision_description(
-    transactions: List[dict], commit: Commit, revision: dict
+    transactions: list[dict], commit: Commit, revision: dict
 ):
     # Appends differential.revision.edit transaction(s) to `transactions` if
     # updating the commit title and/or summary is required.
@@ -551,7 +550,7 @@ def update_revision_description(
         transactions.append({"type": "testPlan", "value": commit.test_plan})
 
 
-def update_revision_bug_id(transactions: List[dict], commit: Commit, revision: dict):
+def update_revision_bug_id(transactions: list[dict], commit: Commit, revision: dict):
     # Appends differential.revision.edit transaction(s) to `transactions` if
     # updating the commit bug-id is required.
     if commit.bug_id and commit.bug_id != revision["fields"]["bugzilla.bug-id"]:
@@ -559,7 +558,7 @@ def update_revision_bug_id(transactions: List[dict], commit: Commit, revision: d
 
 
 def local_uplift_if_possible(
-    args: argparse.Namespace, repo: Repository, commits: List[Commit]
+    args: argparse.Namespace, repo: Repository, commits: list[Commit]
 ) -> bool:
     """If possible, rebase local repository commits onto the target uplift train.
 
@@ -603,7 +602,7 @@ def local_uplift_if_possible(
     return False
 
 
-def _prepare_diffs(repo: Repository, commits: List[Commit]) -> Dict[int, Diff]:
+def _prepare_diffs(repo: Repository, commits: list[Commit]) -> dict[int, Diff]:
     """Build and create the diff for every submittable commit up front.
 
     Returns the prepared diffs (with ``phid`` and ``id`` populated), keyed by
@@ -631,7 +630,7 @@ def _prepare_diffs(repo: Repository, commits: List[Commit]) -> Dict[int, Diff]:
     # mutates the shared working directory and isn't safe to run
     # concurrently. Git's get_diff is read-only plumbing but it's cheap, so
     # we serialise both backends for symmetry.
-    diffs: Dict[int, Diff] = {}
+    diffs: dict[int, Diff] = {}
     for index, commit in submittable:
         with wait_message("Creating local diff..."):
             diffs[index] = repo.get_diff(commit)
@@ -650,7 +649,7 @@ def _prepare_diffs(repo: Repository, commits: List[Commit]) -> Dict[int, Diff]:
     return diffs
 
 
-def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
+def _submit(repo: Repository, args: argparse.Namespace) -> list[Commit]:
     telemetry().submission.preparation_time.start()
     with wait_message("Checking connection to Phabricator."):
         # Check if raw Conduit API can be used
@@ -777,7 +776,7 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
 
     # Collected during the main loop; AI review is requested in parallel
     # after all revisions have been created/updated.
-    ai_review_commits: List[Commit] = []
+    ai_review_commits: list[Commit] = []
 
     for index, commit in enumerate(commits):
         previous_commit = commits[index - 1] if index else None
@@ -897,7 +896,7 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
     return commits
 
 
-def submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
+def submit(repo: Repository, args: argparse.Namespace) -> list[Commit]:
     try:
         return _submit(repo, args)
     except Exception as e:

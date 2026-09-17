@@ -6,7 +6,6 @@ import argparse
 import email.message
 import io
 import json
-from typing import List, Optional
 from unittest import mock
 from urllib.error import HTTPError
 
@@ -38,13 +37,13 @@ class Repo(Repository):
         # Read back by the `Repository.phid` property.
         self._phid = phid
 
-    def get_repo_head_branch(self) -> Optional[str]:
+    def get_repo_head_branch(self) -> str | None:
         return self.unified_head
 
     def is_descendant(self, node: str) -> bool:
         return self._is_descendant
 
-    def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
+    def uplift_commits(self, dest: str, commits: list[Commit]) -> list[Commit]:
         self.uplift_called = True
         return commits
 

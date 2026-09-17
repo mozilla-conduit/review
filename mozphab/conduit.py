@@ -2,6 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+from __future__ import annotations
+
 import base64
 import concurrent.futures
 import datetime
@@ -14,11 +16,6 @@ import urllib.parse as url_parse
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
 )
 
 import urllib3
@@ -104,33 +101,33 @@ REVIEWED_REVIEWER_STATUSES = frozenset({"accepted", "rejected", "resigned"})
 class ConduitAPIError(Error):
     """Raised when the Phabricator Conduit API returns an error response."""
 
-    def __init__(self, msg: Optional[str] = None):
+    def __init__(self, msg: str | None = None):
         super().__init__(f"Phabricator Error: {msg if msg else 'Unknown Error'}")
 
 
 class ConduitAPI:
     def __init__(self):
-        self._repo: Optional["Repository"] = None
+        self._repo: Repository | None = None
         # Lazy-initialised urllib3 pool. Holding it on the instance (rather
         # than as a module global) keeps test isolation simple and avoids
         # leaking pool state between successive ConduitAPI instances.
         # urllib3's own Retry is disabled because call() does method-aware
         # retries: blindly retrying a POST that actually succeeded could
         # duplicate mutations.
-        self._http_pool: Optional[urllib3.PoolManager] = None
+        self._http_pool: urllib3.PoolManager | None = None
 
     @property
-    def repo(self) -> "Repository":
+    def repo(self) -> Repository:
         """Return the repository the API calls are made against."""
         if self._repo is None:
             raise Error("Phabricator API used before the repository was set.")
         return self._repo
 
     @repo.setter
-    def repo(self, repo: Optional["Repository"]):
+    def repo(self, repo: Repository | None):
         self._repo = repo
 
-    def set_repo(self, repo: Optional["Repository"]):
+    def set_repo(self, repo: Repository | None):
         self.repo = repo
 
     def _get_http_pool(self) -> urllib3.PoolManager:
@@ -189,7 +186,7 @@ class ConduitAPI:
             os.chmod(filename, 0o600)
 
     def call(
-        self, api_method: str, api_call_args: dict, *, api_token: Optional[str] = None
+        self, api_method: str, api_call_args: dict, *, api_token: str | None = None
     ) -> Any:
         """Call Conduit API and return the JSON API call result.
 
@@ -262,8 +259,8 @@ class ConduitAPI:
         return res["result"]
 
     def _build_request(
-        self, *, method: str, args: dict, token: Optional[str]
-    ) -> Dict[str, Any]:
+        self, *, method: str, args: dict, token: str | None
+    ) -> dict[str, Any]:
         """Return dict with Request args for calling the specified conduit method."""
         return {
             "url": url_parse.urljoin(self.repo.api_url, method),
@@ -314,19 +311,19 @@ class ConduitAPI:
 
         return False
 
-    def get_projects(self, slugs: List[str]) -> List[dict]:
+    def get_projects(self, slugs: list[str]) -> list[dict]:
         """Search for tags by hashtags."""
         response = self.call("project.search", {"constraints": {"slugs": slugs}})
         return response.get("data")
 
-    def get_project_phid(self, slug: str) -> Optional[str]:
+    def get_project_phid(self, slug: str) -> str | None:
         projects = self.get_projects([slug])
         if not projects:
             return None
 
         return projects[0]["phid"]
 
-    def ids_to_phids(self, rev_ids: List[int]) -> List[str]:
+    def ids_to_phids(self, rev_ids: list[int]) -> list[str]:
         """Convert revision ids to PHIDs.
 
         Parameters:
@@ -345,7 +342,7 @@ class ConduitAPI:
 
         raise NotFoundError("revision {} not found".format(rev_id))
 
-    def phids_to_ids(self, phids: List[str]) -> List[str]:
+    def phids_to_ids(self, phids: list[str]) -> list[str]:
         """Convert revision PHIDs to ids.
 
         Parameteres:
@@ -365,8 +362,8 @@ class ConduitAPI:
         raise NotFoundError("revision {} not found".format(phid))
 
     def get_revisions(
-        self, ids: Optional[List[int]] = None, phids: Optional[List[str]] = None
-    ) -> List[dict]:
+        self, ids: list[int] | None = None, phids: list[str] | None = None
+    ) -> list[dict]:
         """Get revisions info from Phabricator.
 
         Args:
@@ -436,9 +433,9 @@ class ConduitAPI:
     def get_revisions_for_author(
         self,
         authorphid: str,
-        statuses: Optional[List[str]] = None,
+        statuses: list[str] | None = None,
         order: str = "updated",
-    ) -> List[dict]:
+    ) -> list[dict]:
         """Get revisions info from Phabricator.
 
         Args:
@@ -460,7 +457,7 @@ class ConduitAPI:
         response = self.call("differential.revision.search", api_call_args)
         return response.get("data")
 
-    def get_usernames_for_phids(self, phids: List[str]) -> Dict[str, str]:
+    def get_usernames_for_phids(self, phids: list[str]) -> dict[str, str]:
         """Get a PHID-to-username mapping for the given user PHIDs.
 
         Args:
@@ -477,8 +474,8 @@ class ConduitAPI:
         }
 
     def get_diffs(
-        self, ids: Optional[List[int]] = None, phids: Optional[List[str]] = None
-    ) -> Dict[str, Dict]:
+        self, ids: list[int] | None = None, phids: list[str] | None = None
+    ) -> dict[str, dict]:
         """Get diffs from Phabricator.
 
         Args:
@@ -493,7 +490,7 @@ class ConduitAPI:
         # Serve known diffs from the cache and only query Phabricator for the
         # ones we haven't seen yet. Diffs are immutable once created, so a
         # per-process cache is safe.
-        cached_diffs: Dict[str, Dict] = {}
+        cached_diffs: dict[str, dict] = {}
         if ids:
             uncached_ids = []
             for diff_id in set(ids):
@@ -529,7 +526,7 @@ class ConduitAPI:
 
         return diff_dict
 
-    def get_users(self, usernames: List[str]) -> List[dict]:
+    def get_users(self, usernames: list[str]) -> list[dict]:
         """Get users using the user.query API.
 
         Caches the result in the process.
@@ -561,7 +558,7 @@ class ConduitAPI:
 
         return users
 
-    def get_groups(self, slugs: List[str]) -> List[dict]:
+    def get_groups(self, slugs: list[str]) -> list[dict]:
         to_collect = []
         groups = []
         for slug in slugs:
@@ -600,7 +597,7 @@ class ConduitAPI:
         self,
         commit: Commit,
         diff_phid: str,
-        parent_rev_phid: Optional[str] = None,
+        parent_rev_phid: str | None = None,
     ) -> dict:
         """Create a new revision in Phabricator."""
         transactions = [
@@ -625,9 +622,9 @@ class ConduitAPI:
     def update_revision(
         self,
         commit: Commit,
-        diff_phid: Optional[str] = None,
-        comment: Optional[str] = None,
-        parent_rev_phid: Optional[str] = None,
+        diff_phid: str | None = None,
+        comment: str | None = None,
+        parent_rev_phid: str | None = None,
     ) -> dict:
         """Update an existing revision in Phabricator."""
         # Update the title and summary
@@ -666,11 +663,11 @@ class ConduitAPI:
 
     def edit_revision(
         self,
-        transactions: Optional[List[dict]] = None,
-        diff_phid: Optional[str] = None,
-        rev_id: Optional[Union[int, str]] = None,
-        wip: Optional[bool] = False,
-        parent_rev_phid: Optional[str] = None,
+        transactions: list[dict] | None = None,
+        diff_phid: str | None = None,
+        rev_id: int | str | None = None,
+        wip: bool | None = False,
+        parent_rev_phid: str | None = None,
     ) -> dict:
         """Edit (create or update) a revision."""
         trans = transactions or []
@@ -719,7 +716,7 @@ class ConduitAPI:
             trans.append({"type": "request-review", "value": True})
 
         # Call differential.revision.edit
-        api_call_args: Dict[str, Any] = {"transactions": trans}
+        api_call_args: dict[str, Any] = {"transactions": trans}
         if rev_id:
             api_call_args["objectIdentifier"] = rev_id
         revision = self.call("differential.revision.edit", api_call_args)
@@ -738,7 +735,7 @@ class ConduitAPI:
 
         return revision
 
-    def apply_transactions_to_revision(self, rev_id: str, transactions: List[dict]):
+    def apply_transactions_to_revision(self, rev_id: str, transactions: list[dict]):
         """Apply transactions to the specified revision."""
         self.call(
             "differential.revision.edit",
@@ -759,15 +756,15 @@ class ConduitAPI:
     AI_REVIEW_MAX_WORKERS = 5
 
     def request_ai_reviews(
-        self, rev_ids: List[int]
-    ) -> Dict[int, Optional[ConduitAPIError]]:
+        self, rev_ids: list[int]
+    ) -> dict[int, ConduitAPIError | None]:
         """Request AI reviews for several revisions in parallel.
 
         Returns a dict mapping each rev_id to ``None`` on success, or to
         the ``ConduitAPIError`` raised by the underlying call. The
         threading is hidden here so callers stay in command-layer code.
         """
-        results: Dict[int, Optional[ConduitAPIError]] = {}
+        results: dict[int, ConduitAPIError | None] = {}
         if not rev_ids:
             return results
         with concurrent.futures.ThreadPoolExecutor(
@@ -858,7 +855,7 @@ class ConduitAPI:
         diff.id = result["diffid"]
         return diff
 
-    def create_diffs(self, commit_diffs: List[Tuple[Commit, Diff]]):
+    def create_diffs(self, commit_diffs: list[tuple[Commit, Diff]]):
         """Create several diffs on Phabricator, overlapping the round-trips.
 
         Each `Diff` is updated in place, exactly as `create_diff` does for a
@@ -1015,7 +1012,7 @@ class ConduitAPI:
 
         upload["phid"] = str(file_phid)
 
-    def whoami(self, *, api_token: Optional[str] = None) -> dict:
+    def whoami(self, *, api_token: str | None = None) -> dict:
         if "whoami" in cache:
             return dict(cache.get("whoami"))
 
@@ -1023,7 +1020,7 @@ class ConduitAPI:
         cache.set("whoami", who)
         return who
 
-    def get_reviewer_phids(self) -> List[str]:
+    def get_reviewer_phids(self) -> list[str]:
         """Return the PHIDs the current user can be asked for review as.
 
         That's the user themselves, plus every project (review group) they are
@@ -1042,7 +1039,7 @@ class ConduitAPI:
         cache.set("reviewer-phids", phids)
         return phids
 
-    def get_pending_reviews(self, limit: int = 100) -> Tuple[int, bool]:
+    def get_pending_reviews(self, limit: int = 100) -> tuple[int, bool]:
         """Return how many revisions are waiting on the current user's review.
 
         Revisions requested from a review group the user is a member of are
@@ -1099,7 +1096,7 @@ class ConduitAPI:
         return bool(revs and revs[0]["attachments"]["reviewers"]["reviewers"])
 
     def update_revision_reviewers(
-        self, transactions: List[Dict[str, Any]], commit: Commit
+        self, transactions: list[dict[str, Any]], commit: Commit
     ):
         # Appends differential.revision.edit transaction(s) to `transactions` to
         # set the reviewers.
@@ -1133,7 +1130,7 @@ class ConduitAPI:
         )
         transactions.extend([{"type": "reviewers.set", "value": all_reviewing_phid}])
 
-    def check_for_invalid_reviewers(self, reviewers: dict) -> List[Dict[str, Any]]:
+    def check_for_invalid_reviewers(self, reviewers: dict) -> list[dict[str, Any]]:
         """Return a list of invalid reviewer names.
 
         Args:

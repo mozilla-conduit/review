@@ -6,7 +6,6 @@ import json
 import time
 import uuid
 from pathlib import Path
-from typing import Optional
 
 from mozphab import environment
 
@@ -23,7 +22,7 @@ MOZILLA_EMPLOYEE_EMAIL_ENDINGS = {
 }
 
 
-def is_bad_uuid(key: str, value: Optional[str]) -> bool:
+def is_bad_uuid(key: str, value: str | None) -> bool:
     """Return `True` if the key/value pair corresponds to a faulty UUID."""
     return (
         key in {"installation_id", "user_code"}
@@ -98,7 +97,7 @@ class UserData:
         with USER_INFO_FILE.open("w", encoding="utf-8") as f:
             json.dump(user_info, f, sort_keys=True, indent=2)
 
-    def whoami(self) -> Optional[dict]:
+    def whoami(self) -> dict | None:
         """Returns a dict with email and employee status."""
         # Check user in Phabricator.
         try:

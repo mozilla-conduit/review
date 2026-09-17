@@ -4,7 +4,6 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from packaging.version import Version
 
@@ -116,7 +115,7 @@ class Jujutsu(Repository):
             ["jj", "config", "get", "user.email"]
         ).rstrip()
 
-    def __check_and_get_version(self) -> Tuple[str, Version]:
+    def __check_and_get_version(self) -> tuple[str, Version]:
         min_version = Jujutsu.MIN_VERSION
 
         version_re = re.compile(r"jj (\d+\.\d+\.\d+)(?:-[a-fA-F0-9]{40})?")
@@ -184,7 +183,7 @@ class Jujutsu(Repository):
 
             self.revset = (start_rev, end_rev)
 
-    def commit_stack(self, single: bool = False) -> Optional[List[Commit]]:
+    def commit_stack(self, single: bool = False) -> list[Commit] | None:
         """Collect all the info about commits."""
         logger.debug(f"searching with start and end at {self.revset}")
         if not self.revset:
@@ -277,7 +276,7 @@ class Jujutsu(Repository):
         # read-only. So, we don't have to do anything. Yay!
         pass
 
-    def untracked(self) -> List[str]:
+    def untracked(self) -> list[str]:
         is_working_copy_descriptionless_but_changed = self.__cli_log_text(
             revset="@",
             template="self.description().len() == 0 && !self.empty()",
@@ -299,7 +298,7 @@ class Jujutsu(Repository):
         self.__git_repo.args = self.args
         return self.__git_repo.get_diff(commit)
 
-    def amend_commit(self, commit: Commit, commits: List[Commit]):
+    def amend_commit(self, commit: Commit, commits: list[Commit]):
         """Amend the commit with an updated message.
 
         Changing commit's message changes also its SHA1.
@@ -329,7 +328,7 @@ class Jujutsu(Repository):
             with open(message_path) as message_file:
                 check_call(["jj", "describe", change_id, "--stdin"], stdin=message_file)
 
-    def finalize(self, commits: List[Commit]):
+    def finalize(self, commits: list[Commit]):
         pass
 
     def cleanup(self):
@@ -337,7 +336,7 @@ class Jujutsu(Repository):
         # changed any state that we might need to restore.
         pass
 
-    def refresh_commit_stack(self, commits: List[Commit]):
+    def refresh_commit_stack(self, commits: list[Commit]):
         # TODO: update `commit[n].node` to match current `commit_id`s
         pass
 
@@ -359,7 +358,7 @@ class Jujutsu(Repository):
         """Return `True` if `node` is an ancestor of an official remote branch."""
         return self.__git_repo.is_public(node)
 
-    def get_latest_landing_node(self, before: Optional[int] = None) -> Optional[str]:
+    def get_latest_landing_node(self, before: int | None = None) -> str | None:
         """Return the most recent autoland-to-mozilla-central merge on a remote."""
         return self.__git_repo.get_latest_landing_node(before=before)
 
@@ -455,7 +454,7 @@ class Jujutsu(Repository):
         check_call(["jj", "abandon", "--quiet", f"{node}..@"])
 
     def apply_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
+        self, diff: str, body: str, author: str | None, author_date: int | None
     ):
         # NOTE: `before_patch` ensures that we are editing a new, empty commit on the base we want.
 
@@ -501,7 +500,7 @@ class Jujutsu(Repository):
             )
 
     def format_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
+        self, diff: str, body: str, author: str | None, author_date: int | None
     ) -> str:
         return diff
 
@@ -518,7 +517,7 @@ class Jujutsu(Repository):
 
     def __cli_log_command(
         self, *, revset: str, template: str, use_reversed: bool = False
-    ) -> List[str]:
+    ) -> list[str]:
         """Build the `jj log` command for the given revset and template."""
         options = []
         if use_reversed:
@@ -540,7 +539,7 @@ class Jujutsu(Repository):
 
     def __cli_log(
         self, *, revset: str, template: str, use_reversed: bool = False, **kwargs
-    ) -> List[str]:
+    ) -> list[str]:
         """Return the `jj log` output as lines."""
         return self.__check_output(
             self.__cli_log_command(
@@ -574,7 +573,7 @@ class Jujutsu(Repository):
                 # <https://github.com/martinvonz/jj/issues/4170>
             )
 
-    def __get_last_stack_change(self) -> Optional[str]:
+    def __get_last_stack_change(self) -> str | None:
         """Gets the last of the current stack of mutable changes, but _only_ if there's one."""
         # TODO: Should we do something different when `config.git_remote` or `self.args.upstream`
         # are specified? Compare with `remotes` checks in Git impl.
@@ -589,7 +588,7 @@ class Jujutsu(Repository):
             )
         return mutable_roots[0]
 
-    def __get_first_stack_change(self) -> Optional[str]:
+    def __get_first_stack_change(self) -> str | None:
         """Gets the first of the current stack of mutable changes, but _only_ if there's one."""
         # TODO: Should we do something different when `config.git_remote` or `self.args.upstream`
         # are specified? Compare with `remotes` checks in Git impl.
@@ -610,10 +609,10 @@ class Jujutsu(Repository):
             raise Error(f"internal error: {name} was not `true` or `false`")
         return s == "true"
 
-    def __check_output(self, command: List[str], **kwargs) -> List[str]:
+    def __check_output(self, command: list[str], **kwargs) -> list[str]:
         """Run `command` and return its output as lines."""
         return check_output(command, stderr=subprocess.PIPE, **kwargs)
 
-    def __check_output_text(self, command: List[str], **kwargs) -> str:
+    def __check_output_text(self, command: list[str], **kwargs) -> str:
         """Run `command` and return its output as a single string."""
         return check_output_text(command, stderr=subprocess.PIPE, **kwargs)

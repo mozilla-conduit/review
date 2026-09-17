@@ -10,8 +10,6 @@ from pathlib import Path
 from shutil import which
 from typing import (
     Any,
-    List,
-    Optional,
 )
 
 from .config import config
@@ -21,7 +19,7 @@ from .subprocess_wrapper import check_call, command_output
 
 
 class GitCommand:
-    def __init__(self, path: str, bare_repo_path: Optional[str] = None):
+    def __init__(self, path: str, bare_repo_path: str | None = None):
         """Check if Git is available, set initial values."""
         self.command = config.git_command.copy()
         if not which_path(self.command[0]):
@@ -38,7 +36,7 @@ class GitCommand:
         self.safe_mode = config.safe_mode
         self.email = ""
 
-    def call(self, git_args: List[str], **kwargs):
+    def call(self, git_args: list[str], **kwargs):
         unicode_args = [
             "-c",
             "i18n.logOutputEncoding=UTF-8",
@@ -48,7 +46,7 @@ class GitCommand:
         check_call(self.command + unicode_args + git_args, env=self._env, **kwargs)
 
     def command_output(
-        self, git_args: List[str], extra_env: Optional[dict] = None, **kwargs
+        self, git_args: list[str], extra_env: dict | None = None, **kwargs
     ) -> Any:
         """Run git command and return its output.
 
@@ -67,7 +65,7 @@ class GitCommand:
         return command_output(self.command + unicode_args + git_args, env=env, **kwargs)
 
     def output_binary(
-        self, git_args: List[str], extra_env: Optional[dict] = None, **kwargs
+        self, git_args: list[str], extra_env: dict | None = None, **kwargs
     ) -> bytes:
         """Run git command and return its raw output."""
         return self.command_output(
@@ -75,18 +73,18 @@ class GitCommand:
         )
 
     def output_text(
-        self, git_args: List[str], extra_env: Optional[dict] = None, **kwargs
+        self, git_args: list[str], extra_env: dict | None = None, **kwargs
     ) -> str:
         """Run git command and return its output as a single string."""
         return self.command_output(git_args, extra_env=extra_env, **kwargs)
 
     def output(
         self,
-        git_args: List[str],
-        extra_env: Optional[dict] = None,
+        git_args: list[str],
+        extra_env: dict | None = None,
         keep_ends: bool = False,
         **kwargs,
-    ) -> List[str]:
+    ) -> list[str]:
         """Run git command and return its output split into lines."""
         return self.output_text(git_args, extra_env=extra_env, **kwargs).splitlines(
             keep_ends

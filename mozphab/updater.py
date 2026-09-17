@@ -10,7 +10,6 @@ import time
 import urllib.request
 from importlib import invalidate_caches
 from pathlib import Path
-from typing import Optional
 
 from packaging.version import Version
 from packaging.version import parse as parse_version
@@ -89,7 +88,7 @@ def should_self_update(self_last_check: int, current_time: int) -> bool:
     return True
 
 
-def check_for_updates(force_check: bool = False) -> Optional[str]:
+def check_for_updates(force_check: bool = False) -> str | None:
     """Check if an update is available for `moz-phab`.
 
     Log a message about the new version, return the version as a `str` if it is
@@ -149,7 +148,7 @@ def check_for_updates(force_check: bool = False) -> Optional[str]:
     return pypi_version
 
 
-def find_uv_receipt() -> Optional[Path]:
+def find_uv_receipt() -> Path | None:
     """Return the `uv-receipt.toml` for this install, or `None` if not a `uv` tool.
 
     A `uv tool install` places a `uv-receipt.toml` at the root of the tool's

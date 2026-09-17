@@ -27,8 +27,9 @@ loudly rather than as a silent drift in a dashboard number.
 
 import argparse
 from collections import Counter
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -54,10 +55,10 @@ class FakeState:
     id-batched ones.
     """
 
-    revisions_by_id: Dict[int, Dict[str, Any]] = field(default_factory=dict)
-    revisions_by_phid: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    diffs_by_phid: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    diffs_by_id: Dict[int, Dict[str, Any]] = field(default_factory=dict)
+    revisions_by_id: dict[int, dict[str, Any]] = field(default_factory=dict)
+    revisions_by_phid: dict[str, dict[str, Any]] = field(default_factory=dict)
+    diffs_by_phid: dict[str, dict[str, Any]] = field(default_factory=dict)
+    diffs_by_id: dict[int, dict[str, Any]] = field(default_factory=dict)
 
 
 def revision_phid(rev_id: int) -> str:
@@ -183,7 +184,7 @@ def populate_patch_state(state: FakeState, num_revisions: int) -> None:
     revision only, but seeding all of them keeps the dispatcher simple.
     """
     rev_ids = [100 + index for index in range(1, num_revisions + 1)]
-    stack_graph: Dict[str, List[str]] = {}
+    stack_graph: dict[str, list[str]] = {}
     for position, rev_id in enumerate(rev_ids):
         if position == 0:
             stack_graph[revision_phid(rev_id)] = []
@@ -279,9 +280,9 @@ def make_fake_call(state: FakeState, calls: Counter) -> Callable[..., Any]:
     def fake_call(
         _self: Any,
         method: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         *,
-        api_token: Optional[str] = None,
+        api_token: str | None = None,
     ) -> Any:
         calls[method] += 1
 
@@ -367,7 +368,7 @@ def make_fake_call(state: FakeState, calls: Counter) -> Callable[..., Any]:
 @pytest.fixture
 def call_harness(
     monkeypatch: pytest.MonkeyPatch,
-) -> Iterator[Tuple[FakeState, Counter, mock.MagicMock]]:
+) -> Iterator[tuple[FakeState, Counter, mock.MagicMock]]:
     """Yield `(state, calls, repo)` with `ConduitAPI.call` mocked.
 
     The repo is wired up as `conduit.repo` so `submit_diff` and
@@ -398,7 +399,7 @@ def call_harness(
 # updates with no reviewers, AI review enabled, and per-commit SHA1
 # changes. Re-derive these from a fresh run if the workflow is
 # refactored intentionally.
-SUBMIT_EXPECTED: Dict[int, Dict[str, int]] = {
+SUBMIT_EXPECTED: dict[int, dict[str, int]] = {
     1: {
         "differential.revision.search": 1,
         "differential.diff.search": 1,
@@ -440,7 +441,7 @@ SUBMIT_EXPECTED: Dict[int, Dict[str, int]] = {
 
 @pytest.mark.parametrize("num_commits", sorted(SUBMIT_EXPECTED))
 def test_submit_call_count(
-    call_harness: Tuple[FakeState, Counter, mock.MagicMock],
+    call_harness: tuple[FakeState, Counter, mock.MagicMock],
     num_commits: int,
 ) -> None:
     state, calls, repo = call_harness
@@ -472,7 +473,7 @@ def test_submit_call_count(
 # an N-revision linear stack with `--apply-to=base` and the default
 # create-commit flow. Re-derive from a fresh run if the workflow is
 # refactored intentionally.
-PATCH_EXPECTED: Dict[int, Dict[str, int]] = {
+PATCH_EXPECTED: dict[int, dict[str, int]] = {
     1: {
         "differential.revision.search": 1,
         "differential.diff.search": 1,
@@ -498,7 +499,7 @@ PATCH_EXPECTED: Dict[int, Dict[str, int]] = {
 
 @pytest.mark.parametrize("num_revisions", sorted(PATCH_EXPECTED))
 def test_patch_call_count(
-    call_harness: Tuple[FakeState, Counter, mock.MagicMock],
+    call_harness: tuple[FakeState, Counter, mock.MagicMock],
     num_revisions: int,
 ) -> None:
     state, calls, repo = call_harness

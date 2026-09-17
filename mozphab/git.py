@@ -12,11 +12,6 @@ import uuid
 from contextlib import suppress
 from datetime import datetime
 from functools import lru_cache
-from typing import (
-    List,
-    Optional,
-    Tuple,
-)
 
 from mozphab import environment
 
@@ -60,7 +55,7 @@ LANDING_MERGE_MESSAGE_PATTERNS = (
 
 
 class Git(Repository):
-    def __init__(self, path: str, bare_path: Optional[str] = None):
+    def __init__(self, path: str, bare_path: str | None = None):
         dot_path = bare_path or os.path.join(path, ".git")
         if not os.path.exists(dot_path):
             raise ValueError("%s: not a git repository" % path)
@@ -83,14 +78,14 @@ class Git(Repository):
 
         self.vcs_version = m.group(0)
         # Set by `set_args` once the commit range is known.
-        self.revset: Optional[Tuple[str, str]] = None
+        self.revset: tuple[str, str] | None = None
         # Set by `before_submit` to the branch to return to afterwards.
         self.branch = ""
         # Name of the branch created by `before_patch`, if any.
         self.patch_branch_name = None
 
     @property
-    def required_revset(self) -> Tuple[str, str]:
+    def required_revset(self) -> tuple[str, str]:
         """Return the commit range, which `set_args` sets before the stack is used."""
         if not self.revset:
             raise Error("Internal error: the commit range has not been set.")
@@ -106,7 +101,7 @@ class Git(Repository):
         """Check if local VCS is different than the remote one."""
         return self.vcs != self.phab_vcs
 
-    def _hg_to_git(self, node: str) -> Optional[str]:
+    def _hg_to_git(self, node: str) -> str | None:
         """Convert Mercurial hashtag to Git."""
         if not self.is_cinnabar_required:
             return None
@@ -114,7 +109,7 @@ class Git(Repository):
         return self.git_out_text(["cinnabar", "hg2git", node])
 
     @lru_cache(maxsize=None)  # noqa: B019
-    def _git_to_hg(self, node: str) -> Optional[str]:
+    def _git_to_hg(self, node: str) -> str | None:
         """Convert Git hashtag to Mercurial."""
         if not self.is_cinnabar_required:
             return None
@@ -168,21 +163,21 @@ class Git(Repository):
         """Quick check for repository at specified path."""
         return os.path.exists(os.path.join(path, ".git"))
 
-    def git_call(self, command: List[str], **kwargs):
+    def git_call(self, command: list[str], **kwargs):
         """Call git from the repository path."""
         self.git.call(command, cwd=self.path, **kwargs)
 
     def git_out_binary(
-        self, command: List[str], path: Optional[str] = None, **kwargs
+        self, command: list[str], path: str | None = None, **kwargs
     ) -> bytes:
         """Call git from the repository path and return its raw output."""
         return self.git.output_binary(command, cwd=path or self.path, **kwargs)
 
     def git_out_text(
         self,
-        command: List[str],
-        path: Optional[str] = None,
-        extra_env: Optional[dict] = None,
+        command: list[str],
+        path: str | None = None,
+        extra_env: dict | None = None,
         **kwargs,
     ) -> str:
         """Call git from the repository path and return its output as one string."""
@@ -192,11 +187,11 @@ class Git(Repository):
 
     def git_out(
         self,
-        command: List[str],
-        path: Optional[str] = None,
-        extra_env: Optional[dict] = None,
+        command: list[str],
+        path: str | None = None,
+        extra_env: dict | None = None,
         **kwargs,
-    ) -> List[str]:
+    ) -> list[str]:
         """Call git from the repository path and return its output as lines."""
         return self.git.output(
             command, cwd=path or self.path, extra_env=extra_env, **kwargs
@@ -207,7 +202,7 @@ class Git(Repository):
         if self.branch and not self._is_head_on_branch(self.branch):
             self.checkout(self.branch)
 
-    def _find_branches_to_rebase(self, commits: List[Commit]) -> dict:
+    def _find_branches_to_rebase(self, commits: list[Commit]) -> dict:
         """Create a list of branches to rebase."""
         branches_to_rebase = {}
         for commit in commits:
@@ -228,7 +223,7 @@ class Git(Repository):
 
         return branches_to_rebase
 
-    def finalize(self, commits: List[Commit]):
+    def finalize(self, commits: list[Commit]):
         """Rebase all branches based on changed commits from the stack."""
         branches_to_rebase = self._find_branches_to_rebase(commits)
 
@@ -243,19 +238,19 @@ class Git(Repository):
         if self.branch and not self._is_head_on_branch(self.branch):
             self.checkout(self.branch)
 
-    def refresh_commit_stack(self, commits: List[Commit]):
+    def refresh_commit_stack(self, commits: list[Commit]):
         """Update revset and names of the commits."""
         for commit in commits:
             commit.name = short_node(commit.node)
         self.revset = (commits[0].node, commits[-1].node)
 
-    def get_base_remote_args(self) -> List[str]:
+    def get_base_remote_args(self) -> list[str]:
         """Return a list of `--remotes` arguments to limit commits to official remotes."""
         remote_args = [f"--remotes={remote}" for remote in self.get_base_remotes()]
 
         return remote_args if remote_args else ["--remotes"]
 
-    def get_base_remotes(self) -> List[str]:
+    def get_base_remotes(self) -> list[str]:
         """Return a list of remotes to use for selecting the first unpublished node."""
         if self.args.upstream:
             logger.debug(f"Using remote from `--upstream` arg: {self.args.upstream}.")
@@ -265,7 +260,7 @@ class Git(Repository):
             logger.debug(f"Using remote from `git.remote` config: {config.git_remote}.")
             return config.git_remote
 
-        remotes: List[str] = self.git_out(["remote"])
+        remotes: list[str] = self.git_out(["remote"])
 
         if len(remotes) == 1:
             logger.info(f"Using the only available remote: {remotes[0]}")
@@ -286,7 +281,7 @@ class Git(Repository):
         logger.debug(f"Using all detected remotes: {remotes}.")
         return remotes
 
-    def _get_first_unpublished_node(self, end: str = "HEAD") -> Optional[str]:
+    def _get_first_unpublished_node(self, end: str = "HEAD") -> str | None:
         """Check which commits should be pushed and return the oldest one."""
         remote_args = self.get_base_remote_args()
 
@@ -309,7 +304,7 @@ class Git(Repository):
         unpublished = self.git_out(["rev-list", "-1", node, "--not", *remote_args])
         return not unpublished
 
-    def get_latest_landing_node(self, before: Optional[int] = None) -> Optional[str]:
+    def get_latest_landing_node(self, before: int | None = None) -> str | None:
         """Return the most recent autoland-to-mozilla-central merge on a remote."""
         remote_args = self.get_base_remote_args()
         grep_args = []
@@ -350,7 +345,7 @@ class Git(Repository):
             end = start_rev if is_single else self.args.end_rev
             self.revset = (start, end)
 
-    def _git_get_children(self, node: str) -> List[str]:
+    def _git_get_children(self, node: str) -> list[str]:
         """Get commits SHA1 with their children.
 
         Args:
@@ -367,7 +362,7 @@ class Git(Repository):
         )
 
     @staticmethod
-    def _get_direct_children(node: str, rev_list: List[str]) -> List[str]:
+    def _get_direct_children(node: str, rev_list: list[str]) -> list[str]:
         """Return direct children of the commit.
 
         Args:
@@ -385,7 +380,7 @@ class Git(Repository):
 
         return []
 
-    def _get_commits_info(self, start: str, end: str) -> List[str]:
+    def _get_commits_info(self, start: str, end: str) -> list[str]:
         """Log useful info about the commits within the desired range.
 
         Returns a list of strings
@@ -416,7 +411,7 @@ class Git(Repository):
         )[: -len(boundary) - 1]
         return log.split("%s\n" % boundary)
 
-    def _is_child(self, parent: str, node: str, rev_list: List[str]) -> bool:
+    def _is_child(self, parent: str, node: str, rev_list: list[str]) -> bool:
         """Check if `node` is a direct or indirect child of the `parent`.
 
         Args:
@@ -438,14 +433,14 @@ class Git(Repository):
 
         return False
 
-    def commit_stack(self, single: bool = False) -> Optional[List[Commit]]:
+    def commit_stack(self, single: bool = False) -> list[Commit] | None:
         """Collect all the info about commits."""
         if not self.revset:
             # No commits found to submit
             return None
 
         commits = []
-        rev_list: List[str] = []
+        rev_list: list[str] = []
         first_node = ""
         for log_line in self._get_commits_info(*self.revset):
             if not log_line:
@@ -468,9 +463,7 @@ class Git(Repository):
 
         return commits
 
-    def _commit_from_info(
-        self, log_info: str, first_node: Optional[str] = None
-    ) -> Commit:
+    def _commit_from_info(self, log_info: str, first_node: str | None = None) -> Commit:
         """Parse the ouptut of _get_commits_info into a Commit object.
 
         Note: This does some validation to prevent merge commits,
@@ -563,7 +556,7 @@ class Git(Repository):
         self.git_call(["checkout", "--quiet", node])
 
     def commit(
-        self, body: str, author: Optional[str] = None, author_date: Optional[int] = None
+        self, body: str, author: str | None = None, author_date: int | None = None
     ):
         """Commit the changes in the working directory.
 
@@ -657,7 +650,7 @@ class Git(Repository):
             self.checkout(node)
 
     def apply_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
+        self, diff: str, body: str, author: str | None, author_date: int | None
     ):
         # apply the patch as a binary file to ensure the correct line endings
         # is used.
@@ -667,7 +660,7 @@ class Git(Repository):
         self.commit(body, author, author_date)
 
     def format_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
+        self, diff: str, body: str, author: str | None, author_date: int | None
     ) -> str:
         return diff
 
@@ -730,7 +723,7 @@ class Git(Repository):
                 },
             )
 
-    def amend_commit(self, commit: Commit, commits: List[Commit]):
+    def amend_commit(self, commit: Commit, commits: list[Commit]):
         """Amend the commit with an updated message.
 
         Changing commit's message changes also its SHA1.
@@ -810,7 +803,7 @@ class Git(Repository):
         # If the command ran without an error, the commit is a descendant.
         return True
 
-    def get_repo_head_branch(self) -> Optional[str]:
+    def get_repo_head_branch(self) -> str | None:
         default_branch = self.phab_repo["fields"]["defaultBranch"]
 
         remotes = self.get_base_remotes()
@@ -831,7 +824,7 @@ class Git(Repository):
         except CommandError as e:
             raise Error(f"Failed to fetch from upstream: {str(e)}")
 
-    def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
+    def uplift_commits(self, dest: str, commits: list[Commit]) -> list[Commit]:
         # Branch name for the uplift.
         mozphab_uplift_branch = f"{self.branch}_uplift"
 

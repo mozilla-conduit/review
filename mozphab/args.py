@@ -6,7 +6,6 @@ import argparse
 import os
 import textwrap
 from importlib import import_module
-from typing import List, Set
 
 from mozphab import commands
 
@@ -15,7 +14,7 @@ from .detect_repository import find_repo_root
 from .logger import logger
 
 
-def should_fallback_to_submit(argv: List[str], commands: Set[str]) -> bool:
+def should_fallback_to_submit(argv: list[str], commands: set[str]) -> bool:
     """Return `True` if `moz-phab` should fallback to `submit` command.
 
     If `moz-phab` is called without a command and from within a repository,
@@ -41,7 +40,7 @@ def should_fallback_to_submit(argv: List[str], commands: Set[str]) -> bool:
     return True
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     main_parser = argparse.ArgumentParser(add_help=False)
     main_parser.add_argument("--version", action="store_true", help=argparse.SUPPRESS)
     main_parser.add_argument(

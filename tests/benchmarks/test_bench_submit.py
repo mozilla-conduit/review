@@ -23,8 +23,9 @@ not contribute to the count, which is the right behaviour for
 isolating moz-phab's own perf signal.
 """
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -42,7 +43,7 @@ call_conduit = mock.Mock()
 def make_submit_create_dispatcher() -> Callable[..., Any]:
     """Return a `call_conduit.side_effect` for the create-revision flow."""
 
-    def dispatch(method: str, args: Dict[str, Any], **kwargs: Any) -> Any:
+    def dispatch(method: str, args: dict[str, Any], **kwargs: Any) -> Any:
         if method == "conduit.ping":
             return {}
         if method == "diffusion.repository.search":

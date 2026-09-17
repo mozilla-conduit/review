@@ -12,7 +12,6 @@ import re
 import sys
 import time
 from glob import glob
-from typing import List
 
 from colorama import just_fix_windows_console
 
@@ -25,7 +24,7 @@ LOG_MAX_SIZE = 1024 * 1024 * 50
 LOG_BACKUPS = 5
 
 
-_handlers: List[logging.Handler] = []
+_handlers: list[logging.Handler] = []
 
 
 class ColourFormatter(logging.Formatter):

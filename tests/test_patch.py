@@ -3,7 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
-from typing import Any, Dict, Optional
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -18,7 +18,7 @@ from .conftest import with_stack_graph
 
 def test_resolve_branch_name():
     class Args(argparse.Namespace):
-        def __init__(self, name: Optional[str] = None, no_commit: bool = False):
+        def __init__(self, name: str | None = None, no_commit: bool = False):
             self.name = name
             self.no_commit = no_commit
 
@@ -738,7 +738,7 @@ def test_patch(
     m_print.assert_has_calls((mock.call("raw2"), mock.call("raw1"), mock.call("raw3")))
 
 
-REV_1: Dict[str, Any] = {
+REV_1: dict[str, Any] = {
     "phid": "PHID-1",
     "id": 1,
     "fields": {
@@ -749,7 +749,7 @@ REV_1: Dict[str, Any] = {
     },
 }
 
-REV_2: Dict[str, Any] = {
+REV_2: dict[str, Any] = {
     "phid": "PHID-2",
     "id": 2,
     "fields": {
@@ -760,7 +760,7 @@ REV_2: Dict[str, Any] = {
     },
 }
 
-REV_3: Dict[str, Any] = {
+REV_3: dict[str, Any] = {
     "phid": "PHID-3",
     "id": 3,
     "fields": {
@@ -771,7 +771,7 @@ REV_3: Dict[str, Any] = {
     },
 }
 
-DIFF_1: Dict[str, Any] = {
+DIFF_1: dict[str, Any] = {
     "id": 1,
     "phid": "DIFFPHID-1",
     "fields": {"revisionPHID": "PHID-1", "dateCreated": 1547806078},
@@ -790,7 +790,7 @@ DIFF_1: Dict[str, Any] = {
     },
 }
 
-DIFF_2: Dict[str, Any] = {
+DIFF_2: dict[str, Any] = {
     "id": 2,
     "phid": "DIFFPHID-2",
     "attachments": {
@@ -800,7 +800,7 @@ DIFF_2: Dict[str, Any] = {
     },
 }
 
-DIFF_3: Dict[str, Any] = {
+DIFF_3: dict[str, Any] = {
     "id": 3,
     "phid": "DIFFPHID-3",
     "fields": {"revisionPHID": "PHID-1", "dateCreated": 1547806078},

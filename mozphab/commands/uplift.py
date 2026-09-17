@@ -8,7 +8,6 @@ import urllib.error as url_error
 import urllib.request as url_request
 import webbrowser
 from pathlib import Path
-from typing import Optional
 
 from mozphab.conduit import (
     conduit,
@@ -75,7 +74,7 @@ def list_trains():
 
 
 def build_assessment_linking_url(
-    lando_url: str, tip_commit_id: int, assessment_id: Optional[int] = None
+    lando_url: str, tip_commit_id: int, assessment_id: int | None = None
 ) -> str:
     """Return the URL for linking revisions."""
     # Ensure `lando_url` doesn't have a trailing slash.

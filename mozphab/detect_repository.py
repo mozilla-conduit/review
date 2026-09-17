@@ -4,7 +4,6 @@
 
 import argparse
 import os
-from typing import Optional
 
 from .exceptions import Error
 from .git import Git
@@ -13,7 +12,7 @@ from .mercurial import Mercurial
 from .repository import Repository
 
 
-def find_repo_root(path: str, avoid_jj: bool = False) -> Optional[str]:
+def find_repo_root(path: str, avoid_jj: bool = False) -> str | None:
     """Lightweight check for a repo in/under the specified path."""
     path = os.path.abspath(path)
     while os.path.split(path)[1]:
@@ -27,7 +26,7 @@ def find_repo_root(path: str, avoid_jj: bool = False) -> Optional[str]:
     return None
 
 
-def probe_repo(path: str, avoid_jj: bool = False) -> Optional[Repository]:
+def probe_repo(path: str, avoid_jj: bool = False) -> Repository | None:
     """Attempt to find a repository at `path`."""
     try:
         return Mercurial(path)

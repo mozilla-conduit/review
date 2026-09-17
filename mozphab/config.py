@@ -8,7 +8,6 @@ import os
 from pathlib import Path
 from typing import (
     Any,
-    Optional,
 )
 
 from mozphab import environment
@@ -17,9 +16,7 @@ from .logger import logger
 
 
 class Config(object):
-    def __init__(
-        self, should_access_file: bool = True, filename: Optional[Path] = None
-    ):
+    def __init__(self, should_access_file: bool = True, filename: Path | None = None):
         """Sets default config and overrides it with values from the config file.
 
         Kwargs:

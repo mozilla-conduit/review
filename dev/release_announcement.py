@@ -15,7 +15,6 @@ import subprocess
 import time
 import urllib.request
 from pathlib import Path
-from typing import List
 
 # If we are `moz-phab/dev/release_announcement.py`, then `moz-phab` is the following.
 MOZPHAB_PATH_DEFAULT = Path(__file__).resolve().parent.parent
@@ -40,7 +39,7 @@ def get_bug_ids(
     last_version: str,
     current_version: str,
     mozphab_path: Path,
-) -> List[str]:
+) -> list[str]:
     """Fetch commits between `last_version` and `current_version` and return Bug IDs."""
     output = subprocess.check_output(
         ["git", "log", "--oneline", f"{last_version}..{current_version}"],

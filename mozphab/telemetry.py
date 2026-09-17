@@ -5,9 +5,6 @@
 import logging
 import platform
 from pathlib import Path
-from typing import (
-    Union,
-)
 
 import distro
 
@@ -195,4 +192,4 @@ def telemetry():
 class _Globals:
     """Container for holding globals in a way that can be easily replaced."""
 
-    telemetry: Union[Telemetry, TelemetryDisabled] = TelemetryDisabled()
+    telemetry: Telemetry | TelemetryDisabled = TelemetryDisabled()

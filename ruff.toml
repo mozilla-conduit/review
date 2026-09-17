@@ -7,7 +7,20 @@ line-length = 88
 target-version = "py310"
 
 [lint]
-select = ["C", "E", "F", "W", "B", "B9", "I"]
+select = [
+    "C",
+    "E",
+    "F",
+    "W",
+    "B",
+    "B9",
+    "I",
+    "UP006",
+    "UP007",
+    "UP035",
+    "UP037",
+    "UP045",
+]
 ignore = ["B006", "B904", "C901", "E203", "E501"]
 exclude = [
     ".hg",

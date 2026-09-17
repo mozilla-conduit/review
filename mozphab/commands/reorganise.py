@@ -6,13 +6,7 @@
 import argparse
 import sys
 from collections import OrderedDict
-from typing import (
-    Container,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-)
+from collections.abc import Container
 
 from mozphab.conduit import conduit
 from mozphab.config import config
@@ -42,7 +36,7 @@ def linkify_revision_id(
 
 
 def linkify_bugs_in_text(
-    text: str, bmo_url: Optional[str], hyperlinks_enabled: bool = True
+    text: str, bmo_url: str | None, hyperlinks_enabled: bool = True
 ) -> str:
     """Find bug numbers in text and make them clickable Bugzilla links.
 
@@ -59,7 +53,7 @@ def linkify_bugs_in_text(
     return BUG_ID_RE.sub(replace_bug, text)
 
 
-def to_llist(revisions: List[str]) -> Dict[str, Optional[str]]:
+def to_llist(revisions: list[str]) -> dict[str, str | None]:
     """Converts a list to a linked list.
 
     Parameters:
@@ -76,8 +70,8 @@ def to_llist(revisions: List[str]) -> Dict[str, Optional[str]]:
 
 
 def walk_llist(
-    llist: Dict[str, Optional[str]], allow_multiple_heads: bool = False
-) -> List[str]:
+    llist: dict[str, str | None], allow_multiple_heads: bool = False
+) -> list[str]:
     """Parse the llist for multiple heads and return a unique list of elements.
 
     Parameters:
@@ -99,7 +93,7 @@ def walk_llist(
         raise Error("Failed to find head.")
 
     # Walk list, checking for loops
-    nodes: List[str] = []
+    nodes: list[str] = []
     while head:
         nodes.append(head)
         child = llist.get(head)
@@ -112,8 +106,8 @@ def walk_llist(
 
 
 def remove_or_set_child(
-    local_list: Dict, remote_list: Dict, revision: str
-) -> Optional[Tuple[str, List[str]]]:
+    local_list: dict, remote_list: dict, revision: str
+) -> tuple[str, list[str]] | None:
     """Return a `children.*` transaction for the revision based on remote/local state.
 
     Return `None` if no transaction is required.
@@ -132,11 +126,11 @@ def remove_or_set_child(
 
 
 def stack_transactions(
-    remote_phids: List[str],
-    local_phids: List[str],
+    remote_phids: list[str],
+    local_phids: list[str],
     abandoned_revisions: Container[str],
     no_abandon: bool = False,
-) -> Dict[str, List[Dict]]:
+) -> dict[str, list[dict]]:
     """Prepare transactions to set the stack as provided in local_phids.
 
     Returns a dict of transactions for PHID as defined in
@@ -219,14 +213,14 @@ def stack_transactions(
 
 
 def convert_stackgraph_to_linear(
-    stack_graph: Dict[str, List[str]],
-    phid_to_id: Dict[str, int],
-) -> Dict[str, Optional[str]]:
+    stack_graph: dict[str, list[str]],
+    phid_to_id: dict[str, int],
+) -> dict[str, str | None]:
     """Converts the `stackGraph` data from Phabricator to a linear format.
 
     Ensures each revision has only a single successor revision.
     """
-    linear_stackgraph: Dict[str, Optional[str]] = {}
+    linear_stackgraph: dict[str, str | None] = {}
 
     for successor_phid, predecessor_phid_list in stack_graph.items():
         for predecessor_phid in predecessor_phid_list:
@@ -256,11 +250,11 @@ def convert_stackgraph_to_linear(
 
 
 def force_stack_transactions(
-    remote_phids: List[str],
-    local_phids: List[str],
+    remote_phids: list[str],
+    local_phids: list[str],
     abandoned_revisions: Container[str],
     no_abandon_unconnected: bool = False,
-) -> Dict[str, List[Dict]]:
+) -> dict[str, list[dict]]:
     """Prepare transactions for force mode: synchronize remote to match local exactly.
 
     Force mode logic:
@@ -326,8 +320,8 @@ def force_stack_transactions(
 
 
 def show_revision_glossary(
-    transactions: Dict[str, List[Dict]],
-    revisions: List[dict],
+    transactions: dict[str, list[dict]],
+    revisions: list[dict],
     repo: Repository,
     hyperlinks_enabled: bool = True,
 ):
@@ -369,9 +363,9 @@ def show_revision_glossary(
 
 
 def format_stack(
-    phids: List[str],
+    phids: list[str],
     title: str,
-    phid_to_revision: Dict[str, dict],
+    phid_to_revision: dict[str, dict],
     repo: Repository,
     hyperlinks_enabled: bool = True,
 ) -> None:
@@ -398,9 +392,9 @@ def format_stack(
 
 
 def show_verbose_stack_info(
-    phabstack_phids: List[str],
-    localstack_phids: List[str],
-    revisions: List[dict],
+    phabstack_phids: list[str],
+    localstack_phids: list[str],
+    revisions: list[dict],
     repo: Repository,
     hyperlinks_enabled: bool = True,
 ):

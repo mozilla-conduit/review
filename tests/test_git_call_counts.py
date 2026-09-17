@@ -19,8 +19,9 @@ underlying workflow runs against a real `git_repo_path`.
 """
 
 from collections import Counter
+from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -33,7 +34,7 @@ from mozphab import gitcommand, mozphab
 call_conduit = mock.Mock()
 
 
-def extract_git_subcommand(command: List[str]) -> str:
+def extract_git_subcommand(command: list[str]) -> str:
     """Pull the git subcommand out of a fully-qualified git invocation.
 
     moz-phab prepends `-c key=value` flags to every git call (for UTF-8
@@ -62,12 +63,12 @@ def git_call_counter(monkeypatch: pytest.MonkeyPatch) -> Iterator[Counter]:
     original_check_call = gitcommand.check_call
     original_command_output = gitcommand.command_output
 
-    def counting_check_call(command: List[str], **kwargs: Any) -> Any:
+    def counting_check_call(command: list[str], **kwargs: Any) -> Any:
         if command and Path(command[0]).name == "git":
             calls[extract_git_subcommand(command)] += 1
         return original_check_call(command, **kwargs)
 
-    def counting_command_output(command: List[str], **kwargs: Any) -> Any:
+    def counting_command_output(command: list[str], **kwargs: Any) -> Any:
         if command and Path(command[0]).name == "git":
             calls[extract_git_subcommand(command)] += 1
         return original_command_output(command, **kwargs)
@@ -80,7 +81,7 @@ def git_call_counter(monkeypatch: pytest.MonkeyPatch) -> Iterator[Counter]:
 def make_submit_create_dispatcher() -> Callable[..., Any]:
     """Side-effect for `call_conduit` covering the create-revision flow."""
 
-    def dispatch(method: str, args: Dict[str, Any], **kwargs: Any) -> Any:
+    def dispatch(method: str, args: dict[str, Any], **kwargs: Any) -> Any:
         if method == "conduit.ping":
             return {}
         if method == "diffusion.repository.search":
@@ -156,7 +157,7 @@ def make_patch_raw_dispatcher() -> Callable[..., Any]:
         "\n"
     )
 
-    def dispatch(method: str, args: Dict[str, Any], **kwargs: Any) -> Any:
+    def dispatch(method: str, args: dict[str, Any], **kwargs: Any) -> Any:
         if method == "conduit.ping":
             return {}
         if method == "diffusion.repository.search":
@@ -187,7 +188,7 @@ def make_patch_raw_dispatcher() -> Callable[..., Any]:
 # rather than 1).
 #
 # Re-derive if the workflow is refactored intentionally.
-SUBMIT_CREATE_EXPECTED: Dict[str, int] = {
+SUBMIT_CREATE_EXPECTED: dict[str, int] = {
     "--version": 1,
     "branch": 1,
     "cat-file": 2,
@@ -243,7 +244,7 @@ def test_submit_create_git_call_count(
 # diff to stdout rather than applying it, so most of moz-phab's git
 # work falls away. Re-derive if the workflow is refactored
 # intentionally.
-PATCH_RAW_EXPECTED: Dict[str, int] = {
+PATCH_RAW_EXPECTED: dict[str, int] = {
     "--version": 1,
     "config": 1,
     "gc": 1,

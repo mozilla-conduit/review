@@ -11,16 +11,10 @@ import re
 import stat
 import sys
 import tempfile
+from collections.abc import Callable
 from contextlib import contextmanager
 from itertools import zip_longest
 from shutil import which
-from typing import (
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-)
 
 from mozphab import environment
 
@@ -79,7 +73,7 @@ DONTBUILD_RE = re.compile(r"\s*\(?DONTBUILD\)?(?:\s*\(NPOTB\))?")
 VALID_EMAIL_RE = re.compile(r"[^@ \t\r\n]+@[^@ \t\r\n]+\.[^@ \t\r\n]+")
 
 
-def which_path(path: str) -> Optional[str]:
+def which_path(path: str) -> str | None:
     """Check if an executable is provided. Fall back to which if not.
 
     Args:
@@ -99,9 +93,7 @@ def which_path(path: str) -> Optional[str]:
     return which(path)
 
 
-def parse_config(
-    config_list: List[str], filter_func: Optional[Callable] = None
-) -> dict:
+def parse_config(config_list: list[str], filter_func: Callable | None = None) -> dict:
     """Parses list with "name=value" strings.
 
     Args:
@@ -127,7 +119,7 @@ def parse_config(
     return result
 
 
-def read_json_field(files: List[str], field_path: List[str]) -> Optional[str]:
+def read_json_field(files: list[str], field_path: list[str]) -> str | None:
     """Parses json files in turn returning value as per field_path, or None."""
     for filename in files:
         try:
@@ -149,9 +141,7 @@ def read_json_field(files: List[str], field_path: List[str]) -> Optional[str]:
 
 
 @contextmanager
-def temporary_file(
-    content: str, encoding: str = "utf-8", newline: Optional[str] = "\n"
-):
+def temporary_file(content: str, encoding: str = "utf-8", newline: str | None = "\n"):
     f = tempfile.NamedTemporaryFile(
         delete=False, mode="w+", encoding=encoding, newline=newline
     )
@@ -193,7 +183,7 @@ def get_arcrc_path() -> str:
     return arcrc
 
 
-def parse_arc_diff_rev(body: str) -> Optional[int]:
+def parse_arc_diff_rev(body: str) -> int | None:
     m = ARC_DIFF_REV_RE.search(body)
     return int(m.group("rev")) if m else None
 
@@ -207,9 +197,7 @@ def strip_dontbuild(text: str) -> str:
     return DONTBUILD_RE.sub("", text).strip()
 
 
-def move_drev_to_original(
-    body: str, rev_id: Optional[int]
-) -> Tuple[str, Optional[int]]:
+def move_drev_to_original(body: str, rev_id: int | None) -> tuple[str, int | None]:
     """Handle moving the `Differential Revision` line.
 
     Moves the `Differential Revision` line to `Original Revision`, if a link
@@ -246,7 +234,7 @@ def move_drev_to_original(
     )
 
 
-def parse_api_error(api_response: str) -> Optional[str]:
+def parse_api_error(api_response: str) -> str | None:
     """Parse the string output from 'arc call-conduit' and return any errors found.
 
     Args:
@@ -270,11 +258,11 @@ def parse_api_error(api_response: str) -> Optional[str]:
         return response["errorMessage"]
 
 
-def prompt(question: str, options: Optional[List[str]] = None):
+def prompt(question: str, options: list[str] | None = None):
     if environment.HAS_ANSI:
         question = "\033[33m%s\033[0m" % question
     prompt_str = question
-    options_map: Dict[str, str] = {}
+    options_map: dict[str, str] = {}
     if options:
         prompt_options = list(options)
         prompt_options[0] = prompt_options[0].upper()
@@ -303,7 +291,7 @@ def has_arc_rejections(body: str) -> bool:
     return all(r.search(body) for r in ARC_REJECT_RE_LIST)
 
 
-def augment_commits_from_body(commits: List[Commit]):
+def augment_commits_from_body(commits: list[Commit]):
     """Extract metadata from commit body as fields.
 
     Adds: rev-id, bug-id, reviewers, wip
@@ -330,7 +318,7 @@ def augment_commits_from_body(commits: List[Commit]):
         commit.wip = commit.wip_in_commit_title()
 
 
-def parse_bugs(title: str) -> List[str]:
+def parse_bugs(title: str) -> list[str]:
     return list(BUG_ID_RE.findall(title))
 
 
@@ -342,7 +330,7 @@ def parse_reviewers(title: str) -> dict:
         "r=" reviewers under the "granted" key
     """
 
-    def extend_matches(match_re: re.Pattern, matches: List[str]):
+    def extend_matches(match_re: re.Pattern, matches: list[str]):
         """Extends `matches` with any matches found using `match_re`.
         Args:
             match_re (re.Pattern): a regular expression object to search with
@@ -364,7 +352,7 @@ def strip_depends_on(body: str) -> str:
     return DEPENDS_ON_RE.sub("", body).rstrip()
 
 
-def update_commit_title_previews(commits: List[Commit]):
+def update_commit_title_previews(commits: list[Commit]):
     """Update title-preview from commit metadata for all commits in stack"""
     for commit in commits:
         commit.title_preview = build_commit_title(commit)
@@ -470,7 +458,7 @@ def short_node(text: str) -> str:
 
 def create_hunk_lines(
     body: str, prefix: str, check_eof: bool = True
-) -> Tuple[List[str], Optional[bool]]:
+) -> tuple[list[str], bool | None]:
     """Parse a text body into a list of lines to be used in hunks.
 
     Args:
@@ -526,7 +514,7 @@ def create_hunk_lines(
     return lines, eof_missing_newline if check_eof else None
 
 
-def split_lines(body: str) -> List[str]:
+def split_lines(body: str) -> list[str]:
     """Split a string on line separators, and keep line endings.
 
     This method behaves the same as `str.splitlines(True)`, but only splits on POSIX
@@ -546,7 +534,7 @@ def split_lines(body: str) -> List[str]:
     return re.split("(\n|\r\n)", body)
 
 
-def split_binary_lines(body: bytes) -> List[bytes]:
+def split_binary_lines(body: bytes) -> list[bytes]:
     """Split bytes on line separators, and keep line endings.
 
     See `split_lines`, which this mirrors for binary content.
@@ -554,7 +542,7 @@ def split_binary_lines(body: bytes) -> List[bytes]:
     return re.split(b"(\n|\r\n)", body)
 
 
-def join_lineseps(lines: List[str]) -> List[str]:
+def join_lineseps(lines: list[str]) -> list[str]:
     """Given a list of strings, join every two entries together where possible.
 
     NOTE: If the list length is odd, then the last entry is joined with an empty string.

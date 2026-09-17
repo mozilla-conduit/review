@@ -6,10 +6,6 @@ import argparse
 import json
 import os
 import urllib.parse
-from typing import (
-    List,
-    Optional,
-)
 
 from mozphab import environment
 
@@ -52,10 +48,10 @@ def is_mozilla_phabricator(url: str) -> bool:
 
 
 class Repository(object):
-    def __init__(self, path: str, dot_path: str, phab_url: Optional[str] = None):
+    def __init__(self, path: str, dot_path: str, phab_url: str | None = None):
         self._phid = None
         self._phab_repo = None
-        self._phab_vcs: Optional[str] = None
+        self._phab_vcs: str | None = None
         # Short name of the local VCS, set by each backend.
         self.vcs = ""
         self.path = path  # base repository directory
@@ -127,7 +123,7 @@ class Repository(object):
         May be called multiple times.
         If an exception is raised this is NOT called (to avoid dataloss)."""
 
-    def finalize(self, commits: List[Commit]):
+    def finalize(self, commits: list[Commit]):
         """Update the history after node changed."""
 
     def set_args(self, args: argparse.Namespace):
@@ -140,14 +136,14 @@ class Repository(object):
 
         self.args = args
 
-    def untracked(self) -> List[str]:
+    def untracked(self) -> list[str]:
         """Return a list of untracked files.
 
         Backends that can't report untracked files inherit this empty default.
         """
         return []
 
-    def commit_stack(self, single: bool = False) -> Optional[List[Commit]]:
+    def commit_stack(self, single: bool = False) -> list[Commit] | None:
         """Return list of commits.
 
         List of `Commit`s:
@@ -172,7 +168,7 @@ class Repository(object):
         """Create a Diff object with changes."""
         raise NotImplementedError()
 
-    def refresh_commit_stack(self, commits: List[Commit]):
+    def refresh_commit_stack(self, commits: list[Commit]):
         """Update the stack following an altering change (eg rebase)."""
 
     def is_node(self, node: str) -> bool:
@@ -194,7 +190,7 @@ class Repository(object):
         """
         raise NotImplementedError()
 
-    def get_latest_landing_node(self, before: Optional[int] = None) -> Optional[str]:
+    def get_latest_landing_node(self, before: int | None = None) -> str | None:
         """Return the most recent node known to have landed on mozilla-central.
 
         Used as a rebase target when a patch's original base commit isn't a
@@ -211,7 +207,7 @@ class Repository(object):
     def commit(self, body: str):
         """Commit the changes in the working directory."""
 
-    def amend_commit(self, commit: Commit, commits: List[Commit]):
+    def amend_commit(self, commit: Commit, commits: list[Commit]):
         """Amend commit description from `title` and `desc` fields"""
 
     def is_descendant(self, node: str) -> bool:
@@ -222,13 +218,13 @@ class Repository(object):
         """Return the node currently checked out in the working directory."""
         raise NotImplementedError()
 
-    def get_repo_head_branch(self) -> Optional[str]:
+    def get_repo_head_branch(self) -> str | None:
         """Return the expected branch/head for the current Phabricator repo.
 
         Confirms the identified head exists in the repository.
         """
 
-    def uplift_commits(self, dest: str, commits: List[Commit]) -> List[Commit]:
+    def uplift_commits(self, dest: str, commits: list[Commit]) -> list[Commit]:
         """Uplift the repo's revset onto `dest` and returns the refreshed `commits`."""
         raise NotImplementedError()
 
@@ -252,12 +248,12 @@ class Repository(object):
         """
 
     def apply_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
+        self, diff: str, body: str, author: str | None, author_date: int | None
     ):
         """Apply the patch and commit the changes."""
 
     def format_patch(
-        self, diff: str, body: str, author: Optional[str], author_date: Optional[int]
+        self, diff: str, body: str, author: str | None, author_date: int | None
     ) -> str:
         """Format a patch appropriate for importing."""
         raise NotImplementedError()
@@ -265,7 +261,7 @@ class Repository(object):
     def fetch_from_upstream(self):
         """Fetch latest changes from upstream remote without merging."""
 
-    def check_commits_for_submit(self, commits: List[Commit]):
+    def check_commits_for_submit(self, commits: list[Commit]):
         """Validate the list of commits are okay to submit."""
 
     def _api_url(self) -> str:

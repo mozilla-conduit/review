@@ -16,8 +16,9 @@ sequence without needing a real apply-able patch on disk. Future work
 could add a `--no-commit` variant to also cover the `git apply` path.
 """
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -27,7 +28,7 @@ from mozphab import mozphab
 call_conduit = mock.Mock()
 
 
-REV_1: Dict[str, Any] = {
+REV_1: dict[str, Any] = {
     "id": 1,
     "phid": "PHID-REV-1",
     "fields": {
@@ -40,7 +41,7 @@ REV_1: Dict[str, Any] = {
 }
 
 
-DIFF_1: Dict[str, Any] = {
+DIFF_1: dict[str, Any] = {
     "id": 1,
     "phid": "PHID-DIFF-1",
     "fields": {
@@ -83,7 +84,7 @@ def make_patch_raw_dispatcher() -> Callable[..., Any]:
     start of `patch`.
     """
 
-    def dispatch(method: str, args: Dict[str, Any], **kwargs: Any) -> Any:
+    def dispatch(method: str, args: dict[str, Any], **kwargs: Any) -> Any:
         if method == "conduit.ping":
             return {}
         if method == "diffusion.repository.search":
