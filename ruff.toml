@@ -4,7 +4,7 @@
 
 line-length = 88
 
-target-version = "py39"
+target-version = "py310"
 
 [lint]
 select = ["C", "E", "F", "W", "B", "B9", "I"]

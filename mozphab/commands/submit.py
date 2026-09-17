@@ -779,9 +779,8 @@ def _submit(repo: Repository, args: argparse.Namespace) -> List[Commit]:
     # after all revisions have been created/updated.
     ai_review_commits: List[Commit] = []
 
-    # Note: we can use `itertools.pairwise([None, *commits])` once we
-    # upgrade our minimum Python version to 3.10.
-    for index, (previous_commit, commit) in enumerate(zip([None, *commits], commits)):
+    for index, commit in enumerate(commits):
+        previous_commit = commits[index - 1] if index else None
         if not commit.submit:
             continue
 

@@ -1014,6 +1014,7 @@ def test_submit_create_no_checkout(in_process, hg_repo_path):
                 ),
                 key=changed_paths,
             ),
+            strict=False,
         )
     )
     # Make sure we've got something to assert!
