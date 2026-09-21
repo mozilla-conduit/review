@@ -893,10 +893,6 @@ class Git(Repository):
         self.git_call(["update-ref", branch, base])
 
     @lru_cache(maxsize=128)  # noqa: B019
-    def _file_size(self, blob: str) -> int:
-        return int(self.git_out_text(["cat-file", "-s", blob]))
-
-    @lru_cache(maxsize=128)  # noqa: B019
     def _cat_file(self, blob: str) -> bytes:
         return self.git_out_binary(["cat-file", "blob", blob])
 
@@ -921,18 +917,16 @@ class Git(Repository):
 
         # Extract the bodies of blobs to compare
         if a_blob == NULL_SHA1:
-            a_blob, a_bytes, a_size = None, b"", 0
+            a_blob, a_bytes = None, b""
         else:
             a_bytes = self._cat_file(a_blob)
-            a_size = self._file_size(a_blob)
 
         if b_blob == NULL_SHA1:
-            b_blob, b_bytes, b_size = None, b"", 0
+            b_blob, b_bytes = None, b""
         else:
             b_bytes = self._cat_file(b_blob)
-            b_size = self._file_size(b_blob)
 
-        file_size = max(a_size, b_size)
+        file_size = max(len(a_bytes), len(b_bytes))
         telemetry().submission.files_size.accumulate(file_size)
 
         # Detect if we're binary, and generate a unified diff

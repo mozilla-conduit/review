@@ -1108,29 +1108,12 @@ class Mercurial(Repository):
     def hg_cat(self, filename: str, node: str) -> bytes:
         return self.hg_out_binary(["cat", "-r", node, filename])
 
-    @lru_cache(maxsize=None)  # noqa: B019
-    def _file_size(self, filename: str, rev: str) -> int:
-        """Get the file size of the file."""
-        return int(
-            self.hg_out_text(
-                [
-                    "files",
-                    "-v",
-                    "-r",
-                    rev,
-                    os.path.join(self.path, filename),
-                    "-T",
-                    "{size}",
-                ],
-            )
-        )
-
     @lru_cache(maxsize=128)  # noqa: B019
     def _get_file_meta(self, filename: str, rev: str) -> dict:
         """Collect information about the file."""
         binary = False
         bin_body = self.hg_cat(filename, rev)
-        file_size = self._file_size(filename, rev)
+        file_size = len(bin_body)
         meta: dict[str, Any] = {
             "mime": "TEXT",
             "bin_body": bin_body,

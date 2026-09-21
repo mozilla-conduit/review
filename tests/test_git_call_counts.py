@@ -191,7 +191,7 @@ def make_patch_raw_dispatcher() -> Callable[..., Any]:
 SUBMIT_CREATE_EXPECTED: dict[str, int] = {
     "--version": 1,
     "branch": 1,
-    "cat-file": 2,
+    "cat-file": 1,
     "commit-tree": 1,
     "config": 1,
     "diff-index": 1,

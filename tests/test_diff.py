@@ -20,17 +20,15 @@ class Args(argparse.Namespace):
         self.lesscontext = less_context
 
 
-@mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
 @mock.patch("mozphab.git.Git.git_out")
-def test_create(m_git_out, m_cat_file, m_file_size, git):
+def test_create(m_git_out, m_cat_file, git):
     raw = (
         "000000 100644 0000000000000000000000000000000000000000 "
         "78981922613b2afb6025042ff6bd878ac1994e85 A\x00a"
     )
     diff = Diff()
     m_cat_file.side_effect = (b"a\n",)
-    m_file_size.return_value = 5
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
@@ -55,10 +53,9 @@ def test_create(m_git_out, m_cat_file, m_file_size, git):
     )
 
 
-@mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
 @mock.patch("mozphab.git.Git.git_out_binary")
-def test_change_file(m_git_out, m_cat_file, m_file_size, git):
+def test_change_file(m_git_out, m_cat_file, git):
     raw = (
         "100644 100644 78981922613b2afb6025042ff6bd878ac1994e85 "
         "422c2b7ab3b3c668038da977e4e93a5fc623169c M\x00a"
@@ -74,7 +71,6 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
 @@ -1 +1,2 @@
  a
 +b"""
-    m_file_size.return_value = 5
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
@@ -112,17 +108,15 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
     )
 
 
-@mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
 @mock.patch("mozphab.git.Git.git_out")
-def test_create_empty(m_git_out, m_cat_file, m_file_size, git):
+def test_create_empty(m_git_out, m_cat_file, git):
     raw = (
         "000000 100644 0000000000000000000000000000000000000000 "
         "78981922613b2afb6025042ff6bd878ac1994e85 A\x00a"
     )
     diff = Diff()
     m_cat_file.side_effect = (b"",)
-    m_file_size.return_value = 0
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
@@ -133,17 +127,15 @@ def test_create_empty(m_git_out, m_cat_file, m_file_size, git):
     assert change.cur_mode == "100644"
 
 
-@mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
 @mock.patch("mozphab.git.Git.git_out")
-def test_change_empty(m_git_out, m_cat_file, m_file_size, git):
+def test_change_empty(m_git_out, m_cat_file, git):
     raw = (
         "100644 100755 0000000000000000000000000000000000000000 "
         "78981922613b2afb6025042ff6bd878ac1994e85 M\x00a"
     )
     diff = Diff()
     m_cat_file.side_effect = (b"",)
-    m_file_size.return_value = 0
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
@@ -231,17 +223,15 @@ def test_change_empty_hg(
     ), "`change.hunks` should be an empty list when parsing empty files"
 
 
-@mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
 @mock.patch("mozphab.git.Git.git_out")
-def test_delete_file(m_git_out, m_cat_file, m_file_size, git):
+def test_delete_file(m_git_out, m_cat_file, git):
     raw = (
         "100644 000000 61780798228d17af2d34fce4cfbdf35556832472 "
         "0000000000000000000000000000000000000000 D\x00a"
     )
     diff = Diff()
     m_cat_file.side_effect = (b"a\nb\n",)
-    m_file_size.return_value = 5
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
@@ -263,17 +253,15 @@ def test_delete_file(m_git_out, m_cat_file, m_file_size, git):
     )
 
 
-@mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
 @mock.patch("mozphab.git.Git.git_out")
-def test_delete_empty_file(m_git_out, m_cat_file, m_file_size, git):
+def test_delete_empty_file(m_git_out, m_cat_file, git):
     raw = (
         "100644 000000 61780798228d17af2d34fce4cfbdf35556832472 "
         "0000000000000000000000000000000000000000 D\x00a"
     )
     diff = Diff()
     m_cat_file.side_effect = (b"",)
-    m_file_size.return_value = 0
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
@@ -282,10 +270,9 @@ def test_delete_empty_file(m_git_out, m_cat_file, m_file_size, git):
     assert change.hunks == []
 
 
-@mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
 @mock.patch("mozphab.git.Git.git_out")
-def test_recognize_binary(m_git_out, m_cat_file, m_file_size, git):
+def test_recognize_binary(m_git_out, m_cat_file, git):
     raw = (
         "000000 100644 0000000000000000000000000000000000000000 "
         "21be03052ed0c8dc31dff33eeb9275430241a727 A\x00sample.bin"
@@ -293,7 +280,6 @@ def test_recognize_binary(m_git_out, m_cat_file, m_file_size, git):
     diff = Diff()
     content = b"\x08\x00\x00\x10"
     m_cat_file.side_effect = (content,)
-    m_file_size.return_value = 5
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
@@ -311,18 +297,18 @@ def test_recognize_binary(m_git_out, m_cat_file, m_file_size, git):
     assert not change.hunks
 
 
-@mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
 @mock.patch("mozphab.git.Git.git_out")
-def test_recognize_long_text_as_binary(m_git_out, m_cat_file, m_file_size, git):
+def test_recognize_long_text_as_binary(m_git_out, m_cat_file, git, monkeypatch):
     raw = (
         "000000 100644 0000000000000000000000000000000000000000 "
         "78981922613b2afb6025042ff6bd878ac1994e85 A\x00a"
     )
     diff = Diff()
     content = b"a\n"
+    # Lower the limit rather than allocate a buffer over the real one.
+    monkeypatch.setattr(environment, "MAX_TEXT_SIZE", len(content) - 1)
     m_cat_file.side_effect = (content,)
-    m_file_size.return_value = environment.MAX_TEXT_SIZE + 1
     git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
@@ -335,10 +321,9 @@ def test_recognize_long_text_as_binary(m_git_out, m_cat_file, m_file_size, git):
     assert not change.hunks
 
 
-@mock.patch("mozphab.git.Git._file_size")
 @mock.patch("mozphab.git.Git._cat_file")
 @mock.patch("mozphab.git.Git.git_out_binary")
-def test_less_context(m_git_out, m_cat_file, m_file_size, git):
+def test_less_context(m_git_out, m_cat_file, git, monkeypatch):
     raw = (
         "100644 100644 78981922613b2afb6025042ff6bd878ac1994e85 "
         "422c2b7ab3b3c668038da977e4e93a5fc623169c M\x00a"
@@ -354,7 +339,6 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
 @@ -1 +1,2 @@
  a
 +b"""
-    m_file_size.return_value = 5
     git.args = Args(less_context=True)
 
     git._parse_diff_change(raw, diff)
@@ -372,8 +356,10 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
     )
 
     git.args = Args(less_context=False)
-    m_file_size.return_value = environment.MAX_CONTEXT_SIZE + 1
     m_cat_file.side_effect = (b"a\n", b"a\nb\n")
+    # A file over MAX_CONTEXT_SIZE gets less context too; lower the limit
+    # rather than allocate a buffer over the real one.
+    monkeypatch.setattr(environment, "MAX_CONTEXT_SIZE", len(b"a\nb\n") - 1)
     m_git_out.reset_mock()
 
     git._parse_diff_change(raw, diff)

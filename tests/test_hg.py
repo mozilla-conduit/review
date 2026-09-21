@@ -391,19 +391,8 @@ def test_hg_cat(m_hg, hg):
     assert cat == b"some text"
 
 
-@mock.patch("mozphab.mercurial.Mercurial.hg_out_text")
-def test_file_size(m_hg, hg):
-    m_hg.return_value = "123\n"
-    res = hg._file_size("fn", "rev")
-    m_hg.assert_called_once_with(["files", "-v", "-r", "rev", mock.ANY, "-T", "{size}"])
-    assert res == 123
-
-
-@mock.patch("mozphab.mercurial.Mercurial._file_size")
 @mock.patch("mozphab.mercurial.Mercurial.hg_cat")
-def test_file_meta(m_cat, m_file_size, hg):
-    size = environment.MAX_TEXT_SIZE - 1
-    m_file_size.return_value = size
+def test_file_meta(m_cat, hg):
     m_cat.return_value = b"spam\nham"
     meta = hg._get_file_meta("fn", "rev")
     assert meta == {
@@ -411,33 +400,30 @@ def test_file_meta(m_cat, m_file_size, hg):
         "mime": "TEXT",
         "bin_body": b"spam\nham",
         "body": "spam\nham",
-        "file_size": size,
+        "file_size": len(b"spam\nham"),
     }
 
 
 @mock.patch("mozphab.mercurial.mimetypes")
-@mock.patch("mozphab.mercurial.Mercurial._file_size")
 @mock.patch("mozphab.mercurial.Mercurial.hg_cat")
-def test_file_meta_binary(m_cat, m_file_size, m_mime, hg):
+def test_file_meta_binary(m_cat, m_mime, hg, monkeypatch):
     m_mime.guess_type.return_value = ["MIMETYPE"]
+    # A text file over MAX_TEXT_SIZE is treated as binary; lower the limit
+    # rather than allocate a buffer over the real one.
+    monkeypatch.setattr(environment, "MAX_TEXT_SIZE", len(b"spam\nham") - 1)
     m_cat.return_value = b"spam\nham"
-    size = environment.MAX_TEXT_SIZE + 1
-    m_file_size.return_value = size
     meta = hg._get_file_meta("fn", "rev")
     assert meta == {
         "binary": True,
         "mime": "MIMETYPE",
         "bin_body": b"spam\nham",
         "body": b"spam\nham",
-        "file_size": size,
+        "file_size": len(b"spam\nham"),
     }
 
     hg._get_file_meta.cache_clear()
     hg.hg_cat.cache_clear()
-    hg._file_size.cache_clear()
 
-    size = environment.MAX_TEXT_SIZE - 1
-    m_file_size.return_value = size
     m_cat.return_value = b"\0spam\nham"
     meta = hg._get_file_meta("fn", "rev")
     assert meta == {
@@ -445,7 +431,7 @@ def test_file_meta_binary(m_cat, m_file_size, m_mime, hg):
         "mime": "MIMETYPE",
         "bin_body": b"\0spam\nham",
         "body": b"\0spam\nham",
-        "file_size": size,
+        "file_size": len(b"\0spam\nham"),
     }
 
 
