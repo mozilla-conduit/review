@@ -46,6 +46,7 @@ always_blocking = False
 warn_untracked = True
 ai_review = False
 review_queue_reminder_frequency = 3600
+review_queue_reminder_include_groups = True
 
 [patch]
 apply_to = base
@@ -86,12 +87,14 @@ report_to_sentry = True
     revisions; use the `--ai` flag to explicitly request AI review on updates
     (default: `False`).
 - `submit.review_queue_reminder_frequency` : How often, in seconds, to remind
-    Mozilla employees of the revisions waiting on their review, including those
-    requested from their review groups, after submitting revisions for review. Set
-    it to `0` to never remind. The reminder is also skipped when the review queue
-    is empty and when the submission consists solely of Work In Progress revisions
-    (default: `3600`, an hour). When the queue was last checked is recorded in
-    `user_info.json`, not here.
+    Mozilla employees of the revisions waiting on their review after submitting
+    revisions for review. Set it to `0` to never remind. The reminder is also
+    skipped when the review queue is empty and when the submission consists
+    solely of Work In Progress revisions (default: `3600`, an hour). When the
+    queue was last checked is recorded in `user_info.json`, not here.
+- `submit.review_queue_reminder_include_groups` : When `True` the review queue
+    reminder also counts revisions requested from a review group the user is a
+    member of, matching what Differential shows the user (default: `True`).
 - `patch.apply_to` : [base/here] Where to apply the patches by default. If `"base"`
     `moz-phab` will look for the SHA1 in the first commit. If `"here"` - current
     commit/checkout will be used (default: base).

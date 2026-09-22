@@ -662,13 +662,23 @@ class Commits(unittest.TestCase):
         submit.conduit.set_repo(repository.Repository("", "", "http://phab"))
         m_get_pending_reviews.return_value = (3, False)
 
-        def reminder_text(commits, is_employee=True, frequency=3600):
+        def reminder_text(
+            commits: list[Commit],
+            is_employee: bool = True,
+            frequency: int = 3600,
+            include_groups: bool = True,
+        ):
             """Return what the reminder logged, empty if it stayed quiet."""
             with (
                 mock.patch.object(submit, "logger") as m_logger,
                 mock.patch.object(submit.user_data, "is_employee", is_employee),
                 mock.patch.object(
                     submit.config, "review_queue_reminder_frequency", frequency
+                ),
+                mock.patch.object(
+                    submit.config,
+                    "review_queue_reminder_include_groups",
+                    include_groups,
                 ),
                 # Start every case outside the "reminded recently" window.
                 mock.patch.object(submit.user_data, "review_queue_last_reminder", 0),
@@ -688,6 +698,12 @@ class Commits(unittest.TestCase):
             "3 revisions waiting on your review",
             reminder_text([commit(rev_id=1)]),
         )
+        m_get_pending_reviews.assert_called_with(include_groups=True)
+        self.assertIn(
+            "3 revisions waiting on your review",
+            reminder_text([commit(rev_id=1)], include_groups=False),
+        )
+        m_get_pending_reviews.assert_called_with(include_groups=False)
         self.assertIn("http://phab/differential/", reminder_text([commit(rev_id=1)]))
 
         # A capped count is shown as "100+", and one review is singular.
@@ -1377,6 +1393,7 @@ def m_config():
     with mock.patch("mozphab.commands.submit.config") as m:
         m.ai_review = False
         m.review_queue_reminder_frequency = 3600
+        m.review_queue_reminder_include_groups = True
         yield m
 
 

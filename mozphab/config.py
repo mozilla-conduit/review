@@ -50,6 +50,7 @@ class Config(object):
             warn_untracked = True
             ai_review = False
             review_queue_reminder_frequency = 3600
+            review_queue_reminder_include_groups = True
 
             [patch]
             apply_to = base
@@ -93,6 +94,9 @@ class Config(object):
         self.ai_review = self._getboolean("submit", "ai_review")
         self.review_queue_reminder_frequency = self._getint(
             "submit", "review_queue_reminder_frequency"
+        )
+        self.review_queue_reminder_include_groups = self._getboolean(
+            "submit", "review_queue_reminder_include_groups"
         )
         self.apply_patch_to = self._config.get("patch", "apply_to")
         self.create_bookmark = self._getboolean("patch", "create_bookmark")
@@ -172,6 +176,11 @@ class Config(object):
                 "submit",
                 "review_queue_reminder_frequency",
                 self.review_queue_reminder_frequency,
+            )
+            self._set(
+                "submit",
+                "review_queue_reminder_include_groups",
+                self.review_queue_reminder_include_groups,
             )
             self._set("patch", "apply_to", self.apply_patch_to)
             self._set("patch", "create_bookmark", self.create_bookmark)

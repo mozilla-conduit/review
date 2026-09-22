@@ -140,7 +140,9 @@ def show_review_queue_reminder(commits: list[Commit]):
 
     try:
         with wait_message("Checking your review queue..."):
-            count, has_more = conduit.get_pending_reviews()
+            count, has_more = conduit.get_pending_reviews(
+                include_groups=config.review_queue_reminder_include_groups
+            )
     except ConduitAPIError as e:
         # The submission itself succeeded; a reminder isn't worth failing for.
         logger.debug("Failed to check the review queue: %s", e)

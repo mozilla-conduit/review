@@ -590,8 +590,6 @@ def test_get_pending_reviews(m_whoami, m_call):
         revision["attachments"]["reviewers"]["reviewers"] = reviewers
         return revision
 
-    revision_search = {"data": []}
-
     def fake_call(method, args):
         if method == "project.search":
             assert args == {"constraints": {"members": ["PHID-USER-me"]}}
@@ -600,6 +598,30 @@ def test_get_pending_reviews(m_whoami, m_call):
         return revision_search
 
     m_call.side_effect = fake_call
+
+    # Excluding groups avoids the project lookup and queries only the user.
+    revision_search = {
+        "data": [
+            rev(1, [reviewer("PHID-USER-me", "added")]),
+            rev(2, [reviewer("PHID-PROJ-mine", "added")]),
+        ]
+    }
+    assert mozphab.conduit.get_pending_reviews(include_groups=False) == (1, False)
+    assert m_call.call_args.args == (
+        "differential.revision.search",
+        {
+            "constraints": {
+                "reviewerPHIDs": ["PHID-USER-me"],
+                "statuses": ["needs-review"],
+            },
+            "attachments": {"reviewers": True},
+            "limit": 100,
+        },
+    )
+    assert all(call.args[0] != "project.search" for call in m_call.call_args_list)
+
+    m_call.reset_mock()
+    revision_search = {"data": []}
 
     # The groups the user belongs to are searched alongside the user.
     assert mozphab.conduit.get_pending_reviews() == (0, False)

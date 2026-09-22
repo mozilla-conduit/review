@@ -1039,17 +1039,20 @@ class ConduitAPI:
         cache.set("reviewer-phids", phids)
         return phids
 
-    def get_pending_reviews(self, limit: int = 100) -> tuple[int, bool]:
+    def get_pending_reviews(
+        self, limit: int = 100, *, include_groups: bool = True
+    ) -> tuple[int, bool]:
         """Return how many revisions are waiting on the current user's review.
 
-        Revisions requested from a review group the user is a member of are
-        counted too, matching what Differential shows the user.
+        When include groups is true, revisions requested from a review group
+        the user is a member of are counted too, matching what Differential
+        shows the user.
 
         Returns a tuple of the number of revisions found and a bool indicating
         that the count was capped by `limit`.
         """
         user_phid = self.whoami()["phid"]
-        reviewer_phids = self.get_reviewer_phids()
+        reviewer_phids = self.get_reviewer_phids() if include_groups else [user_phid]
         response = self.call(
             "differential.revision.search",
             {
