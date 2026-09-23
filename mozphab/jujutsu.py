@@ -230,6 +230,11 @@ class Jujutsu(Repository):
                 desc,
             ) = log_line.split("\n", 7)
             desc = desc.splitlines()
+            if not desc:
+                raise Error(
+                    f"Change {change_id} has no description set, unable to continue. "
+                    f"Run `jj describe -r {change_id}` and provide a commit message."
+                )
 
             tree_hash = self.__git_repo._revparse(commit_id + ":./")
 

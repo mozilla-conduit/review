@@ -7,6 +7,7 @@ from unittest import mock
 
 import pytest
 
+from mozphab.exceptions import Error
 from mozphab.jujutsu import Jujutsu
 
 
@@ -63,3 +64,37 @@ def test_get_current_node_queries_working_copy_commit(m_cli_log_text, jj):
 
     assert jj.get_current_node() == "wc_commit_id"
     m_cli_log_text.assert_called_once_with(template='commit_id ++ "\\n"', revset="@")
+
+
+@mock.patch.object(Jujutsu, "_Jujutsu__cli_log_text")
+def test_commit_stack_raises_on_change_with_no_description(m_cli_log_text, jj):
+    jj.revset = ("start_id", "end_id")
+
+    log_line = "\n".join(
+        [
+            "2024-01-01T00:00:00+00:00",
+            "Author Name",
+            "author@example.com",
+            "parent_commit_id",
+            "change_id",
+            "commit_id",
+            "false",
+            "",
+        ]
+    )
+
+    # "0" * 37 required because in commit_stack, the log is trimmed with
+    # log = self.__cli_log_text(...)[: -len(boundary)]. Without it we would
+    # consume the log line.
+    #
+    # boundary = "--%s--\n" % uuid.uuid4().hex which adds up to:
+    # 2 (--)  + 32 (hex uuid) + 2 (--) + 1 (\n) = 37 characters.
+    m_cli_log_text.return_value = log_line + "0" * 37
+
+    with pytest.raises(Error) as excinfo:
+        jj.commit_stack()
+
+    assert str(excinfo.value) == (
+        "Change change_id has no description set, unable to continue. "
+        "Run `jj describe -r change_id` and provide a commit message."
+    )
