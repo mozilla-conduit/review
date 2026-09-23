@@ -10,7 +10,6 @@ CLI to support submission of a series of commits to Phabricator. .
 """
 
 import argparse
-import logging
 import os
 import ssl
 import subprocess
@@ -26,7 +25,7 @@ from .conduit import ConduitAPIError, conduit
 from .config import config
 from .detect_repository import repo_from_args
 from .exceptions import Error
-from .logger import init_logging, logger, stop_logging
+from .logger import disable_stdout_logging, init_logging, logger, stop_logging
 from .repository import Repository
 from .sentry import init_sentry, report_to_sentry
 from .spinner import wait_message
@@ -107,7 +106,7 @@ def main(argv: list[str], *, is_development: bool):
 
         if should_disable_logging(args):
             environment.SHOW_SPINNER = False
-            logger.setLevel(logging.ERROR)
+            disable_stdout_logging()
 
         elif args.command != "self-update":
             new_version = check_for_updates()

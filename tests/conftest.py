@@ -473,17 +473,21 @@ def restore_logging():
     """Restore the global `moz-phab` logger state after each test.
 
     `mozphab.main` mutates the shared logger as a side effect (for example
-    `patch --raw` lowers its level to `ERROR`). Without this guard that level
-    leaks across the session and breaks `caplog`/`assertLogs` assertions in
-    later, unrelated tests.
+    `patch --raw` and `list --format json` raise the stdout handler's level to
+    `ERROR` via `disable_stdout_logging`). Without this guard those changes leak
+    across the session and can break `caplog`/`assertLogs` assertions in later,
+    unrelated tests.
     """
     original_level = logger.level
     original_handlers = logger.handlers.copy()
+    original_handler_levels = {handler: handler.level for handler in original_handlers}
     try:
         yield
     finally:
         logger.setLevel(original_level)
         logger.handlers = original_handlers
+        for handler, level in original_handler_levels.items():
+            handler.setLevel(level)
 
 
 @pytest.fixture(autouse=True)

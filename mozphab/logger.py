@@ -26,6 +26,10 @@ LOG_BACKUPS = 5
 
 _handlers: list[logging.Handler] = []
 
+# Name given to the stdout handler so it can be looked up later (e.g. to
+# silence non-error output while keeping the log file complete).
+_STDOUT_HANDLER_NAME = "moz-phab-stdout"
+
 
 class ColourFormatter(logging.Formatter):
     def __init__(self):
@@ -49,6 +53,7 @@ def init_logging():
     """Initialize logging."""
     log_file = os.path.join(environment.MOZBUILD_PATH, "moz-phab.log")
     handler = logging.StreamHandler(sys.stdout)
+    handler.set_name(_STDOUT_HANDLER_NAME)
     handler.setFormatter(ColourFormatter())
     handler.setLevel(logging.DEBUG if environment.DEBUG else logging.INFO)
     logger.addHandler(handler)
@@ -82,6 +87,13 @@ def init_logging():
             logger.debug("deleting old log file: %s" % os.path.basename(filename))
             with contextlib.suppress(IOError):
                 os.unlink(filename)
+
+
+def disable_stdout_logging():
+    """Suppress non-error output on stdout, keeping the log file complete."""
+    for handler in _handlers:
+        if handler.name == _STDOUT_HANDLER_NAME:
+            handler.setLevel(logging.ERROR)
 
 
 def stop_logging():
