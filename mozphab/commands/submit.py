@@ -802,11 +802,16 @@ def _submit(repo: Repository, args: argparse.Namespace) -> list[Commit]:
 
         if is_update:
             with wait_message("Updating revision..."):
-                rev = conduit.update_revision(
-                    commit,
-                    diff_phid=diff.phid,
-                    comment=args.message,
-                )
+                try:
+                    rev = conduit.update_revision(
+                        commit,
+                        diff_phid=diff.phid,
+                        comment=args.message,
+                    )
+                except Error as e:
+                    # Name the revision, as Phabricator's error message
+                    # doesn't mention it.
+                    raise Error(f"D{commit.rev_id}: {e}") from e
         else:
             with wait_message("Creating a new revision..."):
                 rev = conduit.create_revision(

@@ -1422,6 +1422,30 @@ def test_ai_review_requested_for_each_commit(
     assert m_conduit.request_ai_review.call_count == 2
 
 
+def test_update_revision_error_names_revision(
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+):
+    """A failing revision update reports which revision it belongs to."""
+    validation_error = (
+        "Validation errors:\n"
+        "  - You can not request review of this revision because it has "
+        "already been closed. You can only request review of open revisions."
+    )
+    m_repo.commit_stack.return_value = [
+        commit(
+            bug_id="1",
+            rev_id=314841,
+            body="Differential Revision: http://example.test/D314841",
+        )
+    ]
+    m_conduit.update_revision.side_effect = ConduitAPIError(validation_error)
+
+    with pytest.raises(exceptions.Error) as e:
+        submit._submit(m_repo, submit_args)
+
+    assert str(e.value) == f"D314841: Phabricator Error: {validation_error}"
+
+
 def test_ai_review_not_called_without_flag(
     m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
 ):
