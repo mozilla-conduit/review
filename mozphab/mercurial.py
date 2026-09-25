@@ -269,6 +269,14 @@ class Mercurial(Repository):
         """Return the `hg log` output as a single string."""
         return self.hg_out_text(self.hg_log_command(revset, select))
 
+    def get_public_base_node(self, node: str) -> str | None:
+        """Return the public ancestor automation should use as the diff base.
+
+        Returns `None` when no public ancestor is reachable.
+        """
+        nodes = self.hg_log(f"last(ancestors({node}) and public())")
+        return nodes[0] if nodes else None
+
     def before_submit(self):
         self.validate_email()
 
@@ -601,6 +609,10 @@ class Mercurial(Repository):
     def get_current_node(self) -> str:
         """Return the node currently checked out in the working directory."""
         return self.hg_log_text(".")
+
+    def resolve_node(self, ref: str) -> str:
+        """Return the node `ref` (a branch, bookmark, or other revision) resolves to."""
+        return self.hg_log_text(ref)
 
     def checkout(self, node: str):
         self.hg(["update", "--quiet", node])

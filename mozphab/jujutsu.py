@@ -377,6 +377,10 @@ class Jujutsu(Repository):
         # of `--source`/`--branch`, which would also move `source_node`.
         check_call(["jj", "rebase", "-r", f"{source_node}..@", "--onto", dest_node])
 
+    def get_public_base_node(self, node: str) -> str | None:
+        """Return the public ancestor automation should use as the diff base."""
+        return self.__git_repo.get_public_base_node(node)
+
     # TODO: Functionality to make `local_uplift_if_possible` work?
 
     def is_worktree_clean(self) -> bool:

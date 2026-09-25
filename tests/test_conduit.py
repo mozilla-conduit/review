@@ -865,7 +865,7 @@ def test_diff_property(m_call, git, hg):
         parent="def",
         wip=False,
     )
-    mozphab.conduit.set_diff_property("1", commit, "message")
+    mozphab.conduit.set_diff_property("1", commit, "message", "public-def")
     m_call.assert_called_once_with(
         "differential.setdiffproperty",
         {
@@ -881,6 +881,7 @@ def test_diff_property(m_call, git, hg):
                         "message": "message",
                         "commit": "abc",
                         "parents": ["def"],
+                        "firstPublicParent": "public-def",
                     }
                 }
             ),
@@ -890,7 +891,7 @@ def test_diff_property(m_call, git, hg):
     m_call.reset_mock()
     git._phab_vcs = "hg"
     git._cinnabar_installed = True
-    mozphab.conduit.set_diff_property("1", commit, "message")
+    mozphab.conduit.set_diff_property("1", commit, "message", "public-def")
     m_call.assert_called_once_with(
         "differential.setdiffproperty",
         {
@@ -906,6 +907,7 @@ def test_diff_property(m_call, git, hg):
                         "message": "message",
                         "commit": "abc",
                         "parents": ["def"],
+                        "firstPublicParent": "public-def",
                         "rev": "abc",
                     }
                 }
@@ -916,7 +918,32 @@ def test_diff_property(m_call, git, hg):
     m_call.reset_mock()
     hg._phab_vcs = "hg"
     mozphab.conduit.set_repo(hg)
-    mozphab.conduit.set_diff_property("1", commit, "message")
+    mozphab.conduit.set_diff_property("1", commit, "message", "public-def")
+    m_call.assert_called_once_with(
+        "differential.setdiffproperty",
+        {
+            "diff_id": "1",
+            "name": "local:commits",
+            "data": json.dumps(
+                {
+                    "abc": {
+                        "author": "Author Name",
+                        "authorEmail": "auth@or.email",
+                        "time": 1234567,
+                        "summary": "Title Preview",
+                        "message": "message",
+                        "commit": "abc",
+                        "parents": ["def"],
+                        "firstPublicParent": "public-def",
+                        "rev": "abc",
+                    }
+                }
+            ),
+        },
+    )
+
+    m_call.reset_mock()
+    mozphab.conduit.set_diff_property("1", commit, "message", None)
     m_call.assert_called_once_with(
         "differential.setdiffproperty",
         {

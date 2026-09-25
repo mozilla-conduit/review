@@ -1474,6 +1474,78 @@ def test_ai_review_failure_does_not_abort_submission(
     )
 
 
+def test_uplift_first_public_parent_uses_train_head(
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+):
+    """`firstPublicParent` for uplifts should come from the train's head."""
+    commits = [commit(bug_id="1")]
+    m_repo.commit_stack.return_value = commits
+    m_repo.get_repo_head_branch.return_value = "remotes/origin/beta"
+    m_repo.resolve_node.return_value = "beta-head-sha"
+    m_repo.get_public_node.side_effect = lambda node: node
+    # No local rebase needed, but the train head should still be used.
+    m_repo.is_descendant.return_value = True
+
+    submit_args.command = "uplift"
+    submit_args.no_rebase = False
+    submit_args.train = "beta"
+
+    submit._submit(m_repo, submit_args)
+
+    m_repo.get_public_base_node.assert_not_called()
+    _, _, _, first_public_parent = m_conduit.set_diff_property.call_args[0]
+    assert first_public_parent == "beta-head-sha"
+
+
+def test_uplift_no_rebase_off_train_uses_public_base(
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+):
+    """`--no-rebase` off the train should keep the commits' own public base.
+
+    No rebase happens, so the diffs are still based on their original
+    parent -- the train head isn't an ancestor of them at all.
+    """
+    commits = [commit(bug_id="1")]
+    m_repo.commit_stack.return_value = commits
+    m_repo.get_repo_head_branch.return_value = "remotes/origin/beta"
+    m_repo.get_public_node.side_effect = lambda node: node
+    m_repo.get_public_base_node.return_value = "central-public-base"
+    m_repo.is_descendant.return_value = False
+
+    submit_args.command = "uplift"
+    submit_args.no_rebase = True
+    submit_args.train = "beta"
+
+    submit._submit(m_repo, submit_args)
+
+    m_repo.uplift_commits.assert_not_called()
+    _, _, _, first_public_parent = m_conduit.set_diff_property.call_args[0]
+    assert first_public_parent == "central-public-base"
+
+
+def test_uplift_no_rebase_on_train_uses_train_head(
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+):
+    """`--no-rebase` commits already on the train should report the train head."""
+    commits = [commit(bug_id="1")]
+    m_repo.commit_stack.return_value = commits
+    m_repo.get_repo_head_branch.return_value = "remotes/origin/beta"
+    m_repo.resolve_node.return_value = "beta-head-sha"
+    m_repo.get_public_node.side_effect = lambda node: node
+    m_repo.is_descendant.return_value = True
+
+    submit_args.command = "uplift"
+    submit_args.no_rebase = True
+    submit_args.train = "beta"
+
+    submit._submit(m_repo, submit_args)
+
+    m_repo.uplift_commits.assert_not_called()
+    m_repo.get_public_base_node.assert_not_called()
+    _, _, _, first_public_parent = m_conduit.set_diff_property.call_args[0]
+    assert first_public_parent == "beta-head-sha"
+
+
 def test_ai_review_skipped_for_non_submitted_commits(
     m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
 ):

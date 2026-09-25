@@ -218,6 +218,10 @@ class Repository(object):
         """Return the node currently checked out in the working directory."""
         raise NotImplementedError()
 
+    def resolve_node(self, ref: str) -> str:
+        """Return the node `ref` (a branch, bookmark, or other revision) resolves to."""
+        raise NotImplementedError()
+
     def get_repo_head_branch(self) -> str | None:
         """Return the expected branch/head for the current Phabricator repo.
 
@@ -366,6 +370,10 @@ class Repository(object):
     def get_public_node(self, node: str) -> str:
         """Hashtag in a remote VCS."""
         return node
+
+    def get_public_base_node(self, node: str) -> str | None:
+        """Return the public ancestor automation should use as the diff base."""
+        raise NotImplementedError()
 
     @property
     def is_cinnabar_required(self) -> bool:

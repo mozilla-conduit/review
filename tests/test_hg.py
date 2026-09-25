@@ -27,6 +27,18 @@ def test_get_extensions():
     ) == ["mq"], "The safe mode config pairs should be accepted as names."
 
 
+@mock.patch("mozphab.mercurial.Mercurial.hg_log")
+def test_get_public_base_node(m_hg_log, hg):
+    m_hg_log.return_value = ["public-parent"]
+    assert hg.get_public_base_node("draft-parent") == "public-parent"
+    m_hg_log.assert_called_once_with("last(ancestors(draft-parent) and public())")
+
+    m_hg_log.reset_mock()
+    m_hg_log.return_value = []
+    assert hg.get_public_base_node("draft-no-public") is None
+    m_hg_log.assert_called_once_with("last(ancestors(draft-no-public) and public())")
+
+
 @mock.patch("mozphab.mercurial.Mercurial.hg_out")
 def test_get_successor(m_hg_hg_out, hg):
     m_hg_hg_out.return_value = []

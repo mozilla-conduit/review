@@ -83,6 +83,8 @@ class Git(Repository):
         self.branch = ""
         # Name of the branch created by `before_patch`, if any.
         self.patch_branch_name = None
+        # Cached result of `get_base_remotes`.
+        self._base_remotes: list[str] | None = None
 
     @property
     def required_revset(self) -> tuple[str, str]:
@@ -117,6 +119,18 @@ class Git(Repository):
         hg_node = self.git_out_text(["cinnabar", "git2hg", node])
         return hg_node if hg_node != NULL_SHA1 else None
 
+    def _get_public_boundary_refs(self, node: str) -> list[str]:
+        return self.git_out(
+            [
+                "rev-list",
+                node,
+                "--topo-order",
+                "--boundary",
+                "--not",
+                *self.get_base_remote_args(),
+            ]
+        )
+
     def get_public_node(self, node: str) -> str:
         """Return a Mercurial node if Cinnabar is required.
 
@@ -129,6 +143,18 @@ class Git(Repository):
                 public_node = hg_node
 
         return public_node
+
+    def get_public_base_node(self, node: str) -> str | None:
+        """Return the public ancestor automation should use as the diff base.
+
+        Returns `None` when no public ancestor is reachable through the
+        configured remotes.
+        """
+        for ref in reversed(self._get_public_boundary_refs(node)):
+            if ref.startswith("-"):
+                return self.get_public_node(ref[1:])
+
+        return None
 
     def is_index_modified(self) -> bool:
         """Are there any changes added to the staging area."""
@@ -251,7 +277,18 @@ class Git(Repository):
         return remote_args if remote_args else ["--remotes"]
 
     def get_base_remotes(self) -> list[str]:
-        """Return a list of remotes to use for selecting the first unpublished node."""
+        """Return a list of remotes to use for selecting the first unpublished node.
+
+        The result is computed once per repository instance; callers get a copy
+        so mutating it can't corrupt the cached value.
+        """
+        if self._base_remotes is None:
+            self._base_remotes = self._find_base_remotes()
+
+        return list(self._base_remotes)
+
+    def _find_base_remotes(self) -> list[str]:
+        """Work out which remotes to use, logging how the choice was made."""
         if self.args.upstream:
             logger.debug(f"Using remote from `--upstream` arg: {self.args.upstream}.")
             return self.args.upstream
@@ -283,14 +320,8 @@ class Git(Repository):
 
     def _get_first_unpublished_node(self, end: str = "HEAD") -> str | None:
         """Check which commits should be pushed and return the oldest one."""
-        remote_args = self.get_base_remote_args()
-
-        refs = self.git_out(
-            ["rev-list", end, "--topo-order", "--boundary", "--not", *remote_args]
-        )
-
         # Iterate from the bottom of the list.
-        for ref in reversed(refs):
+        for ref in reversed(self._get_public_boundary_refs(end)):
             if ref.startswith("-"):
                 continue
 
@@ -688,6 +719,10 @@ class Git(Repository):
     def get_current_node(self) -> str:
         """Return the node currently checked out in the working directory."""
         return self._revparse("HEAD")
+
+    def resolve_node(self, ref: str) -> str:
+        """Return the node `ref` (a branch, bookmark, or other revision) resolves to."""
+        return self._revparse(ref)
 
     def _revparse(self, branch: str) -> str:
         """Return the SHA1 of given branch."""

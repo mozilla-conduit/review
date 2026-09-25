@@ -984,7 +984,13 @@ class ConduitAPI:
         }
         return self.call("differential.creatediff", api_call_args)
 
-    def set_diff_property(self, diff_id: str, commit: Commit, message: str):
+    def set_diff_property(
+        self,
+        diff_id: str,
+        commit: Commit,
+        message: str,
+        first_public_parent: str | None,
+    ):
         """Add information about our local commit to the diff."""
         data = {
             commit.node: {
@@ -997,6 +1003,9 @@ class ConduitAPI:
                 "parents": [conduit.repo.get_public_node(commit.parent)],
             }
         }
+        if first_public_parent:
+            data[commit.node]["firstPublicParent"] = first_public_parent
+
         if commit.tree_hash:
             data[commit.node]["tree"] = commit.tree_hash
 

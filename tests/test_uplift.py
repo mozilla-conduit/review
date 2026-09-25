@@ -67,20 +67,29 @@ def test_local_uplift_if_possible():
     repo = Repo()
 
     args = Args(no_rebase=True)
-    assert (
-        local_uplift_if_possible(args, repo, commits) is True
-    ), "Should always do a one-off uplift when `--no-rebase` is set."
+    assert local_uplift_if_possible(args, repo, commits) == (
+        True,
+        "beta",
+    ), "Should do a one-off uplift when `--no-rebase` is set, based on the head."
+
+    repo = Repo(is_descendant=False)
+    assert local_uplift_if_possible(args, repo, commits) == (
+        True,
+        None,
+    ), "`--no-rebase` commits off the unified head shouldn't report it as the base."
 
     args = Args()
     repo = Repo(unified_head=None)
 
-    assert (
-        local_uplift_if_possible(args, repo, commits) is True
+    assert local_uplift_if_possible(args, repo, commits) == (
+        True,
+        None,
     ), "Should avoid do a one-off when no unified head is found."
 
     repo = Repo(is_descendant=True)
-    assert (
-        local_uplift_if_possible(args, repo, commits) is False
+    assert local_uplift_if_possible(args, repo, commits) == (
+        False,
+        "beta",
     ), "Should avoid uplifting commits locally when destination is a descendant."
 
     # Rebase-uplift case.
@@ -92,8 +101,9 @@ def test_local_uplift_if_possible():
         no_rebase=False,
         train="beta",
     )
-    assert (
-        local_uplift_if_possible(args, repo, commits) is False
+    assert local_uplift_if_possible(args, repo, commits) == (
+        False,
+        "beta",
     ), "Uplifting commits locally should amend them as well."
     assert (
         repo.uplift_called

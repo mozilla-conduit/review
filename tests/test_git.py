@@ -41,6 +41,19 @@ def test_first_unpublished(m_git_git_out, git, revisions, expected):
     assert result == expected, "Incorrect first unpublished node detected."
 
 
+@mock.patch("mozphab.git.Git.git_out")
+def test_get_public_base_node(m_git_out, git):
+    git.args.upstream = ["origin"]
+    m_git_out.return_value = []
+    assert git.get_public_base_node("public") is None
+
+    m_git_out.return_value = ["draft", "-public-parent"]
+    assert git.get_public_base_node("draft-parent") == "public-parent"
+
+    m_git_out.return_value = ["draft-a", "draft-b"]
+    assert git.get_public_base_node("no-public") is None
+
+
 @mock.patch("mozphab.git.config")
 @mock.patch("mozphab.git.Git.git_out")
 def test_get_base_remotes_with_git_remote(mock_git_out, mock_config, git):
@@ -115,6 +128,27 @@ def test_get_base_remotes_multiple_without_origin(
     assert caplog.messages == [
         Contains("Multiple remotes found, and no `origin` present.")
     ]
+
+
+@mock.patch("mozphab.git.config")
+@mock.patch("mozphab.git.Git.git_out")
+def test_get_base_remotes_is_cached(
+    mock_git_out, mock_config, git, caplog: pytest.LogCaptureFixture
+):
+    caplog.set_level(logging.INFO)
+    mock_config.git_remote = []
+    mock_git_out.return_value = ["onlyremote"]
+
+    remotes = git.get_base_remotes()
+    remotes.append("mutated")
+
+    assert git.get_base_remotes() == [
+        "onlyremote"
+    ], "Mutating the returned list shouldn't corrupt the cached value."
+    assert mock_git_out.call_count == 1, "Remotes should only be looked up once."
+    assert caplog.messages == [
+        "Using the only available remote: onlyremote"
+    ], "The remote selection should only be logged once."
 
 
 @mock.patch("mozphab.git.Git.get_base_remotes")

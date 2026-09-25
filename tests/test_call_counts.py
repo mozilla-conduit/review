@@ -263,6 +263,7 @@ def build_fake_repo() -> mock.MagicMock:
     repo.apply_patch.return_value = None
     repo.format_patch.return_value = ""
     repo.get_public_node = lambda node: node or ""
+    repo.get_public_base_node = mock.MagicMock(return_value="public-base")
 
     diff = mock.MagicMock()
     diff.changes = {}
@@ -466,6 +467,12 @@ def test_submit_call_count(
         f"Submit of {num_commits} commit(s) made an unexpected set of "
         f"Conduit calls. Expected {expected}, got {dict(calls)}. "
         f"Re-derive `SUBMIT_EXPECTED` if this change is intentional."
+    )
+    # Verify that get_public_base_node is called exactly once per run, not per commit.
+    assert repo.get_public_base_node.call_count == 1, (
+        f"get_public_base_node should be called once, not "
+        f"{repo.get_public_base_node.call_count} times "
+        f"for {num_commits} commit(s)."
     )
 
 

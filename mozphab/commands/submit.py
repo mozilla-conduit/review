@@ -549,7 +549,7 @@ def update_revision_bug_id(transactions: list[dict], commit: Commit, revision: d
 
 def local_uplift_if_possible(
     args: argparse.Namespace, repo: Repository, commits: list[Commit]
-) -> bool:
+) -> tuple[bool, str | None]:
     """If possible, rebase local repository commits onto the target uplift train.
 
     Uplifts will be performed if the `--no-rebase` argument is not
@@ -557,22 +557,34 @@ def local_uplift_if_possible(
     for the uplift train, and if the revset being submitted is not
     already descendant from the target unified head.
 
-    Returns a `bool` indicating if the `commits` should avoid making local
-    repository changes to reflect new Phabricator revisions. If `True`,
-    local commits may be amended to reflect their state on Phabricator,
-    for example to add the `Differential Revision` line. If `False`, the
-    local repository commits should not be updated by `moz-phab`.
+    Returns an `(avoid_local_changes, uplift_base_ref)` tuple.
+
+    `avoid_local_changes` indicates if the `commits` should avoid making
+    local repository changes to reflect new Phabricator revisions. If
+    `True`, `moz-phab` should not amend the local commits. If `False`, they
+    may be amended to reflect their state on Phabricator, for example to add
+    the `Differential Revision` line.
+
+    `uplift_base_ref` is the unified head when the submitted commits are
+    based on it, and `None` when they aren't -- either because there's no
+    unified head locally, or because `--no-rebase` left them on their
+    original parent. `None` means the caller should find the base another way.
     """
+    # Try and find a local repo identifier (hg bookmark, git remote branch) to rebase
+    # our revset onto.
+    unified_head = repo.get_repo_head_branch()
+
     if args.no_rebase:
         # If args tell us not to do a rebase, do not make any local changes and
         # return without rebasing. This is the same as submitting an uplift where
         # the original patch is sent to Phabricator without any modifications.
         # In this case we want to avoid local amendments to commits.
-        return True
+        # The diffs are generated against whatever the commits already sit on,
+        # so the unified head is only their base if they already descend from it.
+        if unified_head and repo.is_descendant(unified_head):
+            return True, unified_head
 
-    # Try and find a local repo identifier (hg bookmark, git remote branch) to rebase
-    # our revset onto.
-    unified_head = repo.get_repo_head_branch()
+        return True, None
 
     if not unified_head:
         # If we didn't find a unified head, we intend to submit an uplift without
@@ -581,7 +593,7 @@ def local_uplift_if_possible(
             f"Couldn't find a head for {args.train} in version control, "
             "submitting without rebase."
         )
-        return True
+        return True, None
 
     if not repo.is_descendant(unified_head):
         # If we found a head to rebase onto and the commit isn't already a descendant
@@ -589,7 +601,7 @@ def local_uplift_if_possible(
         with wait_message(f"Rebasing commits onto {unified_head}"):
             commits = repo.uplift_commits(unified_head, commits)
 
-    return False
+    return False, unified_head
 
 
 def _prepare_diffs(repo: Repository, commits: list[Commit]) -> dict[int, Diff]:
@@ -666,9 +678,12 @@ def _submit(repo: Repository, args: argparse.Namespace) -> list[Commit]:
             "or set the `git.remote` moz-phab config option to specify a remote."
         )
 
+    uplift_base_ref = None
     if args.command == "uplift":
         # Perform uplift logic during submission.
-        avoid_local_changes = local_uplift_if_possible(args, repo, commits)
+        avoid_local_changes, uplift_base_ref = local_uplift_if_possible(
+            args, repo, commits
+        )
     else:
         avoid_local_changes = False
 
@@ -763,6 +778,15 @@ def _submit(repo: Repository, args: argparse.Namespace) -> list[Commit]:
     # serially due to parent_rev_phid chaining and amend_commit mutating
     # downstream commits.
     prepared_diffs = _prepare_diffs(repo, commits)
+    # Compute the public base once; stacks are linear so all commits share it.
+    # Uplifts that are based on the train use its head instead, since
+    # `get_public_base_node` looks at the local remotes, not the uplift train.
+    if uplift_base_ref:
+        first_public_parent = repo.get_public_node(repo.resolve_node(uplift_base_ref))
+    else:
+        # The `No changes to submit` guard above guarantees a submittable commit.
+        submittable_commit = next(c for c in commits if c.submit)
+        first_public_parent = repo.get_public_base_node(submittable_commit.node)
 
     # Collected during the main loop; AI review is requested in parallel
     # after all revisions have been created/updated.
@@ -841,7 +865,7 @@ def _submit(repo: Repository, args: argparse.Namespace) -> list[Commit]:
         if diff:
             with wait_message("Setting diff metadata..."):
                 message = commit.build_arc_commit_message()
-                conduit.set_diff_property(diff.id, commit, message)
+                conduit.set_diff_property(diff.id, commit, message, first_public_parent)
 
     # AI review only needs commit.rev_id (set inside the loop above), so
     # the requests have no ordering dependency. Threading lives in
