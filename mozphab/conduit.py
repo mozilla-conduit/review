@@ -13,6 +13,7 @@ import operator
 import os
 import time
 import urllib.parse as url_parse
+from collections.abc import Iterable
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -592,6 +593,62 @@ class ConduitAPI:
                 cache.set(key, group)
 
         return groups
+
+    def preload_for_validation(
+        self,
+        commits: list[Commit],
+        user_names: Iterable[str],
+        group_slugs: Iterable[str],
+    ) -> tuple[dict[int, dict], dict[str, dict]]:
+        """Fetch everything `validate_commit_stack` needs in as few round-trips
+        as possible.
+
+        Loads the existing revisions for the commits that have a `rev_id`,
+        the diffs those revisions currently point at, and the given reviewer
+        users and groups. The users and groups are only fetched to warm the
+        cache so the per-commit `check_for_invalid_reviewers` calls don't
+        hit the network.
+
+        The revision, user and group lookups are independent of each other,
+        so they run concurrently; the diff lookup depends on the revisions and
+        follows them on the same worker.
+
+        Returns a tuple of revisions keyed by revision ID and diffs keyed by
+        diff PHID.
+        """
+
+        def load_revisions_and_diffs() -> tuple[dict[int, dict], dict[str, dict]]:
+            ids = [commit.rev_id for commit in commits if commit.rev_id]
+            revisions = {
+                revision["id"]: revision
+                for revision in (self.get_revisions(ids=ids) if ids else [])
+            }
+            diff_phids = [
+                revision["fields"]["diffPHID"] for revision in revisions.values()
+            ]
+            diffs = self.get_diffs(phids=diff_phids) if diff_phids else {}
+            return revisions, diffs
+
+        user_names = sorted(user_names)
+        group_slugs = sorted(group_slugs)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            revisions_future = executor.submit(load_revisions_and_diffs)
+            users_future = (
+                executor.submit(self.get_users, user_names) if user_names else None
+            )
+            groups_future = (
+                executor.submit(self.get_groups, group_slugs) if group_slugs else None
+            )
+
+            revisions, diffs = revisions_future.result()
+            # Propagate any exception from the reviewer lookups.
+            if users_future:
+                users_future.result()
+            if groups_future:
+                groups_future.result()
+
+        return revisions, diffs
 
     def create_revision(
         self,

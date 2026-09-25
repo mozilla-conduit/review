@@ -178,17 +178,6 @@ def validate_commit_stack(
     Return collections of warnings and errors.
     """
 
-    # Preload all revisions.
-    ids = [commit.rev_id for commit in commits if commit.rev_id]
-    with wait_message("Loading existing revisions..."):
-        revisions = conduit.get_revisions(ids=ids) if ids else []
-        revisions = {revision["id"]: revision for revision in revisions}
-
-    # Preload diffs.
-    with wait_message("Loading diffs..."):
-        diff_phids = [revision["fields"]["diffPHID"] for revision in revisions.values()]
-        diffs = conduit.get_diffs(phids=diff_phids) if diff_phids else {}
-
     # Preload reviewers and groups in a single batch so the per-commit
     # check_for_invalid_reviewers() calls below hit the cache.
     all_user_names = set()
@@ -201,19 +190,18 @@ def validate_commit_stack(
                     all_group_slugs.add(normalised)
                 else:
                     all_user_names.add(normalised)
-    if all_user_names:
-        with wait_message("Loading reviewers..."):
-            conduit.get_users(sorted(all_user_names))
-    if all_group_slugs:
-        with wait_message("Loading reviewer groups..."):
-            conduit.get_groups(sorted(all_group_slugs))
+
+    with wait_message("Loading revision data..."):
+        revisions, diffs = conduit.preload_for_validation(
+            commits, all_user_names, all_group_slugs
+        )
 
     warnings = {}
     errors = {}
     nodes = {}
 
     for commit in commits:
-        if revision := revisions.get(commit.rev_id):
+        if commit.rev_id is not None and (revision := revisions.get(commit.rev_id)):
             if commit.name != (dupe := nodes.setdefault(commit.rev_id, commit.name)):
                 errors.setdefault(commit.name, []).append(
                     f"Phabricator revisions should be unique, but commit {dupe} refers "

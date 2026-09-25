@@ -15,7 +15,7 @@ from mozphab import exceptions, mozphab, repository, simplecache
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError, conduit
 from mozphab.diff import Diff
-from tests.conftest import search_rev
+from tests.conftest import search_diff, search_rev
 
 
 class Repo(repository.Repository):
@@ -575,6 +575,97 @@ def test_get_diffs_partial_cache(get_diffs, m_call):
     assert api_args["constraints"] == {
         "phids": ["PHID-3"]
     }, "The second call must have asked only for the uncached PHID."
+
+
+def test_preload_for_validation(m_call):
+    """Revisions, their diffs, users and groups are fetched and cached."""
+    mozphab.conduit.set_repo(repository.Repository("", "", "dummy"))
+
+    def fake_call(method, args):
+        if method == "differential.revision.search":
+            assert args["constraints"] == {"ids": [1, 2]}
+            return {
+                "data": [
+                    search_rev(rev=1, phid="PHID-DREV-1", diff="PHID-DIFF-1"),
+                    search_rev(rev=2, phid="PHID-DREV-2", diff="PHID-DIFF-2"),
+                ]
+            }
+        if method == "differential.diff.search":
+            assert sorted(args["constraints"]["phids"]) == [
+                "PHID-DIFF-1",
+                "PHID-DIFF-2",
+            ]
+            return {
+                "data": [
+                    search_diff(diff=1, phid="PHID-DIFF-1"),
+                    search_diff(diff=2, phid="PHID-DIFF-2"),
+                ]
+            }
+        if method == "user.query":
+            assert args == {"usernames": ["alice", "bob"]}
+            return [
+                {"userName": "alice", "phid": "PHID-USER-alice"},
+                {"userName": "bob", "phid": "PHID-USER-bob"},
+            ]
+        if method == "project.search":
+            assert args["constraints"] == {"slugs": ["#team"]}
+            return {
+                "data": [{"fields": {"slug": "#team"}, "phid": "PHID-PROJ-team"}],
+                "maps": {"slugMap": {}},
+            }
+        raise AssertionError(f"unexpected call {method}")
+
+    m_call.side_effect = fake_call
+
+    commits = [Commit(rev_id=1), Commit(rev_id=None), Commit(rev_id=2)]
+    revisions, diffs = mozphab.conduit.preload_for_validation(
+        commits, {"bob", "alice"}, {"#team"}
+    )
+
+    assert sorted(revisions) == [1, 2]
+    assert revisions[1]["phid"] == "PHID-DREV-1"
+    assert revisions[2]["phid"] == "PHID-DREV-2"
+    assert sorted(diffs) == ["PHID-DIFF-1", "PHID-DIFF-2"]
+    assert sorted(call.args[0] for call in m_call.call_args_list) == [
+        "differential.diff.search",
+        "differential.revision.search",
+        "project.search",
+        "user.query",
+    ], "Each kind of data is fetched with exactly one API call."
+
+    # The reviewer lookups only exist to warm the cache.
+    m_call.reset_mock()
+    mozphab.conduit.get_users(["alice", "bob"])
+    mozphab.conduit.get_groups(["#team"])
+    m_call.assert_not_called()
+
+
+def test_preload_for_validation_nothing_to_load(m_call):
+    """No API calls are made when there is nothing to look up."""
+    mozphab.conduit.set_repo(repository.Repository("", "", "dummy"))
+
+    revisions, diffs = mozphab.conduit.preload_for_validation(
+        [Commit(rev_id=None)], set(), set()
+    )
+
+    assert revisions == {}
+    assert diffs == {}
+    m_call.assert_not_called()
+
+
+def test_preload_for_validation_propagates_reviewer_errors(m_call):
+    """A failing user lookup is raised, not swallowed by the revision result."""
+    mozphab.conduit.set_repo(repository.Repository("", "", "dummy"))
+
+    def fake_call(method, args):
+        if method == "user.query":
+            raise ConduitAPIError("boom")
+        return {"data": []}
+
+    m_call.side_effect = fake_call
+
+    with pytest.raises(ConduitAPIError, match="boom"):
+        mozphab.conduit.preload_for_validation([Commit(rev_id=1)], {"alice"}, set())
 
 
 @mock.patch("mozphab.conduit.ConduitAPI.whoami")

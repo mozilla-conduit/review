@@ -16,7 +16,7 @@ from callee import Contains, Matching
 
 from mozphab import exceptions, mozphab
 
-from .conftest import git_out, search_diff, search_rev
+from .conftest import conduit_responses, git_out, search_diff, search_rev
 
 call_conduit = mock.Mock()
 
@@ -575,25 +575,24 @@ def test_submit_create_no_checkout(in_process, git_repo_path: pathlib.Path, init
 
 def test_submit_update(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.reset_mock()
-    call_conduit.side_effect = (
-        # ping
-        {},
-        # diffusion.repository.search
-        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
-        # diffusion.revision.search
-        {"data": [search_rev(rev=123, reviewers=["alice"])]},
-        # diffusion.diff.search
-        {"data": [search_diff()]},
-        # user.query
-        [{"userName": "alice", "phid": "PHID-USER-1"}],
-        # whoami
-        {"phid": "PHID-USER-1"},
-        # differential.creatediff
-        {"phid": "PHID-DIFF-2", "diffid": "2"},
-        # differential.revision.edit
-        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
-        # differential.setdiffproperty
-        {},
+    call_conduit.side_effect = conduit_responses(
+        {
+            "conduit.ping": [{}],
+            "diffusion.repository.search": [
+                {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]}
+            ],
+            "differential.revision.search": [
+                {"data": [search_rev(rev=123, reviewers=["alice"])]}
+            ],
+            "differential.diff.search": [{"data": [search_diff()]}],
+            "user.query": [[{"userName": "alice", "phid": "PHID-USER-1"}]],
+            "user.whoami": [{"phid": "PHID-USER-1"}],
+            "differential.creatediff": [{"phid": "PHID-DIFF-2", "diffid": "2"}],
+            "differential.revision.edit": [
+                {"object": {"id": "123", "phid": "PHID-DREV-123"}}
+            ],
+            "differential.setdiffproperty": [{}],
+        }
     )
     testfile = git_repo_path / "X"
     testfile.write_text("ą", encoding="utf-8")
@@ -713,19 +712,19 @@ Differential Revision: http://example.test/D123
     git_out("commit", "--file", "msg")
     sha = git_sha()
     call_conduit.reset_mock()
-    call_conduit.side_effect = (
-        # ping
-        {},
-        # diffusion.repository.search
-        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
-        # diffusion.revision.search
-        {"data": [search_rev(rev=123, reviewers=("test",))]},
-        # diffusion.diff.search
-        {"data": [search_diff(node=sha)]},
-        # user.query
-        [{"userName": "test", "phid": "PHID-USER-1"}],
-        # whoami
-        {"phid": "PHID-USER-1"},
+    call_conduit.side_effect = conduit_responses(
+        {
+            "conduit.ping": [{}],
+            "diffusion.repository.search": [
+                {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]}
+            ],
+            "differential.revision.search": [
+                {"data": [search_rev(rev=123, reviewers=("test",))]}
+            ],
+            "differential.diff.search": [{"data": [search_diff(node=sha)]}],
+            "user.query": [[{"userName": "test", "phid": "PHID-USER-1"}]],
+            "user.whoami": [{"phid": "PHID-USER-1"}],
+        }
     )
 
     mozphab.main(
@@ -752,25 +751,25 @@ def test_submit_update_test_plan_only(
     git_out("commit", "--file", "msg")
     sha = git_sha()
     call_conduit.reset_mock()
-    call_conduit.side_effect = (
-        # ping
-        {},
-        # diffusion.repository.search
-        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
-        # differential.revision.search (same SHA → no diff change)
-        {"data": [search_rev(rev=123, reviewers=("test",))]},
-        # differential.diff.search
-        {"data": [search_diff(node=sha)]},
-        # user.query
-        [{"userName": "test", "phid": "PHID-USER-1"}],
-        # whoami
-        {"phid": "PHID-USER-1"},
-        # differential.creatediff
-        {"phid": "PHID-DIFF-2", "diffid": "2"},
-        # differential.revision.edit
-        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
-        # differential.setdiffproperty
-        {},
+    call_conduit.side_effect = conduit_responses(
+        {
+            "conduit.ping": [{}],
+            "diffusion.repository.search": [
+                {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]}
+            ],
+            # Same SHA, so the diff doesn't change.
+            "differential.revision.search": [
+                {"data": [search_rev(rev=123, reviewers=("test",))]}
+            ],
+            "differential.diff.search": [{"data": [search_diff(node=sha)]}],
+            "user.query": [[{"userName": "test", "phid": "PHID-USER-1"}]],
+            "user.whoami": [{"phid": "PHID-USER-1"}],
+            "differential.creatediff": [{"phid": "PHID-DIFF-2", "diffid": "2"}],
+            "differential.revision.edit": [
+                {"object": {"id": "123", "phid": "PHID-DREV-123"}}
+            ],
+            "differential.setdiffproperty": [{}],
+        }
     )
 
     mozphab.main(
@@ -1400,25 +1399,31 @@ def test_submit_update_without_test_plan_preserves_existing(
     in_process, git_repo_path: pathlib.Path, init_sha
 ):
     call_conduit.reset_mock()
-    call_conduit.side_effect = (
-        # ping
-        {},
-        # diffusion.repository.search
-        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
-        # differential.revision.search (existing revision with a test plan)
-        {"data": [search_rev(rev=123, reviewers=["alice"], test_plan="Existing plan")]},
-        # differential.diff.search
-        {"data": [search_diff()]},
-        # user.query
-        [{"userName": "alice", "phid": "PHID-USER-1"}],
-        # whoami
-        {"phid": "PHID-USER-1"},
-        # differential.creatediff
-        {"phid": "PHID-DIFF-2", "diffid": "2"},
-        # differential.revision.edit
-        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
-        # differential.setdiffproperty
-        {},
+    call_conduit.side_effect = conduit_responses(
+        {
+            "conduit.ping": [{}],
+            "diffusion.repository.search": [
+                {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]}
+            ],
+            # An existing revision with a test plan.
+            "differential.revision.search": [
+                {
+                    "data": [
+                        search_rev(
+                            rev=123, reviewers=["alice"], test_plan="Existing plan"
+                        )
+                    ]
+                }
+            ],
+            "differential.diff.search": [{"data": [search_diff()]}],
+            "user.query": [[{"userName": "alice", "phid": "PHID-USER-1"}]],
+            "user.whoami": [{"phid": "PHID-USER-1"}],
+            "differential.creatediff": [{"phid": "PHID-DIFF-2", "diffid": "2"}],
+            "differential.revision.edit": [
+                {"object": {"id": "123", "phid": "PHID-DREV-123"}}
+            ],
+            "differential.setdiffproperty": [{}],
+        }
     )
     testfile = git_repo_path / "X"
     testfile.write_text("a\n")

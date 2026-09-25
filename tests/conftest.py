@@ -92,6 +92,24 @@ def search_rev(
     }
 
 
+def conduit_responses(responses):
+    """Build a `call_conduit` side effect that answers by method name.
+
+    `responses` maps each Conduit method to the list of responses it returns,
+    in call order. Unlike an ordered tuple of responses, this stays correct
+    when independent calls run concurrently, such as the revision and
+    reviewer lookups in `validate_commit_stack`.
+    """
+    remaining = {method: list(values) for method, values in responses.items()}
+
+    def side_effect(method, *_args, **_kwargs):
+        if not remaining.get(method):
+            raise AssertionError(f"unexpected call to {method}")
+        return remaining[method].pop(0)
+
+    return side_effect
+
+
 def assert_attributes(hunk, expected):
     for name, value in expected.items():
         if hunk.__getattribute__(name) != value:
