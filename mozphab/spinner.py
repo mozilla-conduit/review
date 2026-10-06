@@ -5,10 +5,11 @@
 import signal
 import sys
 import threading
-import time
 from contextlib import contextmanager
 
 from mozphab import environment
+
+WAIT_INTERVAL = 0.2
 
 
 def clear_terminal_line():
@@ -30,25 +31,25 @@ class Spinner(threading.Thread):
         super().__init__()
         self.message = message
         self.daemon = True
-        self.running = False
+        self._stop_event = threading.Event()
+
+    def signal_stop(self):
+        self._stop_event.set()
 
     def run(self):
-        self.running = True
-
         if not environment.HAS_ANSI:
             sys.stdout.write("%s  " % self.message)
 
         spinner = ["-", "\\", "|", "/"]
         spin = 0
         try:
-            while self.running:
+            while not self._stop_event.wait(WAIT_INTERVAL):
                 if environment.HAS_ANSI:
                     sys.stdout.write("%s %s\r" % (self.message, spinner[spin]))
                 else:
                     sys.stdout.write(chr(8) + spinner[spin])
                 sys.stdout.flush()
                 spin = (spin + 1) % len(spinner)
-                time.sleep(0.2)
         finally:
             if environment.HAS_ANSI:
                 clear_terminal_line()
@@ -67,5 +68,5 @@ def wait_message(message: str):
     try:
         yield
     finally:
-        spinner.running = False
+        spinner.signal_stop()
         spinner.join()
