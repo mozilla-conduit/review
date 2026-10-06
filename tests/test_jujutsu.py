@@ -3,6 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import argparse
 from unittest import mock
 
 import pytest
@@ -38,6 +39,15 @@ def test_delegates_to_git(jj, method, args, kwargs, return_value):
 
     assert getattr(jj, method)(*args, **kwargs) == return_value
     git_method.assert_called_once_with(*args, **kwargs)
+
+
+def test_set_args_shares_args_with_git_repo(jj):
+    """The wrapped Git repo reads args (e.g. `upstream`) for `get_latest_landing_node`."""
+    args = argparse.Namespace(upstream=None)
+
+    jj.set_args(args)
+
+    assert jj._Jujutsu__git_repo.args is args
 
 
 @mock.patch("mozphab.jujutsu.check_call")

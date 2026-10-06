@@ -152,6 +152,7 @@ class Jujutsu(Repository):
     def set_args(self, args: argparse.Namespace):
         """Store moz-phab command line args and set the revset."""
         super().set_args(args)
+        self.__git_repo.args = self.args
 
         is_single = hasattr(self.args, "single") and self.args.single
 
@@ -299,8 +300,6 @@ class Jujutsu(Repository):
 
     def get_diff(self, commit: Commit) -> Diff:
         """Create a Diff object with changes."""
-        # NOTE: If we don't do this, then we break on a `lesscontext` member missing from `args`.
-        self.__git_repo.args = self.args
         return self.__git_repo.get_diff(commit)
 
     def amend_commit(self, commit: Commit, commits: list[Commit]):
