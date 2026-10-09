@@ -4,6 +4,7 @@
 
 import argparse
 import logging
+import re
 import textwrap
 import time
 
@@ -613,7 +614,22 @@ def local_uplift_if_possible(
     return False, unified_head
 
 
-def _prepare_diffs(repo: Repository, commits: list[Commit]) -> dict[int, Diff]:
+# Added lines opening or closing a conflict.
+CONFLICT_MARKER_RE = re.compile(r"^\+(<{7,}|>{7,})( |$)", re.MULTILINE)
+
+
+def conflict_marker_paths(diff: Diff) -> list[str]:
+    """Return the paths of files in `diff` that add conflict markers."""
+    return [
+        change.cur_path
+        for change in diff.changes.values()
+        if any(CONFLICT_MARKER_RE.search(hunk.corpus) for hunk in change.hunks)
+    ]
+
+
+def _prepare_diffs(
+    repo: Repository, commits: list[Commit], allow_conflict_markers: bool = False
+) -> dict[int, Diff]:
     """Build and create the diff for every submittable commit up front.
 
     Returns the prepared diffs (with ``phid`` and ``id`` populated), keyed by
@@ -645,6 +661,20 @@ def _prepare_diffs(repo: Repository, commits: list[Commit]) -> dict[int, Diff]:
     for index, commit in submittable:
         with wait_message("Creating local diff..."):
             diffs[index] = repo.get_diff(commit)
+
+    conflicts = [
+        f"{commit.name} {path}"
+        for index, commit in submittable
+        for path in conflict_marker_paths(diffs[index])
+    ]
+    if conflicts:
+        message = "Conflict markers found in:\n  " + "\n  ".join(conflicts)
+        if not allow_conflict_markers:
+            raise Error(
+                f"Unable to submit commits: {message}\n\n"
+                "Use --allow-conflict-markers to submit anyway."
+            )
+        logger.warning("Ignoring issues found with commits: %s", message)
 
     count = len(submittable)
     if count == 1:
@@ -786,7 +816,9 @@ def _submit(repo: Repository, args: argparse.Namespace) -> list[Commit]:
     # them on Phabricator in parallel. The revision phase below still runs
     # serially due to parent_rev_phid chaining and amend_commit mutating
     # downstream commits.
-    prepared_diffs = _prepare_diffs(repo, commits)
+    prepared_diffs = _prepare_diffs(
+        repo, commits, allow_conflict_markers=args.allow_conflict_markers
+    )
     # Compute the public base once; stacks are linear so all commits share it.
     # Uplifts that are based on the train use its head instead, since
     # `get_public_base_node` looks at the local remotes, not the uplift train.
@@ -989,6 +1021,11 @@ def add_submit_arguments(parser):
         action="store_true",
         help="Mercurial only: Ignore error caused by a DAG branch point without "
         "evolve installed.",
+    )
+    parser.add_argument(
+        "--allow-conflict-markers",
+        action="store_true",
+        help="Submit even if the changes add conflict markers.",
     )
     parser.add_argument(
         "--bug",

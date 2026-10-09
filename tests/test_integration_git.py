@@ -4,6 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import json
+import logging
 import os
 import pathlib
 import platform
@@ -240,6 +241,57 @@ def test_submit_create_added_not_commited(
         mozphab.main(["submit", "--yes", "--bug", "1", init_sha], is_development=True)
 
     assert "Uncommitted changes present." in str(excinfo.value)
+
+
+def test_submit_create_conflict_markers(
+    in_process,
+    git_repo_path: pathlib.Path,
+    init_sha,
+    caplog: pytest.LogCaptureFixture,
+):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        {},
+        # diffusion.repository.search
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
+    )
+    (git_repo_path / "X").write_text("<<<<<<< HEAD\na\n=======\nb\n>>>>>>> other\n")
+    git_out("add", ".")
+    git_out("commit", "-m", "conflicted")
+
+    with pytest.raises(exceptions.Error) as excinfo:
+        mozphab.main(["submit", "--yes", "--bug", "1", init_sha], is_development=True)
+
+    assert "Conflict markers found in:" in str(excinfo.value)
+    assert " X" in str(excinfo.value)
+    assert "Use --allow-conflict-markers to submit anyway." in str(excinfo.value)
+    methods = [c.args[0] for c in call_conduit.call_args_list]
+    assert "differential.creatediff" not in methods
+
+    # ping is skipped this time, as its success is cached on disk.
+    call_conduit.side_effect = (
+        # diffusion.repository.search
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
+        # differential.creatediff
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
+        # differential.revision.edit
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
+        # differential.setdiffproperty
+        {},
+    )
+    caplog.clear()
+    mozphab.main(
+        ["submit", "--yes", "--allow-conflict-markers", "--bug", "1", init_sha],
+        is_development=True,
+    )
+    methods = [c.args[0] for c in call_conduit.call_args_list]
+    assert "differential.creatediff" in methods
+    assert any(
+        record.levelno == logging.WARNING
+        and "Conflict markers found in:" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def test_submit_create_no_bug(in_process, git_repo_path: pathlib.Path, init_sha):

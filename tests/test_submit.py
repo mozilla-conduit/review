@@ -16,6 +16,7 @@ from mozphab import environment, exceptions, helpers, mozphab, repository
 from mozphab.commands import submit
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError
+from mozphab.diff import Diff
 
 from .conftest import search_diff, search_rev
 
@@ -1479,7 +1480,7 @@ def m_conduit():
 def m_repo():
     with mock.patch("mozphab.commands.submit.Repository") as m:
         m.phab_url = "http://example.test"
-        m.get_diff.return_value = mock.MagicMock(phid="PHID-DIFF-1", id="1", changes=[])
+        m.get_diff.return_value = mock.MagicMock(phid="PHID-DIFF-1", id="1", changes={})
         m.args = mock.MagicMock()
         m.check_vcs.return_value = None
         m.before_submit.return_value = None
@@ -1523,6 +1524,7 @@ def submit_args():
     args.force = False
     args.force_vcs = False
     args.safe_mode = False
+    args.allow_conflict_markers = False
     return args
 
 
@@ -1785,6 +1787,26 @@ def test_no_stack_linking(
     first_call, second_call = m_conduit.create_revision.call_args_list
     assert first_call.kwargs["parent_rev_phid"] is None
     assert second_call.kwargs["parent_rev_phid"] == expected_second_parent
+
+
+@pytest.mark.parametrize(
+    "lines,expected",
+    [
+        (["+<<<<<<< HEAD\n", "+a\n"], ["X"]),
+        (["+>>>>>>> Conflict 1 of 1 ends\n"], ["X"]),
+        (["+<<<<<<<\n"], ["X"]),
+        (["-<<<<<<< HEAD\n"], []),
+        (["+=======\n"], []),
+        ([" >>>>>>> other\n"], []),
+        (["+<<<<<<<<\n"], ["X"]),
+    ],
+)
+def test_conflict_marker_paths(lines, expected):
+    diff = Diff()
+    diff.change_for("X").hunks.append(
+        Diff.Hunk(old_off=1, old_len=1, new_off=1, new_len=1, lines=lines)
+    )
+    assert submit.conflict_marker_paths(diff) == expected
 
 
 if __name__ == "__main__":
