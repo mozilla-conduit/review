@@ -234,12 +234,40 @@ class Commits(unittest.TestCase):
         )
         self.assertEqual(list(errors.values()), [[Contains("goofus is disabled")]])
 
-        # Never error for an existing revision with reviewers.
+        # An unchanged disabled reviewer should not block unrelated updates.
         m_revs.return_value = [search_rev(reviewers=["PHID-USER-2"])]
+        m_diffs.return_value = {"PHID-DIFF-1": search_diff(message="1 r?goofus")}
         _, errors = submit.validate_commit_stack(
             [commit("1", (["goofus"], []), rev_id=1)], Args()
         )
         self.assertEqual(errors, {})
+
+        # Only genuinely new reviewers are validated in a mixed reviewer list.
+        check_reviewers.reset_mock()
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["goofus", "alice"], []), rev_id=1)], Args()
+        )
+        self.assertEqual(errors, {})
+        check_reviewers.assert_called_once_with({"request": ["alice"], "granted": []})
+
+        # A newly introduced disabled reviewer should still fail validation.
+        m_diffs.return_value = {"PHID-DIFF-1": search_diff(message="1 r?alice")}
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["goofus"], []), rev_id=1)], Args()
+        )
+        self.assertEqual(list(errors.values()), [[Contains("goofus is disabled")]])
+
+        # An unresolved new reviewer on an otherwise unchanged revision must
+        # still reach validation instead of being treated as no change.
+        m_diffs.return_value = {
+            "PHID-DIFF-1": search_diff(node="same-node", message="1 r?alice")
+        }
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["gonzo"], []), rev_id=1, node="same-node")], Args()
+        )
+        self.assertEqual(
+            list(errors.values()), [[Contains("gonzo isn't a valid reviewer")]]
+        )
 
     @mock.patch("mozphab.conduit.ConduitAPI.get_groups")
     @mock.patch("mozphab.conduit.ConduitAPI.get_users")
@@ -825,7 +853,17 @@ class Commits(unittest.TestCase):
         m_get_users,
         m_get_groups,
     ):
-        m_get_users.return_value = []
+        def _users(reviewers):
+            phids = {
+                "alice": "PHID-USER-2",
+                "bob": "PHID-USER-3",
+            }
+            return [
+                {"phid": phids[reviewer.rstrip("!")], "userName": reviewer.rstrip("!")}
+                for reviewer in reviewers
+            ]
+
+        m_get_users.side_effect = _users
         m_get_groups.return_value = []
 
         def _commit(
@@ -898,6 +936,84 @@ class Commits(unittest.TestCase):
         self.assertEqual(
             warnings, {"aaa000aaa000": [Contains("revision will change from 1 to 2")]}
         )
+
+        # Adding only commit-title reviewers is enough to submit the revision.
+        m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
+        m_get_diffs.return_value = {
+            "PHID-DIFF-1": search_diff(
+                node="aaa000aaa000",
+                message="A r?alice",
+            )
+        }
+        changed_reviewers_commit = _commit(node="aaa000aaa000", rev=1, granted=["bob"])
+        warnings, errors = submit.validate_commit_stack(
+            [changed_reviewers_commit], Args()
+        )
+        self.assertEqual((warnings, errors), ({}, {}))
+        self.assertTrue(changed_reviewers_commit.submit)
+
+        # Reviewers that were previously requested locally but removed in
+        # Phabricator should not be re-added on a reviewer-only resubmit.
+        m_get_revisions.return_value = [search_rev(reviewers=[])]
+        removed_reviewer_commit = _commit(node="aaa000aaa000", rev=1, granted=["alice"])
+        warnings, errors = submit.validate_commit_stack(
+            [removed_reviewer_commit], Args()
+        )
+        self.assertEqual(errors, {})
+        self.assertEqual(
+            warnings, {"aaa000aaa000": [Contains("revision has not changed")]}
+        )
+        self.assertFalse(removed_reviewer_commit.submit)
+
+        # Resigned reviewers remain in the revision attachment and should not
+        # be re-added even when they are newly introduced in the local title.
+        m_get_revisions.return_value = [
+            search_rev(
+                reviewers=[
+                    {
+                        "reviewerPHID": "PHID-USER-2",
+                        "status": "resigned",
+                        "isBlocking": False,
+                    }
+                ]
+            )
+        ]
+        m_get_diffs.return_value = {
+            "PHID-DIFF-1": search_diff(
+                node="aaa000aaa000",
+                message="A",
+            )
+        }
+        resigned_reviewer_commit = _commit(
+            node="aaa000aaa000", rev=1, granted=["alice"]
+        )
+        warnings, errors = submit.validate_commit_stack(
+            [resigned_reviewer_commit], Args()
+        )
+        self.assertEqual(errors, {})
+        self.assertEqual(
+            warnings, {"aaa000aaa000": [Contains("revision has not changed")]}
+        )
+        self.assertFalse(resigned_reviewer_commit.submit)
+
+        # Reviewers first requested on a WIP diff still need to be added once
+        # the revision is ready, even if the commit SHA1 is unchanged.
+        m_get_revisions.return_value = [search_rev(reviewers=[])]
+        m_get_diffs.return_value = {
+            "PHID-DIFF-1": search_diff(
+                node="aaa000aaa000",
+                message="WIP: A r?alice",
+            )
+        }
+        wip_reviewer_commit = _commit(node="aaa000aaa000", rev=1, granted=["alice"])
+        with mock.patch.object(
+            mozphab.conduit, "latest_non_wip_diff", return_value=None
+        ):
+            warnings, errors = submit.validate_commit_stack(
+                [wip_reviewer_commit], Args()
+            )
+        self.assertEqual((warnings, errors), ({}, {}))
+        self.assertTrue(wip_reviewer_commit.submit)
 
         m_whoami.return_value = {"phid": "PHID-USER-2"}
         warnings, _ = submit.validate_commit_stack(
@@ -1239,7 +1355,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
         self.assertFalse(any(tx["type"] == "testPlan" for tx in t))
 
     @mock.patch("mozphab.conduit.ConduitAPI.get_users")
-    def test_update_revision_reviewers(self, m_get_users):
+    def test_set_initial_revision_reviewers(self, m_get_users):
         # From https://phabricator.services.mozilla.com/api/differential.revision.edit
         #
         # Example call format we are aiming for:
@@ -1277,7 +1393,7 @@ class TestUpdateCommitSummary(unittest.TestCase):
                 ],
             }
         ]
-        mozphab.conduit.update_revision_reviewers(t, c)
+        mozphab.conduit.set_initial_revision_reviewers(t, c)
 
         self.assertEqual(
             m_get_users.call_args_list,

@@ -201,6 +201,7 @@ def validate_commit_stack(
     nodes = {}
 
     for commit in commits:
+        reviewer_names_to_validate = commit.reviewers
         if commit.rev_id is not None and (revision := revisions.get(commit.rev_id)):
             if commit.name != (dupe := nodes.setdefault(commit.rev_id, commit.name)):
                 errors.setdefault(commit.name, []).append(
@@ -232,15 +233,20 @@ def validate_commit_stack(
             whoami = conduit.whoami()
             different_author = fields["authorPHID"] != whoami["phid"]
 
-            # Any reviewers added to a revision without them?
-            reviewers_added = bool(
-                commit.reviewers["granted"]
-                and not revision["attachments"]["reviewers"]["reviewers"]
-            )
+            reviewers_changed = False
+            if commit.has_reviewers and not commit.wip:
+                diff = diffs[revision["fields"]["diffPHID"]]
+                reviewer_additions = conduit.commit_reviewer_additions(
+                    commit,
+                    revision,
+                    diff,
+                )
+                reviewer_names_to_validate = reviewer_additions.reviewer_names_to_add
+                reviewers_changed = any(reviewer_names_to_validate.values())
 
             # If SHA1 hasn't changed
             # and we're not changing the WIP or draft status
-            # and we're not adding reviewers to a revision without reviewers
+            # and we're not changing reviewers
             # and we're not changing the bug ID
             # then don't submit.
             diff_phid = fields["diffPHID"]
@@ -251,7 +257,7 @@ def validate_commit_stack(
             if (
                 not sha1_changed
                 and commit.wip == revision_is_wip
-                and not reviewers_added
+                and not reviewers_changed
                 and not bug_id_changed
                 and not revision_is_closed
                 and not args.force
@@ -304,10 +310,13 @@ def validate_commit_stack(
             overridable_errors.append("Contains arc fields")
 
         if (
-            commit.has_reviewers
+            any(reviewer_names_to_validate.values())
             and not commit.wip
-            and not conduit.has_revision_reviewers(commit)
-            and (invalid := conduit.check_for_invalid_reviewers(commit.reviewers))
+            and (
+                invalid := conduit.check_for_invalid_reviewers(
+                    reviewer_names_to_validate
+                )
+            )
         ):
             for reviewer in invalid:
                 if "disabled" in reviewer:

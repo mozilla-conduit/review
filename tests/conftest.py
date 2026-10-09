@@ -52,17 +52,20 @@ def create_temp_fn(*filenames):
     return m_temp_fn
 
 
-def search_diff(diff=1, phid="PHID-DIFF-1", node="aaa000aaa000"):
+def search_diff(diff=1, phid="PHID-DIFF-1", node="aaa000aaa000", message=""):
     return {
         "id": diff,
         "phid": phid,
-        "attachments": {"commits": {"commits": [{"identifier": node}]}},
+        "attachments": {
+            "commits": {"commits": [{"identifier": node, "message": message}]}
+        },
     }
 
 
 def search_rev(
     rev=1,
     phid="PHID-DREV-1",
+    title="Title",
     bug="1",
     status="needs-review",
     closed=False,
@@ -74,10 +77,15 @@ def search_rev(
     test_plan="",
 ):
     reviewers = reviewers or []
+    reviewer_entries = [
+        reviewer if isinstance(reviewer, dict) else {"reviewerPHID": reviewer}
+        for reviewer in reviewers
+    ]
     return {
         "id": rev,
         "phid": phid,
         "fields": {
+            "title": title,
             "bugzilla.bug-id": bug,
             "status": {"value": status, "closed": closed},
             "authorPHID": author,
@@ -86,9 +94,7 @@ def search_rev(
             "isDraft": is_draft,
             "testPlan": test_plan,
         },
-        "attachments": {
-            "reviewers": {"reviewers": [{"reviewerPHID": r} for r in reviewers]}
-        },
+        "attachments": {"reviewers": {"reviewers": reviewer_entries}},
     }
 
 

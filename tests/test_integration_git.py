@@ -582,7 +582,7 @@ def test_submit_update(in_process, git_repo_path: pathlib.Path, init_sha):
                 {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]}
             ],
             "differential.revision.search": [
-                {"data": [search_rev(rev=123, reviewers=["alice"])]}
+                {"data": [search_rev(rev=123, reviewers=["PHID-USER-1"])]}
             ],
             "differential.diff.search": [{"data": [search_diff()]}],
             "user.query": [[{"userName": "alice", "phid": "PHID-USER-1"}]],
@@ -719,7 +719,7 @@ Differential Revision: http://example.test/D123
                 {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]}
             ],
             "differential.revision.search": [
-                {"data": [search_rev(rev=123, reviewers=("test",))]}
+                {"data": [search_rev(rev=123, reviewers=("PHID-USER-1",))]}
             ],
             "differential.diff.search": [{"data": [search_diff(node=sha)]}],
             "user.query": [[{"userName": "test", "phid": "PHID-USER-1"}]],
@@ -759,7 +759,7 @@ def test_submit_update_test_plan_only(
             ],
             # Same SHA, so the diff doesn't change.
             "differential.revision.search": [
-                {"data": [search_rev(rev=123, reviewers=("test",))]}
+                {"data": [search_rev(rev=123, reviewers=("PHID-USER-1",))]}
             ],
             "differential.diff.search": [{"data": [search_diff(node=sha)]}],
             "user.query": [[{"userName": "test", "phid": "PHID-USER-1"}]],
@@ -1410,7 +1410,9 @@ def test_submit_update_without_test_plan_preserves_existing(
                 {
                     "data": [
                         search_rev(
-                            rev=123, reviewers=["alice"], test_plan="Existing plan"
+                            rev=123,
+                            reviewers=["PHID-USER-1"],
+                            test_plan="Existing plan",
                         )
                     ]
                 }

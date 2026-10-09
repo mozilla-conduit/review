@@ -17,11 +17,12 @@ from collections.abc import Iterable
 from typing import (
     TYPE_CHECKING,
     Any,
+    NamedTuple,
 )
 
 import urllib3
 
-from .commits import Commit
+from .commits import WIP_RE, Commit
 from .diff import Diff
 from .environment import INSTALL_CERT_MSG, USER_AGENT
 from .exceptions import (
@@ -31,6 +32,7 @@ from .exceptions import (
 )
 from .helpers import (
     get_arcrc_path,
+    parse_reviewers,
     read_json_field,
     strip_differential_revision,
 )
@@ -54,6 +56,27 @@ def normalise_reviewer(reviewer: str, strip_group: bool = True) -> str:
     if strip_group:
         reviewer = reviewer.lstrip("#")
     return reviewer
+
+
+def strip_blocking_phid(transaction_value: str) -> str:
+    """Return the underlying PHID from a reviewer transaction value."""
+    if transaction_value.startswith("blocking(") and transaction_value.endswith(")"):
+        return transaction_value[len("blocking(") : -1]
+    return transaction_value
+
+
+def diff_commit_title(diff: dict) -> str:
+    """Return the commit title recorded for a Differential diff."""
+    commits = diff.get("attachments", {}).get("commits", {}).get("commits", [])
+    if not commits:
+        return ""
+    message = commits[0].get("message", "")
+    return message.splitlines()[0] if message else ""
+
+
+class ReviewerAdditions(NamedTuple):
+    reviewer_names_to_add: dict[str, list[str]]
+    transaction_values_to_add: list[str]
 
 
 # Default socket timeout for Conduit API calls (seconds).
@@ -664,7 +687,7 @@ class ConduitAPI:
         if commit.test_plan:
             transactions.append({"type": "testPlan", "value": commit.test_plan})
         if commit.has_reviewers and not commit.wip:
-            self.update_revision_reviewers(transactions, commit)
+            self.set_initial_revision_reviewers(transactions, commit)
 
         if commit.bug_id:
             transactions.append({"type": "bugzilla.bug-id", "value": commit.bug_id})
@@ -696,17 +719,23 @@ class ConduitAPI:
         if comment:
             transactions.append({"type": "comment", "value": comment})
 
-        # Add reviewers only if revision lacks them
-        if (
-            commit.has_reviewers
-            and not commit.wip
-            and not conduit.has_revision_reviewers(commit)
-        ):
-            self.update_revision_reviewers(transactions, commit)
+        revision = None
+
+        if commit.has_reviewers and not commit.wip and commit.rev_id:
+            revision = self.get_revisions(ids=[commit.rev_id])[0]
+            diff = self.get_diffs(phids=[revision["fields"]["diffPHID"]])[
+                revision["fields"]["diffPHID"]
+            ]
+            self.add_newly_introduced_reviewers(
+                transactions,
+                commit,
+                revision,
+                diff,
+            )
 
         # Update bug id if different
         if commit.bug_id and commit.rev_id:
-            revision = conduit.get_revisions(ids=[commit.rev_id])[0]
+            revision = revision or self.get_revisions(ids=[commit.rev_id])[0]
             if revision["fields"]["bugzilla.bug-id"] != commit.bug_id:
                 transactions.append({"type": "bugzilla.bug-id", "value": commit.bug_id})
 
@@ -865,7 +894,7 @@ class ConduitAPI:
 
     def get_repositories_with_tag(self, tag: str) -> dict:
         """Get repository information for repos associated with the given tag."""
-        api_call_args = {
+        api_call_args: dict[str, Any] = {
             "constraints": {
                 "projects": [tag],
             }
@@ -1164,40 +1193,212 @@ class ConduitAPI:
         revs = self.get_revisions(ids=[commit.rev_id])
         return bool(revs and revs[0]["attachments"]["reviewers"]["reviewers"])
 
-    def update_revision_reviewers(
-        self, transactions: list[dict[str, Any]], commit: Commit
-    ):
-        # Appends differential.revision.edit transaction(s) to `transactions` to
-        # set the reviewers.
+    def revision_reviewer_phids(self, revision: dict) -> set[str]:
+        """Return reviewer PHIDs for a Phabricator revision."""
+        reviewers = revision["attachments"]["reviewers"]["reviewers"]
+        return {reviewer["reviewerPHID"] for reviewer in reviewers}
 
+    def commit_reviewer_transaction_values(self, commit: Commit) -> list[str]:
+        """Return reviewer transaction values for a commit's reviewers."""
         all_reviewing = commit.reviewers["request"] + commit.reviewers["granted"]
 
-        # Find reviewers PHIDs
         all_reviewers = [r for r in all_reviewing if not r.startswith("#")]
-        # preload all reviewers
         self.get_users(all_reviewers)
         reviewers = [r for r in all_reviewers if not r.endswith("!")]
         blocking_reviewers = [r.rstrip("!") for r in all_reviewers if r.endswith("!")]
-        reviewers_phid = [user["phid"] for user in self.get_users(reviewers)]
-        blocking_phid = [
+        reviewer_transaction_values = [
+            user["phid"] for user in self.get_users(reviewers)
+        ]
+        blocking_reviewer_transaction_values = [
             "blocking(%s)" % user["phid"] for user in self.get_users(blocking_reviewers)
         ]
 
-        # Find groups PHIDs
         all_groups = [g for g in all_reviewing if g.startswith("#")]
         groups = [g for g in all_groups if not g.endswith("!")]
         blocking_groups = [g.rstrip("!") for g in all_groups if g.endswith("!")]
-        # preload all groups
         self.get_groups(all_groups)
-        groups_phid = [group["phid"] for group in self.get_groups(groups)]
-        bl_groups_phid = [
+        group_transaction_values = [group["phid"] for group in self.get_groups(groups)]
+        blocking_group_transaction_values = [
             "blocking(%s)" % group["phid"] for group in self.get_groups(blocking_groups)
         ]
 
-        all_reviewing_phid = (
-            reviewers_phid + blocking_phid + groups_phid + bl_groups_phid
+        return (
+            reviewer_transaction_values
+            + blocking_reviewer_transaction_values
+            + group_transaction_values
+            + blocking_group_transaction_values
         )
-        transactions.extend([{"type": "reviewers.set", "value": all_reviewing_phid}])
+
+    def reviewer_transaction_values_by_name(
+        self, reviewer_names: dict[str, list[str]]
+    ) -> dict[str, str]:
+        """Return transaction values keyed by the reviewer names that resolved."""
+        all_reviewing = reviewer_names["request"] + reviewer_names["granted"]
+        all_reviewers = [r for r in all_reviewing if not r.startswith("#")]
+        all_groups = [g for g in all_reviewing if g.startswith("#")]
+
+        users_by_name = {
+            normalise_reviewer(user["userName"], strip_group=False): user["phid"]
+            for user in self.get_users(all_reviewers)
+        }
+        groups_by_name = {
+            f"#{normalise_reviewer(group['name'])}": group["phid"]
+            for group in self.get_groups(all_groups)
+        }
+
+        transaction_values_by_name = {}
+        for reviewer in all_reviewing:
+            normalised = normalise_reviewer(reviewer, strip_group=False)
+            phid = (
+                groups_by_name.get(normalised)
+                if reviewer.startswith("#")
+                else users_by_name.get(normalised)
+            )
+            if phid:
+                transaction_values_by_name[reviewer] = (
+                    f"blocking({phid})" if reviewer.endswith("!") else phid
+                )
+        return transaction_values_by_name
+
+    def previous_commit_reviewer_names(
+        self, revision: dict, diff: dict | None = None
+    ) -> set[str]:
+        """Return normalized reviewer names from the previous commit title."""
+        if diff is None:
+            diff_phid = revision["fields"]["diffPHID"]
+            diff = self.get_diffs(phids=[diff_phid])[diff_phid]
+
+        title = diff_commit_title(diff) or revision["fields"].get("title", "")
+        cache_key = "reviewer-names-{}-{}-{}".format(
+            revision.get("phid", ""),
+            diff.get("phid", ""),
+            hashlib.sha256(title.encode()).hexdigest(),
+        )
+        if cache_key in cache:
+            return set(cache.get(cache_key))
+
+        if title and WIP_RE.search(title):
+            diff = self.latest_non_wip_diff(revision)
+            if diff is None:
+                reviewer_names = set()
+                cache.set(cache_key, reviewer_names)
+                return set(reviewer_names)
+            title = diff_commit_title(diff)
+
+        reviewers = parse_reviewers(title)
+
+        reviewer_names = {
+            normalise_reviewer(reviewer, strip_group=False)
+            for reviewers_by_type in reviewers.values()
+            for reviewer in reviewers_by_type
+        }
+        cache.set(cache_key, reviewer_names)
+        return set(reviewer_names)
+
+    def latest_non_wip_diff(self, revision: dict) -> dict | None:
+        """Return the latest diff whose commit was not submitted as WIP."""
+        api_call_args = {
+            "constraints": {"revisionPHIDs": [revision["phid"]]},
+            "attachments": {"commits": True},
+            "order": "newest",
+            "limit": 100,
+        }
+        first_page = object()
+        after = first_page
+        while after:
+            page_args: dict[str, Any] = dict(api_call_args)
+            if after is not first_page:
+                page_args["after"] = after
+
+            response = self.call("differential.diff.search", page_args)
+            for diff in response.get("data", []):
+                title = diff_commit_title(diff)
+                if not title:
+                    # Diffs uploaded outside moz-phab have no local commit
+                    # metadata and carry no commit-title reviewer provenance.
+                    logger.debug(
+                        "Diff %s has no recorded commit title; skipping",
+                        diff.get("id"),
+                    )
+                    continue
+                if not WIP_RE.search(title):
+                    return diff
+
+            after = response.get("cursor", {}).get("after")
+        return None
+
+    def new_commit_reviewer_names(
+        self, commit: Commit, revision: dict, diff: dict | None = None
+    ) -> dict[str, list[str]]:
+        """Return reviewer names absent from the previous submitted title."""
+        previous_reviewer_names = self.previous_commit_reviewer_names(revision, diff)
+        reviewer_names = {"request": [], "granted": []}
+        for reviewer_type in ("request", "granted"):
+            reviewer_names[reviewer_type] = [
+                reviewer
+                for reviewer in commit.reviewers[reviewer_type]
+                if normalise_reviewer(reviewer, strip_group=False)
+                not in previous_reviewer_names
+            ]
+
+        return reviewer_names
+
+    def commit_reviewer_additions(
+        self, commit: Commit, revision: dict, diff: dict | None = None
+    ) -> ReviewerAdditions:
+        """Return reviewer names and transaction values to add."""
+        reviewer_names_to_add = {"request": [], "granted": []}
+        transaction_values_to_add = []
+        new_reviewer_names = self.new_commit_reviewer_names(commit, revision, diff)
+
+        remote_reviewer_phids = self.revision_reviewer_phids(revision)
+        transaction_values_by_name = self.reviewer_transaction_values_by_name(
+            new_reviewer_names
+        )
+        for reviewer_type in ("request", "granted"):
+            for reviewer_name in new_reviewer_names[reviewer_type]:
+                transaction_value = transaction_values_by_name.get(reviewer_name)
+                if (
+                    transaction_value
+                    and strip_blocking_phid(transaction_value) in remote_reviewer_phids
+                ):
+                    continue
+                reviewer_names_to_add[reviewer_type].append(reviewer_name)
+                if transaction_value:
+                    transaction_values_to_add.append(transaction_value)
+        return ReviewerAdditions(
+            reviewer_names_to_add,
+            transaction_values_to_add,
+        )
+
+    def set_initial_revision_reviewers(
+        self, transactions: list[dict[str, Any]], commit: Commit
+    ):
+        """Append the reviewers.set transaction used when creating a revision."""
+        transactions.append(
+            {
+                "type": "reviewers.set",
+                "value": self.commit_reviewer_transaction_values(commit),
+            }
+        )
+
+    def add_newly_introduced_reviewers(
+        self,
+        transactions: list[dict[str, Any]],
+        commit: Commit,
+        revision: dict,
+        diff: dict | None = None,
+    ):
+        # Existing revisions only add reviewers newly introduced in the local
+        # commit title, preserving remote reviewer resignations and Herald changes.
+        additions = self.commit_reviewer_additions(commit, revision, diff)
+        if additions.transaction_values_to_add:
+            transactions.append(
+                {
+                    "type": "reviewers.add",
+                    "value": additions.transaction_values_to_add,
+                }
+            )
 
     def check_for_invalid_reviewers(self, reviewers: dict) -> list[dict[str, Any]]:
         """Return a list of invalid reviewer names.

@@ -13,7 +13,12 @@ from immutabledict import immutabledict
 
 from mozphab import exceptions, mozphab, repository, simplecache
 from mozphab.commits import Commit
-from mozphab.conduit import ConduitAPIError, conduit
+from mozphab.conduit import (
+    ConduitAPIError,
+    conduit,
+    diff_commit_title,
+    normalise_reviewer,
+)
 from mozphab.diff import Diff
 from tests.conftest import search_diff, search_rev
 
@@ -36,6 +41,24 @@ def test_set_args_from_repo():
     repo = Repo()
     mozphab.conduit.set_repo(repo)
     assert mozphab.conduit.repo == repo
+
+
+def test_normalise_reviewer_can_preserve_group_marker():
+    assert normalise_reviewer("#Reviewers!", strip_group=False) == "#reviewers"
+
+
+@pytest.mark.parametrize(
+    ("diff", "expected"),
+    [
+        (search_diff(message="Title r?alice\n\nBody"), "Title r?alice"),
+        (search_diff(message=""), ""),
+        ({"attachments": {"commits": {"commits": [{}]}}}, ""),
+        ({"attachments": {"commits": {"commits": []}}}, ""),
+        ({}, ""),
+    ],
+)
+def test_diff_commit_title(diff, expected):
+    assert diff_commit_title(diff) == expected
 
 
 @pytest.mark.no_mock_token
@@ -1326,6 +1349,306 @@ def test_create_revision(m_call):
             ]
         },
     )
+
+
+@mock.patch("mozphab.repository.conduit.get_groups")
+@mock.patch("mozphab.repository.conduit.get_users")
+@mock.patch("mozphab.repository.conduit.call")
+def test_update_revision_adds_new_commit_reviewers(m_call, m_get_users, m_get_groups):
+    commit = Commit(
+        title_preview="Title Preview",
+        body="Additional summary.",
+        rev_id=456,
+        wip=False,
+        reviewers={"granted": [], "request": ["bob"]},
+    )
+    m_call.side_effect = [
+        {"data": [search_rev(rev=456, reviewers=["PHID-USER-2"])]},
+        {
+            "data": [
+                search_diff(
+                    phid="PHID-DIFF-1",
+                    node="aaa",
+                    message="Title Preview r?alice",
+                )
+            ]
+        },
+        {"object": {"id": 456}},
+    ]
+    m_get_users.side_effect = lambda reviewers: [
+        {
+            "phid": {
+                "alice": "PHID-USER-2",
+                "bob": "PHID-USER-3",
+            }[reviewer.rstrip("!")],
+            "userName": reviewer.rstrip("!"),
+        }
+        for reviewer in reviewers
+    ]
+    m_get_groups.side_effect = lambda groups: []
+
+    mozphab.conduit.update_revision(commit, "PHID-DIFF-7")
+
+    m_call.assert_has_calls(
+        [
+            mock.call(
+                "differential.revision.edit",
+                {
+                    "transactions": [
+                        {"type": "title", "value": "Title Preview"},
+                        {"type": "summary", "value": "Additional summary."},
+                        {"type": "reviewers.add", "value": ["PHID-USER-3"]},
+                        {"type": "update", "value": "PHID-DIFF-7"},
+                    ],
+                    "objectIdentifier": 456,
+                },
+            )
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "previous_title",
+        "remote_reviewers",
+        "current_reviewer",
+        "expected_validation",
+        "expected_additions",
+    ),
+    [
+        ("Title r?alice", [], "alice", [], []),
+        (
+            "Title",
+            [
+                {
+                    "reviewerPHID": "PHID-USER-2",
+                    "status": "resigned",
+                    "isBlocking": False,
+                }
+            ],
+            "alice",
+            [],
+            [],
+        ),
+        (
+            "Title r?alice",
+            [{"reviewerPHID": "PHID-USER-3", "isBlocking": True}],
+            "bob",
+            [],
+            [],
+        ),
+        ("Title r?alice", [], "bob", ["bob"], ["PHID-USER-3"]),
+        ("Title r?alice!", [], "alice", [], []),
+        (
+            "Title",
+            [],
+            "bob!",
+            ["bob!"],
+            ["blocking(PHID-USER-3)"],
+        ),
+        ("Title", [], "unknown", ["unknown"], []),
+    ],
+    ids=[
+        "removed",
+        "resigned",
+        "existing-blocking",
+        "new",
+        "removed-blocking-marker-changed",
+        "new-blocking",
+        "unresolved",
+    ],
+)
+@mock.patch("mozphab.repository.conduit.get_groups")
+@mock.patch("mozphab.repository.conduit.get_users")
+def test_commit_reviewer_additions(
+    m_get_users,
+    m_get_groups,
+    previous_title,
+    remote_reviewers,
+    current_reviewer,
+    expected_validation,
+    expected_additions,
+):
+    user_phids = {"alice": "PHID-USER-2", "bob": "PHID-USER-3"}
+    m_get_users.side_effect = lambda reviewers: [
+        {"phid": user_phids[reviewer.rstrip("!")], "userName": reviewer.rstrip("!")}
+        for reviewer in reviewers
+        if reviewer.rstrip("!") in user_phids
+    ]
+    m_get_groups.return_value = []
+    commit = Commit(reviewers={"granted": [], "request": [current_reviewer]})
+    revision = search_rev(rev=456, reviewers=remote_reviewers)
+    diff = search_diff(message=previous_title)
+
+    additions = mozphab.conduit.commit_reviewer_additions(commit, revision, diff)
+    assert additions.reviewer_names_to_add == {
+        "granted": [],
+        "request": expected_validation,
+    }
+    assert additions.transaction_values_to_add == expected_additions
+
+
+@pytest.mark.parametrize(
+    ("history_has_ready_diff", "expected_names", "expected_values"),
+    [
+        (False, ["alice"], ["PHID-USER-2"]),
+        (True, [], []),
+    ],
+    ids=["first-requested-while-wip", "removal-preserved-across-wip"],
+)
+@mock.patch("mozphab.repository.conduit.get_groups")
+@mock.patch("mozphab.repository.conduit.get_users")
+def test_commit_reviewer_additions_from_wip(
+    m_get_users,
+    m_get_groups,
+    m_call,
+    history_has_ready_diff,
+    expected_names,
+    expected_values,
+):
+    m_get_users.side_effect = lambda reviewers: [
+        {"phid": "PHID-USER-2", "userName": reviewer.rstrip("!")}
+        for reviewer in reviewers
+    ]
+    m_get_groups.return_value = []
+    commit = Commit(reviewers={"granted": [], "request": ["alice"]})
+    revision = search_rev(rev=456, reviewers=[])
+    wip_diff = search_diff(
+        diff=2,
+        phid="PHID-DIFF-2",
+        message="WIP: Title Preview r?alice",
+    )
+    history = [wip_diff]
+    if history_has_ready_diff:
+        history.append(
+            search_diff(
+                diff=1,
+                phid="PHID-DIFF-1",
+                message="Title Preview r?alice",
+            )
+        )
+    m_call.return_value = {"data": history, "cursor": {"after": None}}
+
+    additions = mozphab.conduit.commit_reviewer_additions(commit, revision, wip_diff)
+    assert additions.reviewer_names_to_add == {
+        "request": expected_names,
+        "granted": [],
+    }
+    assert additions.transaction_values_to_add == expected_values
+
+
+@mock.patch("mozphab.repository.conduit.get_groups")
+@mock.patch("mozphab.repository.conduit.get_users")
+def test_commit_reviewer_additions_resolves_blocking_group(m_get_users, m_get_groups):
+    m_get_users.return_value = []
+    m_get_groups.return_value = [
+        {"phid": "PHID-PROJ-1", "name": "reviewers"},
+    ]
+    commit = Commit(reviewers={"granted": [], "request": ["#reviewers!"]})
+    revision = search_rev(rev=456, reviewers=[])
+    diff = search_diff(message="Title")
+
+    additions = mozphab.conduit.commit_reviewer_additions(commit, revision, diff)
+
+    assert additions.reviewer_names_to_add == {
+        "request": ["#reviewers!"],
+        "granted": [],
+    }
+    assert additions.transaction_values_to_add == [
+        "blocking(PHID-PROJ-1)",
+    ]
+
+
+def test_previous_commit_reviewers_pages_wip_history(m_call):
+    revision = search_rev(rev=456)
+    wip_diff = search_diff(
+        diff=3,
+        phid="PHID-DIFF-3",
+        message="WIP: Title Preview r?bob",
+    )
+    ready_diff = search_diff(
+        diff=1,
+        phid="PHID-DIFF-1",
+        message="Title Preview r?alice",
+    )
+    m_call.side_effect = [
+        {"data": [wip_diff], "cursor": {"after": "next-page"}},
+        {"data": [ready_diff], "cursor": {"after": None}},
+    ]
+
+    assert mozphab.conduit.previous_commit_reviewer_names(revision, wip_diff) == {
+        "alice"
+    }
+    assert mozphab.conduit.previous_commit_reviewer_names(revision, wip_diff) == {
+        "alice"
+    }
+    m_call.assert_has_calls(
+        [
+            mock.call(
+                "differential.diff.search",
+                {
+                    "constraints": {"revisionPHIDs": ["PHID-DREV-1"]},
+                    "attachments": {"commits": True},
+                    "order": "newest",
+                    "limit": 100,
+                },
+            ),
+            mock.call(
+                "differential.diff.search",
+                {
+                    "constraints": {"revisionPHIDs": ["PHID-DREV-1"]},
+                    "attachments": {"commits": True},
+                    "order": "newest",
+                    "limit": 100,
+                    "after": "next-page",
+                },
+            ),
+        ]
+    )
+    assert m_call.call_count == 2
+
+
+def test_previous_commit_reviewers_uses_revision_title_for_incomplete_wip_diff(
+    m_call,
+):
+    revision = search_rev(rev=456, title="WIP: Title Preview r?bob")
+    incomplete_wip_diff = search_diff(phid="PHID-DIFF-3", message="")
+    ready_diff = search_diff(
+        diff=1,
+        phid="PHID-DIFF-1",
+        message="Title Preview r?alice",
+    )
+    m_call.return_value = {
+        "data": [incomplete_wip_diff, ready_diff],
+        "cursor": {"after": None},
+    }
+
+    assert mozphab.conduit.previous_commit_reviewer_names(
+        revision, incomplete_wip_diff
+    ) == {"alice"}
+
+
+def test_previous_commit_reviewers_skips_incomplete_history(m_call):
+    revision = search_rev(rev=456)
+    wip_diff = search_diff(
+        diff=3,
+        phid="PHID-DIFF-3",
+        message="WIP: Title Preview r?bob",
+    )
+    incomplete_diff = search_diff(diff=2, phid="PHID-DIFF-2", message="")
+    ready_diff = search_diff(
+        diff=1,
+        phid="PHID-DIFF-1",
+        message="Title Preview r?alice",
+    )
+    m_call.return_value = {
+        "data": [wip_diff, incomplete_diff, ready_diff],
+        "cursor": {"after": None},
+    }
+
+    assert mozphab.conduit.previous_commit_reviewer_names(revision, wip_diff) == {
+        "alice"
+    }
 
 
 class TestEditRevision:

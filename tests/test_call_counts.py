@@ -336,6 +336,15 @@ def make_fake_call(state: FakeState, calls: Counter) -> Callable[..., Any]:
         if method == "user.whoami":
             return {"phid": ME_PHID, "userName": "me"}
 
+        if method == "user.query":
+            return [
+                {
+                    "phid": f"PHID-USER-{username}",
+                    "userName": username,
+                }
+                for username in args["usernames"]
+            ]
+
         if method == "differential.creatediff":
             next_new_diff_id[0] += 1
             new_id = next_new_diff_id[0]
@@ -474,6 +483,89 @@ def test_submit_call_count(
         f"{repo.get_public_base_node.call_count} times "
         f"for {num_commits} commit(s)."
     )
+
+
+def test_submit_with_reviewers_uses_preloaded_revision_and_diff(
+    call_harness: tuple[FakeState, Counter, mock.MagicMock],
+) -> None:
+    state, calls, repo = call_harness
+    num_commits = 3
+    populate_submit_state(state, num_commits)
+    commits = [build_submit_commit(index) for index in range(1, num_commits + 1)]
+    for commit in commits:
+        commit.title = f"{commit.title} r?alice,bob"
+        assert commit.rev_id is not None
+        revision = state.revisions_by_id[commit.rev_id]
+        revision["attachments"]["reviewers"]["reviewers"] = [
+            {
+                "reviewerPHID": "PHID-USER-alice",
+                "isBlocking": False,
+            }
+        ]
+        diff = state.diffs_by_phid[revision["fields"]["diffPHID"]]
+        diff["attachments"]["commits"]["commits"][0][
+            "message"
+        ] = f"{commit.title.removesuffix(',bob')}"
+    repo.commit_stack.return_value = commits
+
+    with mock.patch("mozphab.commands.submit.config") as fake_config:
+        fake_config.warn_untracked = False
+        fake_config.auto_submit = True
+        fake_config.ai_review = False
+        fake_config.always_blocking = False
+        fake_config.always_full_stack = False
+        fake_config.filename = "/fake/.moz-phab-config"
+        fake_config.review_queue_reminder_frequency = 0
+
+        submit._submit(repo, build_submit_args())
+
+    expected = {
+        **SUBMIT_EXPECTED[num_commits],
+        "differential.revision.search": 1,
+        "user.query": 1,
+    }
+    assert dict(calls) == expected
+
+
+def test_wip_history_lookup_is_one_call_per_revision(
+    call_harness: tuple[FakeState, Counter, mock.MagicMock],
+) -> None:
+    state, calls, repo = call_harness
+    num_commits = 3
+    populate_submit_state(state, num_commits)
+    commits = [build_submit_commit(index) for index in range(1, num_commits + 1)]
+    for commit in commits:
+        commit.title = f"{commit.title} r?alice"
+        assert commit.rev_id is not None
+        revision = state.revisions_by_id[commit.rev_id]
+        revision["attachments"]["reviewers"]["reviewers"] = [
+            {
+                "reviewerPHID": "PHID-USER-alice",
+                "isBlocking": False,
+            }
+        ]
+        diff = state.diffs_by_phid[revision["fields"]["diffPHID"]]
+        diff["attachments"]["commits"]["commits"][0]["message"] = f"WIP: {commit.title}"
+    repo.commit_stack.return_value = commits
+
+    with mock.patch("mozphab.commands.submit.config") as fake_config:
+        fake_config.warn_untracked = False
+        fake_config.auto_submit = True
+        fake_config.ai_review = False
+        fake_config.always_blocking = False
+        fake_config.always_full_stack = False
+        fake_config.filename = "/fake/.moz-phab-config"
+        fake_config.review_queue_reminder_frequency = 0
+
+        submit._submit(repo, build_submit_args())
+
+    expected = {
+        **SUBMIT_EXPECTED[num_commits],
+        "differential.revision.search": 1,
+        "differential.diff.search": num_commits + 1,
+        "user.query": 1,
+    }
+    assert dict(calls) == expected
 
 
 # Expected ConduitAPI.call shape for `patch.patch` against the top of
