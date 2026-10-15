@@ -15,7 +15,7 @@ from .config import config
 from .environment import MOZPHAB_VERSION
 from .helpers import prompt
 from .logger import logger
-from .user import user_data
+from .user import UserData
 
 
 class Telemetry:
@@ -86,7 +86,7 @@ class Telemetry:
         self._pings.usage.submit()
         logger.debug("Telemetry submit called.")
 
-    def set_metrics(self, args):
+    def set_metrics(self, args, user_data: UserData):
         """Sets metrics common to all commands."""
         self.usage.command.set(args.command)
         self._set_os()
@@ -112,7 +112,7 @@ class TelemetryDisabled:
         return self
 
 
-def update_user_data():
+def update_user_data(user_data: UserData):
     """Update user_data to enable or disable Telemetry.
 
     If employment data has been changed Telemetry might be switched on
@@ -152,7 +152,7 @@ def update_user_data():
     config.write()
 
 
-def configure_telemetry(args):
+def configure_telemetry(args, user_data: UserData):
     if args.command == "install-certificate":
         # Collecting data without a certificate is not possible.
         _Globals.telemetry = TelemetryDisabled()
@@ -167,7 +167,7 @@ def configure_telemetry(args):
     # requiring existence of the Repository.
     if args.needs_repo:
         try:
-            update_user_data()
+            update_user_data(user_data)
         except BMOAPIError as err:
             # Error in retrieving user status.
             # We quietly allow to work without enabling Telemetry.
@@ -182,7 +182,7 @@ def configure_telemetry(args):
 
     # Enable telemetry by swapping the telemetry global with a Glean backed object.
     _Globals.telemetry = Telemetry()
-    telemetry().set_metrics(args)
+    telemetry().set_metrics(args, user_data)
 
 
 def telemetry():

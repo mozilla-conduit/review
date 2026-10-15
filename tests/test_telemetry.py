@@ -73,21 +73,21 @@ def test_set_python(m_platform, get_telemetry):
 
 
 @mock.patch("mozphab.telemetry.config")
-@mock.patch("mozphab.telemetry.user_data")
 @mock.patch("mozphab.telemetry.prompt")
-def test_update_user_data(m_prompt, m_user_data, m_config):
+def test_update_user_data(m_prompt, m_config):
+    m_user_data = mock.Mock()
     m_config.configure_mock(telemetry_enabled=False)
 
     # user_data not updated
     m_user_data.set_user_data.return_value = False
-    telemetry.update_user_data()
+    telemetry.update_user_data(m_user_data)
     assert not m_config.telemetry_enabled
     m_config.write.assert_not_called()
 
     # not instantiated, BMOAPIError
     m_user_data.set_user_data.side_effect = BMOAPIError
     with pytest.raises(BMOAPIError):
-        telemetry.update_user_data()
+        telemetry.update_user_data(m_user_data)
 
     # switched off, not instantiated, user data retrieved from BMO, employee
     m_user_data.set_user_data.side_effect = None
@@ -97,7 +97,7 @@ def test_update_user_data(m_prompt, m_user_data, m_config):
         is_data_collected=True,
     )
     m_config.configure_mock(telemetry_enabled=True)
-    telemetry.update_user_data()
+    telemetry.update_user_data(m_user_data)
     assert m_config.telemetry_enabled
     m_config.write.assert_called_once()
 
@@ -108,22 +108,22 @@ def test_update_user_data(m_prompt, m_user_data, m_config):
     # not opt-in
     m_config.write.reset_mock()
     m_prompt.return_value = "No"
-    telemetry.update_user_data()
+    telemetry.update_user_data(m_user_data)
     assert not m_config.telemetry_enabled
     m_config.write.assert_called_once()
 
     # opt-in
     m_config.write.reset_mock()
     m_prompt.return_value = "Yes"
-    telemetry.update_user_data()
+    telemetry.update_user_data(m_user_data)
     assert m_config.telemetry_enabled
     m_config.write.assert_called_once()
 
 
 @mock.patch("mozphab.telemetry.update_user_data")
-@mock.patch("mozphab.telemetry.user_data")
 @mock.patch("mozphab.telemetry.config")
-def test_set_metrics(m_config, m_user_data, m_update_user_data, get_telemetry):
+def test_set_metrics(m_config, m_update_user_data, get_telemetry):
+    m_user_data = mock.Mock()
     t = get_telemetry
     t._set_os = mock.Mock()
     t._set_python = mock.Mock()
@@ -139,7 +139,7 @@ def test_set_metrics(m_config, m_user_data, m_update_user_data, get_telemetry):
         user_code="1111ffee-eeff-1111-ffee-1111eeff1111",
     )
     # telemetry is enabled in `update_user_data`
-    t.set_metrics(Args(needs_repo=True))
+    t.set_metrics(Args(needs_repo=True), m_user_data)
     t._set_os.assert_called_once()
     t._set_python.assert_called_once()
     assert "submit" == t.usage.command.test_get_value()
@@ -157,43 +157,43 @@ def test_set_metrics(m_config, m_user_data, m_update_user_data, get_telemetry):
 
 @mock.patch("mozphab.telemetry.Telemetry")
 @mock.patch("mozphab.telemetry.update_user_data")
-@mock.patch("mozphab.telemetry.user_data")
 @mock.patch("mozphab.telemetry.config")
 def test_configure_telemetry(
     m_config,
-    m_user_data,
     m_update_user_data,
     m_telemetry,
 ):
+    m_user_data = mock.Mock()
+
     # install-certificate -> disabled
-    telemetry.configure_telemetry(Args(command="install-certificate"))
+    telemetry.configure_telemetry(Args(command="install-certificate"), m_user_data)
     assert isinstance(telemetry.telemetry(), telemetry.TelemetryDisabled)
 
     # self-update -> disabled
-    telemetry.configure_telemetry(Args(command="self-update"))
+    telemetry.configure_telemetry(Args(command="self-update"), m_user_data)
     assert isinstance(telemetry.telemetry(), telemetry.TelemetryDisabled)
 
     # off -> disabled
     m_config.configure_mock(telemetry_enabled=False)
     m_user_data.configure_mock(is_data_collected=True)
-    telemetry.configure_telemetry(Args())
+    telemetry.configure_telemetry(Args(), m_user_data)
     assert isinstance(telemetry.telemetry(), telemetry.TelemetryDisabled)
 
     # on, no user data -> disabled
     m_config.configure_mock(telemetry_enabled=True)
     m_user_data.configure_mock(is_data_collected=False)
-    telemetry.configure_telemetry(Args())
+    telemetry.configure_telemetry(Args(), m_user_data)
     assert isinstance(telemetry.telemetry(), telemetry.TelemetryDisabled)
 
     # on, bmo error -> disabled
     m_config.configure_mock(telemetry_enabled=True)
     m_update_user_data.side_effect = BMOAPIError
-    telemetry.configure_telemetry(Args(needs_repo=True))
+    telemetry.configure_telemetry(Args(needs_repo=True), m_user_data)
     assert isinstance(telemetry.telemetry(), telemetry.TelemetryDisabled)
 
     # on --> enabled
     m_config.configure_mock(telemetry_enabled=True)
     m_user_data.configure_mock(is_data_collected=True)
-    telemetry.configure_telemetry(Args())
+    telemetry.configure_telemetry(Args(), m_user_data)
     m_telemetry.assert_called_once()
     assert not isinstance(telemetry.telemetry(), telemetry.TelemetryDisabled)

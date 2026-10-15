@@ -36,6 +36,7 @@ from .updater import (
     log_windows_update_message,
     self_upgrade,
 )
+from .user import user_data
 
 
 def restart_mozphab():
@@ -133,7 +134,7 @@ def main(argv: list[str], *, is_development: bool):
             conduit.set_repo(repo)
 
         if not is_development:
-            configure_telemetry(args)
+            configure_telemetry(args, user_data)
 
         if repo is not None:
             assert_api_token_is_present(repo, args)
