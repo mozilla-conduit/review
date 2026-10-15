@@ -5,7 +5,6 @@
 from unittest import mock
 
 from mozphab import mozphab
-from mozphab.user import user_data
 
 
 def args_for_command(needs_user_data: bool) -> mock.MagicMock:
@@ -18,7 +17,7 @@ def args_for_command(needs_user_data: bool) -> mock.MagicMock:
 
 @mock.patch("mozphab.mozphab.check_for_updates", new=mock.Mock(return_value=None))
 @mock.patch("mozphab.mozphab.parse_args")
-def test_command_needing_user_data_is_given_it(m_parse_args):
+def test_command_needing_user_data_is_given_it(m_parse_args, user_data):
     args = args_for_command(needs_user_data=True)
     m_parse_args.return_value = args
 

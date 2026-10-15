@@ -36,7 +36,7 @@ from .updater import (
     log_windows_update_message,
     self_upgrade,
 )
-from .user import user_data
+from .user import load_user_data
 
 
 def restart_mozphab():
@@ -104,6 +104,9 @@ def main(argv: list[str], *, is_development: bool):
         init_logging()
 
         logger.debug("%s (%s)", environment.MOZPHAB_NAME, environment.MOZPHAB_VERSION)
+
+        logger.debug("Reading user info.")
+        user_data = load_user_data()
 
         if should_disable_logging(args):
             environment.SHOW_SPINNER = False

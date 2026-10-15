@@ -298,6 +298,20 @@ def test_bad_uuid_rewritten(user_data):
     ), "`user_code` should be rewritten to good UUID on update."
 
 
+def test_load_user_data(tmp_path):
+    """`load_user_data` should be the only thing that reads the file."""
+    user_info_file = tmp_path / "elsewhere.json"
+    user_code = str(uuid.uuid4())
+    user_info_file.write_text(json.dumps({"user_code": user_code}))
+
+    assert (
+        user.UserData(path=user_info_file).user_code is None
+    ), "Building a `UserData` should not read the file."
+    assert (
+        user.load_user_data(path=user_info_file).user_code == user_code
+    ), "`load_user_data` should read the file it is given."
+
+
 @mock.patch("mozphab.user.UserData.whoami")
 def test_new_telemetry_ids_are_valid(m_whoami, user_data):
     m_whoami.side_effect = ({"email": "someemail", "is_employee": False},)

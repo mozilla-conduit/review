@@ -412,7 +412,7 @@ def config():
 
 
 @pytest.fixture
-def in_process(monkeypatch, safe_environ, request, config):
+def in_process(monkeypatch, safe_environ, request, config, user_data):
     """Set up an environment to run moz-phab within the current process."""
     monkeypatch.setattr("mozphab.config.config", config)
     monkeypatch.setattr("mozphab.git.config", config)
@@ -445,18 +445,13 @@ def in_process(monkeypatch, safe_environ, request, config):
         conduit.ConduitAPI, "get_pending_reviews", mock.Mock(return_value=(0, False))
     )
 
-    # Modify user_data object to not touch the file
-    user.USER_INFO_FILE = mock.Mock()
-    user.USER_INFO_FILE.exists.return_value = False
-    user.user_data = user.UserData()
-    user.user_data.update_from_dict(
-        {
-            "user_code": str(uuid.uuid4()),
-            "is_employee": True,
-            "installation_id": str(uuid.uuid4()),
-            "last_check": time.time(),
-        }
-    )
+    collected_user_info = {
+        "user_code": str(uuid.uuid4()),
+        "is_employee": True,
+        "installation_id": str(uuid.uuid4()),
+        "last_check": time.time(),
+    }
+    user_data.update_from_dict(collected_user_info)
 
     # Allow to define the check_call_by_line function in the testing module
     def check_call_by_line_static(*args, **kwargs):
@@ -480,10 +475,18 @@ def in_process(monkeypatch, safe_environ, request, config):
     monkeypatch.setattr(repository, "read_json_field", read_json_field)
 
 
-@pytest.fixture
-def user_data(tmp_path):
-    """A `UserData` backed by a file of its own."""
-    return user.UserData(path=tmp_path / "user_info.json")
+@pytest.fixture(autouse=True)
+def user_data(monkeypatch, tmp_path):
+    """The empty `UserData` every test gets, in place of the developer's own.
+
+    `main` is the only caller of `load_user_data`, so patching it hands this
+    object to anything running a command.
+    """
+    user_info_file = tmp_path / "user_info.json"
+    monkeypatch.setattr(user, "USER_INFO_FILE", user_info_file)
+    user_data = user.UserData(path=user_info_file)
+    monkeypatch.setattr(mozphab, "load_user_data", lambda: user_data)
+    return user_data
 
 
 @pytest.fixture(name="reset_glean", scope="function", autouse=True)

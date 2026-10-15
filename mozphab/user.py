@@ -45,13 +45,6 @@ def format_uuid(bad_uuid: str) -> str:
 
 
 class UserData:
-    is_employee = None
-    user_code = None
-    installation_id = None
-    last_check = None
-    # Defaults to 0 rather than None so that a user who has never been
-    # reminded still counts as `is_data_collected`.
-    review_queue_last_reminder = 0
     keys = [
         "is_employee",
         "user_code",
@@ -62,7 +55,13 @@ class UserData:
 
     def __init__(self, path: Path | None = None):
         self.path = path or USER_INFO_FILE
-        self.set_from_file()
+        self.is_employee: bool | None = None
+        self.user_code: str | None = None
+        self.installation_id: str | None = None
+        self.last_check: int | None = None
+        # Defaults to 0 rather than None so that a user who has never been
+        # reminded still counts as `is_data_collected`.
+        self.review_queue_last_reminder: int = 0
 
     @property
     def is_data_collected(self) -> bool:
@@ -175,4 +174,12 @@ class UserData:
         return is_employee != self.is_employee
 
 
-user_data = UserData()
+def load_user_data(path: Path | None = None) -> UserData:
+    """Read the user info file into a new `UserData`.
+
+    Called once per invocation, from `main`, so that the object can be passed
+    to whatever needs it rather than read from disk again.
+    """
+    user_data = UserData(path=path)
+    user_data.set_from_file()
+    return user_data
