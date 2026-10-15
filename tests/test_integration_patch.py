@@ -6,7 +6,10 @@ import os
 import time
 from unittest import mock
 
+import pytest
+
 from mozphab import mozphab
+from mozphab.exceptions import Error
 
 from .conftest import git_out, hg_out, with_stack_graph
 
@@ -303,6 +306,78 @@ def test_git_patch_here_no_branch(
     m_prompt.assert_not_called()
     assert branch == git_out("rev-parse", "--abbrev-ref", "HEAD").rstrip("\n")
     assert "title R1" in git_out("log", "-1", "--format=%s")
+
+
+@pytest.mark.parametrize("stack", [False, True], ids=["single", "partial-stack"])
+@pytest.mark.parametrize("no_branch", [False, True], ids=["branch", "no-branch"])
+@mock.patch("mozphab.commands.patch.prompt", return_value="No")
+@mock.patch("mozphab.git.Git.is_public", return_value=True)
+@mock.patch("mozphab.git.Git.fetch_from_upstream")
+@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+@mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
+@mock.patch("mozphab.conduit.ConduitAPI.call")
+def test_git_patch_here_no_branch_declines_fallback(
+    m_call_conduit,
+    m_get_diffs,
+    m_get_revs,
+    m_fetch_from_upstream,
+    m_is_public,
+    m_prompt,
+    in_process,
+    git_repo_path,
+    stack,
+    no_branch,
+):
+    """A failed direct apply does not move the current branch when retry is declined."""
+    base = git_out("rev-parse", "HEAD").strip()
+    diff = copy.deepcopy(DIFF_1)
+    diff["fields"]["refs"][0]["identifier"] = base
+    m_get_revs.return_value = [REV_1]
+    if stack:
+        rev2 = with_stack_graph(REV_2, {"PHID-REV-2": ["PHID-REV-1"], "PHID-REV-1": []})
+        m_get_revs.side_effect = ([rev2], [REV_1])
+    m_get_diffs.return_value = {"PHID-DIFF-1": diff, "PHID-DIFF-2": DIFF_2}
+    m_call_conduit.side_effect = lambda method, args: {
+        "conduit.ping": {},
+        "diffusion.repository.search": {
+            "data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]
+        },
+        "differential.getrawdiff": (
+            PATCH_2_DIFF.replace("-a", "-missing")
+            if args.get("diffID") == 2
+            else PATCH_1_DIFF
+        ),
+    }[method]
+
+    # For a stack D1 creates X successfully, then D2 fails. Otherwise D1
+    # fails because X already exists. Both paths must restore the original tip.
+    local_file = "local" if stack else "X"
+    (git_repo_path / local_file).write_text("local\n")
+    git_out("add", local_file)
+    git_out("commit", "--message", "local change")
+    branch = git_out("symbolic-ref", "--short", "HEAD").strip()
+    tip = git_out("rev-parse", "HEAD").strip()
+
+    args = ["patch", "D2" if stack else "D1", "--apply-to", "here"]
+    if no_branch:
+        args.append("--no-branch")
+
+    with pytest.raises(Error, match="Patch failed to apply"):
+        mozphab.main(
+            args,
+            is_development=True,
+        )
+
+    m_prompt.assert_called_once()
+    m_fetch_from_upstream.assert_not_called()
+    assert git_out("symbolic-ref", "--short", "HEAD").strip() == branch
+    assert git_out("rev-parse", "HEAD").strip() == tip
+    assert (git_repo_path / local_file).read_text() == "local\n"
+    if stack:
+        assert not (git_repo_path / "X").exists()
+    if not no_branch:
+        assert "phab-D" not in git_out("branch", "--list")
+    assert not git_out("status", "--porcelain").strip()
 
 
 @mock.patch("mozphab.mercurial.Mercurial.is_public", return_value=True)

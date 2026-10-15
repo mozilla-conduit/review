@@ -917,3 +917,44 @@ def test_git_validate_email(git):
 
     git.git.email = "test@mozilla.com"
     assert git.validate_email() is None, "validate_email() executes without error"
+
+
+@pytest.mark.parametrize("branch", [None, "phab-D1"])
+@mock.patch("mozphab.git.Git.git_call")
+@mock.patch("mozphab.git.Git.checkout")
+def test_discard_patch_attempt_keeps_branch(m_checkout, m_git_call, git, branch):
+    git.patch_branch_name = branch
+    git.discard_patch_attempt("sha111", keep_branch=True)
+    m_git_call.assert_called_once_with(["reset", "--hard", "--quiet", "sha111"])
+    m_checkout.assert_not_called()
+    assert git.patch_branch_name == branch
+
+
+@mock.patch("mozphab.git.Git.git_call")
+@mock.patch("mozphab.git.Git.checkout")
+def test_discard_patch_attempt_restores_original_branch(
+    m_checkout, m_git_call, git
+):
+    git.patch_branch_name = "phab-D1"
+    git.discard_patch_attempt(
+        "sha111", keep_branch=True, original_branch="feature"
+    )
+    m_checkout.assert_called_once_with("feature")
+    m_git_call.assert_called_once_with(["branch", "--delete", "--force", "phab-D1"])
+    assert git.patch_branch_name is None
+
+
+@pytest.mark.parametrize(
+    "result,error,expected",
+    [
+        ("feature/topic", None, "feature/topic"),
+        (None, exceptions.CommandError("detached HEAD"), None),
+        (None, IndexError(), None),
+        (None, OSError(), None),
+    ],
+)
+@mock.patch("mozphab.git.Git._get_current_head")
+def test_get_current_branch(m_get_current_head, git, result, error, expected):
+    m_get_current_head.return_value = result
+    m_get_current_head.side_effect = error
+    assert git.get_current_branch() == expected

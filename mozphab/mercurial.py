@@ -610,6 +610,15 @@ class Mercurial(Repository):
         """Return the node currently checked out in the working directory."""
         return self.hg_log_text(".")
 
+    def get_current_branch(self) -> str | None:
+        """Return the active bookmark, or None when none is active."""
+        try:
+            return (
+                self.hg_out_text(["log", "-r", ".", "-T", "{activebookmark}"]) or None
+            )
+        except (CommandError, OSError):
+            return None
+
     def resolve_node(self, ref: str) -> str:
         """Return the node `ref` (a branch, bookmark, or other revision) resolves to."""
         return self.hg_log_text(ref)

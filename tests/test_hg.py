@@ -780,3 +780,20 @@ def test_hg_extract_email_from_username(hg):
     # Username with email
     hg.username = "test user <test@example.com>"
     assert hg.extract_email_from_username() == "test@example.com"
+
+
+@pytest.mark.parametrize(
+    "result,error,expected",
+    [
+        ("feature", None, "feature"),
+        ("", None, None),
+        (None, exceptions.CommandError("failed"), None),
+        (None, OSError(), None),
+    ],
+)
+@mock.patch("mozphab.mercurial.Mercurial.hg_out_text")
+def test_get_current_branch(m_hg_out_text, hg, result, error, expected):
+    m_hg_out_text.return_value = result
+    m_hg_out_text.side_effect = error
+    assert hg.get_current_branch() == expected
+    m_hg_out_text.assert_called_once_with(["log", "-r", ".", "-T", "{activebookmark}"])

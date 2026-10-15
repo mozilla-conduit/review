@@ -218,6 +218,10 @@ class Repository(object):
         """Return the node currently checked out in the working directory."""
         raise NotImplementedError()
 
+    def get_current_branch(self) -> str | None:
+        """Return the active branch/bookmark, or None when there is none."""
+        return None
+
     def resolve_node(self, ref: str) -> str:
         """Return the node `ref` (a branch, bookmark, or other revision) resolves to."""
         raise NotImplementedError()
@@ -241,8 +245,13 @@ class Repository(object):
     def before_patch(self, node, name):
         """Prepare repository to apply the patches."""
 
-    def discard_patch_attempt(self, node: str):
+    def discard_patch_attempt(
+        self, node: str, *, keep_branch: bool = False, original_branch: str | None = None
+    ):
         """Undo a failed patch attempt, returning the repository to `node`.
+
+        With `keep_branch`, restore the target without detaching the current
+        branch, where supported.
 
         Drops the branch/bookmark `before_patch` created, and the commits
         applied since, so applying at another base starts from a clean state.
@@ -250,6 +259,8 @@ class Repository(object):
         next attempt gets a fresh branch/bookmark name, and the commits are
         collected by the VCS as usual.
         """
+        if keep_branch:
+            self.checkout(node)
 
     def apply_patch(
         self, diff: str, body: str, author: str | None, author_date: int | None

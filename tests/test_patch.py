@@ -307,9 +307,15 @@ def test_get_patch_date():
 @mock.patch("mozphab.git.Git.discard_patch_attempt")
 @mock.patch("mozphab.git.Git.fetch_from_upstream")
 @mock.patch("mozphab.git.Git.get_latest_landing_node")
+@mock.patch("mozphab.commands.patch.prompt")
+@mock.patch("mozphab.git.Git.get_current_branch", return_value="original-branch")
+@mock.patch("mozphab.commands.patch.logger.warning")
 @mock.patch("builtins.print")
 def test_patch(
     m_print,
+    m_warning,
+    m_get_current_branch,
+    m_prompt,
     m_git_get_latest_landing_node,
     m_git_fetch_from_upstream,
     m_git_discard_patch_attempt,
@@ -598,13 +604,67 @@ def test_patch(
     m_git_apply_patch.side_effect = [exceptions.CommandError("boom"), mock.DEFAULT]
     m_git_rebase_node.side_effect = exceptions.CommandError("boom")
     git.args = Args(apply_to="current_sha")
-    with pytest.raises(exceptions.Error):
+    with pytest.raises(exceptions.Error, match="original branch was original-branch"):
         patch.patch(git, git.args)
     m_git_abort_rebase.assert_called_once()
     m_git_apply_patch.side_effect = None
     m_git_rebase_node.side_effect = None
     m_git_rebase_node.reset_mock()
     m_git_discard_patch_attempt.reset_mock()
+
+    # Declining the fallback for `--apply-to here` must leave the checkout
+    # alone, without fetching or looking for an older revision.
+    m_git_before_patch.reset_mock()
+    m_git_check_node.reset_mock()
+    m_git_apply_patch.side_effect = exceptions.CommandError("boom")
+    m_prompt.return_value = "No"
+    git.args = Args(apply_to="here")
+    with pytest.raises(exceptions.Error, match="Patch failed to apply"):
+        patch.patch(git, git.args)
+    m_prompt.assert_called_once_with(
+        "The patch failed to apply here. Retry at the latest landed revision "
+        "and rebase onto current_sha",
+        ["No", "Yes"],
+    )
+    m_git_before_patch.assert_called_once_with("current_sha", "phab-D1")
+    m_git_check_node.assert_called_once_with("sha111")
+    m_git_fetch_from_upstream.assert_not_called()
+    m_git_discard_patch_attempt.assert_called_once_with(
+        "current_sha", keep_branch=True, original_branch="original-branch"
+    )
+    m_git_rebase_node.assert_not_called()
+    m_git_discard_patch_attempt.reset_mock()
+
+    # Accepting the offer retains the existing retry and rebase behavior.
+    m_prompt.reset_mock()
+    m_prompt.return_value = "Yes"
+    m_git_before_patch.reset_mock()
+    m_git_apply_patch.side_effect = [exceptions.CommandError("boom"), mock.DEFAULT]
+    patch.patch(git, git.args)
+    m_git_discard_patch_attempt.assert_called_once_with("current_sha")
+    m_git_rebase_node.assert_called_once_with("sha111", "current_sha")
+    m_git_apply_patch.side_effect = None
+    m_git_discard_patch_attempt.reset_mock()
+    m_git_rebase_node.reset_mock()
+    m_prompt.reset_mock()
+
+    # `--yes` explicitly opts into the retry without another prompt.
+    m_warning.reset_mock()
+    m_git_apply_patch.side_effect = [exceptions.CommandError("boom"), mock.DEFAULT]
+    git.args = Args(apply_to="here", yes=True)
+    patch.patch(git, git.args)
+    m_prompt.assert_not_called()
+    m_warning.assert_any_call(
+        "Retrying may switch you off the current branch %s and "
+        "leave you at the latest landed revision if the retry "
+        "or rebase fails.",
+        "original-branch",
+    )
+    m_git_discard_patch_attempt.assert_called_once_with("current_sha")
+    m_git_rebase_node.assert_called_once_with("sha111", "current_sha")
+    m_git_apply_patch.side_effect = None
+    m_git_discard_patch_attempt.reset_mock()
+    m_git_rebase_node.reset_mock()
 
     # `--apply-to base` applies at the diff's own base, so there's no other
     # commit to try: the original failure propagates.
@@ -677,6 +737,7 @@ def test_patch(
     m_git_check_node.side_effect = exceptions.NotFoundError
     m_git_get_latest_landing_node.return_value = None
     git.args = Args(apply_to="here")
+    m_prompt.return_value = "Yes"
     with pytest.raises(exceptions.Error) as e:
         patch.patch(git, git.args)
     m_git_fetch_from_upstream.assert_called_once()

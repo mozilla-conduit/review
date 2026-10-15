@@ -660,14 +660,24 @@ class Git(Repository):
             logger.info("Created branch %s", branch_name)
             self.patch_branch_name = branch_name
 
-    def discard_patch_attempt(self, node: str):
+    def discard_patch_attempt(
+        self, node: str, *, keep_branch: bool = False, original_branch: str | None = None
+    ):
         """Undo a failed patch attempt, returning the repository to `node`.
 
-        Deletes the branch `before_patch` created, leaving the commits of the
-        failed attempt unreachable rather than named by a branch nobody asked
-        for.
+        With `keep_branch`, reset the current branch without detaching HEAD.
+        Otherwise delete the branch `before_patch` created, leaving the commits
+        of the failed attempt unreachable.
         """
-        if self.patch_branch_name:
+        if keep_branch:
+            if self.patch_branch_name and original_branch:
+                patch_branch_name = self.patch_branch_name
+                self.checkout(original_branch)
+                self.git_call(["branch", "--delete", "--force", patch_branch_name])
+                self.patch_branch_name = None
+            else:
+                self.git_call(["reset", "--hard", "--quiet", node])
+        elif self.patch_branch_name:
             self.checkout(node)
             self.git_call(["branch", "--delete", "--force", self.patch_branch_name])
             self.patch_branch_name = None
@@ -699,6 +709,13 @@ class Git(Repository):
         """Return current's HEAD symbolic link."""
         symbolic = self.git_out_text(["symbolic-ref", "HEAD"])
         return symbolic.split("refs/heads/")[1]
+
+    def get_current_branch(self) -> str | None:
+        """Return the current branch, or None for a detached HEAD."""
+        try:
+            return self._get_current_head()
+        except (CommandError, IndexError, OSError):
+            return None
 
     def _is_head_on_branch(self, branch: str) -> bool:
         """Return True if HEAD is a symbolic ref to the given branch.

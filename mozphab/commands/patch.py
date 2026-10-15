@@ -331,9 +331,9 @@ def patch(repo: Repository, args: argparse.Namespace):
     The patch is applied directly at the target above whenever that's possible.
     When creating commits and it isn't -- the diff's base commit is missing
     locally (eg. it only exists as part of another, unlanded patch stack), or the
-    patch doesn't apply at the target -- moz-phab applies at the closest public
-    (landed) base instead, then rebases onto the target. This avoids failing
-    outright, at the cost of a rebase in that case.
+    patch doesn't apply at the target -- moz-phab can apply at the closest public
+    (landed) base instead, then rebase onto the target. For `--apply-to here`,
+    this fallback requires confirmation unless `--yes` was given.
 
     Raises:
     * Error if uncommitted changes are present in the working tree
@@ -483,6 +483,7 @@ def patch(repo: Repository, args: argparse.Namespace):
                 )
 
     target_node = ""
+    current_branch = None
     branch_name = None
     no_commit = args.no_commit or not config.create_commit
 
@@ -542,6 +543,8 @@ def patch(repo: Repository, args: argparse.Namespace):
                 raise Error(msg)
 
         branch_name = resolve_branch_name(args, config, rev_id)
+        if not no_commit:
+            current_branch = repo.get_current_branch()
 
         repo.before_patch(target_node, branch_name)
 
@@ -605,6 +608,39 @@ def patch(repo: Repository, args: argparse.Namespace):
                 if args.apply_to != "base" and diff_base_node
                 else None
             )
+            can_retry = base_node is not None and base_node != target_node
+            if (
+                args.apply_to == "here"
+                and diff_base_node
+                and diff_base_node != target_node
+                and can_retry
+            ):
+                if current_branch:
+                    logger.warning(
+                        "Retrying may switch you off the current branch %s and "
+                        "leave you at the latest landed revision if the retry "
+                        "or rebase fails.",
+                        current_branch,
+                    )
+                else:
+                    logger.warning(
+                        "Retrying may switch your checkout and leave it at the "
+                        "latest landed revision if the retry or rebase fails."
+                    )
+                if not args.yes:
+                    retry = prompt(
+                        "The patch failed to apply here. Retry at the latest landed "
+                        "revision and rebase onto %s" % short_node(target_node),
+                        ["No", "Yes"],
+                    )
+                    if retry != "Yes":
+                        repo.discard_patch_attempt(
+                            target_node,
+                            keep_branch=True,
+                            original_branch=current_branch,
+                        )
+                        raise
+
             if base_node is None or base_node == target_node:
                 # Nothing else to try: the patch was already applied at the
                 # diff's own base, the diff has no base ref (eg. an older
@@ -627,10 +663,13 @@ def patch(repo: Repository, args: argparse.Namespace):
                     repo.rebase_node(base_node, target_node)
             except CommandError:
                 repo.abort_rebase()
-                raise Error(
+                message = (
                     "Failed to rebase the patches to %s; they have been left "
                     "applied at %s." % (short_node(target_node), short_node(base_node))
                 )
+                if current_branch:
+                    message += " The original branch was %s." % current_branch
+                raise Error(message)
 
             logger.info("Successfully rebased patches to %s", short_node(target_node))
 
