@@ -2,6 +2,7 @@ import argparse
 import os
 import re
 import uuid
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -471,8 +472,26 @@ class Jujutsu(Repository):
         # TODO: Use `jj`'s built-in patching facilities when it exists (see
         # <https://github.com/martinvonz/jj/issues/2702>).
         with temporary_binary_file(diff.encode("utf8")) as patch_file:
+            # Determine list of new files prior to applying the patch, so we can check
+            # which files do not yet exist.
+            new_files = [
+                Jujutsu.__root_file_fileset(path)
+                for path in self.__patch_paths(patch_file)
+                if not os.path.lexists(os.path.join(self.path, path))
+            ]
             # NOTE: We avoid `self.__git_repo.git_call` because it changes the CWD.
             self.__git_repo.git.call(["apply", patch_file], cwd=self.path)
+
+        # New files may not automatically be tracked, either due to `.gitignore`,
+        # excessive file size, or `snapshot.auto-track` configuration. We must therefore
+        # explicitly track them. When the list of files to track is excessively large we
+        # must batch into multiple commands to remain within operating systems' maximum
+        # command line lengths.
+        for batch in Jujutsu.__batch_args(new_files):
+            check_call(
+                ["jj", "file", "track", "--quiet", "--include-ignored", "--", *batch],
+                cwd=self.path,
+            )
 
         # TODO: dedupe with other `describe` usage
         with temporary_file(body) as message_path:
@@ -610,6 +629,53 @@ class Jujutsu(Repository):
                 f"Multiple mutable roots found (revset `{revset}`), unable to continue"
             )
         return mutable_roots[0]
+
+    def __patch_paths(self, patch_file: str) -> list[str]:
+        """Return every path `patch_file` touches, relative to the repository root.
+
+        This includes added, modified and deleted files, and both the source and
+        destination of renames and copies.
+        """
+        output = self.__git_repo.git.output_text(
+            ["apply", "--numstat", "-z", patch_file], cwd=self.path, strip=False
+        )
+        # The output ends with a NUL, so drop the empty field left after it.
+        fields = iter(output.split("\0")[:-1])
+        paths = []
+        for field in fields:
+            _added, _deleted, path = field.split("\t", 2)
+            if path:
+                paths.append(path)
+            else:
+                # Renames and copies leave `path` empty, and are followed by
+                # NUL-separated `source` and `destination` fields.
+                paths.append(next(fields))
+                paths.append(next(fields))
+        return paths
+
+    @staticmethod
+    def __root_file_fileset(path: str) -> str:
+        """Return a fileset expression matching exactly `path` from the workspace root."""
+        escaped = path.replace("\\", "\\\\").replace('"', '\\"')
+        return f'root-file:"{escaped}"'
+
+    @staticmethod
+    def __batch_args(args: list[str], max_length: int = 8192) -> Iterator[list[str]]:
+        """Split `args` into batches to keep command lines within OS limits."""
+        batch = []
+        length = 0
+        for arg in args:
+            # Windows limits a command line to around 32K characters. The default
+            # `max_length` comfortably keeps us within this limit even accounting for the
+            # rest of the command line other than `args`, escaping, etc.
+            if batch and length + len(arg) + 1 > max_length:
+                yield batch
+                batch = []
+                length = 0
+            batch.append(arg)
+            length += len(arg) + 1
+        if batch:
+            yield batch
 
     @staticmethod
     def __parse_log_bool(name: str, s: str) -> bool:

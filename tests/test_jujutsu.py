@@ -108,3 +108,12 @@ def test_commit_stack_raises_on_change_with_no_description(m_cli_log_text, jj):
         "Change change_id has no description set, unable to continue. "
         "Run `jj describe -r change_id` and provide a commit message."
     )
+
+
+def test_batch_args():
+    batch_args = Jujutsu._Jujutsu__batch_args  # type: ignore
+    assert list(batch_args([], max_length=10)) == []
+    assert list(batch_args(["aaaa", "bbbb", "cccc"], max_length=10)) == [
+        ["aaaa", "bbbb"],
+        ["cccc"],
+    ]
