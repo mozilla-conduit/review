@@ -932,13 +932,9 @@ def test_discard_patch_attempt_keeps_branch(m_checkout, m_git_call, git, branch)
 
 @mock.patch("mozphab.git.Git.git_call")
 @mock.patch("mozphab.git.Git.checkout")
-def test_discard_patch_attempt_restores_original_branch(
-    m_checkout, m_git_call, git
-):
+def test_discard_patch_attempt_restores_original_branch(m_checkout, m_git_call, git):
     git.patch_branch_name = "phab-D1"
-    git.discard_patch_attempt(
-        "sha111", keep_branch=True, original_branch="feature"
-    )
+    git.discard_patch_attempt("sha111", keep_branch=True, original_branch="feature")
     m_checkout.assert_called_once_with("feature")
     m_git_call.assert_called_once_with(["branch", "--delete", "--force", "phab-D1"])
     assert git.patch_branch_name is None

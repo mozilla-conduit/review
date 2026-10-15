@@ -246,7 +246,11 @@ class Repository(object):
         """Prepare repository to apply the patches."""
 
     def discard_patch_attempt(
-        self, node: str, *, keep_branch: bool = False, original_branch: str | None = None
+        self,
+        node: str,
+        *,
+        keep_branch: bool = False,
+        original_branch: str | None = None,
     ):
         """Undo a failed patch attempt, returning the repository to `node`.
 
