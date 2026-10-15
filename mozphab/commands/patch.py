@@ -788,4 +788,6 @@ def add_parser(parser):
     )
     # `patch` has no `--upstream` argument, but resolving the base commit goes
     # through the same remote selection as `submit`, which reads it.
-    patch_parser.set_defaults(func=patch, needs_repo=True, upstream=None)
+    patch_parser.set_defaults(
+        func=patch, needs_repo=True, needs_user_data=False, upstream=None
+    )

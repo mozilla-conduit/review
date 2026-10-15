@@ -39,6 +39,7 @@ from mozphab.commands import submit
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPI, conduit
 from mozphab.simplecache import cache
+from mozphab.user import UserData
 
 PHAB_URL = "http://phab.test"
 REPO_PHID = "PHID-REPO-1"
@@ -470,7 +471,7 @@ def test_submit_call_count(
         # The review queue reminder would add a call of its own.
         fake_config.review_queue_reminder_frequency = 0
 
-        submit._submit(repo, build_submit_args())
+        submit._submit(repo, build_submit_args(), UserData())
 
     expected = SUBMIT_EXPECTED[num_commits]
     assert dict(calls) == expected, (
@@ -518,7 +519,7 @@ def test_submit_with_reviewers_uses_preloaded_revision_and_diff(
         fake_config.filename = "/fake/.moz-phab-config"
         fake_config.review_queue_reminder_frequency = 0
 
-        submit._submit(repo, build_submit_args())
+        submit._submit(repo, build_submit_args(), UserData())
 
     expected = {
         **SUBMIT_EXPECTED[num_commits],
@@ -558,7 +559,7 @@ def test_wip_history_lookup_is_one_call_per_revision(
         fake_config.filename = "/fake/.moz-phab-config"
         fake_config.review_queue_reminder_frequency = 0
 
-        submit._submit(repo, build_submit_args())
+        submit._submit(repo, build_submit_args(), UserData())
 
     expected = {
         **SUBMIT_EXPECTED[num_commits],

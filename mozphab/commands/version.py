@@ -17,4 +17,6 @@ def log_current_version(_):
 
 def add_parser(parser):
     ver_parser = parser.add_parser("version", help="Get version number.")
-    ver_parser.set_defaults(func=log_current_version, needs_repo=False)
+    ver_parser.set_defaults(
+        func=log_current_version, needs_repo=False, needs_user_data=False
+    )

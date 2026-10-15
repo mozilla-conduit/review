@@ -28,7 +28,7 @@ from mozphab.logger import logger
 from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
-from mozphab.user import user_data
+from mozphab.user import UserData
 
 
 def morph_blocking_reviewers(commits: list[Commit]):
@@ -112,7 +112,7 @@ def show_commit_stack(commits: list[Commit]):
     log_commit_stack_with_messages(submitted_commits, urls, "-> ")
 
 
-def show_review_queue_reminder(commits: list[Commit]):
+def show_review_queue_reminder(commits: list[Commit], user_data: UserData):
     """Remind the user of the reviews waiting on them.
 
     Only shown when something was submitted for review; Work In Progress
@@ -690,7 +690,9 @@ def _prepare_diffs(
     return diffs
 
 
-def _submit(repo: Repository, args: argparse.Namespace) -> list[Commit]:
+def _submit(
+    repo: Repository, args: argparse.Namespace, user_data: UserData
+) -> list[Commit]:
     telemetry().submission.preparation_time.start()
     with wait_message("Checking connection to Phabricator."):
         # Check if raw Conduit API can be used
@@ -942,7 +944,7 @@ def _submit(repo: Repository, args: argparse.Namespace) -> list[Commit]:
 
     logger.warning("\nCompleted")
     show_commit_stack(commits)
-    show_review_queue_reminder(commits)
+    show_review_queue_reminder(commits, user_data)
 
     if args.ai and not config.ai_review and has_new_revisions:
         logger.info(
@@ -956,9 +958,11 @@ def _submit(repo: Repository, args: argparse.Namespace) -> list[Commit]:
     return commits
 
 
-def submit(repo: Repository, args: argparse.Namespace) -> list[Commit]:
+def submit(
+    repo: Repository, args: argparse.Namespace, user_data: UserData
+) -> list[Commit]:
     try:
-        return _submit(repo, args)
+        return _submit(repo, args, user_data)
     except Exception as e:
         # Check if the `fallback` flag was set and print a warning message.
         if hasattr(args, "fallback") and args.fallback:
@@ -981,7 +985,7 @@ def add_parser(parser):
         ),
     )
     add_submit_arguments(submit_parser)
-    submit_parser.set_defaults(func=submit, needs_repo=True)
+    submit_parser.set_defaults(func=submit, needs_repo=True, needs_user_data=True)
 
 
 def add_submit_arguments(parser):

@@ -17,6 +17,7 @@ from mozphab.commands import submit
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError
 from mozphab.diff import Diff
+from mozphab.user import UserData
 
 from .conftest import search_diff, search_rev
 
@@ -698,9 +699,11 @@ class Commits(unittest.TestCase):
             include_groups: bool = True,
         ):
             """Return what the reminder logged, empty if it stayed quiet."""
+            # A fresh `UserData` starts outside the "reminded recently" window.
+            user_data = UserData()
+            user_data.is_employee = is_employee
             with (
                 mock.patch.object(submit, "logger") as m_logger,
-                mock.patch.object(submit.user_data, "is_employee", is_employee),
                 mock.patch.object(
                     submit.config, "review_queue_reminder_frequency", frequency
                 ),
@@ -709,11 +712,9 @@ class Commits(unittest.TestCase):
                     "review_queue_reminder_include_groups",
                     include_groups,
                 ),
-                # Start every case outside the "reminded recently" window.
-                mock.patch.object(submit.user_data, "review_queue_last_reminder", 0),
-                mock.patch.object(submit.user_data, "save_user_info"),
+                mock.patch.object(user_data, "save_user_info"),
             ):
-                submit.show_review_queue_reminder(commits)
+                submit.show_review_queue_reminder(commits, user_data)
 
             if not m_logger.warning.called:
                 return ""
@@ -786,45 +787,46 @@ class Commits(unittest.TestCase):
 
         frequency = 3600
 
+        user_data = UserData()
+        user_data.is_employee = True
+
         with (
             mock.patch.object(submit, "logger") as m_logger,
-            mock.patch.object(submit.user_data, "is_employee", True),
             mock.patch.object(
                 submit.config, "review_queue_reminder_frequency", frequency
             ),
-            mock.patch.object(submit.user_data, "review_queue_last_reminder", 0),
-            mock.patch.object(submit.user_data, "save_user_info") as m_save,
+            mock.patch.object(user_data, "save_user_info") as m_save,
         ):
             # The first submission reminds, and records when it did.
-            submit.show_review_queue_reminder(commits)
+            submit.show_review_queue_reminder(commits, user_data)
             self.assertTrue(m_logger.warning.called)
             m_save.assert_called_once_with(review_queue_last_reminder=now)
-            submit.user_data.review_queue_last_reminder = now
+            user_data.review_queue_last_reminder = now
 
             # Submitting again within the hour stays quiet, without even
             # checking the queue.
             m_logger.reset_mock()
             m_get_pending_reviews.reset_mock()
             m_time.return_value = now + frequency - 1
-            submit.show_review_queue_reminder(commits)
+            submit.show_review_queue_reminder(commits, user_data)
             self.assertFalse(m_logger.warning.called)
             m_get_pending_reviews.assert_not_called()
 
             # Once the window has passed, remind again.
             m_time.return_value = now + frequency
-            submit.show_review_queue_reminder(commits)
+            submit.show_review_queue_reminder(commits, user_data)
             self.assertTrue(m_logger.warning.called)
             self.assertEqual(
                 m_save.call_args.kwargs,
                 {"review_queue_last_reminder": m_time.return_value},
             )
-            submit.user_data.review_queue_last_reminder = m_time.return_value
+            user_data.review_queue_last_reminder = m_time.return_value
 
             # A stamp in the future, e.g. after the clock moved backwards,
             # doesn't silence the reminder until the clock catches up.
             m_logger.reset_mock()
-            submit.user_data.review_queue_last_reminder = m_time.return_value + 10000
-            submit.show_review_queue_reminder(commits)
+            user_data.review_queue_last_reminder = m_time.return_value + 10000
+            submit.show_review_queue_reminder(commits, user_data)
             self.assertTrue(m_logger.warning.called)
 
             # Finding an empty queue also uses up the window, so that people
@@ -832,8 +834,8 @@ class Commits(unittest.TestCase):
             m_logger.reset_mock()
             m_save.reset_mock()
             m_get_pending_reviews.return_value = (0, False)
-            submit.user_data.review_queue_last_reminder = 0
-            submit.show_review_queue_reminder(commits)
+            user_data.review_queue_last_reminder = 0
+            submit.show_review_queue_reminder(commits, user_data)
             self.assertFalse(m_logger.warning.called)
             m_save.assert_called_once_with(
                 review_queue_last_reminder=m_time.return_value
@@ -1535,7 +1537,7 @@ def test_ai_review_requested_for_each_commit(
     m_repo.commit_stack.return_value = commits
     submit_args.ai = True
 
-    submit._submit(m_repo, submit_args)
+    submit._submit(m_repo, submit_args, UserData())
 
     assert m_conduit.request_ai_review.call_count == 2
 
@@ -1559,7 +1561,7 @@ def test_update_revision_error_names_revision(
     m_conduit.update_revision.side_effect = ConduitAPIError(validation_error)
 
     with pytest.raises(exceptions.Error) as e:
-        submit._submit(m_repo, submit_args)
+        submit._submit(m_repo, submit_args, UserData())
 
     assert str(e.value) == f"D314841: Phabricator Error: {validation_error}"
 
@@ -1571,7 +1573,7 @@ def test_ai_review_not_called_without_flag(
     m_repo.commit_stack.return_value = commits
     submit_args.ai = False
 
-    submit._submit(m_repo, submit_args)
+    submit._submit(m_repo, submit_args, UserData())
 
     m_conduit.request_ai_review.assert_not_called()
 
@@ -1584,7 +1586,7 @@ def test_ai_review_failure_does_not_abort_submission(
     m_conduit.request_ai_review.side_effect = ConduitAPIError("AI service unavailable")
     submit_args.ai = True
 
-    result = submit._submit(m_repo, submit_args)
+    result = submit._submit(m_repo, submit_args, UserData())
 
     assert result is not None
     m_logger.error.assert_any_call(
@@ -1608,7 +1610,7 @@ def test_uplift_first_public_parent_uses_train_head(
     submit_args.no_rebase = False
     submit_args.train = "beta"
 
-    submit._submit(m_repo, submit_args)
+    submit._submit(m_repo, submit_args, UserData())
 
     m_repo.get_public_base_node.assert_not_called()
     _, _, _, first_public_parent = m_conduit.set_diff_property.call_args[0]
@@ -1634,7 +1636,7 @@ def test_uplift_no_rebase_off_train_uses_public_base(
     submit_args.no_rebase = True
     submit_args.train = "beta"
 
-    submit._submit(m_repo, submit_args)
+    submit._submit(m_repo, submit_args, UserData())
 
     m_repo.uplift_commits.assert_not_called()
     _, _, _, first_public_parent = m_conduit.set_diff_property.call_args[0]
@@ -1656,7 +1658,7 @@ def test_uplift_no_rebase_on_train_uses_train_head(
     submit_args.no_rebase = True
     submit_args.train = "beta"
 
-    submit._submit(m_repo, submit_args)
+    submit._submit(m_repo, submit_args, UserData())
 
     m_repo.uplift_commits.assert_not_called()
     m_repo.get_public_base_node.assert_not_called()
@@ -1672,7 +1674,7 @@ def test_ai_review_skipped_for_non_submitted_commits(
     m_repo.commit_stack.return_value = [skipped, submitted]
     submit_args.ai = True
 
-    submit._submit(m_repo, submit_args)
+    submit._submit(m_repo, submit_args, UserData())
 
     assert m_conduit.request_ai_review.call_count == 1
 
@@ -1685,7 +1687,7 @@ def test_ai_review_triggered_by_config(
     submit_args.ai = False
     m_config.ai_review = True
 
-    submit._submit(m_repo, submit_args)
+    submit._submit(m_repo, submit_args, UserData())
 
     assert m_conduit.request_ai_review.call_count == 1
 
@@ -1698,7 +1700,7 @@ def test_ai_review_config_hint_shown(
     submit_args.ai = True
     m_config.ai_review = False
 
-    submit._submit(m_repo, submit_args)
+    submit._submit(m_repo, submit_args, UserData())
 
     m_logger.info.assert_any_call(
         "Tip: to always request AI review on new revisions, set submit.ai_review to true in %s",
@@ -1721,7 +1723,7 @@ def test_ai_review_skipped_for_updates_with_config(
     submit_args.ai = False
     m_config.ai_review = True
 
-    submit._submit(m_repo, submit_args)
+    submit._submit(m_repo, submit_args, UserData())
 
     m_conduit.request_ai_review.assert_not_called()
 
@@ -1740,7 +1742,7 @@ def test_ai_review_requested_for_updates_with_flag(
     m_repo.commit_stack.return_value = commits
     submit_args.ai = True
 
-    submit._submit(m_repo, submit_args)
+    submit._submit(m_repo, submit_args, UserData())
 
     assert m_conduit.request_ai_review.call_count == 1
 
@@ -1753,7 +1755,7 @@ def test_ai_review_config_hint_not_shown_when_config_set(
     submit_args.ai = True
     m_config.ai_review = True
 
-    submit._submit(m_repo, submit_args)
+    submit._submit(m_repo, submit_args, UserData())
 
     for call in m_logger.info.call_args_list:
         assert "Tip:" not in str(call)
@@ -1781,7 +1783,7 @@ def test_no_stack_linking(
     m_repo.commit_stack.return_value = commits
     submit_args.no_stack = no_stack
 
-    submit._submit(m_repo, submit_args)
+    submit._submit(m_repo, submit_args, UserData())
 
     assert m_conduit.create_revision.call_count == 2
     first_call, second_call = m_conduit.create_revision.call_args_list

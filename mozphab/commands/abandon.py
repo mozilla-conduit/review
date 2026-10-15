@@ -124,4 +124,4 @@ def add_parser(parser):
         action="store_true",
         help="Run VCS with only necessary extensions.",
     )
-    abandon_parser.set_defaults(func=abandon, needs_repo=True)
+    abandon_parser.set_defaults(func=abandon, needs_repo=True, needs_user_data=False)

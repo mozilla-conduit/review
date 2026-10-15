@@ -30,6 +30,9 @@ from mozphab.repository import (
 from mozphab.spinner import (
     wait_message,
 )
+from mozphab.user import (
+    UserData,
+)
 
 from .submit import (
     add_submit_arguments,
@@ -143,7 +146,7 @@ def attempt_link_assessment(
         return True
 
 
-def uplift(repo: Repository, args: argparse.Namespace):
+def uplift(repo: Repository, args: argparse.Namespace, user_data: UserData):
     if args.list_trains:
         return list_trains()
 
@@ -159,7 +162,7 @@ def uplift(repo: Repository, args: argparse.Namespace):
     repo._phab_repo = phab_repo
 
     # Run the usual submit command with our patched arg values.
-    commits = submit(repo, args)
+    commits = submit(repo, args, user_data)
 
     # The tip commit has a revision id once `submit` has sent the stack.
     tip_commit_id = commits[-1].rev_id if commits else None
@@ -261,4 +264,4 @@ def add_parser(parser):
         type=Path,
         help=argparse.SUPPRESS,
     )
-    uplift_parser.set_defaults(func=uplift, needs_repo=True)
+    uplift_parser.set_defaults(func=uplift, needs_repo=True, needs_user_data=True)

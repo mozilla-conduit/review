@@ -136,17 +136,21 @@ def main(argv: list[str], *, is_development: bool):
         if not is_development:
             configure_telemetry(args, user_data)
 
+        command_args: list = [args] if repo is None else [repo, args]
+        if args.needs_user_data:
+            command_args.append(user_data)
+
         if repo is not None:
             assert_api_token_is_present(repo, args)
 
             telemetry().set_vcs(repo)
             try:
-                args.func(repo, args)
+                args.func(*command_args)
             finally:
                 repo.cleanup()
 
         else:
-            args.func(args)
+            args.func(*command_args)
 
         telemetry().usage.command_time.stop()
         telemetry().submit()
