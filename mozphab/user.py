@@ -60,7 +60,8 @@ class UserData:
         "review_queue_last_reminder",
     ]
 
-    def __init__(self):
+    def __init__(self, path: Path | None = None):
+        self.path = path or USER_INFO_FILE
         self.set_from_file()
 
     @property
@@ -83,10 +84,10 @@ class UserData:
 
     def set_from_file(self):
         """Read user info from file."""
-        if not USER_INFO_FILE.exists():
+        if not self.path.exists():
             return
 
-        with USER_INFO_FILE.open("r", encoding="utf-8") as f:
+        with self.path.open("r", encoding="utf-8") as f:
             user_info = json.load(f)
             self.update_from_dict(user_info)
 
@@ -94,7 +95,7 @@ class UserData:
         """Save any fields provided as kwargs into the user_info file."""
         self.update_from_dict(kwargs)
         user_info = self.to_dict()
-        with USER_INFO_FILE.open("w", encoding="utf-8") as f:
+        with self.path.open("w", encoding="utf-8") as f:
             json.dump(user_info, f, sort_keys=True, indent=2)
 
     def whoami(self) -> dict | None:
@@ -139,7 +140,7 @@ class UserData:
 
         Returns a bool value indicating if status is updated.
         """
-        if USER_INFO_FILE.exists():
+        if self.path.exists():
             update = (
                 self.last_check is None
                 or time.time() - self.last_check > EMPLOYEE_CHECK_FREQUENCY

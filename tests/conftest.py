@@ -481,10 +481,9 @@ def in_process(monkeypatch, safe_environ, request, config):
 
 
 @pytest.fixture
-@mock.patch("mozphab.user.USER_INFO_FILE")
-def user_data(m_file):
-    m_file.exists.return_value = False
-    return user.UserData()
+def user_data(tmp_path):
+    """A `UserData` backed by a file of its own."""
+    return user.UserData(path=tmp_path / "user_info.json")
 
 
 @pytest.fixture(name="reset_glean", scope="function", autouse=True)

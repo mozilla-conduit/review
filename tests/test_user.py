@@ -3,8 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import hashlib
+import json
 import uuid
-from contextlib import contextmanager
 from unittest import mock
 
 import pytest
@@ -14,16 +14,7 @@ from mozphab.conduit import ConduitAPIError
 from mozphab.exceptions import Error
 
 
-@mock.patch("mozphab.user.USER_INFO_FILE")
-@mock.patch("mozphab.user.json")
-def test_save_user_info(m_json, m_file, user_data):
-    @contextmanager
-    def with_open(*_, **__):
-        yield None
-
-    m_file.open = with_open
-    # create file
-    m_file.exists.return_value = False
+def test_save_user_info(user_data):
     installation_id = str(uuid.uuid4())
     user_info = {
         "is_employee": True,
@@ -32,32 +23,21 @@ def test_save_user_info(m_json, m_file, user_data):
         "last_check": 1,
     }
     user_data.save_user_info(**user_info)
-    m_json.dump.assert_called_once_with(
+    assert json.loads(user_data.path.read_text()) == {
         # Untouched fields are saved with their current value.
-        {**user_info, "review_queue_last_reminder": 0},
-        None,
-        sort_keys=True,
-        indent=2,
-    )
+        **user_info,
+        "review_queue_last_reminder": 0,
+    }, "`save_user_info` should create the file with every field."
 
-    # update file
-    m_file.exists.return_value = True
-    m_json.reset_mock()
-    m_json.load.return_value = user_info
     new_user_code = str(uuid.uuid4())
     user_data.save_user_info(user_code=new_user_code, review_queue_last_reminder=12)
-    m_json.dump.assert_called_once_with(
-        {
-            "is_employee": True,
-            "user_code": new_user_code,
-            "installation_id": installation_id,
-            "last_check": 1,
-            "review_queue_last_reminder": 12,
-        },
-        None,
-        sort_keys=True,
-        indent=2,
-    )
+    assert json.loads(user_data.path.read_text()) == {
+        "is_employee": True,
+        "user_code": new_user_code,
+        "installation_id": installation_id,
+        "last_check": 1,
+        "review_queue_last_reminder": 12,
+    }, "`save_user_info` should only alter the fields it is given."
 
 
 def test_is_data_collected(user_data):
@@ -111,11 +91,10 @@ def test_is_data_collected(user_data):
 @mock.patch("mozphab.user.hashlib")
 @mock.patch("mozphab.user.UserData.whoami")
 @mock.patch("mozphab.user.UserData.save_user_info")
-@mock.patch("mozphab.user.USER_INFO_FILE")
 @mock.patch("mozphab.user.time")
-def test_set_user_data(m_time, m_file, m_save, m_whoami, m_hashlib, user_data):
+def test_set_user_data(m_time, m_save, m_whoami, m_hashlib, user_data):
     m_save.return_value = False
-    m_file.exists.return_value = True
+    user_data.path.write_text("{}")
     m_time.time.return_value = user.EMPLOYEE_CHECK_FREQUENCY - 1
     # all data saved in file, no need to update
     user_data.update_from_dict(
@@ -169,7 +148,7 @@ def test_set_user_data(m_time, m_file, m_save, m_whoami, m_hashlib, user_data):
     } == user_data.to_dict()
 
     # Create user_data file, employee
-    m_file.exists.return_value = False
+    user_data.path.unlink()
     m_whoami.side_effect = ({"email": "someemail", "is_employee": True},)
     m_save.return_value = True
     user_data.installation_id = None
@@ -319,11 +298,9 @@ def test_bad_uuid_rewritten(user_data):
     ), "`user_code` should be rewritten to good UUID on update."
 
 
-@mock.patch("mozphab.user.USER_INFO_FILE")
 @mock.patch("mozphab.user.UserData.whoami")
-def test_new_telemetry_ids_are_valid(m_whoami, m_file, user_data):
+def test_new_telemetry_ids_are_valid(m_whoami, user_data):
     m_whoami.side_effect = ({"email": "someemail", "is_employee": False},)
-    m_file.exists.return_value = False
     assert (
         user_data.installation_id is None
     ), "Sanity check `installation_id` starts as `None`."
