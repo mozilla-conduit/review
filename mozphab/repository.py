@@ -64,8 +64,14 @@ class Repository(object):
         self.args = argparse.Namespace()
         self.phab_url = (phab_url or self._phab_url()).rstrip("/")
         self.api_url = self._api_url()
-        self.call_sign = self._get_setting("repository.callsign")
-        self.bmo_url = self._get_setting("bmo_url")
+        call_sign_override = os.getenv("MOZPHAB_REPOSITORY_CALLSIGN")
+        if call_sign_override:
+            logger.warning(
+                "Using repository callsign from `MOZPHAB_REPOSITORY_CALLSIGN`: %s",
+                call_sign_override,
+            )
+        self.call_sign = call_sign_override or self._get_setting("repository.callsign")
+        self.bmo_url = os.getenv("MOZPHAB_BUGZILLA_URL") or self._get_setting("bmo_url")
 
         if self.bmo_url:
             if not (
@@ -107,8 +113,16 @@ class Repository(object):
         else:
             defaults_files.append("/etc/arcconfig")
 
+        phab_url_override = os.getenv("MOZPHAB_PHABRICATOR_URL")
+        if phab_url_override:
+            logger.warning(
+                "Using Phabricator URL from `MOZPHAB_PHABRICATOR_URL`: %s",
+                phab_url_override,
+            )
+
         phab_url = (
-            self._get_setting("phabricator.uri")
+            phab_url_override
+            or self._get_setting("phabricator.uri")
             or self._get_setting("conduit_uri")
             or read_json_field(defaults_files, ["config", "default"])
         )

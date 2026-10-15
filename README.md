@@ -135,6 +135,24 @@ report_to_sentry = True
   (default: disabled).
 - `DISABLE_SPINNER` : Set to any value in the environment to disable the spinner
   (default: the spinner is enabled).
+- `MOZPHAB_PHABRICATOR_URL` : Override the Phabricator URL from `.arcconfig`.
+- `MOZPHAB_REPOSITORY_CALLSIGN` : Override the repository callsign from
+  `.arcconfig` (useful when the alternate Phabricator instance has a different
+  repository callsign).
+- `MOZPHAB_BUGZILLA_URL` : Override the Bugzilla URL from `.arcconfig`.
+- `MOZPHAB_PHABRICATOR_API_TOKEN` : Use this API token instead of the one in
+  `~/.arcrc`.
+
+For example, to submit from a Firefox checkout to the dev instance without
+changing `.arcconfig`:
+
+```shell
+MOZPHAB_PHABRICATOR_URL=https://phabricator-dev.allizom.org/ \
+MOZPHAB_REPOSITORY_CALLSIGN=FFTESTAUTOLANDDEV \
+MOZPHAB_BUGZILLA_URL=https://bugzilla-dev.allizom.org/ \
+MOZPHAB_PHABRICATOR_API_TOKEN="$DEV_PHAB_TOKEN" \
+moz-phab submit BASE_COMMIT TIP_COMMIT
+```
 
 ## Execution
 
