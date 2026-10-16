@@ -3,7 +3,10 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import os
 import subprocess
+from collections.abc import Generator
+from contextlib import contextmanager
 from shlex import quote
 from typing import (
     Any,
@@ -11,10 +14,69 @@ from typing import (
 
 from .exceptions import CommandError
 from .logger import logger
+from .profiler import Category, MarkerType, profiler
+
+# Global options of git, hg and jj taking a separate value, skipped when looking
+# for the subcommand.
+OPTIONS_WITH_VALUE = {"-c", "-C", "-R", "--config", "--cwd", "--repository"}
+
+
+VCS_EXECUTABLES = {"git", "hg", "jj"}
+
+
+def format_command(command: list[str]) -> str:
+    return " ".join(quote(s.replace("\n", r"\n")) for s in command)
 
 
 def debug_log_command(command: list[str]):
-    logger.debug("$ %s", " ".join(quote(s.replace("\n", r"\n")) for s in command))
+    logger.debug("$ %s", format_command(command))
+
+
+def find_subcommand_index(command: list[str]) -> int:
+    """Return the index of the subcommand, skipping global options and their values."""
+    arguments = enumerate(command[1:], start=1)
+    for index, argument in arguments:
+        if argument in OPTIONS_WITH_VALUE:
+            next(arguments, None)
+        elif not argument.startswith("-"):
+            return index
+    # Fall back to the last argument for commands like `git --version`.
+    return len(command) - 1
+
+
+@contextmanager
+def profiler_marker(command: list[str]) -> Generator[dict]:
+    """Record a profiler marker named after the executable.
+
+    The exit code is taken from `subprocess.CalledProcessError`, or from
+    `CommandError` for the Mercurial commands.
+    """
+    executable = os.path.basename(command[0])
+    subcommand_index = find_subcommand_index(command)
+
+    with profiler.marker(
+        executable,
+        (
+            Category.VCS
+            if executable.removesuffix(".exe") in VCS_EXECUTABLES
+            else Category.OTHER
+        ),
+        MarkerType.COMMAND,
+        subcommand=command[subcommand_index] if len(command) > 1 else "",
+        # Without the global options, which are the same for every command.
+        # Commit messages can be passed on the command line.
+        shortCommand=format_command([executable, *command[subcommand_index:]])[:1000],
+        command=format_command(command)[:1000],
+    ) as marker_data:
+        try:
+            yield marker_data
+        except subprocess.CalledProcessError as e:
+            marker_data["exitCode"] = e.returncode
+            raise
+        except CommandError as e:
+            marker_data["exitCode"] = e.status
+            raise
+        marker_data["exitCode"] = 0
 
 
 def check_call(command: list[str], **kwargs):
@@ -22,7 +84,8 @@ def check_call(command: list[str], **kwargs):
     debug_log_command(command)
     kwargs["encoding"] = "UTF-8"
     try:
-        subprocess.check_call(command, **kwargs)
+        with profiler_marker(command):
+            subprocess.check_call(command, **kwargs)
     except subprocess.CalledProcessError as e:
         raise CommandError(
             "command '%s' failed to complete successfully" % command[0], e.returncode
@@ -91,7 +154,8 @@ def command_output(
         kwargs["env"] = env
 
     try:
-        output = subprocess.check_output(command, **kwargs)
+        with profiler_marker(command):
+            output = subprocess.check_output(command, **kwargs)
     except subprocess.CalledProcessError as e:
         if search_error:
             for err in search_error:

@@ -17,6 +17,7 @@ from itertools import zip_longest
 from shutil import which
 
 from mozphab import environment
+from mozphab.profiler import Category, MarkerType, profiler
 
 from .commits import Commit
 from .logger import logger
@@ -123,7 +124,10 @@ def read_json_field(files: list[str], field_path: list[str]) -> str | None:
     """Parses json files in turn returning value as per field_path, or None."""
     for filename in files:
         try:
-            with open(filename, encoding="utf-8") as f:
+            with (
+                profiler.file_io("read", filename),
+                open(filename, encoding="utf-8") as f,
+            ):
                 rc = json.load(f)
                 for field_name in field_path:
                     if field_name not in rc:
@@ -259,6 +263,17 @@ def parse_api_error(api_response: str) -> str | None:
 
 
 def prompt(question: str, options: list[str] | None = None):
+    # Don't record the answer, which can be an API token.
+    with profiler.marker(
+        "User input",
+        Category.USER_INPUT,
+        MarkerType.USER_INPUT,
+        question=question,
+    ):
+        return _prompt(question, options)
+
+
+def _prompt(question: str, options: list[str] | None = None):
     if environment.HAS_ANSI:
         question = "\033[33m%s\033[0m" % question
     prompt_str = question

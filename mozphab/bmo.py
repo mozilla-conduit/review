@@ -12,6 +12,7 @@ from .conduit import conduit
 from .environment import USER_AGENT
 from .exceptions import Error
 from .logger import logger
+from .profiler import profiler
 
 
 class BMOAPIError(Error):
@@ -27,7 +28,11 @@ class BMOAPI:
         logger.debug("%s %s", req_args["url"], self._sanitise_req(req_args))
 
         try:
-            with url_request.urlopen(url_request.Request(**req_args)) as r:
+            with (
+                profiler.network_marker(req_args["url"]) as marker_data,
+                url_request.urlopen(url_request.Request(**req_args)) as r,
+            ):
+                marker_data["responseStatus"] = r.status
                 res = json.load(r)
         except (url_error.HTTPError, OSError) as err:
             raise BMOAPIError(str(err))
@@ -71,7 +76,8 @@ class BMOAPI:
             except BMOAPIError as e:
                 logger.debug(e)
 
-            time.sleep(1.0 * attempt)
+            with profiler.sleep_marker(f"Retrying Bugzilla /{endpoint}"):
+                time.sleep(1.0 * attempt)
         else:
             raise BMOAPIError(f"Reached maximum retries for BMO API (/{endpoint}).")
 

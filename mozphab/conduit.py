@@ -37,6 +37,7 @@ from .helpers import (
     strip_differential_revision,
 )
 from .logger import logger
+from .profiler import profiler
 from .simplecache import cache
 
 if TYPE_CHECKING:
@@ -84,6 +85,14 @@ CONDUIT_CALL_TIMEOUT = 120
 
 # Max retry attempts on connection-level failures for idempotent methods.
 CONDUIT_MAX_RETRIES = 3
+
+# Methods sending file contents, which aren't worth serializing once more for
+# the URLs shown in profiler markers, as these URLs are truncated.
+PROFILER_HIDDEN_ARGS_METHODS = {
+    "differential.creatediff",
+    "file.upload",
+    "file.uploadchunk",
+}
 
 # urllib3 PoolManager sizing. moz-phab talks to a single Phabricator host so
 # one pool is enough in practice; a small num_pools cap leaves headroom for
@@ -193,7 +202,10 @@ class ConduitAPI:
         filename = get_arcrc_path()
         created = False
         try:
-            with open(filename, "r", encoding="utf-8") as f:
+            with (
+                profiler.file_io("read", filename),
+                open(filename, "r", encoding="utf-8") as f,
+            ):
                 rc = json.load(f)
         except FileNotFoundError:
             rc = {}
@@ -203,7 +215,10 @@ class ConduitAPI:
         rc["hosts"].setdefault(self.repo.api_url, {})
         rc["hosts"][self.repo.api_url]["token"] = token
 
-        with open(filename, "w", encoding="utf-8") as f:
+        with (
+            profiler.file_io("write", filename),
+            open(filename, "w", encoding="utf-8") as f,
+        ):
             json.dump(rc, f, sort_keys=True, indent=2)
 
         if created:
@@ -238,15 +253,30 @@ class ConduitAPI:
         retryable = api_method in IDEMPOTENT_CONDUIT_METHODS
         max_attempts = CONDUIT_MAX_RETRIES if retryable else 1
         pool = self._get_http_pool()
+        # The arguments are sent in the POST body, but show them as a query
+        # string so that the profile tells what was requested.
+        profiler_uri = req_args["url"]
+        if profiler.enabled and api_method not in PROFILER_HIDDEN_ARGS_METHODS:
+            profiler_uri += "?params=%s" % (
+                json.dumps(api_call_args, separators=(",", ":"))[:1000]
+            )
         for attempt in range(max_attempts):
             try:
-                resp = pool.request(
-                    req_args["method"],
-                    req_args["url"],
-                    headers=req_args["headers"],
-                    body=req_args["data"],
-                    timeout=CONDUIT_CALL_TIMEOUT,
-                )
+                with profiler.network_marker(
+                    profiler_uri, req_args["method"]
+                ) as marker_data:
+                    resp = pool.request(
+                        req_args["method"],
+                        req_args["url"],
+                        headers=req_args["headers"],
+                        body=req_args["data"],
+                        timeout=CONDUIT_CALL_TIMEOUT,
+                    )
+                    marker_data.update(
+                        responseStatus=resp.status,
+                        count=len(resp.data),
+                        contentType=resp.headers.get("Content-Type"),
+                    )
                 # PoolManager.request does not raise on non-2xx (unlike
                 # urlopen, which would throw HTTPError). Without this check
                 # we'd feed an HTML/empty error body straight into
@@ -274,7 +304,8 @@ class ConduitAPI:
                     err,
                     backoff,
                 )
-                time.sleep(backoff)
+                with profiler.sleep_marker(f"Retrying {api_method}"):
+                    time.sleep(backoff)
         else:
             raise ConduitAPIError(f"Conduit call {api_method} was not attempted.")
 
@@ -324,12 +355,13 @@ class ConduitAPI:
         """Check if raw Conduit API can be used."""
         # Check if the cache file exists
         path = os.path.join(self.repo.dot_path, ".moz-phab_conduit-configured")
-        if os.path.isfile(path):
-            return True
+        with profiler.file_io("stat", path):
+            if os.path.isfile(path):
+                return True
 
         if self.ping():
             # Create the cache file
-            with open(path, "a"):
+            with profiler.file_io("write", path), open(path, "a"):
                 os.utime(path, None)
             return True
 

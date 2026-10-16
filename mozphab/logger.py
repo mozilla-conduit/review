@@ -16,6 +16,7 @@ from glob import glob
 from colorama import just_fix_windows_console
 
 from mozphab import environment
+from mozphab.profiler import Category, MarkerType, profiler
 
 logger = logging.getLogger("moz-phab")
 
@@ -47,6 +48,39 @@ class ColourFormatter(logging.Formatter):
         if environment.HAS_ANSI and record.levelname in self.log_colours:
             result = "\033[%sm%s\033[0m" % (self.log_colours[record.levelname], result)
         return result
+
+
+class ProfilerFilter(logging.Filter):
+    """Record log messages as profiler markers named after their level.
+
+    Debug messages are recorded too, as they are always written to the log
+    file, even when they aren't printed to the terminal.
+    """
+
+    # Blue is the default marker color, so warnings can't be blue as in the
+    # terminal.
+    level_colours = {"WARNING": "orange", "ERROR": "red"}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not profiler.enabled:
+            return True
+
+        # Unlike handlers, filters don't catch errors, e.g. from a message with
+        # the wrong number of arguments, which would make the command fail.
+        try:
+            # Debug messages can contain the whole output of commands.
+            data = {"message": record.getMessage()[:10000]}
+            if record.levelname in self.level_colours:
+                data["color"] = self.level_colours[record.levelname]
+            profiler.add_instant_marker(
+                record.levelname, Category.LOGGING, MarkerType.LOG, **data
+            )
+        except Exception:
+            pass
+        return True
+
+
+logger.addFilter(ProfilerFilter())
 
 
 def init_logging():

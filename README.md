@@ -64,6 +64,11 @@ get_pre_releases = False
 
 [error_reporting]
 report_to_sentry = True
+
+[profiler]
+enabled = True
+profiles_to_keep = 20
+origin = https://profiler.firefox.com
 ```
 
 - `ui.no_ansi` : Never use ANSI colours (default: auto-detected).
@@ -125,6 +130,14 @@ report_to_sentry = True
    if they are available, otherwise pre-releases will be ignored (default: `False`).
 - `error_reporting.report_to_sentry` : When `True` moz-phab will submit exceptions
    to Sentry so moz-phab devs can see unreported errors.
+- `profiler.enabled` : When `True` moz-phab saves a profile of each run in
+   `~/.mozbuild/moz-phab/profiles`, which `moz-phab profile` opens in the Firefox
+   Profiler (default: `True`).
+- `profiler.profiles_to_keep` : How many profiles to keep, deleting the oldest
+   ones. Set it to `0` to keep them all (default: `20`).
+- `profiler.origin` : The Firefox Profiler `moz-phab profile` opens the profiles
+   in, e.g. `http://localhost:4242` for a local instance. The `PROFILER_ORIGIN`
+   environment variable overrides it (default: `https://profiler.firefox.com`).
 
 ### Environment Variables
 
@@ -135,6 +148,8 @@ report_to_sentry = True
   (default: disabled).
 - `DISABLE_SPINNER` : Set to any value in the environment to disable the spinner
   (default: the spinner is enabled).
+- `PROFILER_ORIGIN` : The Firefox Profiler `moz-phab profile` opens the profiles
+  in, overriding `profiler.origin`. Other tools can share this variable.
 - `MOZPHAB_PHABRICATOR_URL` : Override the Phabricator URL from `.arcconfig`.
 - `MOZPHAB_REPOSITORY_CALLSIGN` : Override the repository callsign from
   `.arcconfig` (useful when the alternate Phabricator instance has a different

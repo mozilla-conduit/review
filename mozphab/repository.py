@@ -8,6 +8,7 @@ import os
 import urllib.parse
 
 from mozphab import environment
+from mozphab.profiler import profiler
 
 from .commits import Commit
 from .conduit import conduit
@@ -333,8 +334,10 @@ class Repository(object):
         if not self._phid:
             path = os.path.join(self.dot_path, ".moz-phab_phid_cache")
 
-            if os.path.isfile(path):
-                with open(path) as f:
+            with profiler.file_io("stat", path):
+                is_file = os.path.isfile(path)
+            if is_file:
+                with profiler.file_io("read", path), open(path) as f:
                     try:
                         repo_phids = json.load(f)
                     except json.decoder.JSONDecodeError:
@@ -348,7 +351,7 @@ class Repository(object):
             if not repo_phid:
                 repo_phid = self.phab_repo["phid"]
                 repo_phids[self.call_sign] = repo_phid
-                with open(path, "w") as f:
+                with profiler.file_io("write", path), open(path, "w") as f:
                     json.dump(repo_phids, f)
             self._phid = repo_phid
 
@@ -380,12 +383,14 @@ class Repository(object):
 
         # check file
         path = os.path.join(self.dot_path, ".moz-phab_vcs_cache")
-        if os.path.isfile(path):
-            with open(path) as f:
+        with profiler.file_io("stat", path):
+            is_file = os.path.isfile(path)
+        if is_file:
+            with profiler.file_io("read", path), open(path) as f:
                 phab_vcs = f.readline()
         else:
             phab_vcs = self.phab_repo["fields"]["vcs"]
-            with open(path, "w") as f:
+            with profiler.file_io("write", path), open(path, "w") as f:
                 f.write(phab_vcs)
 
         self._phab_vcs = phab_vcs

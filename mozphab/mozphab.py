@@ -19,6 +19,7 @@ import traceback
 from packaging.version import Version
 
 from mozphab import environment
+from mozphab.profiler import profiler
 
 from .args import parse_args
 from .conduit import ConduitAPIError, conduit
@@ -94,7 +95,15 @@ def main(argv: list[str], *, is_development: bool):
             environment.HAS_ANSI = False
         os.environ["MOZPHAB"] = "1"
 
-        args = parse_args(argv)
+        try:
+            args = parse_args(argv)
+        except SystemExit:
+            # Don't let help output or argument errors push out the profiles
+            # worth keeping.
+            profiler.disable()
+            raise
+        if not args.fallback:
+            profiler.set_track_name(f"moz-phab {args.command}")
 
         if args.trace:
             environment.DEBUG = True
@@ -137,7 +146,8 @@ def main(argv: list[str], *, is_development: bool):
             conduit.set_repo(repo)
 
         if not is_development:
-            configure_telemetry(args, user_data)
+            with profiler.phase("Configuring telemetry"):
+                configure_telemetry(args, user_data)
 
         command_args: list = [args] if repo is None else [repo, args]
         if args.needs_user_data:
@@ -150,7 +160,8 @@ def main(argv: list[str], *, is_development: bool):
             try:
                 args.func(*command_args)
             finally:
-                repo.cleanup()
+                with profiler.phase("Cleaning up"):
+                    repo.cleanup()
 
         else:
             args.func(*command_args)
@@ -190,9 +201,24 @@ def main(argv: list[str], *, is_development: bool):
         sys.exit(1)
 
 
+def save_profile():
+    try:
+        if path := profiler.save(config.profiles_to_keep):
+            logger.debug("Profile saved to %s", path)
+    except Exception as e:
+        # Profiling must never make a command fail.
+        logger.debug("Failed to save the profile: %s", e)
+
+
 def run():
     is_development = Version(environment.MOZPHAB_VERSION).is_prerelease
-    main(sys.argv[1:], is_development=is_development)
+    if not config.profiler_enabled:
+        profiler.disable()
+    profiler.add_startup_phase()
+    try:
+        main(sys.argv[1:], is_development=is_development)
+    finally:
+        save_profile()
 
 
 if __name__ == "__main__":

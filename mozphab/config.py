@@ -11,6 +11,7 @@ from typing import (
 )
 
 from mozphab import environment
+from mozphab.profiler import profiler
 
 from .logger import logger
 
@@ -71,6 +72,11 @@ class Config(object):
 
             [telemetry]
             enabled = False
+
+            [profiler]
+            enabled = True
+            profiles_to_keep = 20
+            origin = https://profiler.firefox.com
             """
 
         self._config = configparser.ConfigParser()
@@ -82,7 +88,8 @@ class Config(object):
             self._config.remove_section("arc")
 
         if should_access_file:
-            self._config.read([self.filename])
+            with profiler.file_io("read", self.filename):
+                self._config.read([self.filename])
 
         self.no_ansi = self._getboolean("ui", "no_ansi")
         self.hyperlinks = self._getboolean("ui", "hyperlinks")
@@ -112,6 +119,14 @@ class Config(object):
         self.git_remote = git_remote.replace(" ", "").split(",") if git_remote else []
         self.report_to_sentry = self._getboolean("error_reporting", "report_to_sentry")
         self.telemetry_enabled = self._getboolean("telemetry", "enabled")
+        self.profiler_enabled = self._getboolean("profiler", "enabled")
+        self.profiles_to_keep = self._getint("profiler", "profiles_to_keep")
+        if self.profiles_to_keep < 0:
+            raise ValueError(
+                "profiler.profiles_to_keep should be 0 (unlimited) or more, "
+                f"not {self.profiles_to_keep}"
+            )
+        self.profiler_origin = self._config.get("profiler", "origin").rstrip("/")
         self._git_command = self._config.get("git", "command_path")
         self.git_command = (
             [self._git_command] if self._git_command else environment.GIT_COMMAND
@@ -190,7 +205,10 @@ class Config(object):
             self._set("patch", "create_commit", self.create_commit)
             self._set("telemetry", "enabled", self.telemetry_enabled)
 
-        with self.filename.open("w", encoding="utf-8") as f:
+        with (
+            profiler.file_io("write", self.filename),
+            self.filename.open("w", encoding="utf-8") as f,
+        ):
             self._config.write(f)
 
 

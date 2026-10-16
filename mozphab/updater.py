@@ -16,6 +16,7 @@ from packaging.version import parse as parse_version
 from setuptools import Distribution
 
 from mozphab import environment
+from mozphab.profiler import profiler
 
 from .config import config
 from .environment import MOZPHAB_VERSION, get_mozphab_version
@@ -30,7 +31,12 @@ SELF_UPDATE_FREQUENCY_SECONDS = 24 * 3 * 60 * 60
 def get_pypi_json() -> dict:
     """Get data about `MozPhab` from the JSON API endpoint."""
     url = "https://pypi.org/pypi/MozPhab/json"
-    output = urllib.request.urlopen(urllib.request.Request(url), timeout=30).read()
+    with (
+        profiler.network_marker(url) as marker_data,
+        urllib.request.urlopen(urllib.request.Request(url), timeout=30) as r,
+    ):
+        marker_data["responseStatus"] = r.status
+        output = r.read()
     response = json.loads(output.decode("utf-8"))
     return response
 
@@ -41,7 +47,12 @@ def get_simple_json() -> dict:
     request = urllib.request.Request(
         url, headers={"Accept": "application/vnd.pypi.simple.v1+json"}
     )
-    output = urllib.request.urlopen(request, timeout=30).read()
+    with (
+        profiler.network_marker(url) as marker_data,
+        urllib.request.urlopen(request, timeout=30) as r,
+    ):
+        marker_data["responseStatus"] = r.status
+        output = r.read()
     return json.loads(output.decode("utf-8"))
 
 

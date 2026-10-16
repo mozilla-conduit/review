@@ -5,10 +5,12 @@
 import logging
 import platform
 from pathlib import Path
+from typing import Any
 
 import distro
 
 from mozphab import environment
+from mozphab.profiler import Category, MarkerType, profiler
 
 from .bmo import BMOAPIError
 from .config import config
@@ -17,43 +19,94 @@ from .helpers import prompt
 from .logger import logger
 from .user import UserData
 
+# Methods of Glean metrics and pings recorded as profiler markers.
+# This must include every Glean method that moz-phab calls.
+PROFILED_GLEAN_METHODS = {"set", "start", "stop", "add", "accumulate", "submit"}
+
+
+class ProfiledGleanObject:
+    """Wrap Glean metrics or pings to record a marker when they are changed.
+
+    When `wrapped` is `None`, telemetry is disabled: nothing is sent, but the
+    markers are still recorded to show what would have been.
+    """
+
+    def __init__(self, wrapped: Any, name: str):
+        self._wrapped = wrapped
+        self._name = name
+
+    def __getattr__(self, attr: str) -> Any:
+        value = None if self._wrapped is None else getattr(self._wrapped, attr)
+        if attr in PROFILED_GLEAN_METHODS:
+            return self._profiled_method(attr, value)
+        # Let other methods through, e.g. for the Glean testing API; metric
+        # categories are classes and need to be wrapped.
+        if callable(value) and not isinstance(value, type):
+            return value
+        return ProfiledGleanObject(value, f"{self._name}.{attr}")
+
+    def _profiled_method(self, operation: str, method: Any):
+        def profiled(*args, **kwargs):
+            data = {"metric": self._name, "operation": operation}
+            if args:
+                data["value"] = ", ".join(str(arg) for arg in args)[:1000]
+            if method is None:
+                data["telemetry"] = "disabled"
+            with profiler.marker("Glean", Category.OTHER, MarkerType.GLEAN, **data):
+                return None if method is None else method(*args, **kwargs)
+
+        return profiled
+
 
 class Telemetry:
     def __init__(self):
         """Initiate Glean, load pings and metrics."""
-        import glean
+        with profiler.marker(
+            "Glean",
+            Category.OTHER,
+            MarkerType.GLEAN,
+            metric="Glean",
+            operation="initialize",
+        ):
+            import glean
 
-        logging.getLogger("glean").setLevel(logging.DEBUG)
-        logger.debug("Initializing Glean...")
+            logging.getLogger("glean").setLevel(logging.DEBUG)
+            logger.debug("Initializing Glean...")
 
-        glean.Glean.initialize(
-            application_id="MozPhab",
-            application_version=MOZPHAB_VERSION,
-            upload_enabled=True,
-            configuration=glean.Configuration(),
-            data_dir=Path(environment.MOZBUILD_PATH) / "telemetry-data",
-        )
+            glean.Glean.initialize(
+                application_id="MozPhab",
+                application_version=MOZPHAB_VERSION,
+                upload_enabled=True,
+                configuration=glean.Configuration(),
+                data_dir=Path(environment.MOZBUILD_PATH) / "telemetry-data",
+            )
 
-        self._pings = glean.load_pings(environment.MOZPHAB_MAIN_DIR / "pings.yaml")
-        self._metrics = glean.load_metrics(
-            environment.MOZPHAB_MAIN_DIR / "metrics.yaml"
-        )
+            self._pings = ProfiledGleanObject(
+                glean.load_pings(environment.MOZPHAB_MAIN_DIR / "pings.yaml"),
+                "pings",
+            )
+            self._metrics = ProfiledGleanObject(
+                glean.load_metrics(
+                    environment.MOZPHAB_MAIN_DIR / "metrics.yaml"
+                ).mozphab,
+                "mozphab",
+            )
 
     @property
     def environment(self):
-        return self._metrics.mozphab.environment
+        return self._metrics.environment
 
     @property
     def usage(self):
-        return self._metrics.mozphab.usage
+        return self._metrics.usage
 
     @property
     def user(self):
-        return self._metrics.mozphab.user
+        return self._metrics.user
 
     @property
     def submission(self):
-        return self._metrics.mozphab.submission
+        return self._metrics.submission
 
     def _set_os(self):
         """Collect human readable information about the OS version.
@@ -83,7 +136,9 @@ class Telemetry:
         self.environment.vcs.version.set(repo.vcs_version)
 
     def submit(self):
-        self._pings.usage.submit()
+        # Glean uploads the ping later, from a separate process.
+        with profiler.phase("Submitting the telemetry ping"):
+            self._pings.usage.submit()
         logger.debug("Telemetry submit called.")
 
     def set_metrics(self, args, user_data: UserData):
@@ -99,17 +154,16 @@ class Telemetry:
         self.user.id.set(user_data.user_code)
 
 
-class TelemetryDisabled:
-    """Dummy class that does nothing."""
+class TelemetryDisabled(Telemetry):
+    """Telemetry that doesn't use Glean, and only records profiler markers."""
 
-    def __init__(*args, **kwargs):
+    def __init__(self):
+        self._pings = ProfiledGleanObject(None, "pings")
+        self._metrics = ProfiledGleanObject(None, "mozphab")
+
+    def submit(self):
+        # No ping is submitted, so don't record a marker.
         pass
-
-    def __call__(self, *args, **kwargs):
-        return self
-
-    def __getattr__(self, *args, **kwargs):
-        return self
 
 
 def update_user_data(user_data: UserData):

@@ -34,6 +34,9 @@ def test_defaults(config):
     assert config.get_pre_releases is False
     assert config.report_to_sentry is True
     assert config.telemetry_enabled is False
+    assert config.profiler_enabled is True
+    assert config.profiles_to_keep == 20
+    assert config.profiler_origin == "https://profiler.firefox.com"
 
 
 def test_write(config):
@@ -94,6 +97,18 @@ def test_invalid_int_field(config):
     assert str(e.value) == (
         "could not convert updater.self_last_check to an integer: "
         "invalid literal for int() with base 10: ''"
+    )
+
+
+def test_negative_profiles_to_keep(config):
+    config._set("profiler", "profiles_to_keep", "-1")
+    config.write()
+
+    with pytest.raises(ValueError) as e:
+        Config(filename=config.filename)
+
+    assert str(e.value) == (
+        "profiler.profiles_to_keep should be 0 (unlimited) or more, not -1"
     )
 
 

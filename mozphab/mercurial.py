@@ -43,7 +43,7 @@ from .helpers import (
 from .logger import logger
 from .repository import Repository
 from .spinner import clear_terminal_line, wait_message
-from .subprocess_wrapper import debug_log_command
+from .subprocess_wrapper import debug_log_command, profiler_marker
 from .telemetry import telemetry
 
 MINIMUM_MERCURIAL_VERSION = Version("4.3.3")
@@ -226,7 +226,8 @@ class Mercurial(Repository):
 
         debug_log_command(["hg"] + command)
         command_bytes = [c.encode() for c in command]
-        out = self.repository.rawcommand(command_bytes, eh=error_handler)
+        with profiler_marker(["hg"] + command):
+            out = self.repository.rawcommand(command_bytes, eh=error_handler)
 
         if expect_binary:
             logger.debug("%s bytes of data received", len(out))

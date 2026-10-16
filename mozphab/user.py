@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 from mozphab import environment
+from mozphab.profiler import profiler
 
 from .bmo import bmo
 from .conduit import ConduitAPIError, conduit
@@ -83,10 +84,14 @@ class UserData:
 
     def set_from_file(self):
         """Read user info from file."""
-        if not self.path.exists():
-            return
+        with profiler.file_io("stat", self.path):
+            if not self.path.exists():
+                return
 
-        with self.path.open("r", encoding="utf-8") as f:
+        with (
+            profiler.file_io("read", self.path),
+            self.path.open("r", encoding="utf-8") as f,
+        ):
             user_info = json.load(f)
             self.update_from_dict(user_info)
 
@@ -94,7 +99,10 @@ class UserData:
         """Save any fields provided as kwargs into the user_info file."""
         self.update_from_dict(kwargs)
         user_info = self.to_dict()
-        with self.path.open("w", encoding="utf-8") as f:
+        with (
+            profiler.file_io("write", self.path),
+            self.path.open("w", encoding="utf-8") as f,
+        ):
             json.dump(user_info, f, sort_keys=True, indent=2)
 
     def whoami(self) -> dict | None:

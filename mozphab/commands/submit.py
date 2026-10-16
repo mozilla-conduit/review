@@ -25,6 +25,7 @@ from mozphab.helpers import (
     update_commit_title_previews,
 )
 from mozphab.logger import logger
+from mozphab.profiler import profiler
 from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
@@ -702,7 +703,8 @@ def _submit(
         # Check if local and remote VCS matches
         repo.check_vcs()
 
-    repo.before_submit()
+    with profiler.phase("Checking the working directory"):
+        repo.before_submit()
 
     # Find and preview commits to submits.
     with wait_message("Looking for commits.."):

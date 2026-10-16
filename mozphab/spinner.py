@@ -8,6 +8,7 @@ import threading
 from contextlib import contextmanager
 
 from mozphab import environment
+from mozphab.profiler import profiler
 
 WAIT_INTERVAL = 0.2
 
@@ -59,14 +60,15 @@ class Spinner(threading.Thread):
 
 @contextmanager
 def wait_message(message: str):
-    if not environment.SHOW_SPINNER:
-        yield
-        return
+    with profiler.phase(message):
+        if not environment.SHOW_SPINNER:
+            yield
+            return
 
-    spinner = Spinner(message)
-    spinner.start()
-    try:
-        yield
-    finally:
-        spinner.signal_stop()
-        spinner.join()
+        spinner = Spinner(message)
+        spinner.start()
+        try:
+            yield
+        finally:
+            spinner.signal_stop()
+            spinner.join()
