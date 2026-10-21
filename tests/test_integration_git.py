@@ -311,6 +311,15 @@ def test_submit_create_conflict_markers(
             "try-task-config",
             id="try_task_config",
         ),
+        pytest.param(
+            lambda repo: (repo / ".gitmodules").write_text(
+                '[submodule "sub"]\n\tpath = sub\n\turl = https://example.com\n'
+            ),
+            "Git submodules found in:",
+            ".gitmodules",
+            "submodules",
+            id="submodule",
+        ),
     ],
 )
 def test_submit_create_rejected_files(

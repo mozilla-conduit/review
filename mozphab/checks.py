@@ -42,6 +42,11 @@ DIFF_CHECKS = [
         "Try task config found in",
         lambda change: change.cur_path == "try_task_config.json",
     ),
+    DiffCheck(
+        "submodules",
+        "Git submodules found in",
+        lambda change: change.cur_path == ".gitmodules",
+    ),
 ]
 
 
