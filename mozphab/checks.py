@@ -37,6 +37,11 @@ class DiffCheck:
 DIFF_CHECKS = [
     DiffCheck("conflict-markers", "Conflict markers found in", has_conflict_markers),
     DiffCheck("symlinks", "Symlinks found in", is_symlink),
+    DiffCheck(
+        "try-task-config",
+        "Try task config found in",
+        lambda change: change.cur_path == "try_task_config.json",
+    ),
 ]
 
 

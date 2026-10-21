@@ -294,11 +294,34 @@ def test_submit_create_conflict_markers(
     )
 
 
-def test_submit_create_symlink(
+@pytest.mark.parametrize(
+    "add_file,message,path,check",
+    [
+        pytest.param(
+            lambda repo: (repo / "link").symlink_to("X"),
+            "Symlinks found in:",
+            "link",
+            "symlinks",
+            id="symlink",
+        ),
+        pytest.param(
+            lambda repo: (repo / "try_task_config.json").write_text("{}"),
+            "Try task config found in:",
+            "try_task_config.json",
+            "try-task-config",
+            id="try_task_config",
+        ),
+    ],
+)
+def test_submit_create_rejected_files(
     in_process,
     git_repo_path: pathlib.Path,
     init_sha,
     caplog: pytest.LogCaptureFixture,
+    add_file,
+    message,
+    path,
+    check,
 ):
     call_conduit.reset_mock()
     call_conduit.side_effect = (
@@ -307,16 +330,16 @@ def test_submit_create_symlink(
         # diffusion.repository.search
         {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
     )
-    (git_repo_path / "link").symlink_to("X")
+    add_file(git_repo_path)
     git_out("add", ".")
-    git_out("commit", "-m", "symlink")
+    git_out("commit", "-m", "rejected")
 
     with pytest.raises(exceptions.Error) as excinfo:
         mozphab.main(["submit", "--yes", "--bug", "1", init_sha], is_development=True)
 
-    assert "Symlinks found in:" in str(excinfo.value)
-    assert " link" in str(excinfo.value)
-    assert "Use --bypass-check symlinks to submit anyway." in str(excinfo.value)
+    assert message in str(excinfo.value)
+    assert f" {path}" in str(excinfo.value)
+    assert f"Use --bypass-check {check} to submit anyway." in str(excinfo.value)
     methods = [c.args[0] for c in call_conduit.call_args_list]
     assert "differential.creatediff" not in methods
 
@@ -333,14 +356,13 @@ def test_submit_create_symlink(
     )
     caplog.clear()
     mozphab.main(
-        ["submit", "--yes", "--bypass-check", "symlinks", "--bug", "1", init_sha],
+        ["submit", "--yes", "--bypass-check", check, "--bug", "1", init_sha],
         is_development=True,
     )
     methods = [c.args[0] for c in call_conduit.call_args_list]
     assert "differential.creatediff" in methods
     assert any(
-        record.levelno == logging.WARNING
-        and "Symlinks found in:" in record.getMessage()
+        record.levelno == logging.WARNING and message in record.getMessage()
         for record in caplog.records
     )
 
