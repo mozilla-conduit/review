@@ -101,7 +101,7 @@ def build_submit_args() -> argparse.Namespace:
     args.force = False
     args.force_vcs = False
     args.safe_mode = False
-    args.allow_conflict_markers = False
+    args.bypass_check = []
     args.no_bug = False
     args.wip = False
     args.no_wip = False

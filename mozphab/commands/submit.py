@@ -4,11 +4,11 @@
 
 import argparse
 import logging
-import re
 import textwrap
 import time
 
 from mozphab import environment
+from mozphab.checks import DIFF_CHECKS, failed_checks
 from mozphab.commits import AiReviewState, Commit
 from mozphab.conduit import ConduitAPIError, conduit, normalise_reviewer
 from mozphab.config import config
@@ -615,21 +615,8 @@ def local_uplift_if_possible(
     return False, unified_head
 
 
-# Added lines opening or closing a conflict.
-CONFLICT_MARKER_RE = re.compile(r"^\+(<{7,}|>{7,})( |$)", re.MULTILINE)
-
-
-def conflict_marker_paths(diff: Diff) -> list[str]:
-    """Return the paths of files in `diff` that add conflict markers."""
-    return [
-        change.cur_path
-        for change in diff.changes.values()
-        if any(CONFLICT_MARKER_RE.search(hunk.corpus) for hunk in change.hunks)
-    ]
-
-
 def _prepare_diffs(
-    repo: Repository, commits: list[Commit], allow_conflict_markers: bool = False
+    repo: Repository, commits: list[Commit], args: argparse.Namespace
 ) -> dict[int, Diff]:
     """Build and create the diff for every submittable commit up front.
 
@@ -663,19 +650,20 @@ def _prepare_diffs(
         with wait_message("Creating local diff..."):
             diffs[index] = repo.get_diff(commit)
 
-    conflicts = [
-        f"{commit.name} {path}"
-        for index, commit in submittable
-        for path in conflict_marker_paths(diffs[index])
-    ]
-    if conflicts:
-        message = "Conflict markers found in:\n  " + "\n  ".join(conflicts)
-        if not allow_conflict_markers:
-            raise Error(
-                f"Unable to submit commits: {message}\n\n"
-                "Use --allow-conflict-markers to submit anyway."
+    found = failed_checks((commit.name, diffs[index]) for index, commit in submittable)
+    problems = []
+    for check, paths in found.items():
+        if not paths:
+            continue
+        message = f"{check.description}:\n  " + "\n  ".join(paths)
+        if args.force or check.name in args.bypass_check:
+            logger.warning("Ignoring issues found with commits: %s", message)
+        else:
+            problems.append(
+                f"{message}\n\nUse --bypass-check {check.name} to submit anyway."
             )
-        logger.warning("Ignoring issues found with commits: %s", message)
+    if problems:
+        raise Error("Unable to submit commits: " + "\n\n".join(problems))
 
     count = len(submittable)
     if count == 1:
@@ -820,9 +808,7 @@ def _submit(
     # them on Phabricator in parallel. The revision phase below still runs
     # serially due to parent_rev_phid chaining and amend_commit mutating
     # downstream commits.
-    prepared_diffs = _prepare_diffs(
-        repo, commits, allow_conflict_markers=args.allow_conflict_markers
-    )
+    prepared_diffs = _prepare_diffs(repo, commits, args)
     # Compute the public base once; stacks are linear so all commits share it.
     # Uplifts that are based on the train use its head instead, since
     # `get_public_base_node` looks at the local remotes, not the uplift train.
@@ -1029,9 +1015,11 @@ def add_submit_arguments(parser):
         "evolve installed.",
     )
     parser.add_argument(
-        "--allow-conflict-markers",
-        action="store_true",
-        help="Submit even if the changes add conflict markers.",
+        "--bypass-check",
+        action="append",
+        default=[],
+        choices=[check.name for check in DIFF_CHECKS],
+        help="Submit even if the changes fail the given check. Can be repeated.",
     )
     parser.add_argument(
         "--bug",
