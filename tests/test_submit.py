@@ -1829,9 +1829,29 @@ def test_check_override_hints_cannot_prompt(m_prompt, m_logger):
 
 
 @pytest.mark.parametrize(
+    "path,hint",
+    [
+        ("security/nss/lib/ssl/ssl3con.c", "UPGRADE_NSS_RELEASE"),
+        ("nsprpub/pr/src/io/prfile.c", "UPGRADE_NSPR_RELEASE"),
+    ],
+)
+@mock.patch("mozphab.commands.submit.prompt")
+def test_check_override_hints_warn_only(m_prompt, m_logger, path, hint):
+    c = commit(title="Bug 1 - x")
+    diff = Diff()
+    diff.change_for(path)
+    submit.check_override_hints(c, diff, can_prompt=True)
+    assert c.title_preview == "Bug 1 - x"
+    m_prompt.assert_not_called()
+    assert hint in m_logger.warning.call_args.args[0]
+
+
+@pytest.mark.parametrize(
     "title,path",
     [
         ("Bug 1 - x DOT_GITHUB_OVERRIDE", ".github/workflows/ci.yml"),
+        ("Bug 1 - x UPGRADE_NSS_RELEASE", "security/nss/lib/ssl/ssl3con.c"),
+        ("Bug 1 - x", "security/nssutil/x.c"),
         ("Bug 1 - x", ".github/dependabot.yml"),
         ("Bug 1 - x", "src/.github/workflows/ci.yml"),
     ],

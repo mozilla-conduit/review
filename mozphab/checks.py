@@ -87,4 +87,6 @@ OVERRIDE_HINTS = [
     OverrideHint(
         re.compile(r"^\.github/workflows"), "DOT_GITHUB_OVERRIDE", offer_to_add=True
     ),
+    OverrideHint(re.compile(r"^security/nss/"), "UPGRADE_NSS_RELEASE"),
+    OverrideHint(re.compile(r"^nsprpub/"), "UPGRADE_NSPR_RELEASE"),
 ]
