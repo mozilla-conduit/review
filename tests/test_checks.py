@@ -64,3 +64,19 @@ def test_failed_checks():
         "conflict-markers": ["aaa X", "bbb Y"],
         "symlinks": ["aaa link"],
     }
+
+
+@pytest.mark.parametrize(
+    "title,paths,expected",
+    [
+        ("Bug 1 - x", [".github/workflows/ci.yml", "X"], [".github/workflows/ci.yml"]),
+        ("Bug 1 - x DOT_GITHUB_OVERRIDE", [".github/workflows/ci.yml"], []),
+        ("Bug 1 - x", ["src/.github/workflows/ci.yml"], []),
+    ],
+)
+def test_override_hint_missing_paths(title, paths, expected):
+    diff = Diff()
+    for path in paths:
+        diff.change_for(path)
+    dot_github = checks.OVERRIDE_HINTS[0]
+    assert dot_github.missing_paths(title, diff) == expected

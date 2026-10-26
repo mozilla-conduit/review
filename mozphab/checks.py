@@ -65,3 +65,26 @@ def failed_checks(
                 if check.matches(change):
                     found[check].append(f"{name} {change.cur_path}")
     return found
+
+
+@dataclass(frozen=True)
+class OverrideHint:
+    """A hint Lando needs in the revision title to land changes to some paths."""
+
+    pattern: re.Pattern[str]
+    hint: str
+    # Whether to offer to add the hint to the commit title.
+    offer_to_add: bool = False
+
+    def missing_paths(self, title: str, diff: Diff) -> list[str]:
+        """Return the paths in `diff` needing the hint, unless `title` has it."""
+        if self.hint in title:
+            return []
+        return [path for path in diff.changes if self.pattern.match(path)]
+
+
+OVERRIDE_HINTS = [
+    OverrideHint(
+        re.compile(r"^\.github/workflows"), "DOT_GITHUB_OVERRIDE", offer_to_add=True
+    ),
+]

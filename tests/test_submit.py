@@ -16,6 +16,7 @@ from mozphab import environment, exceptions, helpers, mozphab, repository
 from mozphab.commands import submit
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError
+from mozphab.diff import Diff
 from mozphab.user import UserData
 
 from .conftest import search_diff, search_rev
@@ -1788,6 +1789,62 @@ def test_no_stack_linking(
     first_call, second_call = m_conduit.create_revision.call_args_list
     assert first_call.kwargs["parent_rev_phid"] is None
     assert second_call.kwargs["parent_rev_phid"] == expected_second_parent
+
+
+def workflow_diff():
+    diff = Diff()
+    diff.change_for(".github/workflows/ci.yml")
+    return diff
+
+
+@mock.patch("mozphab.commands.submit.prompt", return_value="Yes")
+def test_check_override_hints_adds_hint(m_prompt, m_logger):
+    c = commit(bug_id="1", title="Bug 1 - x r=foo")
+    submit.check_override_hints(c, workflow_diff(), can_prompt=True)
+    assert c.title_preview == "Bug 1 - x r=foo DOT_GITHUB_OVERRIDE"
+    m_logger.warning.assert_not_called()
+
+    # The reviewers are still parsed from the amended title on the next submit.
+    c.title = c.title_preview
+    assert helpers.parse_reviewers(c.title)["granted"] == ["foo"]
+    c.reviewers = {"granted": ["foo", "bar"], "request": []}
+    assert helpers.build_commit_title(c) == "Bug 1 - x r=foo,bar DOT_GITHUB_OVERRIDE"
+
+
+@mock.patch("mozphab.commands.submit.prompt", return_value="No")
+def test_check_override_hints_declined(m_prompt, m_logger):
+    c = commit(title="Bug 1 - x")
+    submit.check_override_hints(c, workflow_diff(), can_prompt=True)
+    assert c.title_preview == "Bug 1 - x"
+    m_logger.warning.assert_called_once()
+
+
+@mock.patch("mozphab.commands.submit.prompt")
+def test_check_override_hints_cannot_prompt(m_prompt, m_logger):
+    c = commit(title="Bug 1 - x")
+    submit.check_override_hints(c, workflow_diff(), can_prompt=False)
+    assert c.title_preview == "Bug 1 - x"
+    m_prompt.assert_not_called()
+    assert "DOT_GITHUB_OVERRIDE" in m_logger.warning.call_args.args[0]
+
+
+@pytest.mark.parametrize(
+    "title,path",
+    [
+        ("Bug 1 - x DOT_GITHUB_OVERRIDE", ".github/workflows/ci.yml"),
+        ("Bug 1 - x", ".github/dependabot.yml"),
+        ("Bug 1 - x", "src/.github/workflows/ci.yml"),
+    ],
+)
+@mock.patch("mozphab.commands.submit.prompt")
+def test_check_override_hints_not_needed(m_prompt, m_logger, title, path):
+    c = commit(title=title)
+    diff = Diff()
+    diff.change_for(path)
+    submit.check_override_hints(c, diff, can_prompt=True)
+    assert c.title_preview == title
+    m_prompt.assert_not_called()
+    m_logger.warning.assert_not_called()
 
 
 if __name__ == "__main__":

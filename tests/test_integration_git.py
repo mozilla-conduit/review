@@ -376,6 +376,87 @@ def test_submit_create_rejected_files(
     )
 
 
+@mock.patch("mozphab.commands.submit.prompt", return_value="Yes")
+def test_submit_create_adds_override_hint(
+    m_prompt, in_process, git_repo_path: pathlib.Path, init_sha
+):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        {},
+        # diffusion.repository.search
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
+        # differential.creatediff
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
+        # differential.revision.edit
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
+        # differential.setdiffproperty
+        {},
+    )
+    (git_repo_path / ".github" / "workflows").mkdir(parents=True)
+    (git_repo_path / ".github" / "workflows" / "ci.yml").write_text("on: push\n")
+    git_out("add", ".")
+    git_out("commit", "-m", "Bug 1 - workflow")
+
+    mozphab.main(["submit", "--bug", "1", init_sha], is_development=True)
+
+    assert "DOT_GITHUB_OVERRIDE" in m_prompt.call_args_list[-1].args[0]
+    assert (
+        git_out("log", "--format=%s", "-1").strip()
+        == "Bug 1 - workflow DOT_GITHUB_OVERRIDE"
+    )
+    edit = next(
+        c
+        for c in call_conduit.call_args_list
+        if c.args[0] == "differential.revision.edit"
+    )
+    # Submitted as WIP since the commit has no reviewers.
+    assert {
+        "type": "title",
+        "value": "WIP: Bug 1 - workflow DOT_GITHUB_OVERRIDE",
+    } in edit.args[1]["transactions"]
+
+
+@mock.patch("mozphab.commands.submit.prompt", return_value="Yes")
+def test_submit_create_force_skips_override_prompt(
+    m_prompt,
+    in_process,
+    git_repo_path: pathlib.Path,
+    init_sha,
+    caplog: pytest.LogCaptureFixture,
+):
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        # ping
+        {},
+        # diffusion.repository.search
+        {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
+        # differential.creatediff
+        {"phid": "PHID-DIFF-1", "diffid": "1"},
+        # differential.revision.edit
+        {"object": {"id": "123", "phid": "PHID-DREV-123"}},
+        # differential.setdiffproperty
+        {},
+    )
+    (git_repo_path / ".github" / "workflows").mkdir(parents=True)
+    (git_repo_path / ".github" / "workflows" / "ci.yml").write_text("on: push\n")
+    git_out("add", ".")
+    git_out("commit", "-m", "Bug 1 - workflow")
+
+    mozphab.main(["submit", "--force", "--bug", "1", init_sha], is_development=True)
+
+    # Only the "Submit to" confirmation is shown.
+    prompts = [c.args[0] for c in m_prompt.call_args_list]
+    assert any("Submit to" in p for p in prompts)
+    assert not any("DOT_GITHUB_OVERRIDE" in p for p in prompts)
+    assert git_out("log", "--format=%s", "-1").strip() == "Bug 1 - workflow"
+    assert any(
+        record.levelno == logging.WARNING
+        and "without DOT_GITHUB_OVERRIDE" in record.getMessage()
+        for record in caplog.records
+    )
+
+
 def test_submit_create_no_bug(in_process, git_repo_path: pathlib.Path, init_sha):
     call_conduit.reset_mock()
     call_conduit.side_effect = (

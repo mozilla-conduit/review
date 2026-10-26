@@ -8,7 +8,7 @@ import textwrap
 import time
 
 from mozphab import environment
-from mozphab.checks import DIFF_CHECKS, failed_checks
+from mozphab.checks import DIFF_CHECKS, OVERRIDE_HINTS, failed_checks
 from mozphab.commits import AiReviewState, Commit
 from mozphab.conduit import ConduitAPIError, conduit, normalise_reviewer
 from mozphab.config import config
@@ -615,8 +615,35 @@ def local_uplift_if_possible(
     return False, unified_head
 
 
+def check_override_hints(commit: Commit, diff: Diff, can_prompt: bool):
+    """Warn about changes Lando needs an override hint in the title to land.
+
+    When `can_prompt`, offer to add the hint to the commit title instead.
+    """
+    for override in OVERRIDE_HINTS:
+        paths = override.missing_paths(commit.title_preview, diff)
+        if not paths:
+            continue
+        hint = override.hint
+        message = (
+            f"{commit.name} changes {', '.join(paths)}, which Lando will not land "
+            f"without {hint} in the commit title."
+        )
+        if (
+            override.offer_to_add
+            and can_prompt
+            and prompt(f"{message}\nAdd {hint} to the title", ["Yes", "No"]) == "Yes"
+        ):
+            commit.title_preview += f" {hint}"
+        else:
+            logger.warning(message)
+
+
 def _prepare_diffs(
-    repo: Repository, commits: list[Commit], args: argparse.Namespace
+    repo: Repository,
+    commits: list[Commit],
+    args: argparse.Namespace,
+    can_prompt: bool = False,
 ) -> dict[int, Diff]:
     """Build and create the diff for every submittable commit up front.
 
@@ -664,6 +691,9 @@ def _prepare_diffs(
             )
     if problems:
         raise Error("Unable to submit commits: " + "\n\n".join(problems))
+
+    for index, commit in submittable:
+        check_override_hints(commit, diffs[index], can_prompt and not args.force)
 
     count = len(submittable)
     if count == 1:
@@ -784,9 +814,10 @@ def _submit(
     telemetry().submission.commits_count.add(len(commits))
 
     # Confirmation prompt.
+    can_prompt = not args.yes and (args.interactive or not config.auto_submit)
     if args.yes:
         pass
-    elif config.auto_submit and not args.interactive:
+    elif not can_prompt:
         logger.info(
             "Automatically submitting (as per submit.auto_submit in %s)",
             config.filename,
@@ -808,7 +839,7 @@ def _submit(
     # them on Phabricator in parallel. The revision phase below still runs
     # serially due to parent_rev_phid chaining and amend_commit mutating
     # downstream commits.
-    prepared_diffs = _prepare_diffs(repo, commits, args)
+    prepared_diffs = _prepare_diffs(repo, commits, args, can_prompt)
     # Compute the public base once; stacks are linear so all commits share it.
     # Uplifts that are based on the train use its head instead, since
     # `get_public_base_node` looks at the local remotes, not the uplift train.
