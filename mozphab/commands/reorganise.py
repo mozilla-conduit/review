@@ -7,15 +7,40 @@ import argparse
 import sys
 from collections import OrderedDict
 from collections.abc import Container
+from dataclasses import dataclass
 
 from mozphab.conduit import conduit
-from mozphab.config import config
+from mozphab.config import Config, config
 from mozphab.exceptions import Error
 from mozphab.helpers import BUG_ID_RE, augment_commits_from_body, prompt
 from mozphab.logger import logger
 from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
+
+
+@dataclass(frozen=True)
+class ReorgOptions:
+    """The command line flags and config knobs that control `reorg`, resolved once."""
+
+    yes: bool = False
+    force: bool = False
+    no_abandon: bool = False
+    no_abandon_unconnected: bool = False
+    verbose: bool = False
+    hyperlinks: bool = True
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace, config: Config) -> "ReorgOptions":
+        """Build the options from the parsed command line and the user's config."""
+        return cls(
+            yes=args.yes,
+            force=args.force,
+            no_abandon=args.no_abandon,
+            no_abandon_unconnected=args.no_abandon_unconnected,
+            verbose=args.verbose,
+            hyperlinks=config.hyperlinks and not args.no_hyperlinks,
+        )
 
 
 def create_hyperlink(text: str, url: str) -> str:
@@ -420,12 +445,12 @@ def show_verbose_stack_info(
     logger.info("")
 
 
-def reorganise_inner(repo: Repository, args: argparse.Namespace):
+def reorganise_inner(repo: Repository, options: ReorgOptions):
     """Reorganise the stack on Phabricator to match the stack in the local VCS."""
     telemetry().submission.preparation_time.start()
 
     # Validate argument combinations
-    if args.no_abandon_unconnected and not args.force:
+    if options.no_abandon_unconnected and not options.force:
         raise Error("--no-abandon-unconnected can only be used with --force")
 
     with wait_message("Checking connection to Phabricator."):
@@ -444,7 +469,7 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
         augment_commits_from_body(commits)
 
     if not all(commit.rev_id for commit in commits):
-        if args.force:
+        if options.force:
             raise Error(
                 "Force mode requires all local revisions to be present on Phabricator."
             )
@@ -493,7 +518,7 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
         # Validate the `stackGraph` field from our remote revisions.
         phabstack = convert_stackgraph_to_linear(stack_graph, phid_to_id)
     except Error as e:
-        if args.force:
+        if options.force:
             # Lingering links from abandoned revisions can leave a predecessor
             # with multiple successors, which convert_stackgraph_to_linear
             # rejects. force_stack_transactions only needs the set of remote
@@ -511,7 +536,7 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
         try:
             phabstack_phids = walk_llist(phabstack)
         except Error:
-            if args.force:
+            if options.force:
                 # In force mode, we ignore remote stack structure issues
                 logger.warning(
                     "Remote stack is not linear, but continuing in force mode.\n"
@@ -539,12 +564,12 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
         if revision["fields"]["status"]["value"] == "abandoned"
     }
 
-    if args.force:
+    if options.force:
         transactions = force_stack_transactions(
             phabstack_phids,
             localstack_phids,
             abandoned_revisions,
-            no_abandon_unconnected=args.no_abandon_unconnected,
+            no_abandon_unconnected=options.no_abandon_unconnected,
         )
     else:
         try:
@@ -552,7 +577,7 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
                 phabstack_phids,
                 localstack_phids,
                 abandoned_revisions,
-                no_abandon=args.no_abandon,
+                no_abandon=options.no_abandon,
             )
         except Error:
             logger.error("Unable to prepare stack transactions.")
@@ -562,10 +587,7 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
         logger.info("Reorganisation is not needed.")
         return
 
-    # Determine hyperlinks setting from config and args
-    hyperlinks_enabled = config.hyperlinks and not args.no_hyperlinks
-
-    if args.force:
+    if options.force:
         logger.warning("Stack will be forcibly synchronized:")
     else:
         logger.warning("Stack will be reorganised:")
@@ -575,7 +597,7 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
             # Skip PHIDs that are not in our mapping (can happen in tests)
             continue
         node_id = f"D{phid_to_id[phid]}"
-        linked_node_id = linkify_revision_id(node_id, repo.phab_url, hyperlinks_enabled)
+        linked_node_id = linkify_revision_id(node_id, repo.phab_url, options.hyperlinks)
         if any(transaction["type"] == "abandon" for transaction in rev_transactions):
             logger.info(" * {} will be abandoned".format(linked_node_id))
         else:
@@ -584,7 +606,7 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
                     if t["value"] and t["value"][0] in phid_to_id:  # Has children
                         child_id = f"D{phid_to_id[t['value'][0]]}"
                         linked_child_id = linkify_revision_id(
-                            child_id, repo.phab_url, hyperlinks_enabled
+                            child_id, repo.phab_url, options.hyperlinks
                         )
                         logger.info(
                             " * {child} will depend on {parent}".format(
@@ -592,7 +614,7 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
                                 parent=linked_node_id,
                             )
                         )
-                    elif args.force:
+                    elif options.force:
                         logger.info(
                             " * {} will have all dependencies removed".format(
                                 linked_node_id
@@ -602,7 +624,7 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
                     if t["value"] and t["value"][0] in phid_to_id:
                         child_id = f"D{phid_to_id[t['value'][0]]}"
                         linked_child_id = linkify_revision_id(
-                            child_id, repo.phab_url, hyperlinks_enabled
+                            child_id, repo.phab_url, options.hyperlinks
                         )
                         logger.info(
                             " * {child} will no longer depend on {parent}".format(
@@ -612,20 +634,20 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
                         )
 
     # Show glossary with commit messages for all referenced revisions (but not in verbose mode)
-    if not args.verbose:
-        show_revision_glossary(transactions, revisions, repo, hyperlinks_enabled)
+    if not options.verbose:
+        show_revision_glossary(transactions, revisions, repo, options.hyperlinks)
     else:
         # Show verbose information at the bottom
         show_verbose_stack_info(
-            phabstack_phids, localstack_phids, revisions, repo, hyperlinks_enabled
+            phabstack_phids, localstack_phids, revisions, repo, options.hyperlinks
         )
 
     telemetry().submission.preparation_time.stop()
 
-    if args.yes:
+    if options.yes:
         pass
     else:
-        if args.force:
+        if options.force:
             res = prompt("Perform force synchronization", ["Yes", "No"])
         else:
             res = prompt("Perform reorganisation", ["Yes", "No"])
@@ -663,11 +685,12 @@ def reorganise_inner(repo: Repository, args: argparse.Namespace):
 
 def reorganise(repo: Repository, args: argparse.Namespace):
     """Reorganise the stack on Phabricator to match the stack in the local VCS."""
+    options = ReorgOptions.from_args(args, config)
     try:
-        reorganise_inner(repo, args)
+        reorganise_inner(repo, options)
     except Error as e:
         # Check if the `force` flag was not set and print a hint about --force mode
-        if not args.force:
+        if not options.force:
             logger.warning(
                 "Reorganisation failed. You might try using --force to bypass "
                 "stack structure checks and force synchronization."

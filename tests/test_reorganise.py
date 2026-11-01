@@ -14,6 +14,7 @@ from mozphab import exceptions, mozphab
 from mozphab.commands import reorganise
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError
+from mozphab.config import Config
 
 
 def test_linkify_bugs_in_text_without_bmo_url():
@@ -361,6 +362,8 @@ def test_conduit_broken(m_check):
         no_abandon_unconnected = False
         no_hyperlinks = False
         verbose = False
+        yes = False
+        no_abandon = False
 
     with pytest.raises(exceptions.Error) as e:
         reorganise.reorganise(mock.MagicMock(), Args())
@@ -376,6 +379,8 @@ def test_commits_invalid(_augment, _check, git):
         no_abandon_unconnected = False
         no_hyperlinks = False
         verbose = False
+        yes = False
+        no_abandon = False
 
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()
@@ -401,6 +406,8 @@ def test_remote_stack_invalid(m_walk, m_ids, git, caplog: pytest.LogCaptureFixtu
         no_abandon_unconnected = False
         no_hyperlinks = False
         verbose = False
+        yes = False
+        no_abandon = False
 
     caplog.set_level(logging.ERROR)
     m_ids.return_value = ["A", "B", "C"]
@@ -789,6 +796,8 @@ def test_force_mode_requires_all_local_revisions_on_phabricator(_augment, _check
         no_abandon_unconnected = False
         no_hyperlinks = False
         verbose = False
+        yes = False
+        no_abandon = False
 
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()
@@ -812,6 +821,8 @@ def test_no_abandon_unconnected_requires_force(_check):
         no_abandon_unconnected = True
         no_hyperlinks = False
         verbose = False
+        yes = False
+        no_abandon = False
 
     _check.return_value = True
 
@@ -926,6 +937,7 @@ def test_force_mode_ignores_remote_stack_errors(
         no_abandon_unconnected = False
         no_hyperlinks = False
         verbose = False
+        no_abandon = False
 
     caplog.set_level(logging.WARNING, logger="moz-phab")
     m_walk.side_effect = exceptions.Error("Remote stack is not linear")
@@ -1137,3 +1149,25 @@ class TestReorganiseParser:
         args = parent_parser.parse_args(["reorg", "--force"])
         assert args.force is True
         assert args.no_abandon_unconnected is False
+
+
+def test_reorg_options_from_args():
+    """`ReorgOptions.from_args` combines `--no-hyperlinks` with the config."""
+    test_config = Config(should_access_file=False)
+    args = mozphab.parse_args(["reorg"])
+
+    assert (
+        reorganise.ReorgOptions.from_args(args, test_config)
+        == reorganise.ReorgOptions()
+    ), "The default arguments should give the defaults."
+
+    args.no_hyperlinks = True
+    assert not reorganise.ReorgOptions.from_args(
+        args, test_config
+    ).hyperlinks, "`--no-hyperlinks` should disable hyperlinks."
+
+    args.no_hyperlinks = False
+    test_config.hyperlinks = False
+    assert not reorganise.ReorgOptions.from_args(
+        args, test_config
+    ).hyperlinks, "`ui.hyperlinks = False` should disable hyperlinks."
