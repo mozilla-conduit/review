@@ -198,7 +198,7 @@ class Jujutsu(Repository):
             template="".join(
                 [
                     "separate('\n', ",
-                    "author.timestamp().utc().format('%+'), ",
+                    "author.timestamp().utc().format('%FT%T%:z'), ",
                     "author.name(), ",
                     "author.email(), ",
                     "self.parents().map(|c| c.commit_id().short()).join(' '), ",
