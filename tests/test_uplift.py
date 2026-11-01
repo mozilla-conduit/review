@@ -2,7 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
 import email.message
 import io
 import json
@@ -12,6 +11,7 @@ from urllib.error import HTTPError
 import pytest
 
 from mozphab.commands.submit import (
+    UpliftSettings,
     local_uplift_if_possible,
     update_commits_for_uplift,
 )
@@ -49,11 +49,6 @@ class Repo(Repository):
 
 
 def test_local_uplift_if_possible():
-    class Args(argparse.Namespace):
-        def __init__(self, no_rebase=False, train="train"):
-            self.no_rebase = no_rebase
-            self.train = train
-
     commits = [
         Commit(
             title="A",
@@ -66,28 +61,28 @@ def test_local_uplift_if_possible():
 
     repo = Repo()
 
-    args = Args(no_rebase=True)
-    assert local_uplift_if_possible(args, repo, commits) == (
+    uplift = UpliftSettings(train="train", no_rebase=True)
+    assert local_uplift_if_possible(uplift, repo, commits) == (
         True,
         "beta",
     ), "Should do a one-off uplift when `--no-rebase` is set, based on the head."
 
     repo = Repo(is_descendant=False)
-    assert local_uplift_if_possible(args, repo, commits) == (
+    assert local_uplift_if_possible(uplift, repo, commits) == (
         True,
         None,
     ), "`--no-rebase` commits off the unified head shouldn't report it as the base."
 
-    args = Args()
+    uplift = UpliftSettings(train="train")
     repo = Repo(unified_head=None)
 
-    assert local_uplift_if_possible(args, repo, commits) == (
+    assert local_uplift_if_possible(uplift, repo, commits) == (
         True,
         None,
     ), "Should avoid do a one-off when no unified head is found."
 
     repo = Repo(is_descendant=True)
-    assert local_uplift_if_possible(args, repo, commits) == (
+    assert local_uplift_if_possible(uplift, repo, commits) == (
         False,
         "beta",
     ), "Should avoid uplifting commits locally when destination is a descendant."
@@ -97,11 +92,8 @@ def test_local_uplift_if_possible():
         is_descendant=False,
         unified_head="beta",
     )
-    args = Args(
-        no_rebase=False,
-        train="beta",
-    )
-    assert local_uplift_if_possible(args, repo, commits) == (
+    uplift = UpliftSettings(train="beta", no_rebase=False)
+    assert local_uplift_if_possible(uplift, repo, commits) == (
         False,
         "beta",
     ), "Uplifting commits locally should amend them as well."

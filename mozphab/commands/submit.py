@@ -6,12 +6,13 @@ import argparse
 import logging
 import textwrap
 import time
+from dataclasses import dataclass
 
 from mozphab import environment
 from mozphab.checks import DIFF_CHECKS, OVERRIDE_HINTS, failed_checks
 from mozphab.commits import AiReviewState, Commit
 from mozphab.conduit import ConduitAPIError, conduit, normalise_reviewer
-from mozphab.config import config
+from mozphab.config import Config, config
 from mozphab.diff import Diff
 from mozphab.exceptions import Error
 from mozphab.helpers import (
@@ -30,6 +31,96 @@ from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
 from mozphab.user import UserData
+
+
+@dataclass(frozen=True)
+class UpliftSettings:
+    """The `uplift` flags that change how `submit` runs."""
+
+    train: str | None = None
+    no_rebase: bool = False
+
+
+@dataclass(frozen=True)
+class SubmitOptions:
+    """The command line flags and config knobs that control `submit`, resolved once."""
+
+    yes: bool = False
+    interactive: bool = False
+    message: str | None = None
+    test_plan: str | None = None
+    force: bool = False
+    # The names of the diff checks to submit despite.
+    bypass_check: tuple[str, ...] = ()
+    bug: str | None = None
+    no_bug: bool = False
+    reviewers: tuple[str, ...] = ()
+    blockers: tuple[str, ...] = ()
+    wip: bool = False
+    no_wip: bool = False
+    no_stack: bool = False
+    single: bool = False
+    ai: bool = False
+    # Set when `moz-phab` ran `submit` because no command was given.
+    fallback: bool = False
+    # Set when `submit` runs on behalf of `moz-phab uplift`.
+    uplift: UpliftSettings | None = None
+    # Submit without asking, unless `--interactive` is given.
+    auto_submit: bool = False
+    # Request AI review on new revisions, as `--ai` does for every revision.
+    ai_review: bool = False
+    # Make every reviewer blocking when no reviewers are given with `-r` or `-R`.
+    always_blocking: bool = False
+    warn_untracked: bool = True
+    # Seconds between review queue reminders, or `0` to never show them.
+    review_queue_reminder_frequency: int = 3600
+    review_queue_reminder_include_groups: bool = True
+
+    @property
+    def is_uplift(self) -> bool:
+        """Return `True` if `submit` runs on behalf of `moz-phab uplift`."""
+        return self.uplift is not None
+
+    @property
+    def can_prompt(self) -> bool:
+        """Return `True` if `submit` may ask questions, which `--yes` never allows."""
+        return not self.yes and (self.interactive or not self.auto_submit)
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace, config: Config) -> "SubmitOptions":
+        """Build the options from the parsed command line and the user's config."""
+        uplift = (
+            UpliftSettings(train=args.train, no_rebase=args.no_rebase)
+            if args.command == "uplift"
+            else None
+        )
+        return cls(
+            yes=args.yes,
+            interactive=args.interactive,
+            message=args.message,
+            test_plan=args.test_plan,
+            force=args.force,
+            bypass_check=tuple(args.bypass_check),
+            bug=args.bug,
+            no_bug=args.no_bug,
+            reviewers=tuple(args.reviewer or ()),
+            blockers=tuple(args.blocker or ()),
+            wip=args.wip,
+            no_wip=args.no_wip,
+            no_stack=args.no_stack,
+            single=args.single,
+            ai=args.ai,
+            fallback=args.fallback,
+            uplift=uplift,
+            auto_submit=config.auto_submit,
+            ai_review=config.ai_review,
+            always_blocking=config.always_blocking,
+            warn_untracked=config.warn_untracked,
+            review_queue_reminder_frequency=config.review_queue_reminder_frequency,
+            review_queue_reminder_include_groups=(
+                config.review_queue_reminder_include_groups
+            ),
+        )
 
 
 def morph_blocking_reviewers(commits: list[Commit]):
@@ -113,7 +204,9 @@ def show_commit_stack(commits: list[Commit]):
     log_commit_stack_with_messages(submitted_commits, urls, "-> ")
 
 
-def show_review_queue_reminder(commits: list[Commit], user_data: UserData):
+def show_review_queue_reminder(
+    commits: list[Commit], options: SubmitOptions, user_data: UserData
+):
     """Remind the user of the reviews waiting on them.
 
     Only shown when something was submitted for review; Work In Progress
@@ -125,7 +218,7 @@ def show_review_queue_reminder(commits: list[Commit], user_data: UserData):
     seconds, so that submitting a series of stacks doesn't repeat it every
     time.  Setting that to zero turns the reminder off entirely.
     """
-    frequency = config.review_queue_reminder_frequency
+    frequency = options.review_queue_reminder_frequency
     if frequency <= 0 or not user_data.is_employee:
         return
 
@@ -143,7 +236,7 @@ def show_review_queue_reminder(commits: list[Commit], user_data: UserData):
     try:
         with wait_message("Checking your review queue..."):
             count, has_more = conduit.get_pending_reviews(
-                include_groups=config.review_queue_reminder_include_groups
+                include_groups=options.review_queue_reminder_include_groups
             )
     except ConduitAPIError as e:
         # The submission itself succeeded; a reminder isn't worth failing for.
@@ -173,7 +266,7 @@ def show_review_queue_reminder(commits: list[Commit], user_data: UserData):
 
 
 def validate_commit_stack(
-    commits: list[Commit], args: argparse.Namespace
+    commits: list[Commit], options: SubmitOptions
 ) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     """Validate commit stack is suitable for review.
 
@@ -262,7 +355,7 @@ def validate_commit_stack(
                 and not reviewers_changed
                 and not bug_id_changed
                 and not revision_is_closed
-                and not args.force
+                and not options.force
                 and not commit.test_plan
             ):
                 commit.submit = False
@@ -305,7 +398,7 @@ def validate_commit_stack(
 
         overridable_errors = []
 
-        if not commit.bug_id and not args.no_bug:
+        if not commit.bug_id and not options.no_bug:
             overridable_errors.append("Missing bug ID")
 
         if has_arc_rejections(commit.body):
@@ -333,7 +426,7 @@ def validate_commit_stack(
                 overridable_errors.append(message)
 
         if overridable_errors:
-            if args.force:
+            if options.force:
                 # Downgrade to warnings if `-f` was passed.
                 warnings.setdefault(commit.name, []).extend(overridable_errors)
             else:
@@ -348,11 +441,11 @@ def validate_commit_stack(
             not commit.has_reviewers
             and not conduit.has_revision_reviewers(commit)
             # Submitting a new uplift clears reviewers and shouldn't warn.
-            and args.command != "uplift"
+            and not options.is_uplift
         ):
             warnings.setdefault(commit.name, []).append("Missing reviewers")
 
-        if commit.wip and not args.wip:
+        if commit.wip and not options.wip:
             warnings.setdefault(commit.name, []).append(
                 'It will be submitted as "Changes Planned". Run submit again with '
                 "`--no-wip` to prevent this."
@@ -391,20 +484,20 @@ def remove_duplicates(reviewers: list[str]) -> list[str]:
     return unique
 
 
-def update_commits_from_args(commits: list[Commit], args: argparse.Namespace):
-    """Modify commit description based on args and configuration.
+def update_commits_from_options(commits: list[Commit], options: SubmitOptions):
+    """Modify commit description based on the options and configuration.
 
     Args:
         commits: list of Commits representing the commits in commit stack
-        args: argparse.Namespace object. In this function we're using
+        options: the `SubmitOptions`. In this function we're using
             following attributes:
-            * reviewer - list of strings representing reviewers
-            * blocker - list of string representing blocking reviewers
-            * bug - an integer representing bug id in Bugzilla
+            * reviewers - strings representing reviewers
+            * blockers - strings representing blocking reviewers
+            * bug - a string representing bug id in Bugzilla
 
     Command args always overwrite commit desc.
     Overwriting reviewers rules
-    (The "-r" are loaded into args.reviewer and "-R" into args.blocker):
+    (The "-r" are loaded into options.reviewers and "-R" into options.blockers):
         a) Recognize `r=` and `r?` from commit message title.
         b) Modify reviewers only if `-r` or `-R` is used in call arguments.
         c) Add new reviewers using `r=`.
@@ -415,18 +508,18 @@ def update_commits_from_args(commits: list[Commit], args: argparse.Namespace):
     change all reviewers in title to blocking.
     """
 
-    if args.test_plan and len(commits) > 1:
+    if options.test_plan and len(commits) > 1:
         raise Error(
             "--test-plan can only be used with a single commit. "
             "Use --single or narrow your commit range."
         )
 
     # Build list of reviewers from args.
-    reviewers = list(set(args.reviewer)) if args.reviewer else []
+    reviewers = list(set(options.reviewers))
 
     # Order might be changed here `list(set(["one", "two"])) == ['two', 'one']`
     reviewers.sort()
-    blockers = [r.rstrip("!") for r in args.blocker] if args.blocker else []
+    blockers = [r.rstrip("!") for r in options.blockers]
 
     # User might use "-r <nick>!" to provide a blocking reviewer.
     # Add all such blocking reviewers to blockers list.
@@ -470,21 +563,21 @@ def update_commits_from_args(commits: list[Commit], args: argparse.Namespace):
 
         commit.reviewers = {"granted": granted, "request": requested}
 
-        if args.bug:
+        if options.bug:
             # Bug ID command arg used.
-            commit.bug_id = args.bug
+            commit.bug_id = options.bug
 
-        if args.test_plan:
-            commit.test_plan = args.test_plan
+        if options.test_plan:
+            commit.test_plan = options.test_plan
 
         # Mark a commit as WIP if --wip is provided or if the revision has no reviewers.
         # This is after checking for WIP: prefix in helpers.augment_commits_from_body().
-        if args.no_wip:
+        if options.no_wip:
             commit.wip = False
-        elif args.wip or (
+        elif options.wip or (
             # `moz-phab uplift` assumes `#release-managers` review will be set
             # by automation once the assessment form is submitted.
-            args.command != "uplift"
+            not options.is_uplift
             and not commit.has_reviewers
             and not conduit.has_revision_reviewers(commit)
         ):
@@ -493,7 +586,7 @@ def update_commits_from_args(commits: list[Commit], args: argparse.Namespace):
             commit.wip = False
 
     # Honour config setting to always use blockers
-    if not reviewers and config.always_blocking:
+    if not reviewers and options.always_blocking:
         for commit in commits:
             commit.reviewers = {
                 "request": make_blocking(commit.reviewers["request"]),
@@ -559,7 +652,7 @@ def update_revision_bug_id(transactions: list[dict], commit: Commit, revision: d
 
 
 def local_uplift_if_possible(
-    args: argparse.Namespace, repo: Repository, commits: list[Commit]
+    uplift: UpliftSettings, repo: Repository, commits: list[Commit]
 ) -> tuple[bool, str | None]:
     """If possible, rebase local repository commits onto the target uplift train.
 
@@ -585,7 +678,7 @@ def local_uplift_if_possible(
     # our revset onto.
     unified_head = repo.get_repo_head_branch()
 
-    if args.no_rebase:
+    if uplift.no_rebase:
         # If args tell us not to do a rebase, do not make any local changes and
         # return without rebasing. This is the same as submitting an uplift where
         # the original patch is sent to Phabricator without any modifications.
@@ -601,7 +694,7 @@ def local_uplift_if_possible(
         # If we didn't find a unified head, we intend to submit an uplift without
         # modifying the local repo state via a rebase.
         logger.warning(
-            f"Couldn't find a head for {args.train} in version control, "
+            f"Couldn't find a head for {uplift.train} in version control, "
             "submitting without rebase."
         )
         return True, None
@@ -642,8 +735,7 @@ def check_override_hints(commit: Commit, diff: Diff, can_prompt: bool):
 def _prepare_diffs(
     repo: Repository,
     commits: list[Commit],
-    args: argparse.Namespace,
-    can_prompt: bool = False,
+    options: SubmitOptions,
 ) -> dict[int, Diff]:
     """Build and create the diff for every submittable commit up front.
 
@@ -683,7 +775,7 @@ def _prepare_diffs(
         if not paths:
             continue
         message = f"{check.description}:\n  " + "\n  ".join(paths)
-        if args.force or check.name in args.bypass_check:
+        if options.force or check.name in options.bypass_check:
             logger.warning("Ignoring issues found with commits: %s", message)
         else:
             problems.append(
@@ -693,7 +785,9 @@ def _prepare_diffs(
         raise Error("Unable to submit commits: " + "\n\n".join(problems))
 
     for index, commit in submittable:
-        check_override_hints(commit, diffs[index], can_prompt and not args.force)
+        check_override_hints(
+            commit, diffs[index], options.can_prompt and not options.force
+        )
 
     count = len(submittable)
     if count == 1:
@@ -710,7 +804,7 @@ def _prepare_diffs(
 
 
 def _submit(
-    repo: Repository, args: argparse.Namespace, user_data: UserData
+    repo: Repository, options: SubmitOptions, user_data: UserData
 ) -> list[Commit]:
     telemetry().submission.preparation_time.start()
     with wait_message("Checking connection to Phabricator."):
@@ -726,7 +820,7 @@ def _submit(
 
     # Find and preview commits to submits.
     with wait_message("Looking for commits.."):
-        commits = repo.commit_stack(single=args.single)
+        commits = repo.commit_stack(single=options.single)
     if not commits:
         raise Error("Failed to find any commits to submit")
     n_commits = len(commits)
@@ -740,10 +834,10 @@ def _submit(
         )
 
     uplift_base_ref = None
-    if args.command == "uplift":
+    if options.uplift is not None:
         # Perform uplift logic during submission.
         avoid_local_changes, uplift_base_ref = local_uplift_if_possible(
-            args, repo, commits
+            options.uplift, repo, commits
         )
     else:
         avoid_local_changes = False
@@ -752,8 +846,8 @@ def _submit(
         # Pre-process to load metadata.
         morph_blocking_reviewers(commits)
         augment_commits_from_body(commits)
-        update_commits_from_args(commits, args)
-        if args.command == "uplift":
+        update_commits_from_options(commits, options)
+        if options.is_uplift:
             update_commits_for_uplift(commits, repo)
         update_commit_title_previews(commits)
 
@@ -773,7 +867,7 @@ def _submit(
     )
 
     with wait_message("Checking commits..."):
-        warnings, errors = validate_commit_stack(commits, args)
+        warnings, errors = validate_commit_stack(commits, options)
     if errors:
         log_commit_stack_with_messages(commits, errors, "- ", "  ", logging.ERROR)
         raise Error("Unable to submit commits")
@@ -782,7 +876,7 @@ def _submit(
     try:
         repo.check_commits_for_submit(commits)
     except Error as e:
-        if not args.force:
+        if not options.force:
             raise Error("Unable to submit commits:\n\n%s" % e)
         logger.error("Ignoring issues found with commits:\n\n%s", e)
 
@@ -791,7 +885,7 @@ def _submit(
         return []
 
     # Show a warning if there are untracked files.
-    if config.warn_untracked:
+    if options.warn_untracked:
         untracked = repo.untracked()
         if untracked:
             logger.warning(
@@ -804,7 +898,7 @@ def _submit(
                     logger.info("  %s", filename)
 
     # Show a warning if -m is used and there are new commits.
-    if args.message and any(commit for commit in commits if not commit.rev_id):
+    if options.message and any(commit for commit in commits if not commit.rev_id):
         logger.warning(
             "Warning: --message works with updates only, and will not\n"
             "result in a comment on new revisions."
@@ -814,10 +908,9 @@ def _submit(
     telemetry().submission.commits_count.add(len(commits))
 
     # Confirmation prompt.
-    can_prompt = not args.yes and (args.interactive or not config.auto_submit)
-    if args.yes:
+    if options.yes:
         pass
-    elif not can_prompt:
+    elif not options.can_prompt:
         logger.info(
             "Automatically submitting (as per submit.auto_submit in %s)",
             config.filename,
@@ -839,7 +932,7 @@ def _submit(
     # them on Phabricator in parallel. The revision phase below still runs
     # serially due to parent_rev_phid chaining and amend_commit mutating
     # downstream commits.
-    prepared_diffs = _prepare_diffs(repo, commits, args, can_prompt)
+    prepared_diffs = _prepare_diffs(repo, commits, options)
     # Compute the public base once; stacks are linear so all commits share it.
     # Uplifts that are based on the train use its head instead, since
     # `get_public_base_node` looks at the local remotes, not the uplift train.
@@ -880,7 +973,7 @@ def _submit(
                     rev = conduit.update_revision(
                         commit,
                         diff_phid=diff.phid,
-                        comment=args.message,
+                        comment=options.message,
                     )
                 except Error as e:
                     # Name the revision, as Phabricator's error message
@@ -895,7 +988,7 @@ def _submit(
                     # --no-stack was passed.
                     parent_rev_phid=(
                         previous_commit.rev_phid
-                        if previous_commit and not args.no_stack
+                        if previous_commit and not options.no_stack
                         else None
                     ),
                 )
@@ -904,7 +997,7 @@ def _submit(
         commit.rev_id = rev["object"]["id"]
         commit.rev_phid = rev["object"]["phid"]
 
-        if args.ai or (config.ai_review and not is_update):
+        if options.ai or (options.ai_review and not is_update):
             ai_review_commits.append(commit)
 
         revision_url = "%s/D%s" % (repo.phab_url, commit.rev_id)
@@ -955,7 +1048,7 @@ def _submit(
     # Cleanup (eg. strip nodes) and refresh to ensure the stack is right for the
     # final showing.
     with wait_message("Cleaning up.."):
-        if args.command != "uplift":
+        if not options.is_uplift:
             repo.finalize(commits)
         repo.after_submit()
         repo.cleanup()
@@ -963,9 +1056,9 @@ def _submit(
 
     logger.warning("\nCompleted")
     show_commit_stack(commits)
-    show_review_queue_reminder(commits, user_data)
+    show_review_queue_reminder(commits, options, user_data)
 
-    if args.ai and not config.ai_review and has_new_revisions:
+    if options.ai and not options.ai_review and has_new_revisions:
         logger.info(
             "Tip: to always request AI review on new revisions, set submit.ai_review to true in %s",
             config.filename,
@@ -980,11 +1073,12 @@ def _submit(
 def submit(
     repo: Repository, args: argparse.Namespace, user_data: UserData
 ) -> list[Commit]:
+    options = SubmitOptions.from_args(args, config)
     try:
-        return _submit(repo, args, user_data)
+        return _submit(repo, options, user_data)
     except Exception as e:
         # Check if the `fallback` flag was set and print a warning message.
-        if hasattr(args, "fallback") and args.fallback:
+        if options.fallback:
             logger.warning(
                 "You didn't specify a valid command, so we ran `submit` for you, "
                 "and it failed."

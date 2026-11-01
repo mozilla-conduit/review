@@ -5,6 +5,7 @@
 
 import argparse
 import copy
+import dataclasses
 import unittest
 import uuid
 from unittest import mock
@@ -16,6 +17,7 @@ from mozphab import environment, exceptions, helpers, mozphab, repository
 from mozphab.commands import submit
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError
+from mozphab.config import Config
 from mozphab.diff import Diff
 from mozphab.user import UserData
 
@@ -110,7 +112,9 @@ class Commits(unittest.TestCase):
         m_get_users.return_value = []
         m_get_groups.return_value = []
 
-        _, errors = submit.validate_commit_stack([commit("1", (["r"], []))], Args())
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["r"], []))], submit.SubmitOptions()
+        )
         self.assertEqual(errors, {})
 
         _, errors = submit.validate_commit_stack(
@@ -119,45 +123,55 @@ class Commits(unittest.TestCase):
                 commit("2", (["r1"], [])),
                 commit("3", (["r1", "r2"], [])),
             ],
-            Args(),
+            submit.SubmitOptions(),
         )
         self.assertEqual(errors, {})
 
-        _, errors = submit.validate_commit_stack([commit("1", None)], Args())
-        self.assertEqual(errors, {})
-
         _, errors = submit.validate_commit_stack(
-            [commit("1", (["r"], [])), commit("1", None)], Args()
+            [commit("1", None)], submit.SubmitOptions()
         )
         self.assertEqual(errors, {})
 
-        _, errors = submit.validate_commit_stack([commit(None, (["r"], []))], Args())
-        self.assertEqual(list(errors.values()), [[Contains("Missing bug ID")]])
-
         _, errors = submit.validate_commit_stack(
-            [commit(None, (["r"], []))], Args(no_bug=True)
+            [commit("1", (["r"], [])), commit("1", None)], submit.SubmitOptions()
         )
         self.assertEqual(errors, {})
 
-        _, errors = submit.validate_commit_stack([commit("", (["r"], []))], Args())
-        self.assertEqual(list(errors.values()), [[Contains("Missing bug ID")]])
-
         _, errors = submit.validate_commit_stack(
-            [commit("1", (["r"], [])), commit("", (["r"], []))], Args()
+            [commit(None, (["r"], []))], submit.SubmitOptions()
         )
         self.assertEqual(list(errors.values()), [[Contains("Missing bug ID")]])
 
         _, errors = submit.validate_commit_stack(
-            [commit("1", (["r"], [])), commit("", (["r"], []))], Args(no_bug=True)
+            [commit(None, (["r"], []))], submit.SubmitOptions(no_bug=True)
         )
         self.assertEqual(errors, {})
 
         _, errors = submit.validate_commit_stack(
-            [commit("1", (["r"], []), body="Summary: blah\nReviewers: r")], Args()
+            [commit("", (["r"], []))], submit.SubmitOptions()
+        )
+        self.assertEqual(list(errors.values()), [[Contains("Missing bug ID")]])
+
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["r"], [])), commit("", (["r"], []))], submit.SubmitOptions()
+        )
+        self.assertEqual(list(errors.values()), [[Contains("Missing bug ID")]])
+
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["r"], [])), commit("", (["r"], []))],
+            submit.SubmitOptions(no_bug=True),
+        )
+        self.assertEqual(errors, {})
+
+        _, errors = submit.validate_commit_stack(
+            [commit("1", (["r"], []), body="Summary: blah\nReviewers: r")],
+            submit.SubmitOptions(),
         )
         self.assertEqual(list(errors.values()), [[Contains("Contains arc fields")]])
 
-        _, errors = submit.validate_commit_stack([commit(bug_id="1", rev_id=1)], Args())
+        _, errors = submit.validate_commit_stack(
+            [commit(bug_id="1", rev_id=1)], submit.SubmitOptions()
+        )
         self.assertEqual(
             list(errors.values()),
             [[Contains("didn't return a query result for revision D1")]],
@@ -199,7 +213,7 @@ class Commits(unittest.TestCase):
                 commit("2", (["bob", "gonzo"], [])),
                 commit("3", (["charlie"], [])),
             ],
-            Args(),
+            submit.SubmitOptions(),
         )
         self.assertEqual(
             list(errors.values()), [[Contains("gonzo isn't a valid reviewer")]]
@@ -212,7 +226,7 @@ class Commits(unittest.TestCase):
                 commit("2", (["bob", "goober"], [])),
                 commit("3", (["charlie"], [])),
             ],
-            Args(),
+            submit.SubmitOptions(),
         )
         self.assertEqual(
             list(errors.values()), [[Contains("goober isn't available until string")]]
@@ -224,7 +238,7 @@ class Commits(unittest.TestCase):
                 commit("2", (["bob", "goober"], [])),
                 commit("3", (["charlie"], [])),
             ],
-            Args(force=True),
+            submit.SubmitOptions(force=True),
         )
         self.assertEqual(
             list(warnings.values()), [[Contains("goober isn't available until string")]]
@@ -232,7 +246,7 @@ class Commits(unittest.TestCase):
         self.assertEqual(errors, {})
 
         _, errors = submit.validate_commit_stack(
-            [commit("1", (["goofus"], []))], Args()
+            [commit("1", (["goofus"], []))], submit.SubmitOptions()
         )
         self.assertEqual(list(errors.values()), [[Contains("goofus is disabled")]])
 
@@ -240,14 +254,14 @@ class Commits(unittest.TestCase):
         m_revs.return_value = [search_rev(reviewers=["PHID-USER-2"])]
         m_diffs.return_value = {"PHID-DIFF-1": search_diff(message="1 r?goofus")}
         _, errors = submit.validate_commit_stack(
-            [commit("1", (["goofus"], []), rev_id=1)], Args()
+            [commit("1", (["goofus"], []), rev_id=1)], submit.SubmitOptions()
         )
         self.assertEqual(errors, {})
 
         # Only genuinely new reviewers are validated in a mixed reviewer list.
         check_reviewers.reset_mock()
         _, errors = submit.validate_commit_stack(
-            [commit("1", (["goofus", "alice"], []), rev_id=1)], Args()
+            [commit("1", (["goofus", "alice"], []), rev_id=1)], submit.SubmitOptions()
         )
         self.assertEqual(errors, {})
         check_reviewers.assert_called_once_with({"request": ["alice"], "granted": []})
@@ -255,7 +269,7 @@ class Commits(unittest.TestCase):
         # A newly introduced disabled reviewer should still fail validation.
         m_diffs.return_value = {"PHID-DIFF-1": search_diff(message="1 r?alice")}
         _, errors = submit.validate_commit_stack(
-            [commit("1", (["goofus"], []), rev_id=1)], Args()
+            [commit("1", (["goofus"], []), rev_id=1)], submit.SubmitOptions()
         )
         self.assertEqual(list(errors.values()), [[Contains("goofus is disabled")]])
 
@@ -265,7 +279,8 @@ class Commits(unittest.TestCase):
             "PHID-DIFF-1": search_diff(node="same-node", message="1 r?alice")
         }
         _, errors = submit.validate_commit_stack(
-            [commit("1", (["gonzo"], []), rev_id=1, node="same-node")], Args()
+            [commit("1", (["gonzo"], []), rev_id=1, node="same-node")],
+            submit.SubmitOptions(),
         )
         self.assertEqual(
             list(errors.values()), [[Contains("gonzo isn't a valid reviewer")]]
@@ -297,7 +312,7 @@ class Commits(unittest.TestCase):
                 commit("2", (["r"], []), node="b"),
                 commit("3", (["r"], []), node="c"),
             ],
-            Args(),
+            submit.SubmitOptions(),
         )
         self.assertEqual(errors, {})
 
@@ -307,7 +322,7 @@ class Commits(unittest.TestCase):
                 commit("2", (["r"], []), rev_id=2, node="b"),
                 commit("3", (["r"], []), rev_id=3, node="c"),
             ],
-            Args(),
+            submit.SubmitOptions(),
         )
         self.assertEqual(errors, {})
 
@@ -317,7 +332,7 @@ class Commits(unittest.TestCase):
                 commit("2", (["r"], []), rev_id=2, node="b"),
                 commit("3", (["r"], []), rev_id=1, node="c"),
             ],
-            Args(),
+            submit.SubmitOptions(),
         )
         self.assertEqual(
             errors, {"c": [Contains("commit a refers to the same one D1")]}
@@ -330,7 +345,7 @@ class Commits(unittest.TestCase):
                 commit("3", (["r"], []), rev_id=1, node="c"),
                 commit("4", (["r"], []), rev_id=2, node="d"),
             ],
-            Args(),
+            submit.SubmitOptions(),
         )
         self.assertEqual(
             errors,
@@ -360,7 +375,7 @@ class Commits(unittest.TestCase):
                 commit("2", (["bob", "#release-managers"], [])),
                 commit("3", (["charlie", "#release-managers!"], [])),
             ],
-            Args(),
+            submit.SubmitOptions(),
         )
 
         # Single batch call for users; deduped across commits.
@@ -702,19 +717,15 @@ class Commits(unittest.TestCase):
             # A fresh `UserData` starts outside the "reminded recently" window.
             user_data = UserData()
             user_data.is_employee = is_employee
+            options = submit.SubmitOptions(
+                review_queue_reminder_frequency=frequency,
+                review_queue_reminder_include_groups=include_groups,
+            )
             with (
                 mock.patch.object(submit, "logger") as m_logger,
-                mock.patch.object(
-                    submit.config, "review_queue_reminder_frequency", frequency
-                ),
-                mock.patch.object(
-                    submit.config,
-                    "review_queue_reminder_include_groups",
-                    include_groups,
-                ),
                 mock.patch.object(user_data, "save_user_info"),
             ):
-                submit.show_review_queue_reminder(commits, user_data)
+                submit.show_review_queue_reminder(commits, options, user_data)
 
             if not m_logger.warning.called:
                 return ""
@@ -790,15 +801,14 @@ class Commits(unittest.TestCase):
         user_data = UserData()
         user_data.is_employee = True
 
+        options = submit.SubmitOptions(review_queue_reminder_frequency=frequency)
+
         with (
             mock.patch.object(submit, "logger") as m_logger,
-            mock.patch.object(
-                submit.config, "review_queue_reminder_frequency", frequency
-            ),
             mock.patch.object(user_data, "save_user_info") as m_save,
         ):
             # The first submission reminds, and records when it did.
-            submit.show_review_queue_reminder(commits, user_data)
+            submit.show_review_queue_reminder(commits, options, user_data)
             self.assertTrue(m_logger.warning.called)
             m_save.assert_called_once_with(review_queue_last_reminder=now)
             user_data.review_queue_last_reminder = now
@@ -808,13 +818,13 @@ class Commits(unittest.TestCase):
             m_logger.reset_mock()
             m_get_pending_reviews.reset_mock()
             m_time.return_value = now + frequency - 1
-            submit.show_review_queue_reminder(commits, user_data)
+            submit.show_review_queue_reminder(commits, options, user_data)
             self.assertFalse(m_logger.warning.called)
             m_get_pending_reviews.assert_not_called()
 
             # Once the window has passed, remind again.
             m_time.return_value = now + frequency
-            submit.show_review_queue_reminder(commits, user_data)
+            submit.show_review_queue_reminder(commits, options, user_data)
             self.assertTrue(m_logger.warning.called)
             self.assertEqual(
                 m_save.call_args.kwargs,
@@ -826,7 +836,7 @@ class Commits(unittest.TestCase):
             # doesn't silence the reminder until the clock catches up.
             m_logger.reset_mock()
             user_data.review_queue_last_reminder = m_time.return_value + 10000
-            submit.show_review_queue_reminder(commits, user_data)
+            submit.show_review_queue_reminder(commits, options, user_data)
             self.assertTrue(m_logger.warning.called)
 
             # Finding an empty queue also uses up the window, so that people
@@ -835,7 +845,7 @@ class Commits(unittest.TestCase):
             m_save.reset_mock()
             m_get_pending_reviews.return_value = (0, False)
             user_data.review_queue_last_reminder = 0
-            submit.show_review_queue_reminder(commits, user_data)
+            submit.show_review_queue_reminder(commits, options, user_data)
             self.assertFalse(m_logger.warning.called)
             m_save.assert_called_once_with(
                 review_queue_last_reminder=m_time.return_value
@@ -896,27 +906,29 @@ class Commits(unittest.TestCase):
         m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
         m_check_reviewers.return_value = []
 
-        warnings, errors = submit.validate_commit_stack([], Args())
+        warnings, errors = submit.validate_commit_stack([], submit.SubmitOptions())
         self.assertEqual((warnings, errors), ({}, {}))
 
         warnings, _ = submit.validate_commit_stack(
-            [_commit(bug_orig="2", bug="1", granted=["alice"])], Args()
+            [_commit(bug_orig="2", bug="1", granted=["alice"])], submit.SubmitOptions()
         )
         self.assertEqual(list(warnings.values()), [["Bug ID changed from 2 to 1"]])
 
         # Submit with missing bug ID.
         warnings, _ = submit.validate_commit_stack(
-            [_commit(bug="", request=["bob"])], Args(force=True)
+            [_commit(bug="", request=["bob"])], submit.SubmitOptions(force=True)
         )
         self.assertEqual(list(warnings.values()), [["Missing bug ID"]])
 
         # Submit with missing reviewers.
-        warnings, _ = submit.validate_commit_stack([_commit()], Args())
+        warnings, _ = submit.validate_commit_stack([_commit()], submit.SubmitOptions())
         self.assertEqual(list(warnings.values()), [["Missing reviewers"]])
 
         # Submit with existing revision reviewers.
         m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
-        warnings, errors = submit.validate_commit_stack([_commit(rev=1)], Args())
+        warnings, errors = submit.validate_commit_stack(
+            [_commit(rev=1)], submit.SubmitOptions()
+        )
         self.assertEqual((warnings, errors), ({}, {}))
 
         # Do not update not changed commits
@@ -934,7 +946,7 @@ class Commits(unittest.TestCase):
                 _commit(node="aaa000aaa000", rev=1, bug="2", granted=["alice"]),
                 _commit(node="bbb000bbb000", title="B", rev=2, granted=["alice"]),
             ],
-            Args(),
+            submit.SubmitOptions(),
         )
         self.assertEqual(
             warnings, {"aaa000aaa000": [Contains("revision will change from 1 to 2")]}
@@ -950,7 +962,7 @@ class Commits(unittest.TestCase):
         }
         changed_reviewers_commit = _commit(node="aaa000aaa000", rev=1, granted=["bob"])
         warnings, errors = submit.validate_commit_stack(
-            [changed_reviewers_commit], Args()
+            [changed_reviewers_commit], submit.SubmitOptions()
         )
         self.assertEqual((warnings, errors), ({}, {}))
         self.assertTrue(changed_reviewers_commit.submit)
@@ -960,7 +972,7 @@ class Commits(unittest.TestCase):
         m_get_revisions.return_value = [search_rev(reviewers=[])]
         removed_reviewer_commit = _commit(node="aaa000aaa000", rev=1, granted=["alice"])
         warnings, errors = submit.validate_commit_stack(
-            [removed_reviewer_commit], Args()
+            [removed_reviewer_commit], submit.SubmitOptions()
         )
         self.assertEqual(errors, {})
         self.assertEqual(
@@ -991,7 +1003,7 @@ class Commits(unittest.TestCase):
             node="aaa000aaa000", rev=1, granted=["alice"]
         )
         warnings, errors = submit.validate_commit_stack(
-            [resigned_reviewer_commit], Args()
+            [resigned_reviewer_commit], submit.SubmitOptions()
         )
         self.assertEqual(errors, {})
         self.assertEqual(
@@ -1013,14 +1025,14 @@ class Commits(unittest.TestCase):
             mozphab.conduit, "latest_non_wip_diff", return_value=None
         ):
             warnings, errors = submit.validate_commit_stack(
-                [wip_reviewer_commit], Args()
+                [wip_reviewer_commit], submit.SubmitOptions()
             )
         self.assertEqual((warnings, errors), ({}, {}))
         self.assertTrue(wip_reviewer_commit.submit)
 
         m_whoami.return_value = {"phid": "PHID-USER-2"}
         warnings, _ = submit.validate_commit_stack(
-            [_commit(rev=1, granted=["alice"])], Args()
+            [_commit(rev=1, granted=["alice"])], submit.SubmitOptions()
         )
         self.assertEqual(list(warnings.values()), [[Contains("Commandeer")]])
 
@@ -1030,7 +1042,8 @@ class Commits(unittest.TestCase):
         m_get_diffs.return_value = {"PHID-DIFF-1": search_diff(node="aaa000aaa000")}
 
         warnings, _ = submit.validate_commit_stack(
-            [_commit(node="aaa000aaa000", rev=1, granted=["alice"])], Args()
+            [_commit(node="aaa000aaa000", rev=1, granted=["alice"])],
+            submit.SubmitOptions(),
         )
         self.assertEqual(
             warnings, {"aaa000aaa000": [Contains("revision has not changed")]}
@@ -1039,7 +1052,8 @@ class Commits(unittest.TestCase):
         # Removing the WIP state from the revision without changing the commit's SHA1
         m_get_revisions.return_value = [search_rev(status="changes-planned")]
         warnings, _ = submit.validate_commit_stack(
-            [_commit(node="aaa000aaa000", rev=1, granted=["alice"])], Args()
+            [_commit(node="aaa000aaa000", rev=1, granted=["alice"])],
+            submit.SubmitOptions(),
         )
         self.assertEqual(
             warnings,
@@ -1050,7 +1064,7 @@ class Commits(unittest.TestCase):
         m_get_revisions.return_value = [search_rev()]
         warnings, _ = submit.validate_commit_stack(
             [_commit(node="aaa000aaa000", rev=1, granted=["alice"], wip=True)],
-            Args(wip=True),
+            submit.SubmitOptions(wip=True),
         )
         self.assertEqual(
             warnings,
@@ -1059,13 +1073,13 @@ class Commits(unittest.TestCase):
 
         # Submit a new patch with reviewers.
         warnings, errors = submit.validate_commit_stack(
-            [_commit(request=["alice"])], Args()
+            [_commit(request=["alice"])], submit.SubmitOptions()
         )
         self.assertEqual((warnings, errors), ({}, {}))
 
         # Submit a new patch without reviewers.
         warnings, _ = submit.validate_commit_stack(
-            [_commit(rev=None, request=[], wip=True)], Args()
+            [_commit(rev=None, request=[], wip=True)], submit.SubmitOptions()
         )
         self.assertEqual(
             list(warnings.values()),
@@ -1079,13 +1093,15 @@ class Commits(unittest.TestCase):
 
         # Submit a new WIP patch with reviewers.
         warnings, errors = submit.validate_commit_stack(
-            [_commit(rev=None, request=["alice"], wip=True)], Args(wip=True)
+            [_commit(rev=None, request=["alice"], wip=True)],
+            submit.SubmitOptions(wip=True),
         )
         self.assertEqual((warnings, errors), ({}, {}))
 
         # Submit a new patch with the WIP prefix.
         warnings, _ = submit.validate_commit_stack(
-            [_commit(title="WIP: A", request=["alice"], wip=True)], Args()
+            [_commit(title="WIP: A", request=["alice"], wip=True)],
+            submit.SubmitOptions(),
         )
         self.assertEqual(
             list(warnings.values()), [[Contains('submitted as "Changes Planned"')]]
@@ -1094,7 +1110,7 @@ class Commits(unittest.TestCase):
         # Submitting a stack of two commits with one revision already on Phabricator
         # should properly set `commit.rev_phid`.
         commits = [_commit(title="submitted", rev=1), _commit(title="new", rev=None)]
-        submit.validate_commit_stack(commits, Args())
+        submit.validate_commit_stack(commits, submit.SubmitOptions())
         self.assertEqual(
             commits[0].rev_phid,
             "PHID-DREV-1",
@@ -1106,15 +1122,16 @@ class Commits(unittest.TestCase):
 
         # Submitting a new uplift clears reviewers and shouldn't warn.
         warnings, errors = submit.validate_commit_stack(
-            [_commit(rev=None, granted=[], request=[])], Args(command="uplift")
+            [_commit(rev=None, granted=[], request=[])],
+            submit.SubmitOptions(uplift=submit.UpliftSettings()),
         )
         self.assertEqual((warnings, errors), ({}, {}))
 
-    def test_update_commits_from_args(self):
+    def test_update_commits_from_options(self):
         def lwr(revs):
             return [r.lower() for r in revs]
 
-        update = submit.update_commits_from_args
+        update = submit.update_commits_from_options
 
         _commits = [
             Commit(title="A", reviewers={"granted": [], "request": []}, bug_id=None),
@@ -1128,30 +1145,28 @@ class Commits(unittest.TestCase):
         # No change if noreviewer  args provided
         commits = copy.deepcopy(_commits)
         commits[1].reviewers["granted"].append("two")
-        with mock.patch("mozphab.commands.submit.config") as m_config:
-            m_config.always_blocking = False
-            update(commits, Args())
-            self.assertEqual(
-                commits,
-                [
-                    Commit(
-                        title="A",
-                        reviewers={"granted": [], "request": []},
-                        bug_id=None,
-                        wip=True,
-                    ),
-                    Commit(
-                        title="B",
-                        reviewers={"granted": ["two"], "request": ["one"]},
-                        bug_id="1",
-                        wip=False,
-                    ),
-                ],
-            )
+        update(commits, submit.SubmitOptions())
+        self.assertEqual(
+            commits,
+            [
+                Commit(
+                    title="A",
+                    reviewers={"granted": [], "request": []},
+                    bug_id=None,
+                    wip=True,
+                ),
+                Commit(
+                    title="B",
+                    reviewers={"granted": ["two"], "request": ["one"]},
+                    bug_id="1",
+                    wip=False,
+                ),
+            ],
+        )
 
         # Adding and removing reviewers, forcing the bug ID
         commits = copy.deepcopy(_commits)
-        update(commits, Args(reviewer=["two", "three"], bug="2"))
+        update(commits, submit.SubmitOptions(reviewers=("two", "three"), bug="2"))
         assert commits[0].title == "A"
         assert commits[0].bug_id == "2"
         assert "two" in commits[0].reviewers["granted"]
@@ -1166,9 +1181,9 @@ class Commits(unittest.TestCase):
         commits = copy.deepcopy(_commits)
         update(
             commits,
-            Args(
-                reviewer=["Two", "two", "two!", "three", "Three", "THREE!"],
-                blocker=["Two", "THREE!", "three", "two", "three"],
+            submit.SubmitOptions(
+                reviewers=("Two", "two", "two!", "three", "Three", "THREE!"),
+                blockers=("Two", "THREE!", "three", "two", "three"),
             ),
         )
         assert commits[0].title == "A"
@@ -1188,9 +1203,9 @@ class Commits(unittest.TestCase):
         commits[1].reviewers["granted"].append("five")
         update(
             commits,
-            Args(
-                reviewer=["one", "two!", "four"],
-                blocker=["three", "four!"],
+            submit.SubmitOptions(
+                reviewers=("one", "two!", "four"),
+                blockers=("three", "four!"),
             ),
         )
         assert commits[0].title == "A"
@@ -1216,21 +1231,21 @@ class Commits(unittest.TestCase):
                 # Function isn't called for second commit since it has reviewers.
                 True,  # For revision ID 2.
             ]
-            update(commits, Args())
+            update(commits, submit.SubmitOptions())
         assert commits[0].wip
         assert not commits[1].wip
         assert not commits[2].wip
 
         # Force WIP
         commits = copy.deepcopy(_commits)
-        update(commits, Args(wip=True))
+        update(commits, submit.SubmitOptions(wip=True))
         assert commits[0].wip
         assert commits[1].wip
 
         # reviewerless with --no-wip shouldn't be WIP
         commits = copy.deepcopy(_commits)
         commits.append(Commit(title="WIP: Bug 2 - A", bug_id="2", wip=True))
-        update(commits, Args(no_wip=True))
+        update(commits, submit.SubmitOptions(no_wip=True))
         assert not commits[0].wip
         assert not commits[1].wip
         assert not commits[2].wip
@@ -1238,48 +1253,50 @@ class Commits(unittest.TestCase):
         # Reviewerless uplift commits should not be marked as WIP, since
         # uplift clears reviewers and `#release-managers` is set by automation.
         commits = copy.deepcopy(_commits)
-        update(commits, Args(command="uplift"))
+        update(commits, submit.SubmitOptions(uplift=submit.UpliftSettings()))
         assert not commits[0].wip, "Uplift commit without reviewers should not be WIP."
         assert not commits[1].wip, "Uplift commit with reviewers should not be WIP."
 
         # Forcing blocking reviewers
         commits = copy.deepcopy(_commits)
         commits[1].reviewers["granted"].append("two")
-        with mock.patch("mozphab.commands.submit.config") as m_config:
-            m_config.always_blocking = True
-            update(commits, Args())
-            self.assertEqual(
-                commits,
-                [
-                    Commit(
-                        title="A",
-                        reviewers={"granted": [], "request": []},
-                        bug_id=None,
-                        wip=True,
-                    ),
-                    Commit(
-                        title="B",
-                        reviewers={"granted": ["two!"], "request": ["one!"]},
-                        bug_id="1",
-                        wip=False,
-                    ),
-                ],
-            )
+        update(commits, submit.SubmitOptions(always_blocking=True))
+        self.assertEqual(
+            commits,
+            [
+                Commit(
+                    title="A",
+                    reviewers={"granted": [], "request": []},
+                    bug_id=None,
+                    wip=True,
+                ),
+                Commit(
+                    title="B",
+                    reviewers={"granted": ["two!"], "request": ["one!"]},
+                    bug_id="1",
+                    wip=False,
+                ),
+            ],
+        )
 
-    def test_update_commits_from_args_test_plan_single_commit(self):
+    def test_update_commits_from_options_test_plan_single_commit(self):
         commits = [Commit(title="A", reviewers={"granted": [], "request": []})]
         with mock.patch("mozphab.commands.submit.conduit") as m_conduit:
             m_conduit.has_revision_reviewers.return_value = False
-            submit.update_commits_from_args(commits, Args(test_plan="Run tests"))
+            submit.update_commits_from_options(
+                commits, submit.SubmitOptions(test_plan="Run tests")
+            )
         self.assertEqual(commits[0].test_plan, "Run tests")
 
-    def test_update_commits_from_args_test_plan_multi_commit_raises(self):
+    def test_update_commits_from_options_test_plan_multi_commit_raises(self):
         commits = [
             Commit(title="A", reviewers={"granted": [], "request": []}),
             Commit(title="B", reviewers={"granted": ["r"], "request": []}),
         ]
         with self.assertRaises(exceptions.Error) as cm:
-            submit.update_commits_from_args(commits, Args(test_plan="Run tests"))
+            submit.update_commits_from_options(
+                commits, submit.SubmitOptions(test_plan="Run tests")
+            )
 
         self.assertIn("--test-plan", str(cm.exception))
 
@@ -1510,40 +1527,28 @@ def m_logger():
 @pytest.fixture
 def m_config():
     with mock.patch("mozphab.commands.submit.config") as m:
-        m.ai_review = False
-        m.review_queue_reminder_frequency = 3600
-        m.review_queue_reminder_include_groups = True
         yield m
 
 
 @pytest.fixture
-def submit_args():
-    args = Args(ai=False)
-    args.message = None
-    args.yes = True
-    args.lesscontext = False
-    args.no_stack = False
-    args.force = False
-    args.force_vcs = False
-    args.safe_mode = False
-    args.bypass_check = []
-    return args
+def submit_options():
+    return submit.SubmitOptions(yes=True)
 
 
 def test_ai_review_requested_for_each_commit(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     commits = [commit(bug_id="1"), commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
-    submit_args.ai = True
+    submit_options = dataclasses.replace(submit_options, ai=True)
 
-    submit._submit(m_repo, submit_args, UserData())
+    submit._submit(m_repo, submit_options, UserData())
 
     assert m_conduit.request_ai_review.call_count == 2
 
 
 def test_update_revision_error_names_revision(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     """A failing revision update reports which revision it belongs to."""
     validation_error = (
@@ -1561,32 +1566,32 @@ def test_update_revision_error_names_revision(
     m_conduit.update_revision.side_effect = ConduitAPIError(validation_error)
 
     with pytest.raises(exceptions.Error) as e:
-        submit._submit(m_repo, submit_args, UserData())
+        submit._submit(m_repo, submit_options, UserData())
 
     assert str(e.value) == f"D314841: Phabricator Error: {validation_error}"
 
 
 def test_ai_review_not_called_without_flag(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     commits = [commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
-    submit_args.ai = False
+    submit_options = dataclasses.replace(submit_options, ai=False)
 
-    submit._submit(m_repo, submit_args, UserData())
+    submit._submit(m_repo, submit_options, UserData())
 
     m_conduit.request_ai_review.assert_not_called()
 
 
 def test_ai_review_failure_does_not_abort_submission(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     commits = [commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
     m_conduit.request_ai_review.side_effect = ConduitAPIError("AI service unavailable")
-    submit_args.ai = True
+    submit_options = dataclasses.replace(submit_options, ai=True)
 
-    result = submit._submit(m_repo, submit_args, UserData())
+    result = submit._submit(m_repo, submit_options, UserData())
 
     assert result is not None
     m_logger.error.assert_any_call(
@@ -1595,7 +1600,7 @@ def test_ai_review_failure_does_not_abort_submission(
 
 
 def test_uplift_first_public_parent_uses_train_head(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     """`firstPublicParent` for uplifts should come from the train's head."""
     commits = [commit(bug_id="1")]
@@ -1606,11 +1611,12 @@ def test_uplift_first_public_parent_uses_train_head(
     # No local rebase needed, but the train head should still be used.
     m_repo.is_descendant.return_value = True
 
-    submit_args.command = "uplift"
-    submit_args.no_rebase = False
-    submit_args.train = "beta"
+    submit_options = dataclasses.replace(
+        submit_options,
+        uplift=submit.UpliftSettings(train="beta", no_rebase=False),
+    )
 
-    submit._submit(m_repo, submit_args, UserData())
+    submit._submit(m_repo, submit_options, UserData())
 
     m_repo.get_public_base_node.assert_not_called()
     _, _, _, first_public_parent = m_conduit.set_diff_property.call_args[0]
@@ -1618,7 +1624,7 @@ def test_uplift_first_public_parent_uses_train_head(
 
 
 def test_uplift_no_rebase_off_train_uses_public_base(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     """`--no-rebase` off the train should keep the commits' own public base.
 
@@ -1632,11 +1638,12 @@ def test_uplift_no_rebase_off_train_uses_public_base(
     m_repo.get_public_base_node.return_value = "central-public-base"
     m_repo.is_descendant.return_value = False
 
-    submit_args.command = "uplift"
-    submit_args.no_rebase = True
-    submit_args.train = "beta"
+    submit_options = dataclasses.replace(
+        submit_options,
+        uplift=submit.UpliftSettings(train="beta", no_rebase=True),
+    )
 
-    submit._submit(m_repo, submit_args, UserData())
+    submit._submit(m_repo, submit_options, UserData())
 
     m_repo.uplift_commits.assert_not_called()
     _, _, _, first_public_parent = m_conduit.set_diff_property.call_args[0]
@@ -1644,7 +1651,7 @@ def test_uplift_no_rebase_off_train_uses_public_base(
 
 
 def test_uplift_no_rebase_on_train_uses_train_head(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     """`--no-rebase` commits already on the train should report the train head."""
     commits = [commit(bug_id="1")]
@@ -1654,11 +1661,12 @@ def test_uplift_no_rebase_on_train_uses_train_head(
     m_repo.get_public_node.side_effect = lambda node: node
     m_repo.is_descendant.return_value = True
 
-    submit_args.command = "uplift"
-    submit_args.no_rebase = True
-    submit_args.train = "beta"
+    submit_options = dataclasses.replace(
+        submit_options,
+        uplift=submit.UpliftSettings(train="beta", no_rebase=True),
+    )
 
-    submit._submit(m_repo, submit_args, UserData())
+    submit._submit(m_repo, submit_options, UserData())
 
     m_repo.uplift_commits.assert_not_called()
     m_repo.get_public_base_node.assert_not_called()
@@ -1667,40 +1675,38 @@ def test_uplift_no_rebase_on_train_uses_train_head(
 
 
 def test_ai_review_skipped_for_non_submitted_commits(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     submitted = commit(bug_id="1")
     skipped = commit(bug_id="1", submit=False)
     m_repo.commit_stack.return_value = [skipped, submitted]
-    submit_args.ai = True
+    submit_options = dataclasses.replace(submit_options, ai=True)
 
-    submit._submit(m_repo, submit_args, UserData())
+    submit._submit(m_repo, submit_options, UserData())
 
     assert m_conduit.request_ai_review.call_count == 1
 
 
 def test_ai_review_triggered_by_config(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     commits = [commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
-    submit_args.ai = False
-    m_config.ai_review = True
+    submit_options = dataclasses.replace(submit_options, ai=False, ai_review=True)
 
-    submit._submit(m_repo, submit_args, UserData())
+    submit._submit(m_repo, submit_options, UserData())
 
     assert m_conduit.request_ai_review.call_count == 1
 
 
 def test_ai_review_config_hint_shown(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     commits = [commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
-    submit_args.ai = True
-    m_config.ai_review = False
+    submit_options = dataclasses.replace(submit_options, ai=True, ai_review=False)
 
-    submit._submit(m_repo, submit_args, UserData())
+    submit._submit(m_repo, submit_options, UserData())
 
     m_logger.info.assert_any_call(
         "Tip: to always request AI review on new revisions, set submit.ai_review to true in %s",
@@ -1709,7 +1715,7 @@ def test_ai_review_config_hint_shown(
 
 
 def test_ai_review_skipped_for_updates_with_config(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     # Commit with rev_id set simulates an update to an existing revision.
     commits = [
@@ -1720,16 +1726,15 @@ def test_ai_review_skipped_for_updates_with_config(
         )
     ]
     m_repo.commit_stack.return_value = commits
-    submit_args.ai = False
-    m_config.ai_review = True
+    submit_options = dataclasses.replace(submit_options, ai=False, ai_review=True)
 
-    submit._submit(m_repo, submit_args, UserData())
+    submit._submit(m_repo, submit_options, UserData())
 
     m_conduit.request_ai_review.assert_not_called()
 
 
 def test_ai_review_requested_for_updates_with_flag(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     # --ai flag should always request AI review, even for updates.
     commits = [
@@ -1740,22 +1745,21 @@ def test_ai_review_requested_for_updates_with_flag(
         )
     ]
     m_repo.commit_stack.return_value = commits
-    submit_args.ai = True
+    submit_options = dataclasses.replace(submit_options, ai=True)
 
-    submit._submit(m_repo, submit_args, UserData())
+    submit._submit(m_repo, submit_options, UserData())
 
     assert m_conduit.request_ai_review.call_count == 1
 
 
 def test_ai_review_config_hint_not_shown_when_config_set(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_args
+    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
 ):
     commits = [commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
-    submit_args.ai = True
-    m_config.ai_review = True
+    submit_options = dataclasses.replace(submit_options, ai=True, ai_review=True)
 
-    submit._submit(m_repo, submit_args, UserData())
+    submit._submit(m_repo, submit_options, UserData())
 
     for call in m_logger.info.call_args_list:
         assert "Tip:" not in str(call)
@@ -1775,15 +1779,15 @@ def test_no_stack_linking(
     m_validate,
     m_logger,
     m_config,
-    submit_args,
+    submit_options,
     no_stack,
     expected_second_parent,
 ):
     commits = [commit(bug_id="1"), commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
-    submit_args.no_stack = no_stack
+    submit_options = dataclasses.replace(submit_options, no_stack=no_stack)
 
-    submit._submit(m_repo, submit_args, UserData())
+    submit._submit(m_repo, submit_options, UserData())
 
     assert m_conduit.create_revision.call_count == 2
     first_call, second_call = m_conduit.create_revision.call_args_list
@@ -1869,3 +1873,57 @@ def test_check_override_hints_not_needed(m_prompt, m_logger, title, path):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_submit_options_from_args():
+    """`SubmitOptions.from_args` keeps the flags and marks `uplift` runs."""
+    test_config = Config(should_access_file=False)
+    options = submit.SubmitOptions.from_args(
+        mozphab.parse_args(["submit", "-r", "alice", "-R", "bob", "--wip"]),
+        test_config,
+    )
+    assert options.reviewers == ("alice",), "`-r` should set the reviewers."
+    assert options.blockers == ("bob",), "`-R` should set the blocking reviewers."
+    assert options.wip, "`--wip` should be kept."
+    assert not options.is_uplift, "`submit` shouldn't have uplift settings."
+
+    options = submit.SubmitOptions.from_args(
+        mozphab.parse_args(["uplift", "--train", "beta", "--no-rebase"]), test_config
+    )
+    assert options.uplift == submit.UpliftSettings(
+        train="beta", no_rebase=True
+    ), "`uplift` should pass its train and `--no-rebase` to `submit`."
+    assert options.is_uplift, "`uplift` runs should be marked as uplifts."
+
+    test_config.auto_submit = True
+    test_config.ai_review = True
+    test_config.always_blocking = True
+    test_config.warn_untracked = False
+    test_config.review_queue_reminder_frequency = 0
+    test_config.review_queue_reminder_include_groups = False
+    options = submit.SubmitOptions.from_args(
+        mozphab.parse_args(["submit"]), test_config
+    )
+    assert (
+        options.auto_submit
+        and options.ai_review
+        and options.always_blocking
+        and not options.warn_untracked
+        and options.review_queue_reminder_frequency == 0
+        and not options.review_queue_reminder_include_groups
+    ), "The `submit` config settings should be read into the options."
+
+
+@pytest.mark.parametrize(
+    "options,can_prompt",
+    [
+        (submit.SubmitOptions(), True),
+        (submit.SubmitOptions(auto_submit=True), False),
+        (submit.SubmitOptions(auto_submit=True, interactive=True), True),
+        (submit.SubmitOptions(yes=True, interactive=True), False),
+    ],
+)
+def test_submit_options_can_prompt(options, can_prompt):
+    assert (
+        options.can_prompt is can_prompt
+    ), "`--yes` should never prompt, and `--interactive` should override `auto_submit`."

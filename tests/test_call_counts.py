@@ -91,28 +91,11 @@ def build_submit_commit(index: int) -> Commit:
     )
 
 
-def build_submit_args() -> argparse.Namespace:
-    args = argparse.Namespace()
-    args.command = "submit"
-    args.message = None
-    args.yes = True
-    args.lesscontext = False
-    args.no_stack = False
-    args.force = False
-    args.force_vcs = False
-    args.safe_mode = False
-    args.bypass_check = []
-    args.no_bug = False
-    args.wip = False
-    args.no_wip = False
-    args.interactive = False
-    args.single = False
-    args.ai = True
-    args.reviewer = None
-    args.blocker = None
-    args.bug = None
-    args.test_plan = None
-    return args
+def build_submit_options() -> submit.SubmitOptions:
+    # The review queue reminder would add a call of its own.
+    return submit.SubmitOptions(
+        yes=True, ai=True, warn_untracked=False, review_queue_reminder_frequency=0
+    )
 
 
 def build_patch_args(target_rev_id: int) -> argparse.Namespace:
@@ -462,16 +445,10 @@ def test_submit_call_count(
     repo.commit_stack.return_value = commits
 
     with mock.patch("mozphab.commands.submit.config") as fake_config:
-        fake_config.warn_untracked = False
-        fake_config.auto_submit = True
-        fake_config.ai_review = False
-        fake_config.always_blocking = False
         fake_config.always_full_stack = False
         fake_config.filename = "/fake/.moz-phab-config"
-        # The review queue reminder would add a call of its own.
-        fake_config.review_queue_reminder_frequency = 0
 
-        submit._submit(repo, build_submit_args(), UserData())
+        submit._submit(repo, build_submit_options(), UserData())
 
     expected = SUBMIT_EXPECTED[num_commits]
     assert dict(calls) == expected, (
@@ -511,15 +488,10 @@ def test_submit_with_reviewers_uses_preloaded_revision_and_diff(
     repo.commit_stack.return_value = commits
 
     with mock.patch("mozphab.commands.submit.config") as fake_config:
-        fake_config.warn_untracked = False
-        fake_config.auto_submit = True
-        fake_config.ai_review = False
-        fake_config.always_blocking = False
         fake_config.always_full_stack = False
         fake_config.filename = "/fake/.moz-phab-config"
-        fake_config.review_queue_reminder_frequency = 0
 
-        submit._submit(repo, build_submit_args(), UserData())
+        submit._submit(repo, build_submit_options(), UserData())
 
     expected = {
         **SUBMIT_EXPECTED[num_commits],
@@ -551,15 +523,10 @@ def test_wip_history_lookup_is_one_call_per_revision(
     repo.commit_stack.return_value = commits
 
     with mock.patch("mozphab.commands.submit.config") as fake_config:
-        fake_config.warn_untracked = False
-        fake_config.auto_submit = True
-        fake_config.ai_review = False
-        fake_config.always_blocking = False
         fake_config.always_full_stack = False
         fake_config.filename = "/fake/.moz-phab-config"
-        fake_config.review_queue_reminder_frequency = 0
 
-        submit._submit(repo, build_submit_args(), UserData())
+        submit._submit(repo, build_submit_options(), UserData())
 
     expected = {
         **SUBMIT_EXPECTED[num_commits],
