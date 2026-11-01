@@ -12,6 +12,7 @@ import pytest
 
 from mozphab import exceptions
 from mozphab.commands import list as list_command
+from mozphab.conduit import RevisionStatus
 from mozphab.repository import Repository
 
 
@@ -216,11 +217,46 @@ def test_list_revisions_status_filter(repo, mock_conduit, args):
     ]
 
 
+def test_list_options_from_args(args):
+    """`ListOptions.from_args` adds the included statuses without touching `args`."""
+    assert (
+        list_command.ListOptions.from_args(args).statuses
+        == list_command.DEFAULT_STATUSES
+    ), "The default statuses should be listed when `--status` isn't passed."
+
+    args.status = ["accepted"]
+    args.include_abandoned = True
+    args.include_published = True
+    options = list_command.ListOptions.from_args(args)
+
+    assert options.statuses == {
+        RevisionStatus.ACCEPTED,
+        RevisionStatus.ABANDONED,
+        RevisionStatus.PUBLISHED,
+    }, "`--include-*` should add their statuses to the ones from `--status`."
+
+    assert args.status == [
+        "accepted"
+    ], "Building the options should not change the `--status` argument."
+
+    args.status = ["abandoned"]
+    assert list_command.ListOptions.from_args(args).statuses == {
+        RevisionStatus.ABANDONED,
+        RevisionStatus.PUBLISHED,
+    }, "`--include-abandoned` shouldn't add a status `--status` already has."
+
+    args.format = "json"
+    assert (
+        list_command.ListOptions.from_args(args).output_format
+        is list_command.OutputFormat.JSON
+    ), "`--format` should be read into an `OutputFormat`."
+
+
 def test_list_revisions_no_results(repo, mock_conduit, args, caplog):
     """Test listing when no revisions are found."""
     caplog.set_level(logging.INFO, logger="moz-phab")
 
-    args.status = ["not-a-real-status"]
+    args.status = ["changes-planned"]
 
     # Call function
     list_command.list_revisions(repo, args)
@@ -308,7 +344,7 @@ def test_list_json_format_verbose(mock_print, repo, mock_conduit, json_args):
 @mock.patch("builtins.print")
 def test_list_json_empty_results(mock_print, repo, mock_conduit, json_args):
     """Test JSON output with no results."""
-    json_args.status = ["not-a-real-status"]
+    json_args.status = ["changes-planned"]
 
     # Call function
     list_command.list_revisions(repo, json_args)

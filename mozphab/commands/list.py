@@ -4,12 +4,67 @@
 
 import argparse
 import json
+from dataclasses import dataclass
+from enum import Enum
 
-from mozphab.conduit import conduit
+from mozphab.conduit import RevisionStatus, conduit
 from mozphab.exceptions import Error
 from mozphab.logger import logger
 from mozphab.repository import Repository
 from mozphab.spinner import wait_message
+
+# The statuses listed when `--status` isn't passed.
+DEFAULT_STATUSES = frozenset(
+    {
+        RevisionStatus.NEEDS_REVIEW,
+        RevisionStatus.NEEDS_REVISION,
+        RevisionStatus.ACCEPTED,
+        RevisionStatus.CHANGES_PLANNED,
+    }
+)
+
+# The statuses `--status` accepts.
+STATUS_CHOICES = (
+    RevisionStatus.NEEDS_REVIEW,
+    RevisionStatus.NEEDS_REVISION,
+    RevisionStatus.ACCEPTED,
+    RevisionStatus.CHANGES_PLANNED,
+    RevisionStatus.ABANDONED,
+    RevisionStatus.PUBLISHED,
+)
+
+
+class OutputFormat(str, Enum):
+    """The formats `list` can print the revisions in."""
+
+    TEXT = "text"
+    JSON = "json"
+
+
+@dataclass(frozen=True)
+class ListOptions:
+    """The command line flags that control `list`, resolved once."""
+
+    statuses: frozenset[RevisionStatus] = DEFAULT_STATUSES
+    verbose: bool = False
+    output_format: OutputFormat = OutputFormat.TEXT
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> "ListOptions":
+        """Build the options from the parsed command line."""
+        statuses = {
+            RevisionStatus(status) for status in args.status or DEFAULT_STATUSES
+        }
+        if args.include_abandoned:
+            statuses.add(RevisionStatus.ABANDONED)
+        if args.include_published:
+            statuses.add(RevisionStatus.PUBLISHED)
+
+        return cls(
+            statuses=frozenset(statuses),
+            verbose=args.verbose,
+            output_format=OutputFormat(args.format),
+        )
 
 
 def format_revision_status(status: str) -> str:
@@ -27,6 +82,7 @@ def format_revision_status(status: str) -> str:
 
 def list_revisions(repo: Repository, args: argparse.Namespace):
     """List in-flight patches for the current user."""
+    options = ListOptions.from_args(args)
 
     # Check connection to Phabricator
     with wait_message("Checking connection to Phabricator..."):
@@ -40,37 +96,20 @@ def list_revisions(repo: Repository, args: argparse.Namespace):
         if not user_phid:
             raise Error("Unable to determine current user")
 
-    # Build status filter based on flags
-    if args.status:
-        # User explicitly specified statuses
-        status_filter = args.status
-    else:
-        # Build default status list
-        status_filter = [
-            "needs-review",
-            "needs-revision",
-            "accepted",
-            "changes-planned",
-        ]
-
-    if args.include_abandoned and "abandoned" not in status_filter:
-        status_filter.append("abandoned")
-
-    if args.include_published and "published" not in status_filter:
-        status_filter.append("published")
-
     with wait_message("Fetching revisions..."):
-        revisions = conduit.get_revisions_for_author(user_phid, statuses=status_filter)
+        revisions = conduit.get_revisions_for_author(
+            user_phid, statuses=sorted(status.value for status in options.statuses)
+        )
 
     if not revisions:
-        if args.format == "json":
+        if options.output_format is OutputFormat.JSON:
             print(json.dumps([], indent=2))
         else:
             logger.info("No revisions found.")
         return
 
     # Format as JSON if requested
-    if args.format == "json":
+    if options.output_format is OutputFormat.JSON:
         output_data = []
         for revision in revisions:
             rev_id = revision["id"]
@@ -87,7 +126,7 @@ def list_revisions(repo: Repository, args: argparse.Namespace):
             }
 
             # Add reviewers if verbose
-            if args.verbose:
+            if options.verbose:
                 reviewers_data = revision["attachments"]["reviewers"]["reviewers"]
                 rev_data["reviewers"] = [
                     {
@@ -108,7 +147,7 @@ def list_revisions(repo: Repository, args: argparse.Namespace):
 
     # Resolve reviewer PHIDs to usernames up front if verbose
     phid_to_username: dict[str, str] = {}
-    if args.verbose:
+    if options.verbose:
         all_phids = set()
         for revision in revisions:
             for reviewer in revision["attachments"]["reviewers"]["reviewers"]:
@@ -143,7 +182,7 @@ def list_revisions(repo: Repository, args: argparse.Namespace):
         # Format output
         logger.info(f"D{rev_id}: {title}")
         logger.info(f"  Status: {status_display}")
-        if reviewers and args.verbose:
+        if reviewers and options.verbose:
             reviewer_display = ", ".join(reviewers[:3])
             if len(reviewers) > 3:
                 reviewer_display += f", ... and {len(reviewers) - 3} more"
@@ -172,14 +211,8 @@ def add_parser(parser):
     list_parser.add_argument(
         "--status",
         nargs="+",
-        choices=[
-            "needs-review",
-            "needs-revision",
-            "accepted",
-            "changes-planned",
-            "abandoned",
-            "published",
-        ],
+        # Strings rather than `type=RevisionStatus`, so a bad value lists the choices.
+        choices=[status.value for status in STATUS_CHOICES],
         help="Filter by specific status(es).",
     )
     list_parser.add_argument(
@@ -190,8 +223,8 @@ def add_parser(parser):
     )
     list_parser.add_argument(
         "--format",
-        choices=["text", "json"],
-        default="text",
+        choices=[output_format.value for output_format in OutputFormat],
+        default=OutputFormat.TEXT.value,
         help="Output format (default: text).",
     )
     list_parser.add_argument(
