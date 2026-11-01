@@ -5,25 +5,42 @@
 import argparse
 import os
 import webbrowser
+from dataclasses import dataclass
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import quote
 
-from mozphab.config import config
+from mozphab.config import Config, config
 from mozphab.exceptions import Error
 from mozphab.logger import logger
 from mozphab.profiler import list_profiles, profiler, profiles_dir
 
 
-def get_profiler_origin() -> str:
-    """Return the origin of the Firefox Profiler to open the profiles in.
+@dataclass(frozen=True)
+class ProfileOptions:
+    """The command line flags and config knobs that control `profile`, resolved once."""
 
-    The `PROFILER_ORIGIN` environment variable, e.g. http://localhost:4242 for
-    a local Firefox Profiler, can be shared with other tools, so it overrides
-    the config file.
-    """
-    return os.environ.get("PROFILER_ORIGIN", config.profiler_origin).rstrip("/")
+    path: str | None = None
+    list_profiles: bool = False
+    open_browser: bool = True
+    # The Firefox Profiler to open the profiles in.
+    profiler_origin: str = "https://profiler.firefox.com"
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace, config: Config) -> "ProfileOptions":
+        """Build the options from the parsed command line and the user's config."""
+        return cls(
+            path=args.path,
+            list_profiles=args.list,
+            open_browser=config.open_browser,
+            # The `PROFILER_ORIGIN` environment variable, e.g. http://localhost:4242
+            # for a local Firefox Profiler, can be shared with other tools, so it
+            # overrides the config file.
+            profiler_origin=os.environ.get(
+                "PROFILER_ORIGIN", config.profiler_origin
+            ).rstrip("/"),
+        )
 
 
 class ProfileServer(HTTPServer):
@@ -69,15 +86,17 @@ def print_profiles():
 
 
 def open_profile(args: argparse.Namespace):
+    options = ProfileOptions.from_args(args, config)
+
     # Don't let this run replace one of the profiles it lists or opens.
     profiler.disable()
 
-    if args.list:
+    if options.list_profiles:
         print_profiles()
         return
 
-    if args.path:
-        path = Path(args.path).resolve()
+    if options.path:
+        path = Path(options.path).resolve()
         if not path.is_file():
             raise Error(f"Profile not found: {path}")
     else:
@@ -86,7 +105,7 @@ def open_profile(args: argparse.Namespace):
             raise Error(f"No profile found in {profiles_dir()}")
         path = profiles[-1]
 
-    origin = get_profiler_origin()
+    origin = options.profiler_origin
     server = ProfileServer(path, origin)
     port = server.server_address[1]
     profile_url = f"http://127.0.0.1:{port}/{quote(path.name)}"
@@ -95,7 +114,7 @@ def open_profile(args: argparse.Namespace):
     logger.info("Serving %s at %s", path, profile_url)
     # The browser may not be able to reach this server, e.g. over SSH, so log
     # the URL even when opening it.
-    if config.open_browser and webbrowser.open_new_tab(profiler_url):
+    if options.open_browser and webbrowser.open_new_tab(profiler_url):
         logger.info("Opened %s", profiler_url)
     else:
         logger.info("Open %s in your browser to view the profile.", profiler_url)

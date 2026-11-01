@@ -13,6 +13,7 @@ import pytest
 
 from mozphab import environment, mozphab
 from mozphab.commands import profile
+from mozphab.config import Config
 from mozphab.exceptions import Error
 from mozphab.profiler import profiler
 
@@ -123,3 +124,20 @@ def test_argument_parsing_exit_does_not_save_a_profile(profiles_dir, argv):
 
     assert profiler.save(20) is None
     assert list(profiles_dir.iterdir()) == []
+
+
+def test_profile_options_from_args(monkeypatch):
+    test_config = Config(should_access_file=False)
+    test_config.profiler_origin = "https://profiler.test/"
+    monkeypatch.delenv("PROFILER_ORIGIN", raising=False)
+
+    options = profile.ProfileOptions.from_args(profile_args(), test_config)
+    assert (
+        options.profiler_origin == "https://profiler.test"
+    ), "`profiler.origin` should be used, without its trailing slash."
+
+    monkeypatch.setenv("PROFILER_ORIGIN", "http://localhost:4242")
+    options = profile.ProfileOptions.from_args(profile_args(), test_config)
+    assert (
+        options.profiler_origin == "http://localhost:4242"
+    ), "`PROFILER_ORIGIN` should override the config file."
