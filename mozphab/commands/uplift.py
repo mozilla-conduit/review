@@ -7,12 +7,14 @@ import json
 import urllib.error as url_error
 import urllib.request as url_request
 import webbrowser
+from dataclasses import dataclass
 from pathlib import Path
 
 from mozphab.conduit import (
     conduit,
 )
 from mozphab.config import (
+    Config,
     config,
 )
 from mozphab.environment import (
@@ -41,6 +43,32 @@ from .submit import (
 )
 
 UPLIFT_REPOSITORY_TAG_SLUG = "uplift"
+
+
+@dataclass(frozen=True)
+class UpliftOptions:
+    """The `uplift` flags and config knobs that `submit` doesn't read."""
+
+    list_trains: bool = False
+    train: str | None = None
+    assessment_id: int | None = None
+    open_browser: bool = True
+    output_file: Path | None = None
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace, config: Config) -> "UpliftOptions":
+        """Build the options from the parsed command line and the user's config."""
+        return cls(
+            list_trains=args.list_trains,
+            train=args.train,
+            assessment_id=args.assessment_id,
+            open_browser=(
+                args.open_browser
+                if args.open_browser is not None
+                else config.open_browser
+            ),
+            output_file=args.output_file,
+        )
 
 
 def map_train_arg_to_repo(train_repo_shortname: str) -> dict:
@@ -152,13 +180,15 @@ def attempt_link_assessment(
 
 
 def uplift(repo: Repository, args: argparse.Namespace, user_data: UserData):
-    if args.list_trains:
+    options = UpliftOptions.from_args(args, config)
+
+    if options.list_trains:
         return list_trains()
 
-    if not args.train:
+    if not options.train:
         raise Error("Missing `--train` argument!")
 
-    phab_repo = map_train_arg_to_repo(train_repo_shortname=args.train)
+    phab_repo = map_train_arg_to_repo(train_repo_shortname=options.train)
 
     # When using `moz-phab uplift`, we perform a standard `submit` but with all
     # the in-repo configurations for submit destination overwritten to submit
@@ -173,8 +203,8 @@ def uplift(repo: Repository, args: argparse.Namespace, user_data: UserData):
     tip_commit_id = commits[-1].rev_id if commits else None
 
     if tip_commit_id:
-        if args.assessment_id and attempt_link_assessment(
-            repo.lando_url, tip_commit_id, args.assessment_id
+        if options.assessment_id and attempt_link_assessment(
+            repo.lando_url, tip_commit_id, options.assessment_id
         ):
             logger.warning(
                 "\nUplift submitted and linked to assessment. "
@@ -182,16 +212,10 @@ def uplift(repo: Repository, args: argparse.Namespace, user_data: UserData):
             )
         else:
             uplift_assessment_linking_url = build_assessment_linking_url(
-                repo.lando_url, tip_commit_id, args.assessment_id
+                repo.lando_url, tip_commit_id, options.assessment_id
             )
 
-            should_open_browser = (
-                args.open_browser
-                if args.open_browser is not None
-                else config.open_browser
-            )
-
-            if should_open_browser and webbrowser.open(uplift_assessment_linking_url):
+            if options.open_browser and webbrowser.open(uplift_assessment_linking_url):
                 logger.warning(
                     f"\nOpened {uplift_assessment_linking_url} in your default "
                     "browser. Please save the uplift request form."
@@ -203,10 +227,10 @@ def uplift(repo: Repository, args: argparse.Namespace, user_data: UserData):
                 )
 
     # Output machine-readable data to a file.
-    if args.output_file:
+    if options.output_file:
         data = {"commits": [commit.to_dict() for commit in commits]}
 
-        with args.output_file.open("w") as f:
+        with options.output_file.open("w") as f:
             json.dump(data, f)
 
 

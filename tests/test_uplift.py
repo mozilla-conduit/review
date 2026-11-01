@@ -10,17 +10,20 @@ from urllib.error import HTTPError
 
 import pytest
 
+from mozphab import mozphab
 from mozphab.commands.submit import (
     UpliftSettings,
     local_uplift_if_possible,
     update_commits_for_uplift,
 )
 from mozphab.commands.uplift import (
+    UpliftOptions,
     attempt_link_assessment,
     build_assessment_linking_url,
     link_assessment,
 )
 from mozphab.commits import Commit
+from mozphab.config import Config
 from mozphab.exceptions import Error
 from mozphab.helpers import ORIGINAL_DIFF_REV_RE
 from mozphab.repository import Repository
@@ -454,3 +457,22 @@ def test_try_link_assessment(m_link_assessment, side_effect, expected):
         f"when `link_assessment` {'succeeds' if expected else 'raises `Error`'}."
     )
     m_link_assessment.assert_called_once_with("https://lando.moz.tools", 123, 5)
+
+
+def test_uplift_options_from_args():
+    """`--open-browser` overrides `ui.open_browser`, which is used otherwise."""
+    test_config = Config(should_access_file=False)
+    test_config.open_browser = False
+
+    options = UpliftOptions.from_args(
+        mozphab.parse_args(["uplift", "--train", "beta"]), test_config
+    )
+    assert options.train == "beta", "`--train` should be kept."
+    assert (
+        not options.open_browser
+    ), "`ui.open_browser` should be used when `--open-browser` isn't passed."
+
+    options = UpliftOptions.from_args(
+        mozphab.parse_args(["uplift", "--open-browser"]), test_config
+    )
+    assert options.open_browser, "`--open-browser` should override the config."
