@@ -5,6 +5,7 @@
 import argparse
 import concurrent.futures
 import re
+from dataclasses import dataclass
 
 from mozphab.conduit import conduit
 from mozphab.config import (
@@ -20,6 +21,42 @@ from mozphab.repository import (
     Repository,
 )
 from mozphab.spinner import wait_message
+
+
+@dataclass(frozen=True)
+class PatchOptions:
+    """The command line flags and config knobs that control `patch`, resolved once."""
+
+    revision_id: int
+    diff_id: int | None = None
+    raw: bool = False
+    create_commit: bool = True
+    # Where to apply the patches: `base`, `here` or a node.
+    apply_to: str = "base"
+    name: str | None = None
+    branch_name_template: str = "phab-D{rev_id}"
+    skip_dependencies: bool = False
+    include_abandoned: bool = False
+    yes: bool = False
+    # Patch a revision's children without asking.
+    always_full_stack: bool = False
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace, config: Config) -> "PatchOptions":
+        """Build the options from the parsed command line and the user's config."""
+        return cls(
+            revision_id=args.revision_id,
+            diff_id=args.diff_id,
+            raw=args.raw,
+            create_commit=not args.no_commit and config.create_commit,
+            apply_to=args.apply_to or config.apply_patch_to,
+            name=args.name,
+            branch_name_template=config.branch_name_template,
+            skip_dependencies=args.skip_dependencies,
+            include_abandoned=args.include_abandoned,
+            yes=args.yes,
+            always_full_stack=config.always_full_stack,
+        )
 
 
 def get_base_ref(diff: dict) -> str | None:
@@ -158,9 +195,7 @@ def update_revision_with_new_diff(revs: list[dict], diff: dict) -> None:
     raise Error(f"Diff {diff['id']} is not related to any revision in the stack.")
 
 
-def resolve_branch_name(
-    args: argparse.Namespace, config: Config, rev_id: str
-) -> str | None:
+def resolve_branch_name(options: PatchOptions, rev_id: str) -> str | None:
     """Resolve the branch name for the resulting patch.
 
     Use the value passed from `--name` on the CLI if possible. If
@@ -170,16 +205,16 @@ def resolve_branch_name(
 
     `patch.branch_name_template` supports a single format string, `rev_id`.
     """
-    if args.name:
+    if options.name:
         # Return the value passed from the CLI.
-        return args.name
+        return options.name
 
-    if args.no_commit or not config.create_commit:
+    if not options.create_commit:
         # `no_commit` implies no branch name.
         return None
 
     # Build the branch name from the configured template.
-    return config.branch_name_template.format(rev_id=rev_id)
+    return options.branch_name_template.format(rev_id=rev_id)
 
 
 def _get_ancestors_from_stack_graph(
@@ -319,14 +354,14 @@ def patch(repo: Repository, args: argparse.Namespace):
     * create a new branch/bookmark/topic
     * apply the patches and commit the changes
 
-    args.no_commit or config.create_commit is False - no commit will be created after
-        applying diffs; patches are applied directly at the target, without any of
-        the base-resolution or rebasing described below.
-    args.apply_to - <base|here|NODE> (default: base)
+    options.create_commit is False - no commit will be created after applying
+        diffs; patches are applied directly at the target, without any of the
+        base-resolution or rebasing described below.
+    options.apply_to - <base|here|NODE> (default: base)
         base - apply on top of the diff's own base commit
         here - apply on top of the current commit/checkout
         NODE - apply on top of the given commit
-    args.raw is True - only print out the diffs (--force doesn't change anything)
+    options.raw is True - only print out the diffs (--force doesn't change anything)
 
     The patch is applied directly at the target above whenever that's possible.
     When creating commits and it isn't -- the diff's base commit is missing
@@ -345,10 +380,12 @@ def patch(repo: Repository, args: argparse.Namespace):
       option or doesn't help either
     * Error if `--diff-id` does not belong to any revision in the stack
     """
+    options = PatchOptions.from_args(args, config)
+
     # The Phabricator ping, the VCS check, and the worktree-cleanness check
     # are independent: run them concurrently when all three are needed.
     # In --raw mode only the ping runs, so skip the pool overhead.
-    if args.raw:
+    if options.raw:
         with wait_message("Checking connection to Phabricator."):
             if not conduit.check():
                 raise Error("Failed to use Conduit API")
@@ -373,15 +410,15 @@ def patch(repo: Repository, args: argparse.Namespace):
                     )
 
     # Get the target revision
-    with wait_message("Fetching D%s.." % args.revision_id):
-        revs = conduit.get_revisions(ids=[args.revision_id])
+    with wait_message("Fetching D%s.." % options.revision_id):
+        revs = conduit.get_revisions(ids=[options.revision_id])
 
     if not revs:
         raise Error("Revision not found")
 
     revision = revs[0]
 
-    if not args.skip_dependencies:
+    if not options.skip_dependencies:
         # Use the stackGraph field from the revision to determine
         # ancestors and children without extra API calls.
         stack_graph = revision["fields"]["stackGraph"]
@@ -405,12 +442,12 @@ def patch(repo: Repository, args: argparse.Namespace):
         # Fetch all related revisions to get metadata and filter out
         # abandoned or inaccessible ones.
         ancestor_phids, children_phids, related_by_phid = _fetch_and_filter_related(
-            ancestor_phids, children_phids, args.include_abandoned
+            ancestor_phids, children_phids, options.include_abandoned
         )
 
         patch_children = True
         if children_phids:
-            if args.yes or config.always_full_stack:
+            if options.yes or options.always_full_stack:
                 patch_children = True
 
             else:
@@ -419,7 +456,7 @@ def patch(repo: Repository, args: argparse.Namespace):
                 )
                 res = prompt(
                     "Revision D%s has %s.  Would you like to patch the "
-                    "full stack?." % (args.revision_id, children_msg),
+                    "full stack?." % (options.revision_id, children_msg),
                     ["Yes", "No", "Always"],
                 )
                 if res == "Always":
@@ -429,11 +466,11 @@ def patch(repo: Repository, args: argparse.Namespace):
                 patch_children = res == "Yes" or res == "Always"
 
             if patch_children:
-                if non_linear and not args.yes:
+                if non_linear and not options.yes:
                     logger.warning(
                         "Revision D%s has a non-linear successor graph.\n"
                         "Unable to apply the full stack.",
-                        args.revision_id,
+                        options.revision_id,
                     )
                     res = prompt("Continue with only part of the stack?", ["Yes", "No"])
                     if res == "No":
@@ -468,12 +505,12 @@ def patch(repo: Repository, args: argparse.Namespace):
 
     # If a user specifies a diff ID, retrieve the diff and add it to the diff mapping,
     # and overwrite the diffPHID for the relevant revision
-    if args.diff_id:
-        requested_diff_phid, requested_diff = get_diff_by_id(args.diff_id)
+    if options.diff_id:
+        requested_diff_phid, requested_diff = get_diff_by_id(options.diff_id)
         diffs[requested_diff_phid] = requested_diff
         update_revision_with_new_diff(revs, requested_diff)
 
-    if not args.no_commit and config.create_commit and not args.raw:
+    if options.create_commit and not options.raw:
         for rev in revs:
             diff = diffs[rev["fields"]["diffPHID"]]
             if not diff["attachments"]["commits"]["commits"]:
@@ -485,16 +522,14 @@ def patch(repo: Repository, args: argparse.Namespace):
     target_node = ""
     current_branch = None
     branch_name = None
-    no_commit = args.no_commit or not config.create_commit
 
     base_diff = diffs[revs[0]["fields"]["diffPHID"]]
     diff_base_node = None
 
-    if not args.raw:
-        args.apply_to = args.apply_to or config.apply_patch_to
+    if not options.raw:
         diff_base_node = get_base_ref(base_diff)
 
-        if args.apply_to == "base":
+        if options.apply_to == "base":
             if not diff_base_node:
                 raise Error(
                     "Base commit not found in diff. "
@@ -509,7 +544,7 @@ def patch(repo: Repository, args: argparse.Namespace):
                 with wait_message("Checking base %s.." % short_node(diff_base_node)):
                     target_node = repo.check_node(diff_base_node)
             except NotFoundError as e:
-                if no_commit:
+                if not options.create_commit:
                     # Nothing is committed, so there's nothing that could be
                     # rebased from a different base later on.
                     msg = "Unknown revision: %s" % short_node(diff_base_node)
@@ -528,22 +563,24 @@ def patch(repo: Repository, args: argparse.Namespace):
                     raise Error(
                         "Unable to find a commit to apply D%s at.\n"
                         "Use `--apply-to here` to patch the current commit."
-                        % args.revision_id
+                        % options.revision_id
                     )
-        elif args.apply_to == "here":
+        elif options.apply_to == "here":
             target_node = repo.get_current_node()
         else:
             try:
-                with wait_message("Checking target %s.." % short_node(args.apply_to)):
-                    target_node = repo.check_node(args.apply_to)
+                with wait_message(
+                    "Checking target %s.." % short_node(options.apply_to)
+                ):
+                    target_node = repo.check_node(options.apply_to)
             except NotFoundError as e:
-                msg = "Unknown target revision: %s" % short_node(args.apply_to)
+                msg = "Unknown target revision: %s" % short_node(options.apply_to)
                 if str(e):
                     msg += "\n%s" % str(e)
                 raise Error(msg)
 
-        branch_name = resolve_branch_name(args, config, rev_id)
-        if not no_commit:
+        branch_name = resolve_branch_name(options, rev_id)
+        if options.create_commit:
             current_branch = repo.get_current_branch()
 
         repo.before_patch(target_node, branch_name)
@@ -567,7 +604,7 @@ def patch(repo: Repository, args: argparse.Namespace):
                 executor.shutdown(wait=False, cancel_futures=True)
                 raise
 
-    if no_commit:
+    if not options.create_commit:
         for rev in revs:
             raw = raw_diffs[rev["id"]]
             with wait_message("Applying D%s.." % rev["id"]):
@@ -575,7 +612,7 @@ def patch(repo: Repository, args: argparse.Namespace):
             if rev["id"] != revs[-1]["id"]:
                 logger.info("D%s applied", rev["id"])
 
-    elif args.raw:
+    elif options.raw:
         for rev in revs:
             diff = diffs[rev["fields"]["diffPHID"]]
             raw = raw_diffs[rev["id"]]
@@ -605,12 +642,12 @@ def patch(repo: Repository, args: argparse.Namespace):
                 resolve_base_node(
                     repo, diff_base_node, before=get_patch_date(base_diff)
                 )
-                if args.apply_to != "base" and diff_base_node
+                if options.apply_to != "base" and diff_base_node
                 else None
             )
             can_retry = base_node is not None and base_node != target_node
             if (
-                args.apply_to == "here"
+                options.apply_to == "here"
                 and diff_base_node
                 and diff_base_node != target_node
                 and can_retry
@@ -627,7 +664,7 @@ def patch(repo: Repository, args: argparse.Namespace):
                         "Retrying may switch your checkout and leave it at the "
                         "latest landed revision if the retry or rebase fails."
                     )
-                if not args.yes:
+                if not options.yes:
                     retry = prompt(
                         "The patch failed to apply here. Retry at the latest landed "
                         "revision and rebase onto %s" % short_node(target_node),

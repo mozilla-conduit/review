@@ -16,46 +16,80 @@ from mozphab.repository import Repository
 from .conftest import with_stack_graph
 
 
-def test_resolve_branch_name():
-    class Args(argparse.Namespace):
-        def __init__(self, name: str | None = None, no_commit: bool = False):
-            self.name = name
-            self.no_commit = no_commit
+def patch_args(**overrides: Any) -> argparse.Namespace:
+    """Return the `patch` arguments the parser produces, with `overrides` applied."""
+    args = mozphab.parse_args(["patch", "123"])
+    for name, value in overrides.items():
+        setattr(args, name, value)
+    return args
 
-    rev_id = "123"
 
-    args = Args(name="branch")
+def test_patch_options_from_args():
     config = Config(should_access_file=False)
 
-    assert (
-        patch.resolve_branch_name(args, config, rev_id) == "branch"
-    ), "Branch name passed via args should take precedent."
+    options = patch.PatchOptions.from_args(patch_args(), config)
+    assert options == patch.PatchOptions(
+        revision_id=123
+    ), "The default arguments and config should give the default options."
 
-    args = Args(no_commit=True)
-    assert (
-        patch.resolve_branch_name(args, config, rev_id) is None
-    ), "No branch name should be used when `no_commit` is `True`."
+    options = patch.PatchOptions.from_args(patch_args(apply_to="here"), config)
+    assert options.apply_to == "here", "`--apply-to` should set where to patch."
 
-    args = Args()
+    config.apply_patch_to = "here"
+    options = patch.PatchOptions.from_args(patch_args(), config)
     assert (
-        patch.resolve_branch_name(args, config, rev_id) == "phab-D123"
-    ), "Branch name should match the default when not changed."
+        options.apply_to == "here"
+    ), "`patch.apply_to` should be used when `--apply-to` isn't passed."
 
-    config.branch_name_template = "phab/D{rev_id}"
+    config.always_full_stack = True
+    options = patch.PatchOptions.from_args(patch_args(), config)
     assert (
-        patch.resolve_branch_name(args, config, rev_id) == "phab/D123"
-    ), "Branch name should change based on the configuration."
+        options.always_full_stack
+    ), "`patch.always_full_stack` should be read into the options."
 
-    config.branch_name_template = "phabrev"
-    assert (
-        patch.resolve_branch_name(args, config, rev_id) == "phabrev"
-    ), "Using template strings should be optional."
+    options = patch.PatchOptions.from_args(patch_args(no_commit=True), config)
+    assert not options.create_commit, "`--no-commit` should disable committing."
 
     config.create_commit = False
+    options = patch.PatchOptions.from_args(patch_args(), config)
     assert (
-        patch.resolve_branch_name(args, config, rev_id) is None
-    ), "When create_commit is False in config no branch should be used."
-    config.create_commit = True
+        not options.create_commit
+    ), "`patch.create_commit = False` should disable committing."
+
+    config.branch_name_template = "phab/D{rev_id}"
+    options = patch.PatchOptions.from_args(patch_args(), config)
+    assert (
+        options.branch_name_template == "phab/D{rev_id}"
+    ), "The branch name template should come from the config."
+
+
+def test_resolve_branch_name():
+    rev_id = "123"
+
+    options = patch.PatchOptions(revision_id=123, name="branch")
+    assert (
+        patch.resolve_branch_name(options, rev_id) == "branch"
+    ), "Branch name passed via args should take precedent."
+
+    options = patch.PatchOptions(revision_id=123, create_commit=False)
+    assert (
+        patch.resolve_branch_name(options, rev_id) is None
+    ), "No branch name should be used when not creating a commit."
+
+    options = patch.PatchOptions(revision_id=123)
+    assert (
+        patch.resolve_branch_name(options, rev_id) == "phab-D123"
+    ), "Branch name should match the default when not changed."
+
+    options = patch.PatchOptions(revision_id=123, branch_name_template="phab/D{rev_id}")
+    assert (
+        patch.resolve_branch_name(options, rev_id) == "phab/D123"
+    ), "Branch name should change based on the configuration."
+
+    options = patch.PatchOptions(revision_id=123, branch_name_template="phabrev")
+    assert (
+        patch.resolve_branch_name(options, rev_id) == "phabrev"
+    ), "Using template strings should be optional."
 
 
 def test_check_revision_id():
