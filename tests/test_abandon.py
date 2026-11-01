@@ -57,7 +57,6 @@ class TestAbandonRevisions(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.args = argparse.Namespace(yes=True)  # Skip confirmation for tests
         self.mock_revisions = [
             {
                 "id": 123,
@@ -96,11 +95,13 @@ class TestAbandonRevisions(unittest.TestCase):
         ]
 
         # Call function
-        abandon.abandon_revisions([123, 125], self.args)
+        abandon.abandon_revisions(
+            abandon.AbandonOptions(revision_ids=(123, 125), yes=True)
+        )
 
         # Verify API calls
         mock_conduit.check.assert_called_once()
-        mock_conduit.get_revisions.assert_called_once_with(ids=[123, 125])
+        mock_conduit.get_revisions.assert_called_once_with(ids=(123, 125))
 
         # Verify abandonment calls
         expected_calls = [
@@ -126,7 +127,9 @@ class TestAbandonRevisions(unittest.TestCase):
 
         # Call function
         with self.assertLogs() as logging_watcher:
-            abandon.abandon_revisions([124], self.args)
+            abandon.abandon_revisions(
+                abandon.AbandonOptions(revision_ids=(124,), yes=True)
+            )
 
         # Verify no abandonment calls were made
         mock_conduit.apply_transactions_to_revision.assert_not_called()
@@ -143,7 +146,9 @@ class TestAbandonRevisions(unittest.TestCase):
         mock_conduit.check.return_value = False
 
         with self.assertRaises(exceptions.Error) as cm:
-            abandon.abandon_revisions([123], self.args)
+            abandon.abandon_revisions(
+                abandon.AbandonOptions(revision_ids=(123,), yes=True)
+            )
 
         self.assertIn("Failed to use Conduit API", str(cm.exception))
 
@@ -154,7 +159,9 @@ class TestAbandonRevisions(unittest.TestCase):
         mock_conduit.get_revisions.return_value = []
 
         with self.assertRaises(exceptions.Error) as cm:
-            abandon.abandon_revisions([999], self.args)
+            abandon.abandon_revisions(
+                abandon.AbandonOptions(revision_ids=(999,), yes=True)
+            )
 
         self.assertIn("No revisions found", str(cm.exception))
 
@@ -167,11 +174,8 @@ class TestAbandonRevisions(unittest.TestCase):
         mock_conduit.get_revisions.return_value = [self.mock_revisions[0]]
         mock_prompt.return_value = "No"
 
-        # Create args without --yes flag
-        args = argparse.Namespace(yes=False)
-
         # Call function
-        abandon.abandon_revisions([123], args)
+        abandon.abandon_revisions(abandon.AbandonOptions(revision_ids=(123,)))
 
         # Verify prompt was called
         mock_prompt.assert_called_once_with("Abandon these revisions?", ["Yes", "No"])
@@ -188,11 +192,8 @@ class TestAbandonRevisions(unittest.TestCase):
         mock_conduit.get_revisions.return_value = [self.mock_revisions[0]]
         mock_prompt.return_value = "Yes"
 
-        # Create args without --yes flag
-        args = argparse.Namespace(yes=False)
-
         # Call function
-        abandon.abandon_revisions([123], args)
+        abandon.abandon_revisions(abandon.AbandonOptions(revision_ids=(123,)))
 
         # Verify prompt was called
         mock_prompt.assert_called_once_with("Abandon these revisions?", ["Yes", "No"])
@@ -211,7 +212,9 @@ class TestAbandonRevisions(unittest.TestCase):
 
         # Call function
         with self.assertLogs() as logging_watcher:
-            abandon.abandon_revisions([123, 124, 125], self.args)
+            abandon.abandon_revisions(
+                abandon.AbandonOptions(revision_ids=(123, 124, 125), yes=True)
+            )
 
         # Verify only non-abandoned revisions were processed
         expected_calls = [
@@ -237,20 +240,22 @@ class TestAbandonMainFunction(unittest.TestCase):
     def test_abandon_main_success(self, mock_abandon_revisions):
         """Test successful execution of main abandon function."""
         # Setup args with revision IDs (parsed by argparse)
-        args = argparse.Namespace(revisions=[123, 124])
+        args = argparse.Namespace(revisions=[123, 124], yes=False)
 
         # Call function
         abandon.abandon(None, args)
 
         # Verify calls
-        mock_abandon_revisions.assert_called_once_with([123, 124], args)
+        mock_abandon_revisions.assert_called_once_with(
+            abandon.AbandonOptions(revision_ids=(123, 124))
+        )
 
     @mock.patch("mozphab.commands.abandon.abandon_revisions")
     def test_abandon_main_error_propagation(self, mock_abandon_revisions):
         """Test that errors are properly propagated."""
         # Setup mock to raise error
         mock_abandon_revisions.side_effect = exceptions.Error("Test error")
-        args = argparse.Namespace(revisions=[123])
+        args = argparse.Namespace(revisions=[123], yes=False)
 
         # Verify error is propagated
         with self.assertRaises(exceptions.Error) as cm:

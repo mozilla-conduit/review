@@ -13,7 +13,7 @@ import operator
 import os
 import time
 import urllib.parse as url_parse
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from enum import Enum
 from typing import (
     TYPE_CHECKING,
@@ -431,7 +431,7 @@ class ConduitAPI:
         raise NotFoundError("revision {} not found".format(phid))
 
     def get_revisions(
-        self, ids: list[int] | None = None, phids: list[str] | None = None
+        self, ids: Sequence[int] | None = None, phids: list[str] | None = None
     ) -> list[dict]:
         """Get revisions info from Phabricator.
 

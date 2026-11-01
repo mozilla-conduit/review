@@ -4,6 +4,7 @@
 
 import argparse
 import re
+from dataclasses import dataclass
 
 from mozphab.conduit import conduit
 from mozphab.exceptions import Error, NotFoundError
@@ -34,7 +35,20 @@ def check_revision_id(value: str) -> int:
     )
 
 
-def abandon_revisions(revision_ids: list[int], args: argparse.Namespace):
+@dataclass(frozen=True)
+class AbandonOptions:
+    """The command line flags that control `abandon`, resolved once."""
+
+    revision_ids: tuple[int, ...]
+    yes: bool = False
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> "AbandonOptions":
+        """Build the options from the parsed command line."""
+        return cls(revision_ids=tuple(args.revisions), yes=args.yes)
+
+
+def abandon_revisions(options: AbandonOptions):
     """Abandon the specified revisions in Phabricator."""
 
     # Check connection to Phabricator
@@ -45,7 +59,7 @@ def abandon_revisions(revision_ids: list[int], args: argparse.Namespace):
     # Get revision information
     with wait_message("Fetching revision information..."):
         try:
-            revisions = conduit.get_revisions(ids=revision_ids)
+            revisions = conduit.get_revisions(ids=options.revision_ids)
         except NotFoundError as e:
             raise Error(f"Failed to fetch revisions: {e}")
 
@@ -79,7 +93,7 @@ def abandon_revisions(revision_ids: list[int], args: argparse.Namespace):
         logger.info(" * D%s: %s", revision["id"], revision["fields"]["title"])
 
     # Confirmation prompt
-    if not args.yes:
+    if not options.yes:
         res = prompt("Abandon these revisions?", ["Yes", "No"])
         if res == "No":
             return
@@ -98,7 +112,7 @@ def abandon_revisions(revision_ids: list[int], args: argparse.Namespace):
 
 def abandon(repo, args: argparse.Namespace):
     """Main function for the abandon command."""
-    abandon_revisions(args.revisions, args)
+    abandon_revisions(AbandonOptions.from_args(args))
 
 
 def add_parser(parser):
