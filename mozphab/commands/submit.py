@@ -61,6 +61,7 @@ class SubmitOptions:
     no_stack: bool = False
     single: bool = False
     ai: bool = False
+    less_context: bool = False
     force_vcs: bool = False
     # Set when `moz-phab` ran `submit` because no command was given.
     fallback: bool = False
@@ -111,6 +112,7 @@ class SubmitOptions:
             no_stack=args.no_stack,
             single=args.single,
             ai=args.ai,
+            less_context=args.lesscontext,
             force_vcs=args.force_vcs,
             fallback=args.fallback,
             uplift=uplift,
@@ -769,7 +771,7 @@ def _prepare_diffs(
     diffs: dict[int, Diff] = {}
     for index, commit in submittable:
         with wait_message("Creating local diff..."):
-            diffs[index] = repo.get_diff(commit)
+            diffs[index] = repo.get_diff(commit, options.less_context)
 
     found = failed_checks((commit.name, diffs[index]) for index, commit in submittable)
     problems = []

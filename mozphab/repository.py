@@ -179,8 +179,12 @@ class Repository(object):
             author-email
         """
 
-    def get_diff(self, commit: Commit) -> Diff:
-        """Create a Diff object with changes."""
+    def get_diff(self, commit: Commit, less_context: bool = False) -> Diff:
+        """Create a Diff object with changes.
+
+        With `less_context`, modified files are diffed with only 100 lines of
+        context, rather than the whole file.
+        """
         raise NotImplementedError()
 
     def refresh_commit_stack(self, commits: list[Commit]):

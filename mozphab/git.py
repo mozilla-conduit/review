@@ -952,7 +952,9 @@ class Git(Repository):
     def _cat_file(self, blob: str) -> bytes:
         return self.git_out_binary(["cat-file", "blob", blob])
 
-    def _parse_diff_change(self, raw: str, diff: Diff) -> Diff.Change:
+    def _parse_diff_change(
+        self, raw: str, diff: Diff, less_context: bool = False
+    ) -> Diff.Change:
         """Parse the changes provided in raw `git` response.
 
         Returns a Diff.Change object.
@@ -1064,7 +1066,7 @@ class Git(Repository):
                     )
             elif b_blob is not None:
                 # There are changes in the file.
-                if self.args.lesscontext or file_size > environment.MAX_CONTEXT_SIZE:
+                if less_context or file_size > environment.MAX_CONTEXT_SIZE:
                     context_size = 100
                 else:
                     context_size = environment.MAX_CONTEXT_SIZE
@@ -1086,7 +1088,7 @@ class Git(Repository):
 
         return change
 
-    def get_diff(self, commit: Commit) -> Diff:
+    def get_diff(self, commit: Commit, less_context: bool = False) -> Diff:
         """Create a Diff object with changes."""
         raw = self.git_out_text(
             [
@@ -1103,7 +1105,7 @@ class Git(Repository):
 
         diff = Diff()
         for raw_change in raw[:-1].split("\0:")[1:]:
-            self._parse_diff_change(raw_change, diff)
+            self._parse_diff_change(raw_change, diff, less_context)
 
         return diff
 

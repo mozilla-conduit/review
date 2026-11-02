@@ -16,7 +16,7 @@ from collections.abc import Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import (
     Any,
     cast,
@@ -1037,7 +1037,7 @@ class Mercurial(Repository):
 
         return file_modes
 
-    def get_diff(self, commit: Commit) -> Diff:
+    def get_diff(self, commit: Commit, less_context: bool = False) -> Diff:
         """Create a Diff object containing all changes for this commit."""
         self.checkout(commit.node)
         parent = self._get_parent(commit.node)
@@ -1064,6 +1064,7 @@ class Mercurial(Repository):
             fn.split(file_divider) for fn in all_files.split(type_divider)
         ]
         changes = []
+        change_mod = partial(self._change_mod, less_context=less_context)
 
         fn_renames = []
         fn_renamed = []  # collection of `old_fn`.
@@ -1080,7 +1081,7 @@ class Mercurial(Repository):
                         filename=new_fn,
                         old_filename=old_fn,
                         kind="R" if is_move else "C",
-                        func=self._change_mod,
+                        func=change_mod,
                     )
                 )
                 fn_renames.append((new_fn, old_fn))
@@ -1100,7 +1101,7 @@ class Mercurial(Repository):
             FileChange(filename=fn, kind="D", func=self._change_del) for fn in fn_dels
         )
         changes.extend(
-            FileChange(filename=fn, kind="M", func=self._change_mod) for fn in fn_mods
+            FileChange(filename=fn, kind="M", func=change_mod) for fn in fn_mods
         )
 
         # Create changes.
@@ -1249,6 +1250,7 @@ class Mercurial(Repository):
         old_filename: str,
         parent: str,
         node: str,
+        less_context: bool = False,
     ):
         """Create a change about modified file in the commit."""
         a_meta = self._get_file_meta(old_filename, parent)
@@ -1284,7 +1286,7 @@ class Mercurial(Repository):
             )
             return
 
-        if self.args.lesscontext or file_size > environment.MAX_CONTEXT_SIZE:
+        if less_context or file_size > environment.MAX_CONTEXT_SIZE:
             context_size = 100
         else:
             context_size = environment.MAX_CONTEXT_SIZE

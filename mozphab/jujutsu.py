@@ -296,9 +296,9 @@ class Jujutsu(Repository):
             )
         return []
 
-    def get_diff(self, commit: Commit) -> Diff:
+    def get_diff(self, commit: Commit, less_context: bool = False) -> Diff:
         """Create a Diff object with changes."""
-        return self.__git_repo.get_diff(commit)
+        return self.__git_repo.get_diff(commit, less_context)
 
     def amend_commit(self, commit: Commit, commits: list[Commit]):
         """Amend the commit with an updated message.

@@ -566,10 +566,6 @@ def test_change_del(m_set_as_binary, m_get_file_meta, hg):
 @mock.patch("mozphab.diff.Diff.Change.from_git_diff")
 @mock.patch("mozphab.mercurial.Mercurial.hg_out_binary")
 def test_change_mod(m_hg_out, m_from_git_diff, m_set_as_binary, m_get_file_meta, hg):
-    class Args(argparse.Namespace):
-        def __init__(self, lesscontext=False):
-            self.lesscontext = lesscontext
-
     # file contents changed
     change = diff.Diff.Change("fn")
     text_side_effect = (
@@ -585,7 +581,6 @@ diff --git a/fn b/fn
 -abc
 +def
 """
-    hg.args = Args()
     hg._change_mod(change, "fn", "old_fn", "parent", "node")
     m_hg_out.assert_called_once_with(
         ["diff"]
@@ -599,8 +594,7 @@ diff --git a/fn b/fn
     # --less-content honoured
     m_hg_out.reset_mock()
     m_get_file_meta.side_effect = text_side_effect
-    hg.args = Args(lesscontext=True)
-    hg._change_mod(change, "fn", "old_fn", "parent", "node")
+    hg._change_mod(change, "fn", "old_fn", "parent", "node", less_context=True)
     m_hg_out.assert_called_once_with(
         ["diff", "--git", "--unified", "100", "--rev", "parent", "fn"]
     )

@@ -4,7 +4,6 @@
 
 # coding=utf-8
 
-import argparse
 import textwrap
 from unittest import mock
 
@@ -13,11 +12,6 @@ from mozphab.commits import Commit
 from mozphab.diff import Diff
 
 from .conftest import assert_attributes
-
-
-class Args(argparse.Namespace):
-    def __init__(self, less_context=False):
-        self.lesscontext = less_context
 
 
 @mock.patch("mozphab.git.Git._cat_file")
@@ -29,7 +23,6 @@ def test_create(m_git_out, m_cat_file, git):
     )
     diff = Diff()
     m_cat_file.side_effect = (b"a\n",)
-    git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
@@ -71,7 +64,6 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
 @@ -1 +1,2 @@
  a
 +b"""
-    git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_called_once_with(
@@ -117,7 +109,6 @@ def test_create_empty(m_git_out, m_cat_file, git):
     )
     diff = Diff()
     m_cat_file.side_effect = (b"",)
-    git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
@@ -136,7 +127,6 @@ def test_change_empty(m_git_out, m_cat_file, git):
     )
     diff = Diff()
     m_cat_file.side_effect = (b"",)
-    git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
@@ -205,7 +195,6 @@ def test_change_empty_hg(
         },
     ]
 
-    hg.args = Args()
     diff = hg.get_diff(commit)
     change = diff.changes.get("fn")
 
@@ -232,7 +221,6 @@ def test_delete_file(m_git_out, m_cat_file, git):
     )
     diff = Diff()
     m_cat_file.side_effect = (b"a\nb\n",)
-    git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
@@ -262,7 +250,6 @@ def test_delete_empty_file(m_git_out, m_cat_file, git):
     )
     diff = Diff()
     m_cat_file.side_effect = (b"",)
-    git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
@@ -280,7 +267,6 @@ def test_recognize_binary(m_git_out, m_cat_file, git):
     diff = Diff()
     content = b"\x08\x00\x00\x10"
     m_cat_file.side_effect = (content,)
-    git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
@@ -309,7 +295,6 @@ def test_recognize_long_text_as_binary(m_git_out, m_cat_file, git, monkeypatch):
     # Lower the limit rather than allocate a buffer over the real one.
     monkeypatch.setattr(environment, "MAX_TEXT_SIZE", len(content) - 1)
     m_cat_file.side_effect = (content,)
-    git.args = Args()
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
@@ -339,9 +324,7 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
 @@ -1 +1,2 @@
  a
 +b"""
-    git.args = Args(less_context=True)
-
-    git._parse_diff_change(raw, diff)
+    git._parse_diff_change(raw, diff, less_context=True)
     m_git_out.assert_called_once_with(
         [
             "diff",
@@ -355,7 +338,6 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
         ],
     )
 
-    git.args = Args(less_context=False)
     m_cat_file.side_effect = (b"a\n", b"a\nb\n")
     # A file over MAX_CONTEXT_SIZE gets less context too; lower the limit
     # rather than allocate a buffer over the real one.
