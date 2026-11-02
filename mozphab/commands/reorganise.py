@@ -769,4 +769,7 @@ def add_parser(parser):
         action="store_true",
         help="Disable terminal hyperlinks for revision IDs and bug numbers.",
     )
-    reorg_parser.set_defaults(func=reorganise, needs_repo=True, needs_user_data=False)
+    # `RepositoryOptions` reads `--path`, which this command lacks.
+    reorg_parser.set_defaults(
+        func=reorganise, needs_repo=True, needs_user_data=False, path=None
+    )

@@ -6,8 +6,11 @@ import json
 
 import pytest
 
+from mozphab import mozphab
+from mozphab.config import Config
 from mozphab.repository import (
     Repository,
+    RepositoryOptions,
     get_lando_url_for_phabricator,
     is_mozilla_phabricator,
 )
@@ -78,3 +81,23 @@ def test_get_lando_url_for_phabricator():
 
     with pytest.raises(KeyError):
         get_lando_url_for_phabricator("https://reviews.llvm.org/")
+
+
+def test_repository_options_from_args():
+    config = Config(should_access_file=False)
+    args = mozphab.parse_args(["submit", "--path", "repo", "-u", "upstream"])
+
+    assert RepositoryOptions.from_args(args, config) == RepositoryOptions(
+        path="repo", upstream=("upstream",)
+    ), "`--path` and `--upstream` should be kept."
+
+    config.safe_mode = True
+    assert RepositoryOptions.from_args(
+        args, config
+    ).safe_mode, "`safe_mode` in the config should enable safe mode."
+
+    config.safe_mode = False
+    args.safe_mode = True
+    assert RepositoryOptions.from_args(
+        args, config
+    ).safe_mode, "`--safe-mode` should enable safe mode."

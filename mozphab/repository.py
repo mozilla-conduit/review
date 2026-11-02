@@ -13,6 +13,7 @@ from mozphab.profiler import profiler
 
 from .commits import Commit
 from .conduit import conduit
+from .config import Config
 from .diff import Diff
 from .exceptions import Error
 from .helpers import (
@@ -34,6 +35,31 @@ LANDO_URL_MAPPING = {
     "https://phabricator-dev.allizom.org": "https://dev.lando.nonprod.webservices.mozgcp.net",
     "https://phabricator.allizom.org": "https://stage.lando.nonprod.webservices.mozgcp.net",
 }
+
+
+@dataclass(frozen=True)
+class RepositoryOptions:
+    """The command line flags and config knobs for finding and running the VCS."""
+
+    # Where to look for the repository, rather than the working directory.
+    path: str | None = None
+    avoid_jj: bool = False
+    safe_mode: bool = False
+    # The Git remotes to look for published commits on, overriding `git.remote`.
+    upstream: tuple[str, ...] = ()
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace, config: Config) -> "RepositoryOptions":
+        """Build the options from the parsed command line and the user's config."""
+        return cls(
+            path=args.path,
+            avoid_jj=args.avoid_jj_vcs,
+            safe_mode=args.safe_mode or config.safe_mode,
+            upstream=tuple(args.upstream or ()),
+        )
+
+
+DEFAULT_REPOSITORY_OPTIONS = RepositoryOptions()
 
 
 @dataclass(frozen=True)
@@ -96,7 +122,14 @@ def is_mozilla_phabricator(url: str) -> bool:
 
 
 class Repository(object):
-    def __init__(self, path: str, dot_path: str, phab_url: str | None = None):
+    def __init__(
+        self,
+        path: str,
+        dot_path: str,
+        phab_url: str | None = None,
+        options: RepositoryOptions = DEFAULT_REPOSITORY_OPTIONS,
+    ):
+        self.options = options
         self._phid = None
         self._phab_repo = None
         self._phab_vcs: str | None = None
@@ -108,8 +141,6 @@ class Repository(object):
             os.path.join(self.dot_path, ".arcconfig"),
             os.path.join(self.path, ".arcconfig"),
         ]
-        # Replaced by `set_args` once the command line has been parsed.
-        self.args = argparse.Namespace()
         self.phab_url = (phab_url or self._phab_url()).rstrip("/")
         self.api_url = self._api_url()
         call_sign_override = os.getenv("MOZPHAB_REPOSITORY_CALLSIGN")
@@ -188,8 +219,11 @@ class Repository(object):
     def finalize(self, commits: list[Commit]):
         """Update the history after node changed."""
 
-    def set_args(self, args: argparse.Namespace):
-        self.args = args
+    def configure(self):
+        """Read the user's VCS configuration, before the repository is used.
+
+        Honours `options.safe_mode`, which ignores most of the configuration.
+        """
 
     def select_stack(self, selection: StackSelection):
         """Select the commits `commit_stack` and the other stack methods work on."""

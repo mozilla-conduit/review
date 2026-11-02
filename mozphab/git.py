@@ -2,7 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
 import mimetypes
 import os
 import re
@@ -29,7 +28,14 @@ from .helpers import (
     temporary_file,
 )
 from .logger import logger
-from .repository import PatchAttempt, PatchRefs, Repository, StackSelection
+from .repository import (
+    DEFAULT_REPOSITORY_OPTIONS,
+    PatchAttempt,
+    PatchRefs,
+    Repository,
+    RepositoryOptions,
+    StackSelection,
+)
 from .spinner import wait_message
 from .telemetry import telemetry
 
@@ -55,7 +61,12 @@ LANDING_MERGE_MESSAGE_PATTERNS = (
 
 
 class Git(Repository):
-    def __init__(self, path: str, bare_path: str | None = None):
+    def __init__(
+        self,
+        path: str,
+        bare_path: str | None = None,
+        options: RepositoryOptions = DEFAULT_REPOSITORY_OPTIONS,
+    ):
         dot_path = bare_path or os.path.join(path, ".git")
         if not os.path.exists(dot_path):
             raise ValueError("%s: not a git repository" % path)
@@ -69,7 +80,7 @@ class Git(Repository):
             # We're working from a worktree. Let's find the dot_path directory.
             dot_path = self.git_out_text(["rev-parse", "--git-common-dir"], path=path)
 
-        super().__init__(path, dot_path)
+        super().__init__(path, dot_path, options=options)
 
         self.vcs = "git"
         m = re.search(r"\d+\.\d+\.\d+", self.git.output_text(["--version"]))
@@ -287,9 +298,10 @@ class Git(Repository):
 
     def _find_base_remotes(self) -> list[str]:
         """Work out which remotes to use, logging how the choice was made."""
-        if self.args.upstream:
-            logger.debug(f"Using remote from `--upstream` arg: {self.args.upstream}.")
-            return self.args.upstream
+        if self.options.upstream:
+            upstream = list(self.options.upstream)
+            logger.debug(f"Using remote from `--upstream` arg: {upstream}.")
+            return upstream
 
         if config.git_remote:
             logger.debug(f"Using remote from `git.remote` config: {config.git_remote}.")
@@ -347,11 +359,9 @@ class Git(Repository):
         )
         return node or None
 
-    def set_args(self, args: argparse.Namespace):
-        """Store moz-phab command line args."""
-        super().set_args(args)
-
-        self.git.set_args(args)
+    def configure(self):
+        """Read the user's Git configuration."""
+        self.git.configure(safe_mode=self.options.safe_mode)
 
     def select_stack(self, selection: StackSelection):
         """Set the revset from `selection`, leaving it unset if there's no stack."""

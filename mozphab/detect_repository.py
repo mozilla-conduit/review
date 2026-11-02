@@ -2,14 +2,13 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
 import os
 
 from .exceptions import Error
 from .git import Git
 from .jujutsu import Jujutsu
 from .mercurial import Mercurial
-from .repository import Repository
+from .repository import DEFAULT_REPOSITORY_OPTIONS, Repository, RepositoryOptions
 
 
 def find_repo_root(path: str, avoid_jj: bool = False) -> str | None:
@@ -26,34 +25,38 @@ def find_repo_root(path: str, avoid_jj: bool = False) -> str | None:
     return None
 
 
-def probe_repo(path: str, avoid_jj: bool = False) -> Repository | None:
+def probe_repo(
+    path: str,
+    avoid_jj: bool = False,
+    options: RepositoryOptions = DEFAULT_REPOSITORY_OPTIONS,
+) -> Repository | None:
     """Attempt to find a repository at `path`."""
     try:
-        return Mercurial(path)
+        return Mercurial(path, options=options)
     except ValueError:
         pass
 
     # NOTE: Jujutsu may have a co-located `.git` directory, so let's detect a `.jj` directory first.
     if not avoid_jj:
         try:
-            return Jujutsu(path)
+            return Jujutsu(path, options=options)
         except ValueError:
             pass
 
     try:
-        return Git(path)
+        return Git(path, options=options)
     except ValueError:
         pass
 
     return None
 
 
-def repo_from_args(args: argparse.Namespace) -> Repository:
-    """Returns a Repository object from either args.path or the cwd"""
+def open_repository(options: RepositoryOptions) -> Repository:
+    """Return the configured repository at `options.path`, or above the cwd."""
 
     repo = None
 
-    avoid_jj_vcs = hasattr(args, "avoid_jj_vcs") and args.avoid_jj_vcs
+    avoid_jj_vcs = options.avoid_jj
 
     def vcses_searched():
         jj = [] if avoid_jj_vcs else [".jj"]
@@ -62,21 +65,21 @@ def repo_from_args(args: argparse.Namespace) -> Repository:
         return vcses_searched
 
     # This allows users to override the below sanity checks.
-    if hasattr(args, "path") and args.path:
-        repo = probe_repo(args.path, avoid_jj=avoid_jj_vcs)
+    if options.path:
+        repo = probe_repo(options.path, avoid_jj=avoid_jj_vcs, options=options)
         if not repo:
-            raise Error("%s: Not a repository: %s" % (args.path, vcses_searched()))
+            raise Error("%s: Not a repository: %s" % (options.path, vcses_searched()))
 
     else:
         # Walk parents to find repository root.
         path = find_repo_root(os.getcwd(), avoid_jj_vcs)
         if path:
-            repo = probe_repo(path, avoid_jj_vcs)
+            repo = probe_repo(path, avoid_jj_vcs, options=options)
         if not repo:
             raise Error(
                 "Not a repository (or any of the parent directories): %s"
                 % vcses_searched()
             )
 
-    repo.set_args(args)
+    repo.configure()
     return repo

@@ -2,18 +2,17 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
 import copy
 from unittest import mock
 
 import pytest
 from packaging.version import Version
 
-from mozphab import diff, environment, exceptions, mozphab
+from mozphab import diff, environment, exceptions
 from mozphab.commits import Commit
 from mozphab.diff import Diff
 from mozphab.mercurial import Mercurial
-from mozphab.repository import PatchRefs, StackSelection
+from mozphab.repository import PatchRefs, RepositoryOptions, StackSelection
 
 from .conftest import assert_attributes, create_temp_fn
 
@@ -120,18 +119,16 @@ def test_finalize_no_evolve(m_hg_rebase, hg):
 @mock.patch("mozphab.mercurial.Mercurial.hg_out")
 @mock.patch("mozphab.mercurial.Mercurial.hg_log")
 @mock.patch("mozphab.mercurial.hglib.open")
-def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
-    class Args(argparse.Namespace):
-        def __init__(self, safe_mode=False):
-            self.safe_mode = safe_mode
+def test_configure(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
+    def configure(safe_mode=False):
+        hg.options = RepositoryOptions(safe_mode=safe_mode)
+        hg.configure()
 
-    m_config = mozphab.config
     with pytest.raises(exceptions.Error):
-        hg.set_args(Args())
+        configure()
 
     # baseline config
     hg.mercurial_version = Version("4.5")
-    m_config.safe_mode = False
     m_parse_config.return_value = {
         "ui.username": "username",
         "extensions.evolve": "",
@@ -140,7 +137,7 @@ def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
 
     # evolve & topic & shelve
     hg._hg = []
-    hg.set_args(Args())
+    configure()
 
     assert "extensions.rebase" in hg._config_options
     assert hg._config_options["rebase.experimental.inmemory"] == "true"
@@ -152,7 +149,7 @@ def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
     # inmemory rebase requires hg 4.5+
     hg.mercurial_version = Version("4.0")
     hg._hg = []
-    hg.set_args(Args())
+    configure()
     assert "extensions.rebase" in hg._config_options
     assert "rebase.experimental.inmemory" not in hg._config_options
     assert hg._extra_options["--pager"] == "never"
@@ -160,7 +157,7 @@ def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
 
     # safe_mode
     hg._hg = []
-    hg.set_args(Args(safe_mode=True))
+    configure(safe_mode=True)
     options = hg._get_config_options()
     assert options == [
         ("extensions.rebase", ""),
@@ -168,23 +165,11 @@ def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
         ("extensions.evolve", ""),
         ("extensions.topic", ""),
     ]
-
-    m_config.safe_mode = True
-    hg._hg = []
-    hg.set_args(Args())
-    options = hg._get_config_options()
-    assert options == [
-        ("extensions.rebase", ""),
-        ("ui.username", "username"),
-        ("extensions.evolve", ""),
-        ("extensions.topic", ""),
-    ]
-    m_config.safe_mode = False
 
     # no evolve
     m_parse_config.return_value = {"ui.username": "username", "extensions.shelve": ""}
     hg._hg = []
-    hg.set_args(Args())
+    configure()
     options = hg._get_config_options()
     assert options == [
         ("extensions.rebase", ""),
@@ -682,23 +667,16 @@ def test_repository_cached(m_which, m_is_dir, m_os_chdir, m_phab_url, m_open, *p
     m_which.return_value = True
     m_open.return_value = MyRepo()
 
-    hg = Mercurial("x")
-
-    class Args(argparse.Namespace):
-        def __init__(self):
-            self.start_rev = "(auto)"
-            self.end_rev = "."
-            self.safe_mode = True
-            self.single = False
+    hg = Mercurial("x", options=RepositoryOptions(safe_mode=True))
 
     hg._repo = None
-    hg.set_args(Args())
+    hg.configure()
     current_repo = hg.repository
     assert current_repo is not None
 
     # makes sure we cache the `hgclient` instance when using the
-    # same args
-    hg.set_args(Args())
+    # same options
+    hg.configure()
     assert hg.repository is current_repo
 
 

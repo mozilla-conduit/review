@@ -54,6 +54,11 @@ def add_parser(parser):
         action="store_true",
         help="Run VCS with only necessary extensions.",
     )
+    # `RepositoryOptions` reads `--path` and `--upstream`, which this command lacks.
     cert_parser.set_defaults(
-        func=install_certificate, needs_repo=True, needs_user_data=False
+        func=install_certificate,
+        needs_repo=True,
+        needs_user_data=False,
+        path=None,
+        upstream=None,
     )

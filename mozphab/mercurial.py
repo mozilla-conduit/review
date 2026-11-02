@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import mimetypes
 import os
@@ -41,7 +40,14 @@ from .helpers import (
     which_path,
 )
 from .logger import logger
-from .repository import PatchAttempt, PatchRefs, Repository, StackSelection
+from .repository import (
+    DEFAULT_REPOSITORY_OPTIONS,
+    PatchAttempt,
+    PatchRefs,
+    Repository,
+    RepositoryOptions,
+    StackSelection,
+)
 from .spinner import clear_terminal_line, wait_message
 from .subprocess_wrapper import debug_log_command, profiler_marker
 from .telemetry import telemetry
@@ -76,20 +82,22 @@ class FileChange:
 
 
 class Mercurial(Repository):
-    def __init__(self, path: str):
+    def __init__(
+        self, path: str, options: RepositoryOptions = DEFAULT_REPOSITORY_OPTIONS
+    ):
         dot_path = os.path.join(path, ".hg")
         if not os.path.isdir(dot_path):
             raise ValueError("%s: not a hg repository" % path)
         logger.debug("found hg repo in %s", path)
 
-        super().__init__(path, dot_path)
+        super().__init__(path, dot_path, options=options)
         self.vcs = "hg"
         self._hg_binary = config.hg_command[0]
         # Set by `select_stack` once the commit range is known.
         self.revset = ""
         self.strip_nodes = []
         self.status = None
-        # Set by `set_args` when the obsstore has to be removed on cleanup.
+        # Set by `configure` when the obsstore has to be removed on cleanup.
         self.obsstore = ""
         self.unlink_obsstore = False
         self.use_evolve = False
@@ -376,15 +384,13 @@ class Mercurial(Repository):
 
         self.revset = "%s::%s" % (commits[0].node, commits[-1].node)
 
-    def set_args(self, args: argparse.Namespace):
+    def configure(self):
         """Sets up the right environment for hg, prior to running it.
 
         Sets:
         - all the --config options (includes safe mode)
         - extra options
         """
-        super().set_args(args)
-
         # Load hg config into hg_config.  We'll specify specific settings on
         # the command line when calling hg; all other user settings are ignored.
         # Do not parse shell alias extensions.
@@ -395,7 +401,7 @@ class Mercurial(Repository):
             ),
         )
 
-        self._safe_mode = self.args.safe_mode or config.safe_mode
+        self._safe_mode = self.options.safe_mode
         self._safe_config_options.clear()
         self._config_options.clear()
         self._extra_options.clear()

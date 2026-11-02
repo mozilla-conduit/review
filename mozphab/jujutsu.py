@@ -1,4 +1,3 @@
-import argparse
 import os
 import re
 import uuid
@@ -21,7 +20,14 @@ from .helpers import (
     temporary_file,
 )
 from .logger import logger
-from .repository import PatchAttempt, PatchRefs, Repository, StackSelection
+from .repository import (
+    DEFAULT_REPOSITORY_OPTIONS,
+    PatchAttempt,
+    PatchRefs,
+    Repository,
+    RepositoryOptions,
+    StackSelection,
+)
 from .spinner import wait_message
 from .subprocess_wrapper import (
     check_call,
@@ -44,7 +50,9 @@ class Jujutsu(Repository):
     # Methods expected from callers of the `Repository` interface:
     # ----
 
-    def __init__(self, path: str):
+    def __init__(
+        self, path: str, options: RepositoryOptions = DEFAULT_REPOSITORY_OPTIONS
+    ):
         dot_path = os.path.join(path, ".jj")
         if not os.path.exists(dot_path):
             raise ValueError(f"{path}: not a Jujutsu repository")
@@ -94,7 +102,9 @@ class Jujutsu(Repository):
             )
             logger.debug(f"is_colocated: {is_colocated}")
             bare_path = None if is_colocated else str(self.git_path)
-            self.__git_repo = Git(path, bare_path=bare_path)
+            # The wrapped `Git` isn't configured, so `--safe-mode` doesn't isolate
+            # its `git` calls from the user's Git configuration.
+            self.__git_repo = Git(path, bare_path=bare_path, options=options)
             logger.debug("Git repo initialized")
         except Exception as exc:
             raise Error(
@@ -102,7 +112,7 @@ class Jujutsu(Repository):
             ) from exc
 
         # Populate common fields expected from a `Repository`
-        super().__init__(path, dot_path)
+        super().__init__(path, dot_path, options=options)
 
         self.vcs = "jj"
 
@@ -143,11 +153,6 @@ class Jujutsu(Repository):
 
     def before_submit(self):
         self.__validate_email()
-
-    def set_args(self, args: argparse.Namespace):
-        """Store moz-phab command line args."""
-        super().set_args(args)
-        self.__git_repo.args = self.args
 
     def select_stack(self, selection: StackSelection):
         """Set the revset from `selection`, leaving it unset if there's no stack."""
@@ -607,8 +612,8 @@ class Jujutsu(Repository):
 
     def __get_last_stack_change(self) -> str | None:
         """Gets the last of the current stack of mutable changes, but _only_ if there's one."""
-        # TODO: Should we do something different when `config.git_remote` or `self.args.upstream`
-        # are specified? Compare with `remotes` checks in Git impl.
+        # TODO: Should we do something different when `config.git_remote` or
+        # `options.upstream` are specified? Compare with `remotes` checks in Git impl.
 
         revset = 'heads(immutable()..@- | present(@ ~ description(exact:"")))'
         mutable_roots = self.__cli_log(template='change_id ++ "\\n"', revset=revset)
@@ -622,8 +627,8 @@ class Jujutsu(Repository):
 
     def __get_first_stack_change(self) -> str | None:
         """Gets the first of the current stack of mutable changes, but _only_ if there's one."""
-        # TODO: Should we do something different when `config.git_remote` or `self.args.upstream`
-        # are specified? Compare with `remotes` checks in Git impl.
+        # TODO: Should we do something different when `config.git_remote` or
+        # `options.upstream` are specified? Compare with `remotes` checks in Git impl.
 
         revset = 'roots(immutable()..@- | present(@ ~ description(exact:"")))'
         mutable_roots = self.__cli_log(template='change_id ++ "\\n"', revset=revset)

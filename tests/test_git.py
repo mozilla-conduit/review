@@ -3,7 +3,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
 import logging
 from pathlib import Path
 from unittest import mock
@@ -13,7 +12,12 @@ from callee import Contains
 
 from mozphab import environment, exceptions, mozphab
 from mozphab.commits import Commit
-from mozphab.repository import PatchAttempt, PatchRefs, StackSelection
+from mozphab.repository import (
+    PatchAttempt,
+    PatchRefs,
+    RepositoryOptions,
+    StackSelection,
+)
 
 from .conftest import create_temp_fn
 
@@ -44,7 +48,7 @@ def test_first_unpublished(m_git_git_out, git, revisions, expected):
 
 @mock.patch("mozphab.git.Git.git_out")
 def test_get_public_base_node(m_git_out, git):
-    git.args.upstream = ["origin"]
+    git.options = RepositoryOptions(upstream=("origin",))
     m_git_out.return_value = []
     assert git.get_public_base_node("public") is None
 
@@ -72,7 +76,7 @@ def test_get_base_remotes_with_git_remote(mock_git_out, mock_config, git):
 @mock.patch("mozphab.git.Git.git_out")
 def test_get_base_remotes_with_remote_arg(mock_git_out, mock_config, git):
     mock_config.git_remote = ["origin"]
-    git.args.upstream = ["custom"]
+    git.options = RepositoryOptions(upstream=("custom",))
 
     remotes = git.get_base_remotes()
     assert remotes == ["custom"], "--upstream arg should take priority."
@@ -387,18 +391,17 @@ def test_select_stack(m_git_get_first, git):
 @mock.patch("mozphab.gitcommand.parse_config")
 @mock.patch("mozphab.git.Git._get_first_unpublished_node")
 @mock.patch("mozphab.git.Git.git_out")
-def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git):
-    class Args(argparse.Namespace):
-        def __init__(self, safe_mode=False):
-            self.safe_mode = safe_mode
+def test_configure(m_git_git_out, m_git_get_first, m_parse_config, m_config, git):
+    def configure(safe_mode=False):
+        git.options = RepositoryOptions(safe_mode=safe_mode)
+        git.configure()
 
     with pytest.raises(exceptions.Error):
-        git.set_args(Args())
+        configure()
 
     git.git.command = ["git"]
-    git.git.safe_mode = False
     m_parse_config.return_value = {"user.email": "email"}
-    git.set_args(Args())
+    configure()
     assert ["git"] == git.git.command
     m_git_get_first.assert_not_called()
 
@@ -407,7 +410,7 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
         "user.name": "name",
         "cinnabar.helper": "string",
     }
-    git.set_args(Args())
+    configure()
     assert ["git"] == git.git.command
     assert ["cinnabar"] == git.git.extensions
 
@@ -417,21 +420,8 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
         + ["-c", "user.name=name"]
         + ["-c", "cinnabar.helper=string"]
     )
-    git.set_args(Args(safe_mode=True))
+    configure(safe_mode=True)
     assert safe_options == git.git.command
-
-    git.git.command = ["git"]
-    git.git.safe_mode = True
-    git.set_args(Args())
-    assert safe_options == git.git.command
-
-    m_config.safe_mode = False
-    git.set_args(Args(safe_mode=True))
-    assert "" == git.git._env["HOME"]
-    assert "" == git.git._env["XDG_CONFIG_HOME"]
-
-    m_config.safe_mode = True
-    git.set_args(Args())
     assert "" == git.git._env["HOME"]
     assert "" == git.git._env["XDG_CONFIG_HOME"]
 

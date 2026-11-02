@@ -3,7 +3,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
 import os
 import re
 from pathlib import Path
@@ -33,7 +32,6 @@ class GitCommand:
 
         self.extensions = []
         self._cinnabar_installed = None
-        self.safe_mode = config.safe_mode
         self.email = ""
 
     def call(self, git_args: list[str], **kwargs):
@@ -90,8 +88,8 @@ class GitCommand:
             keep_ends
         )
 
-    def set_args(self, args: argparse.Namespace):
-        """Read and set the configuration."""
+    def configure(self, safe_mode: bool = False):
+        """Read the user's Git configuration, ignoring most of it in `safe_mode`."""
         git_config = parse_config(self.output(["config", "--list"], never_log=True))
 
         safe_options = []
@@ -112,7 +110,7 @@ class GitCommand:
                 ["-c", "cinnabar.helper=%s" % git_config["cinnabar.helper"]]
             )
 
-        if args.safe_mode or self.safe_mode:
+        if safe_mode:
             # Ignore the user's Git config
             # To make Git not read the `~/.gitconfig` we need to temporarily change the
             # `$HOME` variable.

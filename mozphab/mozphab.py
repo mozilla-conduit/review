@@ -24,10 +24,10 @@ from mozphab.profiler import profiler
 from .args import parse_args
 from .conduit import ConduitAPIError, conduit
 from .config import config
-from .detect_repository import repo_from_args
+from .detect_repository import open_repository
 from .exceptions import Error
 from .logger import disable_stdout_logging, init_logging, logger, stop_logging
-from .repository import Repository
+from .repository import Repository, RepositoryOptions
 from .sentry import init_sentry, report_to_sentry
 from .spinner import wait_message
 from .telemetry import configure_telemetry, telemetry
@@ -141,7 +141,7 @@ def main(argv: list[str], *, is_development: bool):
         repo = None
         if args.needs_repo:
             with wait_message("Starting up.."):
-                repo = repo_from_args(args)
+                repo = open_repository(RepositoryOptions.from_args(args, config))
 
             conduit.set_repo(repo)
 

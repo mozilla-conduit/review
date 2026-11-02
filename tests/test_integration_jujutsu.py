@@ -4,6 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from mozphab.jujutsu import Jujutsu
+from mozphab.repository import RepositoryOptions
 
 from .conftest import jj_out, write_text
 
@@ -46,3 +47,14 @@ def test_apply_patch_tracks_new_files(in_process, jj_colocated_repo_path):
         "A newfile.txt",
         "R {oldfile.txt => renamed.txt}",
     ], "The new, ignored and renamed files should be committed."
+
+
+def test_wrapped_git_repo_uses_the_options(jj_colocated_repo_path):
+    """The Git repo `Jujutsu` wraps finds published commits on `--upstream`."""
+    options = RepositoryOptions(upstream=("upstream",))
+
+    repo = Jujutsu(str(jj_colocated_repo_path), options=options)
+
+    assert repo._Jujutsu__git_repo.get_base_remotes() == [  # type: ignore[attr-defined]
+        "upstream"
+    ], "The wrapped Git repo should use the `--upstream` remotes."

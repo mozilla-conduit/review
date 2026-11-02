@@ -2,7 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
 import builtins
 import datetime
 import logging
@@ -26,6 +25,7 @@ from mozphab import (
 from mozphab.commands import submit
 from mozphab.commits import Commit
 from mozphab.jujutsu import Jujutsu
+from mozphab.repository import RepositoryOptions
 
 
 class Helpers(unittest.TestCase):
@@ -441,7 +441,7 @@ def test_probe_repo(m_jj, m_git, m_hg):
 
 
 @mock.patch("mozphab.detect_repository.probe_repo")
-def test_repo_from_args(m_probe):
+def test_open_repository(m_probe):
     # TODO test walking the path
     repo = None
 
@@ -449,18 +449,15 @@ def test_repo_from_args(m_probe):
         return repo
 
     m_probe.side_effect = probe_repo
-
-    class Args(argparse.Namespace):
-        def __init__(self, path=None):
-            self.path = path
+    options = RepositoryOptions(path="some path")
 
     with pytest.raises(exceptions.Error):
-        detect_repository.repo_from_args(Args(path="some path"))
+        detect_repository.open_repository(options)
 
     repo = mock.MagicMock()
-    args = Args(path="some path")
-    assert repo == detect_repository.repo_from_args(args)
-    repo.set_args.assert_called_once_with(args)
+    assert repo == detect_repository.open_repository(options)
+    m_probe.assert_called_with("some path", avoid_jj=False, options=options)
+    repo.configure.assert_called_once_with()
 
 
 def test_parse_config():
