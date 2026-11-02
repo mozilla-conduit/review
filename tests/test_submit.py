@@ -1620,6 +1620,9 @@ def test_uplift_first_public_parent_uses_train_head(
     m_repo.get_public_base_node.assert_not_called()
     _, _, _, first_public_parent = m_conduit.set_diff_property.call_args[0]
     assert first_public_parent == "beta-head-sha"
+    assert m_conduit.create_diff.call_args.kwargs == {
+        "is_uplift": True
+    }, "Uplift diffs should be created with the uplift creation method."
 
 
 def test_uplift_no_rebase_off_train_uses_public_base(
