@@ -5,9 +5,9 @@
 
 import argparse
 import copy
-import dataclasses
 import unittest
 import uuid
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -1530,25 +1530,25 @@ def m_config():
         yield m
 
 
-@pytest.fixture
-def submit_options():
-    return submit.SubmitOptions(yes=True)
+def submit_options(**overrides: Any) -> submit.SubmitOptions:
+    """Return the options of a `submit --yes` run, with `overrides` applied."""
+    return submit.SubmitOptions(yes=True, **overrides)
 
 
 def test_ai_review_requested_for_each_commit(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
+    m_conduit, m_repo, m_validate, m_logger, m_config
 ):
     commits = [commit(bug_id="1"), commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
-    submit_options = dataclasses.replace(submit_options, ai=True)
+    options = submit_options(ai=True)
 
-    submit._submit(m_repo, submit_options, UserData())
+    submit._submit(m_repo, options, UserData())
 
     assert m_conduit.request_ai_review.call_count == 2
 
 
 def test_update_revision_error_names_revision(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
+    m_conduit, m_repo, m_validate, m_logger, m_config
 ):
     """A failing revision update reports which revision it belongs to."""
     validation_error = (
@@ -1566,32 +1566,32 @@ def test_update_revision_error_names_revision(
     m_conduit.update_revision.side_effect = ConduitAPIError(validation_error)
 
     with pytest.raises(exceptions.Error) as e:
-        submit._submit(m_repo, submit_options, UserData())
+        submit._submit(m_repo, submit_options(), UserData())
 
     assert str(e.value) == f"D314841: Phabricator Error: {validation_error}"
 
 
 def test_ai_review_not_called_without_flag(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
+    m_conduit, m_repo, m_validate, m_logger, m_config
 ):
     commits = [commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
-    submit_options = dataclasses.replace(submit_options, ai=False)
+    options = submit_options(ai=False)
 
-    submit._submit(m_repo, submit_options, UserData())
+    submit._submit(m_repo, options, UserData())
 
     m_conduit.request_ai_review.assert_not_called()
 
 
 def test_ai_review_failure_does_not_abort_submission(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
+    m_conduit, m_repo, m_validate, m_logger, m_config
 ):
     commits = [commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
     m_conduit.request_ai_review.side_effect = ConduitAPIError("AI service unavailable")
-    submit_options = dataclasses.replace(submit_options, ai=True)
+    options = submit_options(ai=True)
 
-    result = submit._submit(m_repo, submit_options, UserData())
+    result = submit._submit(m_repo, options, UserData())
 
     assert result is not None
     m_logger.error.assert_any_call(
@@ -1600,7 +1600,7 @@ def test_ai_review_failure_does_not_abort_submission(
 
 
 def test_uplift_first_public_parent_uses_train_head(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
+    m_conduit, m_repo, m_validate, m_logger, m_config
 ):
     """`firstPublicParent` for uplifts should come from the train's head."""
     commits = [commit(bug_id="1")]
@@ -1611,12 +1611,11 @@ def test_uplift_first_public_parent_uses_train_head(
     # No local rebase needed, but the train head should still be used.
     m_repo.is_descendant.return_value = True
 
-    submit_options = dataclasses.replace(
-        submit_options,
-        uplift=submit.UpliftSettings(train="beta", no_rebase=False),
+    options = submit_options(
+        uplift=submit.UpliftSettings(train="beta", no_rebase=False)
     )
 
-    submit._submit(m_repo, submit_options, UserData())
+    submit._submit(m_repo, options, UserData())
 
     m_repo.get_public_base_node.assert_not_called()
     _, _, _, first_public_parent = m_conduit.set_diff_property.call_args[0]
@@ -1624,7 +1623,7 @@ def test_uplift_first_public_parent_uses_train_head(
 
 
 def test_uplift_no_rebase_off_train_uses_public_base(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
+    m_conduit, m_repo, m_validate, m_logger, m_config
 ):
     """`--no-rebase` off the train should keep the commits' own public base.
 
@@ -1638,12 +1637,9 @@ def test_uplift_no_rebase_off_train_uses_public_base(
     m_repo.get_public_base_node.return_value = "central-public-base"
     m_repo.is_descendant.return_value = False
 
-    submit_options = dataclasses.replace(
-        submit_options,
-        uplift=submit.UpliftSettings(train="beta", no_rebase=True),
-    )
+    options = submit_options(uplift=submit.UpliftSettings(train="beta", no_rebase=True))
 
-    submit._submit(m_repo, submit_options, UserData())
+    submit._submit(m_repo, options, UserData())
 
     m_repo.uplift_commits.assert_not_called()
     _, _, _, first_public_parent = m_conduit.set_diff_property.call_args[0]
@@ -1651,7 +1647,7 @@ def test_uplift_no_rebase_off_train_uses_public_base(
 
 
 def test_uplift_no_rebase_on_train_uses_train_head(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
+    m_conduit, m_repo, m_validate, m_logger, m_config
 ):
     """`--no-rebase` commits already on the train should report the train head."""
     commits = [commit(bug_id="1")]
@@ -1661,12 +1657,9 @@ def test_uplift_no_rebase_on_train_uses_train_head(
     m_repo.get_public_node.side_effect = lambda node: node
     m_repo.is_descendant.return_value = True
 
-    submit_options = dataclasses.replace(
-        submit_options,
-        uplift=submit.UpliftSettings(train="beta", no_rebase=True),
-    )
+    options = submit_options(uplift=submit.UpliftSettings(train="beta", no_rebase=True))
 
-    submit._submit(m_repo, submit_options, UserData())
+    submit._submit(m_repo, options, UserData())
 
     m_repo.uplift_commits.assert_not_called()
     m_repo.get_public_base_node.assert_not_called()
@@ -1675,38 +1668,36 @@ def test_uplift_no_rebase_on_train_uses_train_head(
 
 
 def test_ai_review_skipped_for_non_submitted_commits(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
+    m_conduit, m_repo, m_validate, m_logger, m_config
 ):
     submitted = commit(bug_id="1")
     skipped = commit(bug_id="1", submit=False)
     m_repo.commit_stack.return_value = [skipped, submitted]
-    submit_options = dataclasses.replace(submit_options, ai=True)
+    options = submit_options(ai=True)
 
-    submit._submit(m_repo, submit_options, UserData())
+    submit._submit(m_repo, options, UserData())
 
     assert m_conduit.request_ai_review.call_count == 1
 
 
 def test_ai_review_triggered_by_config(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
+    m_conduit, m_repo, m_validate, m_logger, m_config
 ):
     commits = [commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
-    submit_options = dataclasses.replace(submit_options, ai=False, ai_review=True)
+    options = submit_options(ai=False, ai_review=True)
 
-    submit._submit(m_repo, submit_options, UserData())
+    submit._submit(m_repo, options, UserData())
 
     assert m_conduit.request_ai_review.call_count == 1
 
 
-def test_ai_review_config_hint_shown(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
-):
+def test_ai_review_config_hint_shown(m_conduit, m_repo, m_validate, m_logger, m_config):
     commits = [commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
-    submit_options = dataclasses.replace(submit_options, ai=True, ai_review=False)
+    options = submit_options(ai=True, ai_review=False)
 
-    submit._submit(m_repo, submit_options, UserData())
+    submit._submit(m_repo, options, UserData())
 
     m_logger.info.assert_any_call(
         "Tip: to always request AI review on new revisions, set submit.ai_review to true in %s",
@@ -1715,7 +1706,7 @@ def test_ai_review_config_hint_shown(
 
 
 def test_ai_review_skipped_for_updates_with_config(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
+    m_conduit, m_repo, m_validate, m_logger, m_config
 ):
     # Commit with rev_id set simulates an update to an existing revision.
     commits = [
@@ -1726,15 +1717,15 @@ def test_ai_review_skipped_for_updates_with_config(
         )
     ]
     m_repo.commit_stack.return_value = commits
-    submit_options = dataclasses.replace(submit_options, ai=False, ai_review=True)
+    options = submit_options(ai=False, ai_review=True)
 
-    submit._submit(m_repo, submit_options, UserData())
+    submit._submit(m_repo, options, UserData())
 
     m_conduit.request_ai_review.assert_not_called()
 
 
 def test_ai_review_requested_for_updates_with_flag(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
+    m_conduit, m_repo, m_validate, m_logger, m_config
 ):
     # --ai flag should always request AI review, even for updates.
     commits = [
@@ -1745,21 +1736,21 @@ def test_ai_review_requested_for_updates_with_flag(
         )
     ]
     m_repo.commit_stack.return_value = commits
-    submit_options = dataclasses.replace(submit_options, ai=True)
+    options = submit_options(ai=True)
 
-    submit._submit(m_repo, submit_options, UserData())
+    submit._submit(m_repo, options, UserData())
 
     assert m_conduit.request_ai_review.call_count == 1
 
 
 def test_ai_review_config_hint_not_shown_when_config_set(
-    m_conduit, m_repo, m_validate, m_logger, m_config, submit_options
+    m_conduit, m_repo, m_validate, m_logger, m_config
 ):
     commits = [commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
-    submit_options = dataclasses.replace(submit_options, ai=True, ai_review=True)
+    options = submit_options(ai=True, ai_review=True)
 
-    submit._submit(m_repo, submit_options, UserData())
+    submit._submit(m_repo, options, UserData())
 
     for call in m_logger.info.call_args_list:
         assert "Tip:" not in str(call)
@@ -1779,15 +1770,14 @@ def test_no_stack_linking(
     m_validate,
     m_logger,
     m_config,
-    submit_options,
     no_stack,
     expected_second_parent,
 ):
     commits = [commit(bug_id="1"), commit(bug_id="1")]
     m_repo.commit_stack.return_value = commits
-    submit_options = dataclasses.replace(submit_options, no_stack=no_stack)
+    options = submit_options(no_stack=no_stack)
 
-    submit._submit(m_repo, submit_options, UserData())
+    submit._submit(m_repo, options, UserData())
 
     assert m_conduit.create_revision.call_count == 2
     first_call, second_call = m_conduit.create_revision.call_args_list
