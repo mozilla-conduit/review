@@ -691,11 +691,6 @@ def test_get_file_modes_symlink(m_hg, hg):
 
 
 def test_check_vcs(hg):
-    class Args(argparse.Namespace):
-        def __init__(self, force_vcs=False):
-            self.force_vcs = force_vcs
-
-    hg.args = Args()
     assert hg.check_vcs()
 
     hg._phab_vcs = "git"
@@ -703,9 +698,6 @@ def test_check_vcs(hg):
     # This just produces a warning now.
     # See bug 1963878.
     hg.check_vcs()
-
-    hg.args = Args(force_vcs=True)
-    assert hg.check_vcs()
 
 
 @mock.patch("mozphab.mercurial.hglib.open")

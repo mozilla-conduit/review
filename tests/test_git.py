@@ -771,13 +771,6 @@ def test_unicode_in_windows_env(m_git_out, git, monkeypatch):
 
 
 def test_check_vcs(git):
-    class Args(argparse.Namespace):
-        def __init__(self, force_vcs=False):
-            self.safe_mode = False
-            self.force_vcs = force_vcs
-
-    args = Args()
-    git.set_args(args)
     assert git.check_vcs()
 
     git.git._cinnabar_installed = True
@@ -789,10 +782,6 @@ def test_check_vcs(git):
     # This just produces a warning now.
     # See bug 1963878.
     git.check_vcs()
-
-    args = Args(force_vcs=True)
-    git.set_args(args)
-    assert git.check_vcs()
 
 
 @mock.patch("mozphab.git.Git._get_commits_info")

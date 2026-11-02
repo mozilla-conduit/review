@@ -924,3 +924,17 @@ DIFF_4 = {
         }
     },
 }
+
+
+@pytest.mark.parametrize("force_vcs", [False, True])
+@mock.patch("mozphab.conduit.ConduitAPI.check", return_value=False)
+def test_patch_force_vcs_skips_the_vcs_check(_check, force_vcs):
+    repo = mock.MagicMock(spec=Repository)
+    repo.is_worktree_clean.return_value = True
+
+    with pytest.raises(exceptions.Error, match="Failed to use Conduit API"):
+        patch.patch(repo, patch_args(force_vcs=force_vcs))
+
+    assert (
+        repo.check_vcs.called != force_vcs
+    ), "The VCS should be checked unless `--force-vcs` is given."

@@ -358,10 +358,10 @@ class Repository(object):
         return self._phid
 
     def check_vcs(self) -> bool:
-        """`Git.check_vcs` raises if cinnabar required and not installed."""
-        if self.args.force_vcs:
-            return True
+        """Check the local VCS can work with the repository on Phabricator.
 
+        `--force-vcs` skips the check, so commands don't call this when it's given.
+        """
         if self.vcs != self.phab_vcs:
             # This error is captured in Git and not raised if Cinnabar installed.
             logger.warning(

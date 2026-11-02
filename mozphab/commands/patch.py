@@ -40,6 +40,7 @@ class PatchOptions:
     yes: bool = False
     # Patch a revision's children without asking.
     always_full_stack: bool = False
+    force_vcs: bool = False
 
     @classmethod
     def from_args(cls, args: argparse.Namespace, config: Config) -> "PatchOptions":
@@ -56,6 +57,7 @@ class PatchOptions:
             include_abandoned=args.include_abandoned,
             yes=args.yes,
             always_full_stack=config.always_full_stack,
+            force_vcs=args.force_vcs,
         )
 
 
@@ -393,14 +395,17 @@ def patch(repo: Repository, args: argparse.Namespace):
         with wait_message("Checking environment.."):
             with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
                 ping_future = executor.submit(conduit.check)
-                vcs_future = executor.submit(repo.check_vcs)
+                vcs_future = (
+                    None if options.force_vcs else executor.submit(repo.check_vcs)
+                )
                 clean_future = executor.submit(repo.is_worktree_clean)
 
                 if not ping_future.result():
                     raise Error("Failed to use Conduit API")
 
                 # Propagate exceptions from repo.check_vcs.
-                vcs_future.result()
+                if vcs_future:
+                    vcs_future.result()
 
                 if not clean_future.result():
                     raise Error(

@@ -1917,3 +1917,17 @@ def test_submit_options_can_prompt(options, can_prompt):
     assert (
         options.can_prompt is can_prompt
     ), "`--yes` should never prompt, and `--interactive` should override `auto_submit`."
+
+
+@pytest.mark.parametrize("force_vcs", [False, True])
+def test_force_vcs_skips_the_vcs_check(
+    m_conduit, m_repo, m_validate, m_logger, m_config, force_vcs
+):
+    m_repo.commit_stack.return_value = [commit(bug_id="1")]
+    options = submit_options(force_vcs=force_vcs)
+
+    submit._submit(m_repo, options, UserData())
+
+    assert (
+        m_repo.check_vcs.called != force_vcs
+    ), "The VCS should be checked unless `--force-vcs` is given."

@@ -61,6 +61,7 @@ class SubmitOptions:
     no_stack: bool = False
     single: bool = False
     ai: bool = False
+    force_vcs: bool = False
     # Set when `moz-phab` ran `submit` because no command was given.
     fallback: bool = False
     # Set when `submit` runs on behalf of `moz-phab uplift`.
@@ -110,6 +111,7 @@ class SubmitOptions:
             no_stack=args.no_stack,
             single=args.single,
             ai=args.ai,
+            force_vcs=args.force_vcs,
             fallback=args.fallback,
             uplift=uplift,
             auto_submit=config.auto_submit,
@@ -813,7 +815,8 @@ def _submit(
             raise Error("Failed to use Conduit API")
 
         # Check if local and remote VCS matches
-        repo.check_vcs()
+        if not options.force_vcs:
+            repo.check_vcs()
 
     with profiler.phase("Checking the working directory"):
         repo.before_submit()
