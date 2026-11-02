@@ -29,7 +29,7 @@ from .helpers import (
     temporary_file,
 )
 from .logger import logger
-from .repository import Repository
+from .repository import PatchRefs, Repository
 from .spinner import wait_message
 from .telemetry import telemetry
 
@@ -607,24 +607,31 @@ class Git(Repository):
             commands += ["-F", temp_f]
             self.git_call(commands)
 
-    def before_patch(self, node: str, name: str):
+    def before_patch(
+        self,
+        node: str,
+        refs: PatchRefs,
+        name: str | None = None,
+        assume_yes: bool = False,
+    ):
         """Prepare repository to apply the patches.
 
         Args:
             node - SHA1 of the base commit
-            name - name of the branch to be created
+            refs - the branch to be created
+            assume_yes - switch to the 'detached HEAD' state without asking
         """
         # Checking out the commit that is already checked out is a no-op that
         # detaches HEAD from the branch it's on, so don't (eg. `--apply-to
         # here`, or a target that resolves to the current commit).
         needs_checkout = bool(node) and self._revparse(node) != self.get_current_node()
 
-        no_new_branch = self.args.no_branch or not config.create_branch
+        no_new_branch = not refs.create_branch
         is_detached_head = self._is_detached_head()
         will_detach_head = no_new_branch and needs_checkout
         # HEAD is already detached when applying at another base after a failed
         # attempt, so there's nothing left to ask about the second time around.
-        if will_detach_head and not self.args.yes and not is_detached_head:
+        if will_detach_head and not assume_yes and not is_detached_head:
             res = prompt(
                 "Switching to the 'detached HEAD' state. Do you wish to continue?",
                 ["Yes", "No"],
@@ -632,7 +639,7 @@ class Git(Repository):
             if res == "No":
                 sys.exit(1)
 
-        if will_detach_head and self.args.yes:
+        if will_detach_head and assume_yes:
             logger.warning("Switching to the 'detached HEAD' state.")
 
         # The commits end up on a detached HEAD either way, whether this call
@@ -649,7 +656,7 @@ class Git(Repository):
                 self.checkout(node)
             logger.info("Checked out %s", short_node(node))
 
-        if name and not self.args.no_branch and config.create_branch:
+        if name and refs.create_branch:
             branches = self.git_out(["branch", "--list", "%s*" % name])
             branches = [re.sub("[ *]", "", b) for b in branches]
             branch_name = name

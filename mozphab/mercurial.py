@@ -41,7 +41,7 @@ from .helpers import (
     which_path,
 )
 from .logger import logger
-from .repository import Repository
+from .repository import PatchRefs, Repository
 from .spinner import clear_terminal_line, wait_message
 from .subprocess_wrapper import debug_log_command, profiler_marker
 from .telemetry import telemetry
@@ -634,21 +634,27 @@ class Mercurial(Repository):
         with temporary_file(body) as temp_f:
             self.hg(["commit", "--logfile", temp_f])
 
-    def before_patch(self, node: str, name: str):
+    def before_patch(
+        self,
+        node: str,
+        refs: PatchRefs,
+        name: str | None = None,
+        assume_yes: bool = False,
+    ):
         """Prepare repository to apply the patches.
 
         Args:
             node - SHA1 or revision of the base commit
-            name - name of the bookmark/topic to be created
+            refs - the bookmark/topic to be created
+            assume_yes - unused, as Mercurial has nothing to confirm
         """
         # Checkout sha
         if node:
             with wait_message("Checking out %s.." % short_node(node)):
                 self.checkout(node)
-            if not self.args.raw:
-                logger.info("Checked out %s", short_node(node))
+            logger.info("Checked out %s", short_node(node))
 
-        if name and config.create_bookmark and not self.args.no_bookmark:
+        if name and refs.create_bookmark:
             bookmarks = self.hg_out(["bookmarks", "-T", "{bookmark}\n"])
             bookmark_name = name
             i = 0
@@ -657,10 +663,9 @@ class Mercurial(Repository):
                 bookmark_name = "%s_%s" % (name, i)
 
             self.hg(["bookmark", bookmark_name])
-            if not self.args.raw:
-                logger.info("Bookmark set to %s", bookmark_name)
+            logger.info("Bookmark set to %s", bookmark_name)
 
-        if name and self.use_topic and config.create_topic and not self.args.no_topic:
+        if name and self.use_topic and refs.create_topic:
             topics = self.hg_out(["topics", "-T", "{topic}\n"])
             topic_name = name
             i = 0

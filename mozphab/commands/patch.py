@@ -18,6 +18,7 @@ from mozphab.logger import logger
 from mozphab.mercurial import Mercurial
 from mozphab.patch import apply_patch
 from mozphab.repository import (
+    PatchRefs,
     Repository,
 )
 from mozphab.spinner import wait_message
@@ -35,6 +36,8 @@ class PatchOptions:
     apply_to: str = "base"
     name: str | None = None
     branch_name_template: str = "phab-D{rev_id}"
+    # The refs to create, named once the revisions are known.
+    refs: PatchRefs = PatchRefs(create_branch=True, create_bookmark=True)
     skip_dependencies: bool = False
     include_abandoned: bool = False
     yes: bool = False
@@ -53,6 +56,11 @@ class PatchOptions:
             apply_to=args.apply_to or config.apply_patch_to,
             name=args.name,
             branch_name_template=config.branch_name_template,
+            refs=PatchRefs(
+                create_branch=not args.no_branch and config.create_branch,
+                create_bookmark=not args.no_bookmark and config.create_bookmark,
+                create_topic=not args.no_topic and config.create_topic,
+            ),
             skip_dependencies=args.skip_dependencies,
             include_abandoned=args.include_abandoned,
             yes=args.yes,
@@ -526,7 +534,7 @@ def patch(repo: Repository, args: argparse.Namespace):
 
     target_node = ""
     current_branch = None
-    branch_name = None
+    ref_name = None
 
     base_diff = diffs[revs[0]["fields"]["diffPHID"]]
     diff_base_node = None
@@ -584,11 +592,11 @@ def patch(repo: Repository, args: argparse.Namespace):
                     msg += "\n%s" % str(e)
                 raise Error(msg)
 
-        branch_name = resolve_branch_name(options, rev_id)
+        ref_name = resolve_branch_name(options, rev_id)
         if options.create_commit:
             current_branch = repo.get_current_branch()
 
-        repo.before_patch(target_node, branch_name)
+        repo.before_patch(target_node, options.refs, ref_name, assume_yes=options.yes)
 
     # Fetch raw diffs in parallel.
     raw_diffs = {}
@@ -697,7 +705,7 @@ def patch(repo: Repository, args: argparse.Namespace):
             )
 
             repo.discard_patch_attempt(target_node)
-            repo.before_patch(base_node, branch_name)
+            repo.before_patch(base_node, options.refs, ref_name, assume_yes=options.yes)
             _apply_commits(repo, revs, diffs, raw_diffs)
 
             try:

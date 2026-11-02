@@ -14,17 +14,19 @@ from mozphab.commits import Commit
 from mozphab.git import Git
 from mozphab.jujutsu import Jujutsu
 from mozphab.mercurial import Mercurial
-from mozphab.repository import Repository
+from mozphab.repository import PatchRefs, Repository
 
 from .conftest import git_out, hg_out, jj_out, write_text
 
 
 @dataclass
 class ContractRepo:
-    """A real repository of one VCS, with a way to commit files to it."""
+    """A real repository of one VCS, with ways to commit to it and list its refs."""
 
     repo: Repository
     commit_files: Callable[[dict[str, str], str], str]
+    # The names of the branches or bookmarks in the repository.
+    named_refs: Callable[[], set[str]]
 
 
 def git_commit_files(path: Path, files: dict[str, str], message: str) -> str:
@@ -55,6 +57,21 @@ def jj_commit_files(path: Path, files: dict[str, str], message: str) -> str:
     ).strip()
 
 
+def git_named_refs() -> set[str]:
+    """Return the branches in the Git repository in the working directory."""
+    return set(git_out("branch", "--format=%(refname:short)").split())
+
+
+def hg_named_refs() -> set[str]:
+    """Return the bookmarks in the Mercurial repository in the working directory."""
+    return set(hg_out("bookmarks", "--template", "{bookmark}\n").split())
+
+
+def jj_named_refs() -> set[str]:
+    """Return the bookmarks in the Jujutsu repository in the working directory."""
+    return set(jj_out("bookmark", "list", "--template", 'name ++ "\n"').split())
+
+
 @pytest.fixture(params=["git", "hg", "jj"])
 def contract_repo(request) -> ContractRepo:
     """Return a `ContractRepo` for each VCS backend."""
@@ -63,6 +80,7 @@ def contract_repo(request) -> ContractRepo:
         return ContractRepo(
             Git(str(path)),
             lambda files, message: git_commit_files(path, files, message),
+            git_named_refs,
         )
 
     if request.param == "hg":
@@ -70,13 +88,19 @@ def contract_repo(request) -> ContractRepo:
         return ContractRepo(
             Mercurial(str(path)),
             lambda files, message: hg_commit_files(path, files, message),
+            hg_named_refs,
         )
 
     path = request.getfixturevalue("jj_colocated_repo_path")
     return ContractRepo(
         Jujutsu(str(path)),
         lambda files, message: jj_commit_files(path, files, message),
+        jj_named_refs,
     )
+
+
+# A branch or bookmark, in whichever form each VCS creates it.
+ALL_REFS = PatchRefs(create_branch=True, create_bookmark=True)
 
 
 def numbered_lines(count: int, changed: int | None = None) -> str:
@@ -107,3 +131,22 @@ def test_get_diff_less_context(contract_repo: ContractRepo):
     assert (
         short_hunk.old_len == 201
     ), "`less_context` should only keep 100 lines of context around a change."
+
+
+def test_before_patch_creates_the_named_ref(contract_repo: ContractRepo):
+    node = contract_repo.repo.get_current_node()
+
+    contract_repo.repo.before_patch(node, ALL_REFS, "phab-D1")
+
+    assert (
+        "phab-D1" in contract_repo.named_refs()
+    ), "`before_patch` should create a branch or bookmark with the given name."
+
+
+def test_before_patch_without_named_refs(contract_repo: ContractRepo):
+    node = contract_repo.repo.get_current_node()
+    contract_repo.repo.before_patch(node, PatchRefs(), name="phab-D1", assume_yes=True)
+
+    assert (
+        "phab-D1" not in contract_repo.named_refs()
+    ), "`before_patch` shouldn't create a branch or bookmark it wasn't asked for."

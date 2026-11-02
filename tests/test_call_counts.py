@@ -109,6 +109,9 @@ def build_patch_args(target_rev_id: int) -> argparse.Namespace:
     args.force_vcs = False
     args.name = None
     args.diff_id = None
+    args.no_branch = False
+    args.no_bookmark = False
+    args.no_topic = False
     return args
 
 

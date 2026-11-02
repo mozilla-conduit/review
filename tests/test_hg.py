@@ -13,6 +13,7 @@ from mozphab import diff, environment, exceptions, mozphab
 from mozphab.commits import Commit
 from mozphab.diff import Diff
 from mozphab.mercurial import Mercurial
+from mozphab.repository import PatchRefs
 
 from .conftest import assert_attributes, create_temp_fn
 
@@ -243,79 +244,38 @@ def test_commit(m_hg, hg):
 @mock.patch("mozphab.mercurial.Mercurial.checkout")
 @mock.patch("mozphab.mercurial.Mercurial.hg_out")
 @mock.patch("mozphab.mercurial.Mercurial.hg")
-@mock.patch("mozphab.mercurial.config")
-def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
-    class Args(argparse.Namespace):
-        def __init__(
-            self,
-            rev_id="D123",
-            nocommit=False,
-            raw=False,
-            applyto="base",
-            no_bookmark=False,
-            no_topic=False,
-        ):
-            self.rev_id = rev_id
-            self.nocommit = nocommit
-            self.raw = raw
-            self.applyto = applyto
-            self.no_bookmark = no_bookmark
-            self.no_topic = no_topic
-
-    m_config.create_bookmark = True
-    m_config.create_topic = False
+def test_before_patch(m_hg, m_hg_out, m_checkout, hg):
     m_hg_out.side_effect = ["bookmark"]
-    hg.args = Args()
-    hg.before_patch("sha1", "bookmark")
+    hg.before_patch("sha1", PatchRefs(create_bookmark=True), name="bookmark")
     m_checkout.assert_called_with("sha1")
     m_hg_out.assert_called()
     m_hg.assert_called_with(["bookmark", "bookmark_1"])
     m_checkout.assert_called_once_with("sha1")
 
     m_checkout.reset_mock()
-    hg.args = Args(nocommit=True)
     m_hg.reset_mock()
-    hg.before_patch("sha1", None)
+    hg.before_patch("sha1", PatchRefs())
     m_hg.assert_not_called()
     m_checkout.assert_called_once_with("sha1")
 
-    hg.args = Args(applyto="here")
     m_checkout.reset_mock()
     m_hg_out.reset_mock()
     m_hg_out.side_effect = None
     m_hg_out.return_value = "some book_marks"
-    hg.before_patch(None, "bookmark")
-    m_hg_out.assert_called_once()
-    m_checkout.assert_not_called()
-
-    hg.args = Args(applyto="here")
-    m_checkout.reset_mock()
-    m_hg_out.reset_mock()
-    m_hg_out.side_effect = None
-    m_hg_out.return_value = "some book_marks"
-    hg.before_patch(None, "bookmark")
+    hg.before_patch(None, PatchRefs(create_bookmark=True), name="bookmark")
     m_hg_out.assert_called_once()
     m_checkout.assert_not_called()
 
     m_hg_out.reset_mock()
-    hg.args = Args(no_bookmark=True)
-    hg.before_patch(None, "bookmark")
-    m_hg_out.assert_not_called()
-
-    m_config.create_bookmark = False
-    m_hg_out.reset_mock()
-    hg.args = Args()
-    hg.before_patch(None, "bookmark")
+    hg.before_patch(None, PatchRefs(), name="bookmark")
     m_hg_out.assert_not_called()
 
     # Create a topic, but requested topic collides with an existing
     # topic and so must be renamed.
-    m_config.create_topic = True
     hg.use_topic = True
     m_hg_out.reset_mock()
     m_hg_out.side_effect = ["topic_1"]
-    hg.args = Args()
-    hg.before_patch("sha1", "topic")
+    hg.before_patch("sha1", PatchRefs(create_topic=True), name="topic")
     m_checkout.assert_called_with("sha1")
     m_hg_out.assert_called()
     m_hg.assert_called_with(["topic", "topic_2"])
@@ -323,17 +283,18 @@ def test_before_patch(m_config, m_hg, m_hg_out, m_checkout, hg):
 
     # No conflict => use requested name.
     m_hg_out.side_effect = ["topic"]
-    hg.before_patch("sha1", "other")
+    hg.before_patch("sha1", PatchRefs(create_topic=True), name="other")
     m_hg.assert_called_with(["topic", "other"])
 
     # Create both a bookmark and a topic. Not a useful thing to do,
     # but it should work. And bookmark names and topic names should not
     # collide when looking for pre-existing names.
 
-    m_config.create_bookmark = True
     m_hg.reset_mock()  # Clear the calls.
     m_hg_out.side_effect = ["bookmark", "topic"]
-    hg.before_patch("sha1", "bookmark")
+    hg.before_patch(
+        "sha1", PatchRefs(create_bookmark=True, create_topic=True), name="bookmark"
+    )
     m_hg.assert_has_calls(
         [
             mock.call(["bookmark", "bookmark_1"]),

@@ -13,6 +13,7 @@ from callee import Contains
 
 from mozphab import environment, exceptions, mozphab
 from mozphab.commits import Commit
+from mozphab.repository import PatchRefs
 
 from .conftest import create_temp_fn
 
@@ -507,9 +508,7 @@ def test_check_node(m_phab_vcs, m_git_is_node, m_hg2git, git):
 @mock.patch("mozphab.git.Git.checkout")
 @mock.patch("mozphab.git.Git.git_call")
 @mock.patch("mozphab.git.prompt")
-@mock.patch("mozphab.git.config")
 def test_before_patch(
-    m_config,
     m_prompt,
     m_git,
     m_checkout,
@@ -524,26 +523,8 @@ def test_before_patch(
     m_revparse.side_effect = lambda node: node
     m_get_current_node.return_value = "current_sha"
 
-    class Args(argparse.Namespace):
-        def __init__(
-            self,
-            rev_id="D123",
-            nocommit=False,
-            raw=False,
-            applyto="base",
-            no_branch=False,
-            yes=False,
-        ):
-            self.rev_id = rev_id
-            self.nocommit = nocommit
-            self.raw = raw
-            self.applyto = applyto
-            self.no_branch = no_branch
-            self.yes = yes
-
-    git.args = Args()
     m_git_out.side_effect = (["  branch"],)
-    git.before_patch("sha1", "branch")
+    git.before_patch("sha1", PatchRefs(create_branch=True), name="branch")
     m_checkout.assert_called_with("sha1")
     m_git.assert_called_with(["checkout", "-q", "-b", "branch_1"])
 
@@ -553,22 +534,19 @@ def test_before_patch(
 
     m_checkout.reset_mock()
     m_git_out.side_effect = ("the branch name is not here",)
-    git.args = Args(applyto="here")
-    git.before_patch(None, "branchname")
+    git.before_patch(None, PatchRefs(create_branch=True), name="branchname")
     m_checkout.assert_not_called()
 
     m_git.reset_mock()
     m_checkout.reset_mock()
-    git.args = Args(applyto="abcdef", nocommit=True)
-    git.before_patch("abcdef", None)
+    git.before_patch("abcdef", PatchRefs(create_branch=True))
     m_checkout.assert_called_once_with("abcdef")
     m_git.assert_not_called()
 
     m_git.reset_mock()
     m_checkout.reset_mock()
     caplog.clear()
-    git.args = Args(no_branch=True, yes=True)
-    git.before_patch("abcdef", "name")
+    git.before_patch("abcdef", PatchRefs(), name="name", assume_yes=True)
     m_checkout.assert_called_once()
     m_git.assert_not_called()
     assert Contains("git checkout -b") in caplog.messages
@@ -576,20 +554,7 @@ def test_before_patch(
     m_git.reset_mock()
     m_checkout.reset_mock()
     caplog.clear()
-    git.args = Args(no_branch=True)
-    git.before_patch("abcdef", "name")
-    m_checkout.assert_called_once()
-    m_git.assert_not_called()
-    m_prompt.assert_called_once()
-    assert Contains("git checkout -b") in caplog.messages
-
-    m_git.reset_mock()
-    m_checkout.reset_mock()
-    caplog.clear()
-    m_prompt.reset_mock()
-    m_config.create_branch = False
-    git.args = Args()
-    git.before_patch("abcdef", "name")
+    git.before_patch("abcdef", PatchRefs(), name="name")
     m_checkout.assert_called_once()
     m_git.assert_not_called()
     m_prompt.assert_called_once()
@@ -599,22 +564,20 @@ def test_before_patch(
     # failed attempt: there's nothing left to ask about.
     m_prompt.reset_mock()
     m_is_detached_head.return_value = True
-    git.args = Args(no_branch=True)
-    git.before_patch("abcdef", "name")
+    git.before_patch("abcdef", PatchRefs(), name="name")
     m_prompt.assert_not_called()
     m_is_detached_head.return_value = False
 
     m_prompt.return_value = "No"
     with pytest.raises(SystemExit):
-        git.before_patch("abcdef", "name")
+        git.before_patch("abcdef", PatchRefs(), name="name")
 
     # The target is already checked out (eg. `--apply-to here`): checking it
     # out again would only detach HEAD from the branch it's on.
     m_prompt.reset_mock()
     m_checkout.reset_mock()
     caplog.clear()
-    git.args = Args(applyto="here", no_branch=True)
-    git.before_patch("current_sha", "name")
+    git.before_patch("current_sha", PatchRefs(), name="name")
     m_checkout.assert_not_called()
     m_prompt.assert_not_called()
     assert Contains("git checkout -b") not in caplog.messages
@@ -623,7 +586,7 @@ def test_before_patch(
     # detached HEAD, so the hint about retaining them is still relevant.
     caplog.clear()
     m_is_detached_head.return_value = True
-    git.before_patch("current_sha", "name")
+    git.before_patch("current_sha", PatchRefs(), name="name")
     m_prompt.assert_not_called()
     assert Contains("git checkout -b") in caplog.messages
     m_is_detached_head.return_value = False

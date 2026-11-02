@@ -11,7 +11,7 @@ import pytest
 from mozphab import exceptions, helpers, mozphab
 from mozphab.commands import patch
 from mozphab.config import Config
-from mozphab.repository import Repository
+from mozphab.repository import PatchRefs, Repository
 
 from .conftest import with_stack_graph
 
@@ -22,6 +22,10 @@ def patch_args(**overrides: Any) -> argparse.Namespace:
     for name, value in overrides.items():
         setattr(args, name, value)
     return args
+
+
+# The refs `patch` asks for with the default config.
+DEFAULT_REFS = PatchRefs(create_branch=True, create_bookmark=True)
 
 
 def test_patch_options_from_args():
@@ -61,6 +65,19 @@ def test_patch_options_from_args():
     assert (
         options.branch_name_template == "phab/D{rev_id}"
     ), "The branch name template should come from the config."
+
+    options = patch.PatchOptions.from_args(
+        patch_args(no_branch=True, no_bookmark=True), config
+    )
+    assert (
+        options.refs == PatchRefs()
+    ), "`--no-branch` and `--no-bookmark` should disable their refs."
+
+    config.create_topic = True
+    options = patch.PatchOptions.from_args(patch_args(), config)
+    assert options.refs.create_topic, "`patch.create_topic` should enable topics."
+    options = patch.PatchOptions.from_args(patch_args(no_topic=True), config)
+    assert not options.refs.create_topic, "`--no-topic` should override the config."
 
 
 def test_resolve_branch_name():
@@ -391,6 +408,9 @@ def test_patch(
             force_vcs=False,
             name=None,
             diff_id=None,
+            no_branch=False,
+            no_bookmark=False,
+            no_topic=False,
         ):
             self.revision_id = revision_id
             self.no_commit = no_commit
@@ -402,11 +422,17 @@ def test_patch(
             self.force_vcs = force_vcs
             self.name = name
             self.diff_id = diff_id
+            self.no_branch = no_branch
+            self.no_bookmark = no_bookmark
+            self.no_topic = no_topic
 
     git.args = Args()
     m_git_check_conduit.return_value = False
     m_config.arc_command = "arc"
     m_config.branch_name_template = "phab-D{rev_id}"
+    m_config.create_branch = True
+    m_config.create_bookmark = True
+    m_config.create_topic = False
     with pytest.raises(exceptions.Error):
         patch.patch(git, git.args)
 
@@ -448,7 +474,9 @@ def test_patch(
     )
     m_apply_patch.assert_not_called()
     m_get_base_ref.assert_called_once()
-    m_git_before_patch.assert_called_once_with("sha111", "phab-D1")
+    m_git_before_patch.assert_called_once_with(
+        "sha111", DEFAULT_REFS, "phab-D1", assume_yes=False
+    )
 
     m_git_apply_patch.reset_mock()
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
@@ -502,7 +530,9 @@ def test_patch(
     m_git_get_current_node.return_value = "current_sha"
     git.args = Args(apply_to="here")
     patch.patch(git, git.args)
-    m_git_before_patch.assert_called_once_with("current_sha", "phab-D1")
+    m_git_before_patch.assert_called_once_with(
+        "current_sha", DEFAULT_REFS, "phab-D1", assume_yes=False
+    )
 
     m_get_base_ref.return_value = "sha111"
     m_git_apply_patch.reset_mock()
@@ -529,7 +559,9 @@ def test_patch(
     m_git_before_patch.assert_called_once()
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_called_once_with("raw", "x")
-    m_git_before_patch.assert_called_once_with("sha111", None)
+    m_git_before_patch.assert_called_once_with(
+        "sha111", DEFAULT_REFS, None, assume_yes=False
+    )
 
     m_apply_patch.reset_mock()
     m_git_before_patch.reset_mock()
@@ -540,7 +572,9 @@ def test_patch(
     m_git_before_patch.assert_called_once()
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_called_once_with("raw", "x")
-    m_git_before_patch.assert_called_once_with("sha111", None)
+    m_git_before_patch.assert_called_once_with(
+        "sha111", DEFAULT_REFS, None, assume_yes=False
+    )
 
     m_apply_patch.reset_mock()
     m_config.create_commit = True
@@ -561,7 +595,9 @@ def test_patch(
     git.args = Args(apply_to="head")
     patch.patch(git, git.args)
     m_get_base_ref.assert_called_once()
-    m_git_before_patch.assert_called_once_with("head", "phab-D1")
+    m_git_before_patch.assert_called_once_with(
+        "head", DEFAULT_REFS, "phab-D1", assume_yes=False
+    )
     m_git_apply_patch.assert_called_once_with(
         "raw",
         "commit message",
@@ -576,7 +612,9 @@ def test_patch(
     # --apply-to NODE: same as above, applied directly at `node`.
     git.args = Args(apply_to=node)
     patch.patch(git, git.args)
-    m_git_before_patch.assert_called_once_with(node, "phab-D1")
+    m_git_before_patch.assert_called_once_with(
+        node, DEFAULT_REFS, "phab-D1", assume_yes=False
+    )
     m_git_rebase_node.assert_not_called()
 
     m_git_before_patch.reset_mock()
@@ -584,14 +622,18 @@ def test_patch(
     # --applyto here: applied directly at whatever is currently checked out.
     git.args = Args(apply_to="here")
     patch.patch(git, git.args)
-    m_git_before_patch.assert_called_once_with("current_sha", "phab-D1")
+    m_git_before_patch.assert_called_once_with(
+        "current_sha", DEFAULT_REFS, "phab-D1", assume_yes=False
+    )
     m_git_rebase_node.assert_not_called()
 
     m_git_before_patch.reset_mock()
     # --name NAME: default apply-to (base) uses the diff's own base commit.
     git.args = Args(name="feature")
     patch.patch(git, git.args)
-    m_git_before_patch.assert_called_once_with("sha111", "feature")
+    m_git_before_patch.assert_called_once_with(
+        "sha111", DEFAULT_REFS, "feature", assume_yes=False
+    )
     m_git_rebase_node.assert_not_called()
 
     # --apply-to base, with a base commit that isn't in the repository (eg. it
@@ -602,7 +644,9 @@ def test_patch(
     m_git_get_latest_landing_node.return_value = "landing_sha"
     git.args = Args()
     patch.patch(git, git.args)
-    m_git_before_patch.assert_called_once_with("landing_sha", "phab-D1")
+    m_git_before_patch.assert_called_once_with(
+        "landing_sha", DEFAULT_REFS, "phab-D1", assume_yes=False
+    )
     m_git_rebase_node.assert_not_called()
 
     # Same, with --no-commit: nothing is committed, so nothing could be
@@ -624,8 +668,8 @@ def test_patch(
     git.args = Args(apply_to="current_sha")
     patch.patch(git, git.args)
     assert m_git_before_patch.call_args_list == [
-        mock.call("current_sha", "phab-D1"),
-        mock.call("sha111", "phab-D1"),
+        mock.call("current_sha", DEFAULT_REFS, "phab-D1", assume_yes=False),
+        mock.call("sha111", DEFAULT_REFS, "phab-D1", assume_yes=False),
     ]
     # The failed attempt is undone rather than left behind.
     m_git_discard_patch_attempt.assert_called_once_with("current_sha")
@@ -660,7 +704,9 @@ def test_patch(
         "and rebase onto current_sha",
         ["No", "Yes"],
     )
-    m_git_before_patch.assert_called_once_with("current_sha", "phab-D1")
+    m_git_before_patch.assert_called_once_with(
+        "current_sha", DEFAULT_REFS, "phab-D1", assume_yes=False
+    )
     m_git_check_node.assert_called_once_with("sha111")
     m_git_fetch_from_upstream.assert_not_called()
     m_git_discard_patch_attempt.assert_called_once_with(
@@ -707,7 +753,9 @@ def test_patch(
     git.args = Args()
     with pytest.raises(exceptions.Error):
         patch.patch(git, git.args)
-    m_git_before_patch.assert_called_once_with("sha111", "phab-D1")
+    m_git_before_patch.assert_called_once_with(
+        "sha111", DEFAULT_REFS, "phab-D1", assume_yes=False
+    )
     m_git_discard_patch_attempt.assert_not_called()
 
     # Same when the diff has no base ref at all (eg. an older diff, or a

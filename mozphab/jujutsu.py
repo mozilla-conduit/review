@@ -11,7 +11,6 @@ from packaging.version import Version
 from mozphab import environment
 
 from .commits import Commit
-from .config import config
 from .diff import Diff
 from .exceptions import CommandError, Error
 from .git import Git
@@ -22,7 +21,7 @@ from .helpers import (
     temporary_file,
 )
 from .logger import logger
-from .repository import Repository
+from .repository import PatchRefs, Repository
 from .spinner import wait_message
 from .subprocess_wrapper import (
     check_call,
@@ -412,12 +411,19 @@ class Jujutsu(Repository):
             # cinnabar hashes.
             return self.__git_repo.check_node(node)
 
-    def before_patch(self, node: str, name: str):
+    def before_patch(
+        self,
+        node: str,
+        refs: PatchRefs,
+        name: str | None = None,
+        assume_yes: bool = False,
+    ):
         """Prepare repository to apply the patches.
 
         Args:
             node - SHA1 of the base commit
-            name - name of the bookmark to be created
+            refs - the bookmark to be created
+            assume_yes - unused, as Jujutsu has nothing to confirm
         """
 
         if node:
@@ -425,7 +431,7 @@ class Jujutsu(Repository):
                 check_call(["jj", "new", "--quiet", node])
             logger.info("Checked out %s", short_node(node))
 
-        if name and not self.args.no_branch and config.create_branch:
+        if name and refs.create_branch:
             branches = set(
                 self.__check_output(
                     ["jj", "bookmark", "list", "--template", 'name ++ "\n"'],
@@ -515,10 +521,8 @@ class Jujutsu(Repository):
 
         check_call(["jj", "new", "--quiet"])
 
-        if not self.args.no_branch and config.create_branch:
-            # # Advance the bookmark we created for this patch. Because we know we're creating
-            # entirely new commits, and we have the branch at the parent commit, we can let `--from`
-            # compensate for the fact that we otherwise don't remember the name of the branch.
+        if self.__patch_branch_name:
+            # Advance the bookmark `before_patch` created for this patch.
 
             check_call(
                 [

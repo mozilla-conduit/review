@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import urllib.parse
+from dataclasses import dataclass
 
 from mozphab import environment
 from mozphab.profiler import profiler
@@ -33,6 +34,23 @@ LANDO_URL_MAPPING = {
     "https://phabricator-dev.allizom.org": "https://dev.lando.nonprod.webservices.mozgcp.net",
     "https://phabricator.allizom.org": "https://stage.lando.nonprod.webservices.mozgcp.net",
 }
+
+
+@dataclass(frozen=True)
+class PatchRefs:
+    """The kinds of named ref `patch` asks `before_patch` to create.
+
+    This is the input to `before_patch`, decided from the flags and config, while
+    the name is passed separately once the revisions are known.
+    """
+
+    # Nothing is created unless asked for, so each VCS only needs the flag it reads.
+    # A Git branch, or a Jujutsu bookmark.
+    create_branch: bool = False
+    # A Mercurial bookmark.
+    create_bookmark: bool = False
+    # Only created when Mercurial has the topic extension enabled.
+    create_topic: bool = False
 
 
 def get_lando_url_for_phabricator(phab_url: str) -> str:
@@ -266,8 +284,19 @@ class Repository(object):
     def abort_rebase(self):
         """Abort an interrupted rebase, if the VCS leaves one behind on failure."""
 
-    def before_patch(self, node, name):
-        """Prepare repository to apply the patches."""
+    def before_patch(
+        self,
+        node: str,
+        refs: PatchRefs,
+        name: str | None = None,
+        assume_yes: bool = False,
+    ):
+        """Prepare repository to apply the patches.
+
+        Checks out `node` and creates the `refs` this VCS supports, called `name`,
+        or none without a `name`. With `assume_yes`, don't ask before detaching
+        Git's HEAD.
+        """
 
     def discard_patch_attempt(
         self,
