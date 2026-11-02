@@ -29,7 +29,7 @@ from .helpers import (
     temporary_file,
 )
 from .logger import logger
-from .repository import PatchAttempt, PatchRefs, Repository
+from .repository import PatchAttempt, PatchRefs, Repository, StackSelection
 from .spinner import wait_message
 from .telemetry import telemetry
 
@@ -77,7 +77,7 @@ class Git(Repository):
             raise Error("Failed to determine Git version.")
 
         self.vcs_version = m.group(0)
-        # Set by `set_args` once the commit range is known.
+        # Set by `select_stack` once the commit range is known.
         self.revset: tuple[str, str] | None = None
         # Set by `before_submit` to the branch to return to afterwards.
         self.branch = ""
@@ -86,7 +86,7 @@ class Git(Repository):
 
     @property
     def required_revset(self) -> tuple[str, str]:
-        """Return the commit range, which `set_args` sets before the stack is used."""
+        """Return the commit range, which `select_stack` sets before it's used."""
         if not self.revset:
             raise Error("Internal error: the commit range has not been set.")
         return self.revset
@@ -348,31 +348,31 @@ class Git(Repository):
         return node or None
 
     def set_args(self, args: argparse.Namespace):
-        """Store moz-phab command line args and set the revset."""
+        """Store moz-phab command line args."""
         super().set_args(args)
 
         self.git.set_args(args)
-        if hasattr(self.args, "start_rev"):
-            is_single = hasattr(self.args, "single") and self.args.single
 
-            if self.args.start_rev != environment.DEFAULT_START_REV:
-                start_rev = self.args.start_rev
-            elif is_single:
-                start_rev = "HEAD"
-            else:
-                start_rev = self._get_first_unpublished_node()
+    def select_stack(self, selection: StackSelection):
+        """Set the revset from `selection`, leaving it unset if there's no stack."""
+        if selection.start_rev != environment.DEFAULT_START_REV:
+            start_rev = selection.start_rev
+        elif selection.single:
+            start_rev = "HEAD"
+        else:
+            start_rev = self._get_first_unpublished_node()
 
-            if start_rev is None:
-                return None
+        if start_rev is None:
+            return
 
-            if self.args.start_rev == environment.DEFAULT_START_REV or is_single:
-                # We want inclusive range of commits if start commit is detected
-                start = f"{start_rev}^"
-            else:
-                start = start_rev
+        if selection.start_rev == environment.DEFAULT_START_REV or selection.single:
+            # We want inclusive range of commits if start commit is detected
+            start = f"{start_rev}^"
+        else:
+            start = start_rev
 
-            end = start_rev if is_single else self.args.end_rev
-            self.revset = (start, end)
+        end = start_rev if selection.single else selection.end_rev
+        self.revset = (start, end)
 
     def _git_get_children(self, node: str) -> list[str]:
         """Get commits SHA1 with their children.

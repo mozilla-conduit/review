@@ -14,7 +14,7 @@ from mozphab.commits import Commit
 from mozphab.git import Git
 from mozphab.jujutsu import Jujutsu
 from mozphab.mercurial import Mercurial
-from mozphab.repository import PatchRefs, Repository
+from mozphab.repository import PatchRefs, Repository, StackSelection
 
 from .conftest import git_out, hg_out, jj_out, write_text
 
@@ -92,6 +92,9 @@ def contract_repo(request) -> ContractRepo:
         )
 
     path = request.getfixturevalue("jj_colocated_repo_path")
+    # `commit_stack` can't parse commits without an author.
+    jj_out("config", "set", "--repo", "user.name", "Developer")
+    jj_out("config", "set", "--repo", "user.email", "developer@mozilla.com")
     return ContractRepo(
         Jujutsu(str(path)),
         lambda files, message: jj_commit_files(path, files, message),
@@ -131,6 +134,18 @@ def test_get_diff_less_context(contract_repo: ContractRepo):
     assert (
         short_hunk.old_len == 201
     ), "`less_context` should only keep 100 lines of context around a change."
+
+
+def test_select_single_commit(contract_repo: ContractRepo):
+    contract_repo.commit_files({"first.txt": "first\n"}, "First commit")
+    contract_repo.commit_files({"second.txt": "second\n"}, "Second commit")
+
+    contract_repo.repo.select_stack(StackSelection(single=True))
+    commits = contract_repo.repo.commit_stack(single=True)
+
+    assert [commit.title for commit in commits or []] == [
+        "Second commit"
+    ], "`--single` should select only the most recent commit."
 
 
 def test_before_patch_creates_the_named_ref(contract_repo: ContractRepo):

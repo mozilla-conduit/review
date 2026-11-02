@@ -41,7 +41,7 @@ from .helpers import (
     which_path,
 )
 from .logger import logger
-from .repository import PatchAttempt, PatchRefs, Repository
+from .repository import PatchAttempt, PatchRefs, Repository, StackSelection
 from .spinner import clear_terminal_line, wait_message
 from .subprocess_wrapper import debug_log_command, profiler_marker
 from .telemetry import telemetry
@@ -85,7 +85,7 @@ class Mercurial(Repository):
         super().__init__(path, dot_path)
         self.vcs = "hg"
         self._hg_binary = config.hg_command[0]
-        # Set by `set_args` once the commit range is known.
+        # Set by `select_stack` once the commit range is known.
         self.revset = ""
         self.strip_nodes = []
         self.status = None
@@ -382,7 +382,6 @@ class Mercurial(Repository):
         Sets:
         - all the --config options (includes safe mode)
         - extra options
-        - the `revset` attribute
         """
         super().set_args(args)
 
@@ -471,40 +470,38 @@ class Mercurial(Repository):
                 ", ".join(self._get_extensions(hg_config)),
             )
 
-        if hasattr(self.args, "start_rev"):
-            is_single = hasattr(self.args, "single") and self.args.single
-            # Set the default start revision.
-            if self.args.start_rev == environment.DEFAULT_START_REV:
-                if is_single:
-                    start_rev = self.args.end_rev
-                else:
-                    start_rev = "ancestors(.) and not public() and not obsolete()"
+    def select_stack(self, selection: StackSelection):
+        """Set the revset from `selection`."""
+        # Set the default start revision.
+        if selection.start_rev == environment.DEFAULT_START_REV:
+            if selection.single:
+                start_rev = selection.end_rev
             else:
-                start_rev = self.args.start_rev
+                start_rev = "ancestors(.) and not public() and not obsolete()"
+        else:
+            start_rev = selection.start_rev
 
-            # Resolve to nodes as that's nicer to read.
-            try:
-                start = self.hg_log(start_rev)[0]
-            except IndexError:
-                if self.args.start_rev == environment.DEFAULT_START_REV:
-                    raise Error("Failed to find draft commits to submit")
-                else:
-                    raise Error(
-                        "Failed to start of commit range: %s" % self.args.start_rev
-                    )
+        # Resolve to nodes as that's nicer to read.
+        try:
+            start = self.hg_log(start_rev)[0]
+        except IndexError:
+            if selection.start_rev == environment.DEFAULT_START_REV:
+                raise Error("Failed to find draft commits to submit")
+            else:
+                raise Error("Failed to start of commit range: %s" % selection.start_rev)
 
-            if is_single:
-                self.revset = start
-                return
+        if selection.single:
+            self.revset = start
+            return
 
-            end_rev = self.args.end_rev
+        end_rev = selection.end_rev
 
-            try:
-                end = self.hg_log(end_rev)[0]
-            except IndexError:
-                raise Error("Failed to end of commit range: %s" % end_rev)
+        try:
+            end = self.hg_log(end_rev)[0]
+        except IndexError:
+            raise Error("Failed to end of commit range: %s" % end_rev)
 
-            self.revset = "%s::%s" % (short_node(start), short_node(end))
+        self.revset = "%s::%s" % (short_node(start), short_node(end))
 
     def commit_stack(
         self, single: bool = False, force_delete: bool = False

@@ -37,6 +37,19 @@ LANDO_URL_MAPPING = {
 
 
 @dataclass(frozen=True)
+class StackSelection:
+    """The commits a command works on, as given on its command line."""
+
+    start_rev: str = environment.DEFAULT_START_REV
+    end_rev: str = environment.DEFAULT_END_REV
+    single: bool = False
+
+    def __post_init__(self):
+        if self.single and self.end_rev != environment.DEFAULT_END_REV:
+            raise Error("Option --single can be used with only one identifier.")
+
+
+@dataclass(frozen=True)
 class PatchRefs:
     """The kinds of named ref `patch` asks `before_patch` to create.
 
@@ -176,14 +189,11 @@ class Repository(object):
         """Update the history after node changed."""
 
     def set_args(self, args: argparse.Namespace):
-        if (
-            hasattr(args, "single")
-            and args.single
-            and args.end_rev != environment.DEFAULT_END_REV
-        ):
-            raise Error("Option --single can be used with only one identifier.")
-
         self.args = args
+
+    def select_stack(self, selection: StackSelection):
+        """Select the commits `commit_stack` and the other stack methods work on."""
+        raise NotImplementedError()
 
     def untracked(self) -> list[str]:
         """Return a list of untracked files.

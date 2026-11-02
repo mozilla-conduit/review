@@ -27,7 +27,7 @@ from mozphab.helpers import (
 )
 from mozphab.logger import logger
 from mozphab.profiler import profiler
-from mozphab.repository import Repository
+from mozphab.repository import Repository, StackSelection
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
 from mozphab.user import UserData
@@ -59,7 +59,7 @@ class SubmitOptions:
     wip: bool = False
     no_wip: bool = False
     no_stack: bool = False
-    single: bool = False
+    stack: StackSelection = StackSelection()
     force_delete: bool = False
     ai: bool = False
     less_context: bool = False
@@ -111,7 +111,9 @@ class SubmitOptions:
             wip=args.wip,
             no_wip=args.no_wip,
             no_stack=args.no_stack,
-            single=args.single,
+            stack=StackSelection(
+                start_rev=args.start_rev, end_rev=args.end_rev, single=args.single
+            ),
             force_delete=args.force_delete,
             ai=args.ai,
             less_context=args.lesscontext,
@@ -829,7 +831,7 @@ def _submit(
     # Find and preview commits to submits.
     with wait_message("Looking for commits.."):
         commits = repo.commit_stack(
-            single=options.single, force_delete=options.force_delete
+            single=options.stack.single, force_delete=options.force_delete
         )
     if not commits:
         raise Error("Failed to find any commits to submit")
@@ -1084,6 +1086,9 @@ def submit(
     repo: Repository, args: argparse.Namespace, user_data: UserData
 ) -> list[Commit]:
     options = SubmitOptions.from_args(args, config)
+    # Selecting the stack fails like a bad argument would, rather than like a
+    # failed `submit`.
+    repo.select_stack(options.stack)
     try:
         return _submit(repo, options, user_data)
     except Exception as e:

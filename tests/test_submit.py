@@ -3,7 +3,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
 import copy
 import unittest
 import uuid
@@ -13,7 +12,7 @@ from unittest import mock
 import pytest
 from callee import Contains
 
-from mozphab import environment, exceptions, helpers, mozphab, repository
+from mozphab import exceptions, helpers, mozphab, repository
 from mozphab.commands import submit
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError
@@ -56,36 +55,6 @@ def commit(
         submit=submit,
         wip=wip,
     )
-
-
-class Args(argparse.Namespace):
-    def __init__(
-        self,
-        command="submit",
-        reviewer=None,
-        blocker=None,
-        bug=None,
-        wip=False,
-        no_wip=False,
-        no_bug=False,
-        force=False,
-        single=False,
-        end_rev=environment.DEFAULT_END_REV,
-        ai=False,
-        test_plan=None,
-    ):
-        self.command = command
-        self.reviewer = reviewer
-        self.blocker = blocker
-        self.bug = bug
-        self.wip = wip
-        self.no_wip = no_wip
-        self.no_bug = no_bug
-        self.force = force
-        self.single = single
-        self.end_rev = end_rev
-        self.ai = ai
-        self.test_plan = test_plan
 
 
 # noinspection PyPep8Naming,PyBroadException
@@ -1302,13 +1271,12 @@ class Commits(unittest.TestCase):
 
     def test_single_fails_with_end_rev(self):
         # --single is working with one SHA1 provided only
-        repo = repository.Repository("", "", "dummy")
-
-        self._assertNoError(repo.set_args, Args(single=True))
+        self._assertNoError(repository.StackSelection, single=True)
         self._assertError(
-            repo.set_args,
+            repository.StackSelection,
             "Option --single can be used with only one identifier.",
-            Args(single=True, end_rev="endrev"),
+            single=True,
+            end_rev="endrev",
         )
 
 

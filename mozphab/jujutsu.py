@@ -21,7 +21,7 @@ from .helpers import (
     temporary_file,
 )
 from .logger import logger
-from .repository import PatchAttempt, PatchRefs, Repository
+from .repository import PatchAttempt, PatchRefs, Repository, StackSelection
 from .spinner import wait_message
 from .subprocess_wrapper import (
     check_call,
@@ -145,39 +145,33 @@ class Jujutsu(Repository):
         self.__validate_email()
 
     def set_args(self, args: argparse.Namespace):
-        """Store moz-phab command line args and set the revset."""
+        """Store moz-phab command line args."""
         super().set_args(args)
         self.__git_repo.args = self.args
 
-        is_single = hasattr(self.args, "single") and self.args.single
+    def select_stack(self, selection: StackSelection):
+        """Set the revset from `selection`, leaving it unset if there's no stack."""
+        if selection.start_rev != environment.DEFAULT_START_REV:
+            start_rev = selection.start_rev
+        else:
+            start_rev = (
+                self.__get_last_stack_change()
+                if selection.single
+                else self.__get_first_stack_change()
+            )
+        if not start_rev:
+            return
 
-        if hasattr(self.args, "start_rev"):
-            start_rev = None
-            if self.args.start_rev != environment.DEFAULT_START_REV:
-                start_rev = self.args.start_rev
-            else:
-                start_rev = (
-                    self.__get_last_stack_change()
-                    if is_single
-                    else self.__get_first_stack_change()
-                )
-            if not start_rev:
-                return None
+        if selection.single:
+            end_rev = start_rev
+        elif selection.end_rev != environment.DEFAULT_END_REV:
+            end_rev = selection.end_rev
+        else:
+            end_rev = self.__get_last_stack_change()
+        if not end_rev:
+            return
 
-            end_rev = None
-            if is_single:
-                end_rev = start_rev
-            elif (
-                hasattr(self.args, "end_rev")
-                and self.args.end_rev != environment.DEFAULT_END_REV
-            ):
-                end_rev = self.args.end_rev
-            else:
-                end_rev = self.__get_last_stack_change()
-            if not end_rev:
-                return None
-
-            self.revset = (start_rev, end_rev)
+        self.revset = (start_rev, end_rev)
 
     def commit_stack(
         self, single: bool = False, force_delete: bool = False

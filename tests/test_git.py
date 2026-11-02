@@ -13,7 +13,7 @@ from callee import Contains
 
 from mozphab import environment, exceptions, mozphab
 from mozphab.commits import Commit
-from mozphab.repository import PatchAttempt, PatchRefs
+from mozphab.repository import PatchAttempt, PatchRefs, StackSelection
 
 from .conftest import create_temp_fn
 
@@ -348,20 +348,39 @@ def test_is_child(git):
     assert not is_child("ccc", "ddd", nodes)
 
 
-@mock.patch("mozphab.git.Git.git_out")
-@mock.patch("mozphab.mozphab.config")
-def test_range(m_config, m_git_git_out, git):
-    class Args(argparse.Namespace):
-        def __init__(self, start="start", end="."):
-            self.start_rev = start
-            self.end_rev = end
-            self.safe_mode = False
-            self.single = False
+@mock.patch("mozphab.git.Git._get_first_unpublished_node")
+def test_select_stack(m_git_get_first, git):
+    git.select_stack(StackSelection(start_rev="start"))
+    assert git.revset == ("start", "."), "An explicit start should be exclusive."
 
-    m_config.safe_mode = False
-    m_git_git_out.return_value = ["user.email=email"]
-    git.set_args(Args())
-    assert git.revset == ("start", ".")
+    m_git_get_first.return_value = "aaa"
+    git.select_stack(StackSelection())
+    m_git_get_first.assert_called_once()
+    assert git.revset == (
+        "aaa^",
+        ".",
+    ), "The detected start should be included in the range."
+
+    m_git_get_first.reset_mock()
+    git.select_stack(StackSelection(start_rev="bbb", end_rev="ccc"))
+    m_git_get_first.assert_not_called()
+    assert git.revset == ("bbb", "ccc"), "The range should be used as given."
+
+    git.select_stack(StackSelection(single=True))
+    m_git_get_first.assert_not_called()
+    assert git.revset == ("HEAD^", "HEAD"), "`--single` should select `HEAD`."
+
+    git.select_stack(StackSelection(start_rev="start", single=True))
+    m_git_get_first.assert_not_called()
+    assert git.revset == (
+        "start^",
+        "start",
+    ), "`--single` with a start should select the start."
+
+    git.revset = None
+    m_git_get_first.return_value = None
+    git.select_stack(StackSelection())
+    assert git.revset is None, "No range should be set without unpublished commits."
 
 
 @mock.patch("mozphab.mozphab.config")
@@ -370,17 +389,8 @@ def test_range(m_config, m_git_git_out, git):
 @mock.patch("mozphab.git.Git.git_out")
 def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git):
     class Args(argparse.Namespace):
-        def __init__(
-            self,
-            start=environment.DEFAULT_START_REV,
-            end=environment.DEFAULT_END_REV,
-            safe_mode=False,
-            single=False,
-        ):
-            self.start_rev = start
-            self.end_rev = end
+        def __init__(self, safe_mode=False):
             self.safe_mode = safe_mode
-            self.single = single
 
     with pytest.raises(exceptions.Error):
         git.set_args(Args())
@@ -388,11 +398,9 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
     git.git.command = ["git"]
     git.git.safe_mode = False
     m_parse_config.return_value = {"user.email": "email"}
-    m_git_get_first.return_value = "aaa"
     git.set_args(Args())
     assert ["git"] == git.git.command
-    m_git_get_first.assert_called_once()
-    assert git.revset == ("aaa^", ".")
+    m_git_get_first.assert_not_called()
 
     m_parse_config.return_value = {
         "user.email": "email",
@@ -418,11 +426,6 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
     assert safe_options == git.git.command
 
     m_config.safe_mode = False
-    m_git_get_first.reset_mock()
-    git.set_args(Args(start="bbb", end="ccc"))
-    m_git_get_first.assert_not_called()
-    assert git.revset == ("bbb", "ccc")
-
     git.set_args(Args(safe_mode=True))
     assert "" == git.git._env["HOME"]
     assert "" == git.git._env["XDG_CONFIG_HOME"]
@@ -431,19 +434,6 @@ def test_set_args(m_git_git_out, m_git_get_first, m_parse_config, m_config, git)
     git.set_args(Args())
     assert "" == git.git._env["HOME"]
     assert "" == git.git._env["XDG_CONFIG_HOME"]
-
-    m_git_get_first.reset_mock()
-    m_parse_config.return_value = {
-        "user.email": "email",
-        "user.name": "name",
-    }
-    git.set_args(Args(single=True))
-    m_git_get_first.assert_not_called()
-    assert git.revset == ("HEAD^", "HEAD")
-
-    git.set_args(Args(single=True, start="start"))
-    m_git_get_first.assert_not_called()
-    assert git.revset == ("start^", "start")
 
 
 @mock.patch("mozphab.git.Git.git_out")

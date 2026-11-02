@@ -13,7 +13,7 @@ from mozphab import diff, environment, exceptions, mozphab
 from mozphab.commits import Commit
 from mozphab.diff import Diff
 from mozphab.mercurial import Mercurial
-from mozphab.repository import PatchRefs
+from mozphab.repository import PatchRefs, StackSelection
 
 from .conftest import assert_attributes, create_temp_fn
 
@@ -122,11 +122,8 @@ def test_finalize_no_evolve(m_hg_rebase, hg):
 @mock.patch("mozphab.mercurial.hglib.open")
 def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
     class Args(argparse.Namespace):
-        def __init__(self, start="(auto)", end=".", safe_mode=False, single=False):
-            self.start_rev = start
-            self.end_rev = end
+        def __init__(self, safe_mode=False):
             self.safe_mode = safe_mode
-            self.single = single
 
     m_config = mozphab.config
     with pytest.raises(exceptions.Error):
@@ -197,27 +194,36 @@ def test_set_args(m_hglib_open, m_hg_hg_log, m_hg_hg_out, m_parse_config, hg):
     ]
     assert not hg.use_evolve
     assert hg.has_shelve
+    m_hg_hg_log.assert_not_called()
 
+
+@mock.patch("mozphab.mercurial.Mercurial.hg_log")
+def test_select_stack(m_hg_hg_log, hg):
     m_hg_hg_log.side_effect = [("123456789012",), ("098765432109",)]
-    hg._hg = []
-    hg.set_args(Args())
-    assert "123456789012::098765432109" == hg.revset
+    hg.select_stack(StackSelection())
+    assert (
+        "123456789012::098765432109" == hg.revset
+    ), "The draft commits up to the working directory should be selected."
 
     m_hg_hg_log.side_effect = IndexError
-    with pytest.raises(exceptions.Error):
-        hg.set_args(Args())
+    with pytest.raises(exceptions.Error, match="Failed to find draft commits"):
+        hg.select_stack(StackSelection())
 
     m_hg_hg_log.reset_mock()
     m_hg_hg_log.side_effect = [("123456789012",), ("123456789012",)]
-    hg.set_args(Args(single=True))
-    assert "123456789012" == hg.revset
-    assert m_hg_hg_log.call_args_list == [mock.call(".")]
+    hg.select_stack(StackSelection(single=True))
+    assert "123456789012" == hg.revset, "`--single` should select one commit."
+    assert m_hg_hg_log.call_args_list == [
+        mock.call(".")
+    ], "`--single` should select the working directory's commit."
 
     m_hg_hg_log.reset_mock()
     m_hg_hg_log.side_effect = [("123456789012",), ("123456789012",)]
-    hg.set_args(Args(start="start", single=True))
-    assert "123456789012" == hg.revset
-    assert m_hg_hg_log.call_args_list == [mock.call("start")]
+    hg.select_stack(StackSelection(start_rev="start", single=True))
+    assert "123456789012" == hg.revset, "`--single` should select one commit."
+    assert m_hg_hg_log.call_args_list == [
+        mock.call("start")
+    ], "`--single` with a start should select the start."
 
 
 @mock.patch("mozphab.mercurial.Mercurial._status")

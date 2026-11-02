@@ -14,7 +14,7 @@ from mozphab.config import Config, config
 from mozphab.exceptions import Error
 from mozphab.helpers import BUG_ID_RE, augment_commits_from_body, prompt
 from mozphab.logger import logger
-from mozphab.repository import Repository
+from mozphab.repository import Repository, StackSelection
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
 
@@ -29,6 +29,7 @@ class ReorgOptions:
     no_abandon_unconnected: bool = False
     verbose: bool = False
     hyperlinks: bool = True
+    stack: StackSelection = StackSelection()
 
     @classmethod
     def from_args(cls, args: argparse.Namespace, config: Config) -> "ReorgOptions":
@@ -40,6 +41,7 @@ class ReorgOptions:
             no_abandon_unconnected=args.no_abandon_unconnected,
             verbose=args.verbose,
             hyperlinks=config.hyperlinks and not args.no_hyperlinks,
+            stack=StackSelection(start_rev=args.start_rev, end_rev=args.end_rev),
         )
 
 
@@ -686,6 +688,9 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
 def reorganise(repo: Repository, args: argparse.Namespace):
     """Reorganise the stack on Phabricator to match the stack in the local VCS."""
     options = ReorgOptions.from_args(args, config)
+    # Selecting the stack fails like a bad argument would, without the hint
+    # about `--force` below.
+    repo.select_stack(options.stack)
     try:
         reorganise_inner(repo, options)
     except Error as e:

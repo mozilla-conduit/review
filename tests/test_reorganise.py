@@ -342,6 +342,8 @@ def test_reorg_calling_stack_transactions(
         no_abandon_unconnected = False
         no_hyperlinks = False
         verbose = False
+        start_rev = "start"
+        end_rev = "."
 
     phabstack, commits, rev_ids = stacks
     m_convert_stackgraph_to_linear.return_value = phabstack
@@ -364,6 +366,8 @@ def test_conduit_broken(m_check):
         verbose = False
         yes = False
         no_abandon = False
+        start_rev = "start"
+        end_rev = "."
 
     with pytest.raises(exceptions.Error) as e:
         reorganise.reorganise(mock.MagicMock(), Args())
@@ -381,6 +385,8 @@ def test_commits_invalid(_augment, _check, git):
         verbose = False
         yes = False
         no_abandon = False
+        start_rev = "start"
+        end_rev = "."
 
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()
@@ -408,6 +414,8 @@ def test_remote_stack_invalid(m_walk, m_ids, git, caplog: pytest.LogCaptureFixtu
         verbose = False
         yes = False
         no_abandon = False
+        start_rev = "start"
+        end_rev = "."
 
     caplog.set_level(logging.ERROR)
     m_ids.return_value = ["A", "B", "C"]
@@ -763,6 +771,8 @@ def test_reorg_force_mode(
         no_abandon_unconnected = False
         no_hyperlinks = False
         verbose = False
+        start_rev = "start"
+        end_rev = "."
 
     m_convert_stackgraph_to_linear.return_value = phabstack
     mozphab.conduit.set_repo(git)
@@ -798,6 +808,8 @@ def test_force_mode_requires_all_local_revisions_on_phabricator(_augment, _check
         verbose = False
         yes = False
         no_abandon = False
+        start_rev = "start"
+        end_rev = "."
 
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock()
@@ -823,6 +835,8 @@ def test_no_abandon_unconnected_requires_force(_check):
         verbose = False
         yes = False
         no_abandon = False
+        start_rev = "start"
+        end_rev = "."
 
     _check.return_value = True
 
@@ -900,6 +914,8 @@ def test_apply_transactions_error_names_revision(
         no_abandon_unconnected = False
         no_hyperlinks = True
         verbose = False
+        start_rev = "start"
+        end_rev = "."
 
     m_convert_stackgraph_to_linear.return_value = {"PHID-A": None}
     m_get_revs.return_value = [
@@ -938,6 +954,8 @@ def test_force_mode_ignores_remote_stack_errors(
         no_hyperlinks = False
         verbose = False
         no_abandon = False
+        start_rev = "start"
+        end_rev = "."
 
     caplog.set_level(logging.WARNING, logger="moz-phab")
     m_walk.side_effect = exceptions.Error("Remote stack is not linear")
@@ -995,6 +1013,8 @@ def test_force_mode_tolerates_nonlinear_stackgraph(
         no_abandon_unconnected = False
         no_hyperlinks = False
         verbose = False
+        start_rev = "start"
+        end_rev = "."
 
     caplog.set_level(logging.WARNING, logger="moz-phab")
 
@@ -1071,6 +1091,8 @@ def test_non_force_mode_rejects_nonlinear_stackgraph(
         no_abandon_unconnected = False
         no_hyperlinks = False
         verbose = False
+        start_rev = "start"
+        end_rev = "."
 
     caplog.set_level(logging.ERROR, logger="moz-phab")
 
