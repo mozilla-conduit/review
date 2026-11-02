@@ -27,7 +27,6 @@ from mozphab import (  # noqa: E402
     environment,
     mozphab,
     repository,
-    simplecache,
     user,
 )
 from mozphab import (  # noqa: E402
@@ -154,7 +153,7 @@ def init_sha(in_process, git_repo_path, git_sha):
 
 @pytest.fixture(autouse=True)
 def reset_cache():
-    simplecache.cache.reset()
+    conduit.conduit.cache.reset()
 
 
 @pytest.fixture(autouse=True)

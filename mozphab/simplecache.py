@@ -26,6 +26,3 @@ class SimpleCache:
 
     def reset(self):
         self._cache = {}
-
-
-cache = SimpleCache()

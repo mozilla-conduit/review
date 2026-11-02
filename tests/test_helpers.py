@@ -283,7 +283,7 @@ def test_get_users_with_user(m_conduit):
     conduit.get_users(["alice"])
     m_conduit.assert_called_once()
 
-    simplecache.cache.reset()
+    conduit.cache.reset()
     m_conduit.reset_mock()
     m_conduit.return_value = []
     assert [] == conduit.get_users(["alice"])
@@ -510,7 +510,6 @@ def test_get_arcrc_path(m_getenv, m_chmod, m_stat, m_isfile, m_join, m_expand):
     m_isfile.return_value = True
 
     m_chmod.reset_mock()
-    simplecache.cache.reset()
     arcrc()
     m_chmod.assert_not_called()
 
@@ -519,7 +518,6 @@ def test_get_arcrc_path(m_getenv, m_chmod, m_stat, m_isfile, m_join, m_expand):
     m_join.reset_mock()
     m_getenv.side_effect = ("/app_data",)
     stat.st_mode = 0o100640
-    simplecache.cache.reset()
     arcrc()
     if environment.IS_WINDOWS:
         m_getenv.assert_called_once_with("APPDATA", "")

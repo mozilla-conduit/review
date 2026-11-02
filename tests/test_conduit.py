@@ -11,9 +11,10 @@ import pytest
 import urllib3
 from immutabledict import immutabledict
 
-from mozphab import exceptions, mozphab, repository, simplecache
+from mozphab import exceptions, mozphab, repository
 from mozphab.commits import Commit
 from mozphab.conduit import (
+    ConduitAPI,
     ConduitAPIError,
     conduit,
     diff_commit_title,
@@ -309,7 +310,7 @@ def get_revs():
 
 @pytest.fixture
 def m_call(request):
-    request.addfinalizer(simplecache.cache.reset)
+    request.addfinalizer(mozphab.conduit.cache.reset)
     with mock.patch("mozphab.conduit.ConduitAPI.call") as xmock:
         yield xmock
 
@@ -1801,3 +1802,13 @@ def test_request_ai_review(m_call):
         "reviewhelper.request",
         {"revisionID": 123},
     )
+
+
+def test_conduit_instances_have_their_own_cache():
+    """A `ConduitAPI` doesn't see the responses another instance cached."""
+    first, second = ConduitAPI(), ConduitAPI()
+
+    first.cache.set("whoami", {"phid": "PHID-USER-1"})
+
+    assert "whoami" in first.cache, "The instance should keep what it cached."
+    assert "whoami" not in second.cache, "Other instances shouldn't share the cache."

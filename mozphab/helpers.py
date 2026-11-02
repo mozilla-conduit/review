@@ -21,7 +21,6 @@ from mozphab.profiler import Category, MarkerType, profiler
 
 from .commits import Commit
 from .logger import logger
-from .simplecache import cache
 
 # If a commit body matches **all** of these, reject it.  This is to avoid the
 # necessity to merge arc-style fields across an existing commit description
@@ -172,9 +171,6 @@ def temporary_binary_file(content: bytes):
 
 def get_arcrc_path() -> str:
     """Return a path to the user's Arcanist configuration file."""
-    if "arcrc" in cache:
-        return str(cache.get("arcrc"))
-
     if environment.IS_WINDOWS:
         arcrc = os.path.join(os.getenv("APPDATA", ""), ".arcrc")
     else:
@@ -183,7 +179,6 @@ def get_arcrc_path() -> str:
             logger.debug("Changed file permissions on the %s file.", arcrc)
             os.chmod(arcrc, 0o600)
 
-    cache.set("arcrc", arcrc)
     return arcrc
 
 

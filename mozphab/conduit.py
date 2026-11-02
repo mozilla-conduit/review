@@ -39,7 +39,7 @@ from .helpers import (
 )
 from .logger import logger
 from .profiler import profiler
-from .simplecache import cache
+from .simplecache import SimpleCache
 
 if TYPE_CHECKING:
     # `repository` imports this module, so the import can only happen when
@@ -161,6 +161,8 @@ class ConduitAPI:
         # retries: blindly retrying a POST that actually succeeded could
         # duplicate mutations.
         self._http_pool: urllib3.PoolManager | None = None
+        # API responses already fetched by this instance, keyed by what was asked.
+        self.cache = SimpleCache()
 
     @property
     def repo(self) -> Repository:
@@ -200,15 +202,15 @@ class ConduitAPI:
         except KeyError:
             pass
 
-        if "api_token" in cache:
-            return str(cache.get("api_token"))
+        if "api_token" in self.cache:
+            return str(self.cache.get("api_token"))
 
         token = read_json_field(
             [get_arcrc_path()], ["hosts", self.repo.api_url, "token"]
         )
         if not token:
             raise ConduitAPIError(INSTALL_CERT_MSG)
-        cache.set("api_token", token)
+        self.cache.set("api_token", token)
         return token
 
     def save_api_token(self, token: str):
@@ -450,9 +452,9 @@ class ConduitAPI:
         # Initialise depending on if we're passed revision IDs or PHIDs.
         if rev_ids:
             phids_by_id = {
-                rev_id: cache.get("rev-id-%s" % rev_id)
+                rev_id: self.cache.get("rev-id-%s" % rev_id)
                 for rev_id in rev_ids
-                if "rev-id-%s" % rev_id in cache
+                if "rev-id-%s" % rev_id in self.cache
             }
             found_phids = list(phids_by_id.values())
             query_field = "ids"
@@ -464,13 +466,15 @@ class ConduitAPI:
             phids_by_id = {}
             found_phids = rev_phids.copy()
             query_field = "phids"
-            query_values = {phid for phid in rev_phids if "rev-%s" % phid not in cache}
+            query_values = {
+                phid for phid in rev_phids if "rev-%s" % phid not in self.cache
+            }
 
         # Revisions metadata keyed by PHID.
         revisions = {
-            phid: cache.get("rev-%s" % phid)
+            phid: self.cache.get("rev-%s" % phid)
             for phid in found_phids
-            if "rev-%s" % phid in cache
+            if "rev-%s" % phid in self.cache
         }
 
         # Query Phabricator if we don't have cached values for revisions.
@@ -484,8 +488,8 @@ class ConduitAPI:
             for r in response.get("data") or []:
                 phids_by_id[str(r["id"])] = r["phid"]
                 revisions[r["phid"]] = r
-                cache.set("rev-id-%s" % r["id"], r["phid"])
-                cache.set("rev-%s" % r["phid"], r)
+                self.cache.set("rev-id-%s" % r["id"], r["phid"])
+                self.cache.set("rev-%s" % r["phid"], r)
 
         # Return revisions in the same order requested.
         if rev_ids:
@@ -563,8 +567,8 @@ class ConduitAPI:
         if ids:
             uncached_ids = []
             for diff_id in set(ids):
-                phid = cache.get("diff-id-%s" % diff_id)
-                if phid and (diff := cache.get("diff-%s" % phid)):
+                phid = self.cache.get("diff-id-%s" % diff_id)
+                if phid and (diff := self.cache.get("diff-%s" % phid)):
                     cached_diffs[phid] = diff
                 else:
                     uncached_ids.append(diff_id)
@@ -572,7 +576,7 @@ class ConduitAPI:
         else:
             uncached_phids = []
             for phid in set(phids or []):
-                if diff := cache.get("diff-%s" % phid):
+                if diff := self.cache.get("diff-%s" % phid):
                     cached_diffs[phid] = diff
                 else:
                     uncached_phids.append(phid)
@@ -590,8 +594,8 @@ class ConduitAPI:
 
             for diff in diff_list:
                 diff_dict[diff["phid"]] = diff
-                cache.set("diff-%s" % diff["phid"], diff)
-                cache.set("diff-id-%s" % diff["id"], diff["phid"])
+                self.cache.set("diff-%s" % diff["phid"], diff)
+                self.cache.set("diff-id-%s" % diff["id"], diff["phid"])
 
         return diff_dict
 
@@ -606,8 +610,8 @@ class ConduitAPI:
         for user in usernames:
             u = user.rstrip("!")
             key = "user-%s" % u
-            if key in cache:
-                users.append(cache.get(key))
+            if key in self.cache:
+                users.append(self.cache.get(key))
             else:
                 to_collect.append(u)
 
@@ -622,8 +626,8 @@ class ConduitAPI:
         for user in response:
             users.append(user)
             key = "user-%s" % user["userName"]
-            cache.set(key, user)
-            cache.set(user["phid"], key)
+            self.cache.set(key, user)
+            self.cache.set(user["phid"], key)
 
         return users
 
@@ -633,8 +637,8 @@ class ConduitAPI:
         for slug in slugs:
             s = slug.rstrip("!")
             key = "group-%s" % s
-            if key in cache:
-                groups.append(cache.get(key))
+            if key in self.cache:
+                groups.append(self.cache.get(key))
             else:
                 to_collect.append(s)
 
@@ -648,7 +652,7 @@ class ConduitAPI:
             group = {"name": data["fields"]["slug"], "phid": data["phid"]}
             groups.append(group)
             key = "group-%s" % group["name"]
-            cache.set(key, group)
+            self.cache.set(key, group)
 
         # projects might be received by an alias.
         maps = response["maps"]["slugMap"]
@@ -656,9 +660,9 @@ class ConduitAPI:
             name = normalise_reviewer(alias)
             group = {"name": name, "phid": maps[alias]["projectPHID"]}
             key = "group-%s" % alias
-            if key not in cache:
+            if key not in self.cache:
                 groups.append(group)
-                cache.set(key, group)
+                self.cache.set(key, group)
 
         return groups
 
@@ -1153,11 +1157,11 @@ class ConduitAPI:
         upload["phid"] = str(file_phid)
 
     def whoami(self, *, api_token: str | None = None) -> dict:
-        if "whoami" in cache:
-            return dict(cache.get("whoami"))
+        if "whoami" in self.cache:
+            return dict(self.cache.get("whoami"))
 
         who = self.call("user.whoami", {}, api_token=api_token)
-        cache.set("whoami", who)
+        self.cache.set("whoami", who)
         return who
 
     def get_reviewer_phids(self) -> list[str]:
@@ -1166,8 +1170,8 @@ class ConduitAPI:
         That's the user themselves, plus every project (review group) they are
         a member of.
         """
-        if "reviewer-phids" in cache:
-            return cache.get("reviewer-phids")
+        if "reviewer-phids" in self.cache:
+            return self.cache.get("reviewer-phids")
 
         user_phid = self.whoami()["phid"]
         response = self.call(
@@ -1176,7 +1180,7 @@ class ConduitAPI:
         phids = [user_phid] + [
             project["phid"] for project in response.get("data") or []
         ]
-        cache.set("reviewer-phids", phids)
+        self.cache.set("reviewer-phids", phids)
         return phids
 
     def get_pending_reviews(
@@ -1319,14 +1323,14 @@ class ConduitAPI:
             diff.get("phid", ""),
             hashlib.sha256(title.encode()).hexdigest(),
         )
-        if cache_key in cache:
-            return set(cache.get(cache_key))
+        if cache_key in self.cache:
+            return set(self.cache.get(cache_key))
 
         if title and WIP_RE.search(title):
             diff = self.latest_non_wip_diff(revision)
             if diff is None:
                 reviewer_names = set()
-                cache.set(cache_key, reviewer_names)
+                self.cache.set(cache_key, reviewer_names)
                 return set(reviewer_names)
             title = diff_commit_title(diff)
 
@@ -1337,7 +1341,7 @@ class ConduitAPI:
             for reviewers_by_type in reviewers.values()
             for reviewer in reviewers_by_type
         }
-        cache.set(cache_key, reviewer_names)
+        self.cache.set(cache_key, reviewer_names)
         return set(reviewer_names)
 
     def latest_non_wip_diff(self, revision: dict) -> dict | None:

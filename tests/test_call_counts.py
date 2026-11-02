@@ -38,7 +38,6 @@ from mozphab.commands import patch as patch_cmd
 from mozphab.commands import submit
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPI, conduit
-from mozphab.simplecache import cache
 from mozphab.user import UserData
 
 PHAB_URL = "http://phab.test"
@@ -380,11 +379,11 @@ def call_harness(
     monkeypatch.setattr(ConduitAPI, "check", lambda self: True)
 
     conduit.set_repo(repo)
-    cache.reset()
+    conduit.cache.reset()
     try:
         yield state, calls, repo
     finally:
-        cache.reset()
+        conduit.cache.reset()
         # The autouse `reset_conduit_repo` fixture clears the repo for the next
         # test, so there is nothing to restore here.
         conduit.repo = None
