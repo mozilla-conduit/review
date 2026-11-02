@@ -10,6 +10,7 @@ import pytest
 
 from mozphab.exceptions import Error
 from mozphab.jujutsu import Jujutsu
+from mozphab.repository import PatchAttempt
 
 
 @pytest.fixture
@@ -21,7 +22,6 @@ def jj():
     """
     jj = object.__new__(Jujutsu)
     jj._Jujutsu__git_repo = mock.Mock()  # type: ignore
-    jj._Jujutsu__patch_branch_name = ""  # type: ignore
     return jj
 
 
@@ -52,19 +52,16 @@ def test_set_args_shares_args_with_git_repo(jj):
 
 @mock.patch("mozphab.jujutsu.check_call")
 def test_discard_patch_attempt_abandons_bookmark_and_commits(m_check_call, jj):
-    jj._Jujutsu__patch_branch_name = "phab-D1"
-
-    jj.discard_patch_attempt("sha111")
+    jj.discard_patch_attempt(PatchAttempt("sha111", branch="phab-D1"))
     assert m_check_call.call_args_list == [
         mock.call(["jj", "bookmark", "delete", "--quiet", "phab-D1"]),
         mock.call(["jj", "abandon", "--quiet", "sha111..@"]),
     ]
-    assert jj._Jujutsu__patch_branch_name == ""
 
 
 @mock.patch("mozphab.jujutsu.check_call")
 def test_discard_patch_attempt_without_a_bookmark(m_check_call, jj):
-    jj.discard_patch_attempt("sha111")
+    jj.discard_patch_attempt(PatchAttempt("sha111"))
     m_check_call.assert_called_once_with(["jj", "abandon", "--quiet", "sha111..@"])
 
 

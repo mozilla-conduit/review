@@ -21,7 +21,7 @@ from .helpers import (
     temporary_file,
 )
 from .logger import logger
-from .repository import PatchRefs, Repository
+from .repository import PatchAttempt, PatchRefs, Repository
 from .spinner import wait_message
 from .subprocess_wrapper import (
     check_call,
@@ -108,8 +108,6 @@ class Jujutsu(Repository):
 
         self.revset = None
         self.branch = None
-        # Name of the bookmark created by `before_patch`, empty if none.
-        self.__patch_branch_name = ""
 
         self.__email = self.__check_output_text(
             ["jj", "config", "get", "user.email"]
@@ -417,7 +415,7 @@ class Jujutsu(Repository):
         refs: PatchRefs,
         name: str | None = None,
         assume_yes: bool = False,
-    ):
+    ) -> PatchAttempt:
         """Prepare repository to apply the patches.
 
         Args:
@@ -449,32 +447,36 @@ class Jujutsu(Repository):
                 ["jj", "bookmark", "create", "--quiet", "--revision=@", branch_name]
             )
             logger.info("Created bookmark %s", branch_name)
-            self.__patch_branch_name = branch_name
+            return PatchAttempt(node, branch=branch_name)
+
+        return PatchAttempt(node)
 
     def discard_patch_attempt(
         self,
-        node: str,
+        attempt: PatchAttempt,
         *,
         keep_branch: bool = False,
         original_branch: str | None = None,
     ):
-        """Undo a failed patch attempt, returning the repository to `node`.
+        """Undo a failed patch attempt, returning the repository to its node.
 
         Unlike Git, `jj` keeps abandoned commits and bookmarks visible in
         `jj log`, so both are removed rather than left for garbage collection.
         """
-        if self.__patch_branch_name:
-            check_call(
-                ["jj", "bookmark", "delete", "--quiet", self.__patch_branch_name]
-            )
-            self.__patch_branch_name = ""
+        if attempt.branch:
+            check_call(["jj", "bookmark", "delete", "--quiet", attempt.branch])
 
-        # Abandoning the working-copy commit moves `@` back to `node`, with a
+        # Abandoning the working-copy commit moves `@` back to the node, with a
         # new, empty commit on top.
-        check_call(["jj", "abandon", "--quiet", f"{node}..@"])
+        check_call(["jj", "abandon", "--quiet", f"{attempt.node}..@"])
 
     def apply_patch(
-        self, diff: str, body: str, author: str | None, author_date: int | None
+        self,
+        diff: str,
+        body: str,
+        author: str | None,
+        author_date: int | None,
+        attempt: PatchAttempt | None = None,
     ):
         # NOTE: `before_patch` ensures that we are editing a new, empty commit on the base we want.
 
@@ -521,7 +523,7 @@ class Jujutsu(Repository):
 
         check_call(["jj", "new", "--quiet"])
 
-        if self.__patch_branch_name:
+        if attempt and attempt.branch:
             # Advance the bookmark `before_patch` created for this patch.
 
             check_call(
@@ -530,7 +532,7 @@ class Jujutsu(Repository):
                     "bookmark",
                     "move",
                     "--quiet",
-                    self.__patch_branch_name,
+                    attempt.branch,
                     "--to=@-",
                 ]
             )

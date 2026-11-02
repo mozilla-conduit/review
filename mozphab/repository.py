@@ -41,7 +41,8 @@ class PatchRefs:
     """The kinds of named ref `patch` asks `before_patch` to create.
 
     This is the input to `before_patch`, decided from the flags and config, while
-    the name is passed separately once the revisions are known.
+    the name is passed separately once the revisions are known. What
+    `before_patch` actually did is returned as a `PatchAttempt`.
     """
 
     # Nothing is created unless asked for, so each VCS only needs the flag it reads.
@@ -51,6 +52,21 @@ class PatchRefs:
     create_bookmark: bool = False
     # Only created when Mercurial has the topic extension enabled.
     create_topic: bool = False
+
+
+@dataclass(frozen=True)
+class PatchAttempt:
+    """What `before_patch` changed in the repository, so it can be undone.
+
+    This is the output of `before_patch`, given the `PatchRefs` it was asked for.
+    It's passed back to `apply_patch` and `discard_patch_attempt`.
+    """
+
+    # The node `before_patch` checked out to apply the patches on.
+    node: str
+    # The branch or bookmark actually created, if any. Its name can differ from
+    # the requested name, eg. `phab-D1_1` when `phab-D1` already exists.
+    branch: str | None = None
 
 
 def get_lando_url_for_phabricator(phab_url: str) -> str:
@@ -290,22 +306,23 @@ class Repository(object):
         refs: PatchRefs,
         name: str | None = None,
         assume_yes: bool = False,
-    ):
+    ) -> PatchAttempt:
         """Prepare repository to apply the patches.
 
         Checks out `node` and creates the `refs` this VCS supports, called `name`,
         or none without a `name`. With `assume_yes`, don't ask before detaching
         Git's HEAD.
         """
+        return PatchAttempt(node)
 
     def discard_patch_attempt(
         self,
-        node: str,
+        attempt: PatchAttempt,
         *,
         keep_branch: bool = False,
         original_branch: str | None = None,
     ):
-        """Undo a failed patch attempt, returning the repository to `node`.
+        """Undo a failed patch attempt, returning the repository to its node.
 
         With `keep_branch`, restore the target without detaching the current
         branch, where supported.
@@ -317,12 +334,17 @@ class Repository(object):
         collected by the VCS as usual.
         """
         if keep_branch:
-            self.checkout(node)
+            self.checkout(attempt.node)
 
     def apply_patch(
-        self, diff: str, body: str, author: str | None, author_date: int | None
+        self,
+        diff: str,
+        body: str,
+        author: str | None,
+        author_date: int | None,
+        attempt: PatchAttempt | None = None,
     ):
-        """Apply the patch and commit the changes."""
+        """Apply the patch and commit the changes, as part of `attempt` if given."""
 
     def format_patch(
         self, diff: str, body: str, author: str | None, author_date: int | None

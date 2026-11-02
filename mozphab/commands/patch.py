@@ -18,6 +18,7 @@ from mozphab.logger import logger
 from mozphab.mercurial import Mercurial
 from mozphab.patch import apply_patch
 from mozphab.repository import (
+    PatchAttempt,
     PatchRefs,
     Repository,
 )
@@ -328,9 +329,13 @@ def _fetch_and_filter_related(
 
 
 def _apply_commits(
-    repo: Repository, revs: list[dict], diffs: dict, raw_diffs: dict
+    repo: Repository,
+    revs: list[dict],
+    diffs: dict,
+    raw_diffs: dict,
+    attempt: PatchAttempt,
 ) -> None:
-    """Apply each diff in `revs` as a new commit on the currently checked out base.
+    """Apply each diff in `revs` as a new commit on the base `attempt` checked out.
 
     Raises Error if a patch fails to apply.
     """
@@ -347,7 +352,7 @@ def _apply_commits(
 
         try:
             with wait_message("Applying D%s.." % rev["id"]):
-                repo.apply_patch(raw, body, author, date_created)
+                repo.apply_patch(raw, body, author, date_created, attempt=attempt)
         except CommandError:
             raise Error("Patch failed to apply")
 
@@ -535,6 +540,7 @@ def patch(repo: Repository, args: argparse.Namespace):
     target_node = ""
     current_branch = None
     ref_name = None
+    attempt = PatchAttempt(target_node)
 
     base_diff = diffs[revs[0]["fields"]["diffPHID"]]
     diff_base_node = None
@@ -596,7 +602,9 @@ def patch(repo: Repository, args: argparse.Namespace):
         if options.create_commit:
             current_branch = repo.get_current_branch()
 
-        repo.before_patch(target_node, options.refs, ref_name, assume_yes=options.yes)
+        attempt = repo.before_patch(
+            target_node, options.refs, ref_name, assume_yes=options.yes
+        )
 
     # Fetch raw diffs in parallel.
     raw_diffs = {}
@@ -649,7 +657,7 @@ def patch(repo: Repository, args: argparse.Namespace):
         # touched only by a rebase, but it fails when the target and the
         # diff's base have diverged.
         try:
-            _apply_commits(repo, revs, diffs, raw_diffs)
+            _apply_commits(repo, revs, diffs, raw_diffs, attempt)
         except Error:
             base_node = (
                 resolve_base_node(
@@ -685,7 +693,7 @@ def patch(repo: Repository, args: argparse.Namespace):
                     )
                     if retry != "Yes":
                         repo.discard_patch_attempt(
-                            target_node,
+                            attempt,
                             keep_branch=True,
                             original_branch=current_branch,
                         )
@@ -704,9 +712,11 @@ def patch(repo: Repository, args: argparse.Namespace):
                 short_node(base_node),
             )
 
-            repo.discard_patch_attempt(target_node)
-            repo.before_patch(base_node, options.refs, ref_name, assume_yes=options.yes)
-            _apply_commits(repo, revs, diffs, raw_diffs)
+            repo.discard_patch_attempt(attempt)
+            attempt = repo.before_patch(
+                base_node, options.refs, ref_name, assume_yes=options.yes
+            )
+            _apply_commits(repo, revs, diffs, raw_diffs, attempt)
 
             try:
                 with wait_message("Rebasing to %s.." % short_node(target_node)):

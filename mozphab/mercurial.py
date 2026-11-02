@@ -41,7 +41,7 @@ from .helpers import (
     which_path,
 )
 from .logger import logger
-from .repository import PatchRefs, Repository
+from .repository import PatchAttempt, PatchRefs, Repository
 from .spinner import clear_terminal_line, wait_message
 from .subprocess_wrapper import debug_log_command, profiler_marker
 from .telemetry import telemetry
@@ -640,7 +640,7 @@ class Mercurial(Repository):
         refs: PatchRefs,
         name: str | None = None,
         assume_yes: bool = False,
-    ):
+    ) -> PatchAttempt:
         """Prepare repository to apply the patches.
 
         Args:
@@ -654,6 +654,7 @@ class Mercurial(Repository):
                 self.checkout(node)
             logger.info("Checked out %s", short_node(node))
 
+        bookmark_name = None
         if name and refs.create_bookmark:
             bookmarks = self.hg_out(["bookmarks", "-T", "{bookmark}\n"])
             bookmark_name = name
@@ -675,8 +676,15 @@ class Mercurial(Repository):
 
             self.hg(["topic", topic_name])
 
+        return PatchAttempt(node, branch=bookmark_name)
+
     def apply_patch(
-        self, diff: str, body: str, author: str | None, author_date: int | None
+        self,
+        diff: str,
+        body: str,
+        author: str | None,
+        author_date: int | None,
+        attempt: PatchAttempt | None = None,
     ):
         # Import the diff to apply the changes then commit separately to
         # ensure correct parsing of the commit message.

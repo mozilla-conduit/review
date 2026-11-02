@@ -13,7 +13,7 @@ from callee import Contains
 
 from mozphab import environment, exceptions, mozphab
 from mozphab.commits import Commit
-from mozphab.repository import PatchRefs
+from mozphab.repository import PatchAttempt, PatchRefs
 
 from .conftest import create_temp_fn
 
@@ -524,7 +524,11 @@ def test_before_patch(
     m_get_current_node.return_value = "current_sha"
 
     m_git_out.side_effect = (["  branch"],)
-    git.before_patch("sha1", PatchRefs(create_branch=True), name="branch")
+    assert git.before_patch(
+        "sha1", PatchRefs(create_branch=True), name="branch"
+    ) == PatchAttempt(
+        "sha1", branch="branch_1"
+    ), "The attempt should record the branch created for the patches."
     m_checkout.assert_called_with("sha1")
     m_git.assert_called_with(["checkout", "-q", "-b", "branch_1"])
 
@@ -597,18 +601,15 @@ def test_before_patch(
 def test_discard_patch_attempt(m_checkout, m_git_call, git):
     # Without a branch of our own the commits may have advanced the branch
     # HEAD is on, so reset it before detaching at `node`.
-    git.patch_branch_name = None
-    git.discard_patch_attempt("sha111")
+    git.discard_patch_attempt(PatchAttempt("sha111"))
     m_git_call.assert_called_once_with(["reset", "--hard", "--quiet", "sha111"])
     m_checkout.assert_called_once_with("sha111")
 
     m_git_call.reset_mock()
     m_checkout.reset_mock()
-    git.patch_branch_name = "phab-D1"
-    git.discard_patch_attempt("sha111")
+    git.discard_patch_attempt(PatchAttempt("sha111", branch="phab-D1"))
     m_checkout.assert_called_once_with("sha111")
     m_git_call.assert_called_once_with(["branch", "--delete", "--force", "phab-D1"])
-    assert git.patch_branch_name is None
 
 
 @mock.patch("mozphab.git.Git.git_call")
@@ -875,21 +876,21 @@ def test_git_validate_email(git):
 @mock.patch("mozphab.git.Git.git_call")
 @mock.patch("mozphab.git.Git.checkout")
 def test_discard_patch_attempt_keeps_branch(m_checkout, m_git_call, git, branch):
-    git.patch_branch_name = branch
-    git.discard_patch_attempt("sha111", keep_branch=True)
+    git.discard_patch_attempt(PatchAttempt("sha111", branch=branch), keep_branch=True)
     m_git_call.assert_called_once_with(["reset", "--hard", "--quiet", "sha111"])
     m_checkout.assert_not_called()
-    assert git.patch_branch_name == branch
 
 
 @mock.patch("mozphab.git.Git.git_call")
 @mock.patch("mozphab.git.Git.checkout")
 def test_discard_patch_attempt_restores_original_branch(m_checkout, m_git_call, git):
-    git.patch_branch_name = "phab-D1"
-    git.discard_patch_attempt("sha111", keep_branch=True, original_branch="feature")
+    git.discard_patch_attempt(
+        PatchAttempt("sha111", branch="phab-D1"),
+        keep_branch=True,
+        original_branch="feature",
+    )
     m_checkout.assert_called_once_with("feature")
     m_git_call.assert_called_once_with(["branch", "--delete", "--force", "phab-D1"])
-    assert git.patch_branch_name is None
 
 
 @pytest.mark.parametrize(

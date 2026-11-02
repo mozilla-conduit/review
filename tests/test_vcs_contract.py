@@ -150,3 +150,32 @@ def test_before_patch_without_named_refs(contract_repo: ContractRepo):
     assert (
         "phab-D1" not in contract_repo.named_refs()
     ), "`before_patch` shouldn't create a branch or bookmark it wasn't asked for."
+
+
+@pytest.mark.parametrize(
+    "contract_repo",
+    [
+        "git",
+        pytest.param(
+            "hg",
+            marks=pytest.mark.xfail(
+                reason="Mercurial doesn't implement `discard_patch_attempt` yet.",
+                strict=True,
+            ),
+        ),
+        "jj",
+    ],
+    indirect=True,
+)
+def test_discard_patch_attempt_removes_the_named_ref(contract_repo: ContractRepo):
+    node = contract_repo.repo.get_current_node()
+    attempt = contract_repo.repo.before_patch(node, ALL_REFS, "phab-D1")
+    assert (
+        attempt.branch == "phab-D1"
+    ), "The attempt should record the branch or bookmark it created."
+
+    contract_repo.repo.discard_patch_attempt(attempt)
+
+    assert (
+        "phab-D1" not in contract_repo.named_refs()
+    ), "Discarding the attempt should remove the branch or bookmark it created."

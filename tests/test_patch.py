@@ -11,7 +11,7 @@ import pytest
 from mozphab import exceptions, helpers, mozphab
 from mozphab.commands import patch
 from mozphab.config import Config
-from mozphab.repository import PatchRefs, Repository
+from mozphab.repository import PatchAttempt, PatchRefs, Repository
 
 from .conftest import with_stack_graph
 
@@ -433,6 +433,9 @@ def test_patch(
     m_config.create_branch = True
     m_config.create_bookmark = True
     m_config.create_topic = False
+    m_git_before_patch.side_effect = lambda node, refs, name, assume_yes: PatchAttempt(
+        node
+    )
     with pytest.raises(exceptions.Error):
         patch.patch(git, git.args)
 
@@ -471,6 +474,7 @@ def test_patch(
         "commit message",
         "user <author@example.com>",
         1547806078,
+        attempt=PatchAttempt("sha111"),
     )
     m_apply_patch.assert_not_called()
     m_get_base_ref.assert_called_once()
@@ -486,6 +490,7 @@ def test_patch(
         "commit message",
         "user <author@example.com>",
         1547806078,
+        attempt=PatchAttempt("sha111"),
     )
 
     # --diff-id
@@ -500,6 +505,7 @@ def test_patch(
         "commit message",
         "user 3 <author@example.com>",
         1547806078,
+        attempt=PatchAttempt("sha111"),
     )
     m_get_diffs.side_effect = None
 
@@ -603,6 +609,7 @@ def test_patch(
         "commit message",
         "user <author@example.com>",
         1547806078,
+        attempt=PatchAttempt("head"),
     )
     m_apply_patch.assert_not_called()
     m_git_rebase_node.assert_not_called()
@@ -672,7 +679,7 @@ def test_patch(
         mock.call("sha111", DEFAULT_REFS, "phab-D1", assume_yes=False),
     ]
     # The failed attempt is undone rather than left behind.
-    m_git_discard_patch_attempt.assert_called_once_with("current_sha")
+    m_git_discard_patch_attempt.assert_called_once_with(PatchAttempt("current_sha"))
     m_git_rebase_node.assert_called_once_with("sha111", "current_sha")
     m_git_apply_patch.side_effect = None
     m_git_discard_patch_attempt.reset_mock()
@@ -710,7 +717,9 @@ def test_patch(
     m_git_check_node.assert_called_once_with("sha111")
     m_git_fetch_from_upstream.assert_not_called()
     m_git_discard_patch_attempt.assert_called_once_with(
-        "current_sha", keep_branch=True, original_branch="original-branch"
+        PatchAttempt("current_sha"),
+        keep_branch=True,
+        original_branch="original-branch",
     )
     m_git_rebase_node.assert_not_called()
     m_git_discard_patch_attempt.reset_mock()
@@ -721,7 +730,7 @@ def test_patch(
     m_git_before_patch.reset_mock()
     m_git_apply_patch.side_effect = [exceptions.CommandError("boom"), mock.DEFAULT]
     patch.patch(git, git.args)
-    m_git_discard_patch_attempt.assert_called_once_with("current_sha")
+    m_git_discard_patch_attempt.assert_called_once_with(PatchAttempt("current_sha"))
     m_git_rebase_node.assert_called_once_with("sha111", "current_sha")
     m_git_apply_patch.side_effect = None
     m_git_discard_patch_attempt.reset_mock()
@@ -740,7 +749,7 @@ def test_patch(
         "or rebase fails.",
         "original-branch",
     )
-    m_git_discard_patch_attempt.assert_called_once_with("current_sha")
+    m_git_discard_patch_attempt.assert_called_once_with(PatchAttempt("current_sha"))
     m_git_rebase_node.assert_called_once_with("sha111", "current_sha")
     m_git_apply_patch.side_effect = None
     m_git_discard_patch_attempt.reset_mock()

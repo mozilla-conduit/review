@@ -29,7 +29,7 @@ from .helpers import (
     temporary_file,
 )
 from .logger import logger
-from .repository import PatchRefs, Repository
+from .repository import PatchAttempt, PatchRefs, Repository
 from .spinner import wait_message
 from .telemetry import telemetry
 
@@ -81,8 +81,6 @@ class Git(Repository):
         self.revset: tuple[str, str] | None = None
         # Set by `before_submit` to the branch to return to afterwards.
         self.branch = ""
-        # Name of the branch created by `before_patch`, if any.
-        self.patch_branch_name = None
         # Cached result of `get_base_remotes`.
         self._base_remotes: list[str] | None = None
 
@@ -613,7 +611,7 @@ class Git(Repository):
         refs: PatchRefs,
         name: str | None = None,
         assume_yes: bool = False,
-    ):
+    ) -> PatchAttempt:
         """Prepare repository to apply the patches.
 
         Args:
@@ -667,44 +665,48 @@ class Git(Repository):
 
             self.git_call(["checkout", "-q", "-b", branch_name])
             logger.info("Created branch %s", branch_name)
-            self.patch_branch_name = branch_name
+            return PatchAttempt(node, branch=branch_name)
+
+        return PatchAttempt(node)
 
     def discard_patch_attempt(
         self,
-        node: str,
+        attempt: PatchAttempt,
         *,
         keep_branch: bool = False,
         original_branch: str | None = None,
     ):
-        """Undo a failed patch attempt, returning the repository to `node`.
+        """Undo a failed patch attempt, returning the repository to its node.
 
         With `keep_branch`, reset the current branch without detaching HEAD.
         Otherwise delete the branch `before_patch` created, leaving the commits
         of the failed attempt unreachable.
         """
         if keep_branch:
-            if self.patch_branch_name and original_branch:
-                patch_branch_name = self.patch_branch_name
+            if attempt.branch and original_branch:
                 self.checkout(original_branch)
-                self.git_call(["branch", "--delete", "--force", patch_branch_name])
-                self.patch_branch_name = None
+                self.git_call(["branch", "--delete", "--force", attempt.branch])
             else:
-                self.git_call(["reset", "--hard", "--quiet", node])
-        elif self.patch_branch_name:
-            self.checkout(node)
-            self.git_call(["branch", "--delete", "--force", self.patch_branch_name])
-            self.patch_branch_name = None
+                self.git_call(["reset", "--hard", "--quiet", attempt.node])
+        elif attempt.branch:
+            self.checkout(attempt.node)
+            self.git_call(["branch", "--delete", "--force", attempt.branch])
         else:
             # Without a branch of our own, the commits landed on whatever HEAD
             # pointed at, which can be a branch `before_patch` left in place
             # (`--apply-to here`), so move that back rather than just detaching.
-            self.git_call(["reset", "--hard", "--quiet", node])
-            # Detach at `node`: the next attempt applies at another base, and
+            self.git_call(["reset", "--hard", "--quiet", attempt.node])
+            # Detach at the node: the next attempt applies at another base, and
             # would otherwise prompt about detaching mid-operation.
-            self.checkout(node)
+            self.checkout(attempt.node)
 
     def apply_patch(
-        self, diff: str, body: str, author: str | None, author_date: int | None
+        self,
+        diff: str,
+        body: str,
+        author: str | None,
+        author_date: int | None,
+        attempt: PatchAttempt | None = None,
     ):
         # apply the patch as a binary file to ensure the correct line endings
         # is used.
