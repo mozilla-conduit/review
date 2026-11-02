@@ -464,7 +464,9 @@ class Git(Repository):
 
         return False
 
-    def commit_stack(self, single: bool = False) -> list[Commit] | None:
+    def commit_stack(
+        self, single: bool = False, force_delete: bool = False
+    ) -> list[Commit] | None:
         """Collect all the info about commits."""
         if not self.revset:
             # No commits found to submit

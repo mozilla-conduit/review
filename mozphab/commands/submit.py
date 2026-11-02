@@ -60,6 +60,7 @@ class SubmitOptions:
     no_wip: bool = False
     no_stack: bool = False
     single: bool = False
+    force_delete: bool = False
     ai: bool = False
     less_context: bool = False
     force_vcs: bool = False
@@ -111,6 +112,7 @@ class SubmitOptions:
             no_wip=args.no_wip,
             no_stack=args.no_stack,
             single=args.single,
+            force_delete=args.force_delete,
             ai=args.ai,
             less_context=args.lesscontext,
             force_vcs=args.force_vcs,
@@ -825,7 +827,9 @@ def _submit(
 
     # Find and preview commits to submits.
     with wait_message("Looking for commits.."):
-        commits = repo.commit_stack(single=options.single)
+        commits = repo.commit_stack(
+            single=options.single, force_delete=options.force_delete
+        )
     if not commits:
         raise Error("Failed to find any commits to submit")
     n_commits = len(commits)

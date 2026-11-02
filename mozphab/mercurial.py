@@ -506,7 +506,9 @@ class Mercurial(Repository):
 
             self.revset = "%s::%s" % (short_node(start), short_node(end))
 
-    def commit_stack(self, single: bool = False) -> list[Commit]:
+    def commit_stack(
+        self, single: bool = False, force_delete: bool = False
+    ) -> list[Commit]:
         # Grab all the info we need about the commits, using randomness as a delimiter.
         boundary = "--%s--\n" % uuid.uuid4().hex
         hg_log = self.hg_out_text(
@@ -561,7 +563,7 @@ class Mercurial(Repository):
                 short_node(c) for c in branching_children if c not in nodes
             ]
             msg = "following commits will be DELETED:\n%s" % will_be_deleted
-            if not self.args.force_delete:
+            if not force_delete:
                 raise Error(
                     "DAG branch point detected. Please install the evolve extension.\n"
                     "(https://www.mercurial-scm.org/doc/evolution/)\n"

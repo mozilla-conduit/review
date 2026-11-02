@@ -158,8 +158,13 @@ class Repository(object):
         """
         return []
 
-    def commit_stack(self, single: bool = False) -> list[Commit] | None:
+    def commit_stack(
+        self, single: bool = False, force_delete: bool = False
+    ) -> list[Commit] | None:
         """Return list of commits.
+
+        `force_delete` lets Mercurial without evolve continue past a branch point,
+        deleting the commits on the other branches.
 
         List of `Commit`s:
             name          human readable identifier of commit (eg. short sha)

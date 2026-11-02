@@ -182,7 +182,9 @@ class Jujutsu(Repository):
 
             self.revset = (start_rev, end_rev)
 
-    def commit_stack(self, single: bool = False) -> list[Commit] | None:
+    def commit_stack(
+        self, single: bool = False, force_delete: bool = False
+    ) -> list[Commit] | None:
         """Collect all the info about commits."""
         logger.debug(f"searching with start and end at {self.revset}")
         if not self.revset:

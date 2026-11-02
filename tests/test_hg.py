@@ -783,3 +783,29 @@ def test_get_current_branch(m_hg_out_text, hg, result, error, expected):
     m_hg_out_text.side_effect = error
     assert hg.get_current_branch() == expected
     m_hg_out_text.assert_called_once_with(["log", "-r", ".", "-T", "{activebookmark}"])
+
+
+@pytest.mark.parametrize("force_delete", [False, True])
+@mock.patch("mozphab.mercurial.Mercurial.hg_log")
+@mock.patch("mozphab.mercurial.Mercurial.hg_out_text")
+def test_commit_stack_branch_point_without_evolve(
+    m_hg_out_text, m_hg_log, hg, force_delete
+):
+    def fake_log(command, **kwargs):
+        boundary = command[command.index("-T") + 1].split("{desc}")[1]
+        return f"1\naaa000\n0 0\nAuthor\nauthor@example.com\nTitle{boundary}"
+
+    hg.use_evolve = False
+    hg.revset = "aaa000"
+    m_hg_out_text.side_effect = fake_log
+    m_hg_log.return_value = ["bbb000", "ccc000"]
+
+    if not force_delete:
+        with pytest.raises(exceptions.Error, match="DAG branch point detected"):
+            hg.commit_stack()
+        return
+
+    commits = hg.commit_stack(force_delete=True)
+    assert [commit.node for commit in commits] == [
+        "aaa000"
+    ], "`force_delete` should continue past the branch point."
