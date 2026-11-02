@@ -426,7 +426,7 @@ def test_patch(
             self.no_bookmark = no_bookmark
             self.no_topic = no_topic
 
-    git.args = Args()
+    args = Args()
     m_git_check_conduit.return_value = False
     m_config.arc_command = "arc"
     m_config.branch_name_template = "phab-D{rev_id}"
@@ -437,17 +437,17 @@ def test_patch(
         node
     )
     with pytest.raises(exceptions.Error):
-        patch.patch(git, git.args)
+        patch.patch(git, args)
 
     m_git_check_conduit.return_value = True
     m_git_is_worktree_clean.return_value = False
     with pytest.raises(exceptions.Error):
-        patch.patch(git, git.args)
+        patch.patch(git, args)
 
     m_git_is_worktree_clean.return_value = True
     m_get_revisions.return_value = []
     with pytest.raises(exceptions.Error):
-        patch.patch(git, git.args)
+        patch.patch(git, args)
 
     m_config.always_full_stack = False
     m_get_base_ref.return_value = "sha111"
@@ -468,7 +468,7 @@ def test_patch(
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
     m_git_check_node.return_value = "sha111"
     m_prepare_body.return_value = "commit message"
-    patch.patch(git, git.args)
+    patch.patch(git, args)
     m_git_apply_patch.assert_called_once_with(
         "raw",
         "commit message",
@@ -484,7 +484,7 @@ def test_patch(
 
     m_git_apply_patch.reset_mock()
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
-    patch.patch(git, git.args)
+    patch.patch(git, args)
     m_git_apply_patch.assert_called_once_with(
         "raw",
         "commit message",
@@ -498,8 +498,8 @@ def test_patch(
         {"DIFFPHID-1": DIFF_1},
         {"DIFFPHID-3": DIFF_3},
     ]
-    git.args = Args(diff_id=3)
-    patch.patch(git, git.args)
+    args = Args(diff_id=3)
+    patch.patch(git, args)
     m_git_apply_patch.assert_called_with(
         "raw",
         "commit message",
@@ -511,31 +511,31 @@ def test_patch(
 
     # --diff-id raises NotFoundError
     m_get_diffs.return_value = {}
-    git.args = Args(diff_id=100)
+    args = Args(diff_id=100)
     with pytest.raises(exceptions.NotFoundError):
-        patch.patch(git, git.args)
+        patch.patch(git, args)
 
     # --diff-id raises Error when belonging to different rev
     m_get_diffs.side_effect = [
         {"DIFFPHID-1": DIFF_1},
         {"DIFFPHID-4": DIFF_4},
     ]
-    git.args = Args(diff_id=4)
+    args = Args(diff_id=4)
     with pytest.raises(exceptions.Error):
-        patch.patch(git, git.args)
+        patch.patch(git, args)
     m_get_diffs.side_effect = None
 
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
     m_get_base_ref.return_value = None
     with pytest.raises(exceptions.Error):
-        patch.patch(git, git.args)
+        patch.patch(git, args)
 
     # `--apply-to here` should still work without a base ref (eg. an older
     # diff, or a web-UI upload): apply directly at the current checkout.
     m_git_before_patch.reset_mock()
     m_git_get_current_node.return_value = "current_sha"
-    git.args = Args(apply_to="here")
-    patch.patch(git, git.args)
+    args = Args(apply_to="here")
+    patch.patch(git, args)
     m_git_before_patch.assert_called_once_with(
         "current_sha", DEFAULT_REFS, "phab-D1", assume_yes=False
     )
@@ -544,8 +544,8 @@ def test_patch(
     m_git_apply_patch.reset_mock()
     m_git_before_patch.reset_mock()
     # --raw
-    git.args = Args(raw=True)
-    patch.patch(git, git.args)
+    args = Args(raw=True)
+    patch.patch(git, args)
     m_git_before_patch.assert_not_called()
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_not_called()
@@ -553,15 +553,15 @@ def test_patch(
 
     # skip-dependencies
     m_get_revisions.reset_mock()
-    git.args = Args(raw=True, skip_dependencies=True)
-    patch.patch(git, git.args)
+    args = Args(raw=True, skip_dependencies=True)
+    patch.patch(git, args)
     # Only the initial revision fetch should happen, no related revisions.
     m_get_revisions.assert_called_once()
 
     m_git_before_patch.reset_mock()
     # --no_commit
-    git.args = Args(no_commit=True)
-    patch.patch(git, git.args)
+    args = Args(no_commit=True)
+    patch.patch(git, args)
     m_git_before_patch.assert_called_once()
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_called_once_with("raw", "x")
@@ -573,8 +573,8 @@ def test_patch(
     m_git_before_patch.reset_mock()
     # create_commit=False in config
     m_config.create_commit = False
-    git.args = Args()
-    patch.patch(git, git.args)
+    args = Args()
+    patch.patch(git, args)
     m_git_before_patch.assert_called_once()
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_called_once_with("raw", "x")
@@ -586,8 +586,8 @@ def test_patch(
     m_config.create_commit = True
     m_git_before_patch.reset_mock()
     # --no_commit --applyto head
-    git.args = Args(no_commit=True, apply_to="head")
-    patch.patch(git, git.args)
+    args = Args(no_commit=True, apply_to="head")
+    patch.patch(git, args)
 
     m_get_base_ref.reset_mock()
     m_apply_patch.reset_mock()
@@ -598,8 +598,8 @@ def test_patch(
     # --apply_to head: the patch applies directly at the target on the first
     # (optimistic) attempt, since the mocked `apply_patch` never fails --
     # no base resolution or rebase is needed.
-    git.args = Args(apply_to="head")
-    patch.patch(git, git.args)
+    args = Args(apply_to="head")
+    patch.patch(git, args)
     m_get_base_ref.assert_called_once()
     m_git_before_patch.assert_called_once_with(
         "head", DEFAULT_REFS, "phab-D1", assume_yes=False
@@ -617,8 +617,8 @@ def test_patch(
     m_git_before_patch.reset_mock()
     node = "abcdef"
     # --apply-to NODE: same as above, applied directly at `node`.
-    git.args = Args(apply_to=node)
-    patch.patch(git, git.args)
+    args = Args(apply_to=node)
+    patch.patch(git, args)
     m_git_before_patch.assert_called_once_with(
         node, DEFAULT_REFS, "phab-D1", assume_yes=False
     )
@@ -627,8 +627,8 @@ def test_patch(
     m_git_before_patch.reset_mock()
     m_git_get_current_node.return_value = "current_sha"
     # --applyto here: applied directly at whatever is currently checked out.
-    git.args = Args(apply_to="here")
-    patch.patch(git, git.args)
+    args = Args(apply_to="here")
+    patch.patch(git, args)
     m_git_before_patch.assert_called_once_with(
         "current_sha", DEFAULT_REFS, "phab-D1", assume_yes=False
     )
@@ -636,8 +636,8 @@ def test_patch(
 
     m_git_before_patch.reset_mock()
     # --name NAME: default apply-to (base) uses the diff's own base commit.
-    git.args = Args(name="feature")
-    patch.patch(git, git.args)
+    args = Args(name="feature")
+    patch.patch(git, args)
     m_git_before_patch.assert_called_once_with(
         "sha111", DEFAULT_REFS, "feature", assume_yes=False
     )
@@ -649,8 +649,8 @@ def test_patch(
     m_git_before_patch.reset_mock()
     m_git_check_node.side_effect = exceptions.NotFoundError
     m_git_get_latest_landing_node.return_value = "landing_sha"
-    git.args = Args()
-    patch.patch(git, git.args)
+    args = Args()
+    patch.patch(git, args)
     m_git_before_patch.assert_called_once_with(
         "landing_sha", DEFAULT_REFS, "phab-D1", assume_yes=False
     )
@@ -659,9 +659,9 @@ def test_patch(
     # Same, with --no-commit: nothing is committed, so nothing could be
     # rebased from another base later on -- the missing base is an error.
     m_git_before_patch.reset_mock()
-    git.args = Args(no_commit=True)
+    args = Args(no_commit=True)
     with pytest.raises(exceptions.Error):
-        patch.patch(git, git.args)
+        patch.patch(git, args)
     m_git_before_patch.assert_not_called()
     m_git_check_node.side_effect = lambda n: n
     m_git_fetch_from_upstream.reset_mock()
@@ -672,8 +672,8 @@ def test_patch(
     m_git_apply_patch.reset_mock()
     m_git_apply_patch.side_effect = [exceptions.CommandError("boom"), mock.DEFAULT]
     m_git_is_public.return_value = True
-    git.args = Args(apply_to="current_sha")
-    patch.patch(git, git.args)
+    args = Args(apply_to="current_sha")
+    patch.patch(git, args)
     assert m_git_before_patch.call_args_list == [
         mock.call("current_sha", DEFAULT_REFS, "phab-D1", assume_yes=False),
         mock.call("sha111", DEFAULT_REFS, "phab-D1", assume_yes=False),
@@ -688,9 +688,9 @@ def test_patch(
     # A conflicting rebase is aborted rather than left in progress.
     m_git_apply_patch.side_effect = [exceptions.CommandError("boom"), mock.DEFAULT]
     m_git_rebase_node.side_effect = exceptions.CommandError("boom")
-    git.args = Args(apply_to="current_sha")
+    args = Args(apply_to="current_sha")
     with pytest.raises(exceptions.Error, match="original branch was original-branch"):
-        patch.patch(git, git.args)
+        patch.patch(git, args)
     m_git_abort_rebase.assert_called_once()
     m_git_apply_patch.side_effect = None
     m_git_rebase_node.side_effect = None
@@ -703,9 +703,9 @@ def test_patch(
     m_git_check_node.reset_mock()
     m_git_apply_patch.side_effect = exceptions.CommandError("boom")
     m_prompt.return_value = "No"
-    git.args = Args(apply_to="here")
+    args = Args(apply_to="here")
     with pytest.raises(exceptions.Error, match="Patch failed to apply"):
-        patch.patch(git, git.args)
+        patch.patch(git, args)
     m_prompt.assert_called_once_with(
         "The patch failed to apply here. Retry at the latest landed revision "
         "and rebase onto current_sha",
@@ -729,7 +729,7 @@ def test_patch(
     m_prompt.return_value = "Yes"
     m_git_before_patch.reset_mock()
     m_git_apply_patch.side_effect = [exceptions.CommandError("boom"), mock.DEFAULT]
-    patch.patch(git, git.args)
+    patch.patch(git, args)
     m_git_discard_patch_attempt.assert_called_once_with(PatchAttempt("current_sha"))
     m_git_rebase_node.assert_called_once_with("sha111", "current_sha")
     m_git_apply_patch.side_effect = None
@@ -740,8 +740,8 @@ def test_patch(
     # `--yes` explicitly opts into the retry without another prompt.
     m_warning.reset_mock()
     m_git_apply_patch.side_effect = [exceptions.CommandError("boom"), mock.DEFAULT]
-    git.args = Args(apply_to="here", yes=True)
-    patch.patch(git, git.args)
+    args = Args(apply_to="here", yes=True)
+    patch.patch(git, args)
     m_prompt.assert_not_called()
     m_warning.assert_any_call(
         "Retrying may switch you off the current branch %s and "
@@ -759,9 +759,9 @@ def test_patch(
     # commit to try: the original failure propagates.
     m_git_before_patch.reset_mock()
     m_git_apply_patch.side_effect = exceptions.CommandError("boom")
-    git.args = Args()
+    args = Args()
     with pytest.raises(exceptions.Error):
-        patch.patch(git, git.args)
+        patch.patch(git, args)
     m_git_before_patch.assert_called_once_with(
         "sha111", DEFAULT_REFS, "phab-D1", assume_yes=False
     )
@@ -771,9 +771,9 @@ def test_patch(
     # web-UI upload).
     m_git_before_patch.reset_mock()
     m_get_base_ref.return_value = None
-    git.args = Args(apply_to="here")
+    args = Args(apply_to="here")
     with pytest.raises(exceptions.Error):
-        patch.patch(git, git.args)
+        patch.patch(git, args)
     m_git_before_patch.assert_called_once()
     m_git_discard_patch_attempt.assert_not_called()
     m_git_apply_patch.side_effect = None
@@ -784,21 +784,21 @@ def test_patch(
         "DIFFPHID-1": {"id": 1, "attachments": {"commits": {"commits": []}}}
     }
     m_call_conduit.side_effect = ("raw",)
-    git.args = Args()
+    args = Args()
     with pytest.raises(exceptions.Error):
-        patch.patch(git, git.args)
+        patch.patch(git, args)
 
     m_git_apply_patch.reset_mock()
     m_apply_patch.reset_mock()
-    git.args = Args(no_commit=True)
-    patch.patch(git, git.args)
+    args = Args(no_commit=True)
+    patch.patch(git, args)
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_called_once()
 
     m_print.reset_mock()
     m_call_conduit.side_effect = ("raw",)
-    git.args = Args(raw=True)
-    patch.patch(git, git.args)
+    args = Args(raw=True)
+    patch.patch(git, args)
     m_print.assert_called_once_with("raw")
 
     # ########## multiple revisions
@@ -812,7 +812,7 @@ def test_patch(
     # results regardless of thread execution order.
     m_call_conduit.side_effect = lambda m, a: "raw%s" % a["diffID"]
     # --raw 2 revisions in stack
-    patch.patch(git, git.args)
+    patch.patch(git, args)
     # Verify ancestors are fetched via a single batched get_revisions call.
     assert m_get_revisions.call_args_list == [
         mock.call(ids=[123]),
@@ -827,10 +827,10 @@ def test_patch(
     m_git_apply_patch.side_effect = exceptions.CommandError("boom")
     m_git_check_node.side_effect = exceptions.NotFoundError
     m_git_get_latest_landing_node.return_value = None
-    git.args = Args(apply_to="here")
+    args = Args(apply_to="here")
     m_prompt.return_value = "Yes"
     with pytest.raises(exceptions.Error) as e:
-        patch.patch(git, git.args)
+        patch.patch(git, args)
     m_git_fetch_from_upstream.assert_called_once()
     m_git_apply_patch.side_effect = None
     m_git_check_node.side_effect = lambda n: n
@@ -846,8 +846,8 @@ def test_patch(
     m_get_revisions.side_effect = ([rev1], [REV_2])
     m_call_conduit.side_effect = lambda m, a: "raw%s" % a["diffID"]
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1, "DIFFPHID-2": DIFF_2}
-    git.args = Args(revision_id=1, raw=True, yes=True)
-    patch.patch(git, git.args)
+    args = Args(revision_id=1, raw=True, yes=True)
+    patch.patch(git, args)
     assert m_get_revisions.call_args_list == [
         mock.call(ids=[1]),
         mock.call(phids=["PHID-2"]),
@@ -862,7 +862,7 @@ def test_patch(
     m_get_revisions.side_effect = ([rev1],)
     m_call_conduit.side_effect = ("raw",)
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
-    patch.patch(git, git.args)
+    patch.patch(git, args)
     m_get_revisions.assert_called_once_with(ids=[1])
 
     # ########## ancestors and children batched in single get_revisions call
@@ -880,8 +880,8 @@ def test_patch(
         "DIFFPHID-2": DIFF_2,
         "DIFFPHID-3": DIFF_3,
     }
-    git.args = Args(revision_id=1, raw=True, yes=True)
-    patch.patch(git, git.args)
+    args = Args(revision_id=1, raw=True, yes=True)
+    patch.patch(git, args)
     # Verify ancestors and children are fetched in a single batched call.
     assert m_get_revisions.call_args_list == [
         mock.call(ids=[1]),
