@@ -799,11 +799,12 @@ def _prepare_diffs(
     if count == 1:
         index, commit = submittable[0]
         with wait_message("Submitting the diff..."):
-            conduit.create_diff(diffs[index], commit)
+            conduit.create_diff(diffs[index], commit, is_uplift=options.is_uplift)
     else:
         with wait_message(f"Submitting {count} diffs in parallel..."):
             conduit.create_diffs(
-                [(commit, diffs[index]) for index, commit in submittable]
+                [(commit, diffs[index]) for index, commit in submittable],
+                is_uplift=options.is_uplift,
             )
 
     return diffs

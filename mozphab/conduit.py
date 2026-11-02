@@ -955,7 +955,7 @@ class ConduitAPI:
 
         return data
 
-    def build_creation_method(self) -> str:
+    def build_creation_method(self, is_uplift: bool = False) -> str:
         """Build the creationMethod string for differential.creatediff."""
         creation_method = ["moz-phab", self.repo.vcs]
 
@@ -965,7 +965,7 @@ class ConduitAPI:
             creation_method.append("cinnabar")
 
         # Add uplift indicator if this is an uplift command
-        if self.repo.args.command == "uplift":
+        if is_uplift:
             creation_method.append("uplift")
 
         # Indicate Lando as the creation method when the
@@ -978,19 +978,21 @@ class ConduitAPI:
 
         return "-".join(creation_method)
 
-    def create_diff(self, diff: Diff, commit: Commit) -> Diff:
+    def create_diff(self, diff: Diff, commit: Commit, is_uplift: bool = False) -> Diff:
         """Upload a diff's attachments and create it on Phabricator.
 
         `diff` is updated in place with the `phid` and `id` returned by
         `differential.creatediff`, and returned for convenience.
         """
         self.upload_files_from_diff(diff)
-        result = self.submit_diff(diff, commit)
+        result = self.submit_diff(diff, commit, is_uplift=is_uplift)
         diff.phid = result["phid"]
         diff.id = result["diffid"]
         return diff
 
-    def create_diffs(self, commit_diffs: list[tuple[Commit, Diff]]):
+    def create_diffs(
+        self, commit_diffs: list[tuple[Commit, Diff]], is_uplift: bool = False
+    ):
         """Create several diffs on Phabricator, overlapping the round-trips.
 
         Each `Diff` is updated in place, exactly as `create_diff` does for a
@@ -1013,7 +1015,9 @@ class ConduitAPI:
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
         try:
             futures = {
-                executor.submit(self.create_diff, diff, commit): commit
+                executor.submit(
+                    self.create_diff, diff, commit, is_uplift=is_uplift
+                ): commit
                 for commit, diff in commit_diffs
             }
             for future in concurrent.futures.as_completed(futures):
@@ -1030,7 +1034,7 @@ class ConduitAPI:
             # `creatediff` to completion after the user hit Ctrl-C.
             executor.shutdown(cancel_futures=True)
 
-    def submit_diff(self, diff: Diff, commit: Commit) -> dict:
+    def submit_diff(self, diff: Diff, commit: Commit, is_uplift: bool = False) -> dict:
         files_changed = sorted(
             diff.changes.values(), key=operator.attrgetter("cur_path")
         )
@@ -1041,7 +1045,7 @@ class ConduitAPI:
 
         base_revision = conduit.repo.get_public_node(commit.parent)
 
-        creation_method_str = self.build_creation_method()
+        creation_method_str = self.build_creation_method(is_uplift)
 
         # Use the repo of the existing revision if this is an update.
         revs = conduit.get_revisions(ids=[commit.rev_id]) if commit.rev_id else []

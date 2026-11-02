@@ -1064,9 +1064,9 @@ def test_create_diff(m_upload, m_submit_diff, git):
     commit = Commit(name="abc-name")
     m_submit_diff.return_value = {"phid": "PHID-DIFF-1", "diffid": "1"}
 
-    assert mozphab.conduit.create_diff(diff, commit) is diff
+    assert mozphab.conduit.create_diff(diff, commit, is_uplift=True) is diff
     m_upload.assert_called_once_with(diff)
-    m_submit_diff.assert_called_once_with(diff, commit)
+    m_submit_diff.assert_called_once_with(diff, commit, is_uplift=True)
     assert diff.phid == "PHID-DIFF-1"
     assert diff.id == "1"
 
@@ -1090,7 +1090,7 @@ def test_create_diffs_names_failing_commit(m_create_diff, git):
     mozphab.conduit.set_repo(git)
     commit_diffs = [(Commit(name=f"commit-{i}"), Diff()) for i in range(3)]
 
-    def create_diff(diff, commit):
+    def create_diff(diff, commit, is_uplift=False):
         if commit.name == "commit-1":
             raise ConduitAPIError("no soup for you")
         return diff
@@ -1147,7 +1147,6 @@ def test_submit_diff(m_call, git):
 @mock.patch("mozphab.repository.conduit.call")
 def test_submit_diff_uplift(m_call, git):
     """Test that uplift command adds 'uplift' to creationMethod."""
-    git.args.command = "uplift"
     mozphab.conduit.set_repo(git)
     diff = Diff()
     commit = Commit(
@@ -1168,7 +1167,7 @@ def test_submit_diff_uplift(m_call, git):
         # differential.creatediff
         {},
     ]
-    mozphab.conduit.submit_diff(diff, commit)
+    mozphab.conduit.submit_diff(diff, commit, is_uplift=True)
     m_call.assert_any_call(
         "differential.creatediff",
         {
@@ -1233,7 +1232,6 @@ def test_submit_diff_lando(m_call, git, monkeypatch):
 @mock.patch("mozphab.repository.conduit.call")
 def test_submit_diff_uplift_and_lando(m_call, git, monkeypatch):
     """Test that both uplift command and lando env var are reflected in creationMethod."""
-    git.args.command = "uplift"
     monkeypatch.setenv("MOZPHAB_PHABRICATOR_API_TOKEN", "some-token")
     mozphab.conduit.set_repo(git)
     diff = Diff()
@@ -1255,7 +1253,7 @@ def test_submit_diff_uplift_and_lando(m_call, git, monkeypatch):
         # differential.creatediff
         {},
     ]
-    mozphab.conduit.submit_diff(diff, commit)
+    mozphab.conduit.submit_diff(diff, commit, is_uplift=True)
     m_call.assert_any_call(
         "differential.creatediff",
         {
@@ -1278,7 +1276,6 @@ def test_submit_diff_uplift_and_lando(m_call, git, monkeypatch):
 @mock.patch("mozphab.repository.conduit.call")
 def test_submit_diff_cinnabar_uplift_lando(m_call, m_get_public_node, git, monkeypatch):
     """Test that cinnabar, uplift, and lando all appear in creationMethod in correct order."""
-    git.args.command = "uplift"
     git._cinnabar_installed = True
     # Make cinnabar required by setting phab_vcs different from local vcs
     git._phab_vcs = "hg"  # git.vcs is "git", so is_cinnabar_required will be True
@@ -1305,7 +1302,7 @@ def test_submit_diff_cinnabar_uplift_lando(m_call, m_get_public_node, git, monke
         # differential.creatediff
         {},
     ]
-    mozphab.conduit.submit_diff(diff, commit)
+    mozphab.conduit.submit_diff(diff, commit, is_uplift=True)
     m_call.assert_any_call(
         "differential.creatediff",
         {
