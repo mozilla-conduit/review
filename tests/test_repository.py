@@ -87,7 +87,7 @@ def test_get_lando_url_for_phabricator():
     ), "Prod Phabricator without trailing slash should return prod Lando URL."
     assert (
         get_lando_url_for_phabricator("https://phabricator-dev.allizom.org/")
-        == "https://dev.lando.nonprod.webservices.mozgcp.net"
+        == "https://lando-dev.allizom.org"
     ), "Dev Phabricator should return dev Lando URL."
 
     with pytest.raises(KeyError):

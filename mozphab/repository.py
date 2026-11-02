@@ -32,8 +32,8 @@ MOZILLA_DOMAINS = {
 # Mapping of known Phabricator URLs to Lando URLs.
 LANDO_URL_MAPPING = {
     "https://phabricator.services.mozilla.com": "https://lando.moz.tools",
-    "https://phabricator-dev.allizom.org": "https://dev.lando.nonprod.webservices.mozgcp.net",
-    "https://phabricator.allizom.org": "https://stage.lando.nonprod.webservices.mozgcp.net",
+    "https://phabricator-dev.allizom.org": "https://lando-dev.allizom.org",
+    "https://phabricator.allizom.org": "https://lando.allizom.org",
 }
 
 
