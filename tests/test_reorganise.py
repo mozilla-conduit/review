@@ -896,6 +896,8 @@ def test_swap_edits_old_parent_first(
         no_abandon_unconnected=False,
         no_hyperlinks=True,
         verbose=False,
+        start_rev="start",
+        end_rev=".",
     )
     m_convert_stackgraph_to_linear.return_value = {"PHID-A": "PHID-B", "PHID-B": None}
     m_get_revs.return_value = [
