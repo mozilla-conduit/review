@@ -529,112 +529,62 @@ def test_convert_stackgraph_to_linear_fail(stack_graph):
         reorganise.convert_stackgraph_to_linear(stack_graph, phids_to_ids)
 
 
+UNLINK = {"type": "children.set", "value": []}
+ABANDON = {"type": "abandon", "value": True}
+
+
+def link(child):
+    return {"type": "children.set", "value": [child]}
+
+
+def test_apply_order():
+    """Revisions leaving the stack go first, then the stack from the top down."""
+    assert reorganise.apply_order(["C", "A", "B", "A"], ["B", "C"]) == ["A", "C", "B"]
+
+
+def test_stack_transactions_order():
+    transactions = reorganise.stack_transactions(["A", "B", "C"], ["C", "A"], set())
+    assert list(transactions) == ["B", "A", "C"]
+
+
+# Expected dicts below are written in apply order, which is checked too.
 @pytest.mark.parametrize(
-    "remote_phids,local_phids,abandoned,expected_transactions",
+    "remote_phids,local_phids,abandoned,expected",
     [
         # Simple case: same revision in both remote and local
-        (
-            ["A"],
-            ["A"],
-            set(),
-            {
-                "A": [
-                    {"type": "children.set", "value": []},
-                ]
-            },
-        ),
+        (["A"], ["A"], set(), {"A": [UNLINK]}),
         # Local revision with child
-        (
-            ["A"],
-            ["A", "B"],
-            set(),
-            {
-                "A": [
-                    {"type": "children.set", "value": []},
-                    {"type": "children.set", "value": ["B"]},
-                ]
-            },
-        ),
-        # Remote revision not in local - should be abandoned
-        (
-            ["A", "B"],
-            ["A"],
-            set(),
-            {
-                "A": [
-                    {"type": "children.set", "value": []},
-                ],
-                "B": [
-                    {"type": "abandon", "value": True},
-                ],
-            },
-        ),
-        # Remote revision not in local but already abandoned - no abandon transaction
-        (
-            ["A", "B"],
-            ["A"],
-            {"B"},
-            {
-                "A": [
-                    {"type": "children.set", "value": []},
-                ]
-            },
-        ),
+        (["A"], ["A", "B"], set(), {"B": [UNLINK], "A": [link("B")]}),
+        # Remote revision not in local - abandoned, and unlinked too
+        (["A", "B"], ["A"], set(), {"B": [ABANDON, UNLINK], "A": [UNLINK]}),
+        # Remote revision not in local but already abandoned - only unlinked
+        (["A", "B"], ["A"], {"B"}, {"B": [UNLINK], "A": [UNLINK]}),
+        # Swap: A loses its child before B is linked to it
+        (["A", "B"], ["B", "A"], set(), {"A": [UNLINK], "B": [link("A")]}),
         # Complex case: reorder with abandonment
         (
             ["A", "B", "C"],
             ["C", "A"],
             set(),
-            {
-                "A": [
-                    {"type": "children.set", "value": []},
-                ],
-                "B": [
-                    {"type": "abandon", "value": True},
-                ],
-                "C": [
-                    {"type": "children.set", "value": []},
-                    {"type": "children.set", "value": ["A"]},
-                ],
-            },
+            {"B": [ABANDON, UNLINK], "A": [UNLINK], "C": [link("A")]},
         ),
         # Empty remote, non-empty local
-        (
-            [],
-            ["A", "B"],
-            set(),
-            {
-                "A": [
-                    {"type": "children.set", "value": ["B"]},
-                ]
-            },
-        ),
+        ([], ["A", "B"], set(), {"B": [UNLINK], "A": [link("B")]}),
         # Empty local, non-empty remote - abandon all
-        (
-            ["A", "B"],
-            [],
-            set(),
-            {
-                "A": [
-                    {"type": "abandon", "value": True},
-                ],
-                "B": [
-                    {"type": "abandon", "value": True},
-                ],
-            },
-        ),
+        (["A", "B"], [], set(), {"A": [ABANDON, UNLINK], "B": [ABANDON, UNLINK]}),
     ],
 )
-def test_force_stack_transactions(
-    remote_phids, local_phids, abandoned, expected_transactions
-):
+def test_force_stack_transactions(remote_phids, local_phids, abandoned, expected):
     """Test the force_stack_transactions function with various scenarios."""
-    result = reorganise.force_stack_transactions(remote_phids, local_phids, abandoned)
-    assert result == expected_transactions
+    transactions = reorganise.force_stack_transactions(
+        remote_phids, local_phids, abandoned
+    )
+    assert transactions == expected
+    assert list(transactions) == list(expected)
 
 
 @pytest.mark.parametrize(
-    "remote_phids,local_phids,abandoned,no_abandon_unconnected,expected_transactions",
+    "remote_phids,local_phids,abandoned,no_abandon_unconnected,expected",
     [
         # With no_abandon_unconnected=True: don't abandon remote revisions not in local
         (
@@ -642,17 +592,7 @@ def test_force_stack_transactions(
             ["A"],
             set(),
             True,
-            {
-                "A": [
-                    {"type": "children.set", "value": []},
-                ],
-                "B": [
-                    {"type": "children.set", "value": []},
-                ],
-                "C": [
-                    {"type": "children.set", "value": []},
-                ],
-            },
+            {"B": [UNLINK], "C": [UNLINK], "A": [UNLINK]},
         ),
         # With no_abandon_unconnected=False: abandon remote revisions not in local (default behavior)
         (
@@ -660,62 +600,29 @@ def test_force_stack_transactions(
             ["A"],
             set(),
             False,
-            {
-                "A": [
-                    {"type": "children.set", "value": []},
-                ],
-                "B": [
-                    {"type": "abandon", "value": True},
-                ],
-                "C": [
-                    {"type": "abandon", "value": True},
-                ],
-            },
+            {"B": [ABANDON, UNLINK], "C": [ABANDON, UNLINK], "A": [UNLINK]},
         ),
         # With no_abandon_unconnected=True and already abandoned revision: no change
-        (
-            ["A", "B"],
-            ["A"],
-            {"B"},
-            True,
-            {
-                "A": [
-                    {"type": "children.set", "value": []},
-                ],
-                "B": [
-                    {"type": "children.set", "value": []},
-                ],
-            },
-        ),
+        (["A", "B"], ["A"], {"B"}, True, {"B": [UNLINK], "A": [UNLINK]}),
         # Complex case with no_abandon_unconnected=True: reorder but don't abandon
         (
             ["A", "B", "C"],
             ["C", "A"],
             set(),
             True,
-            {
-                "A": [
-                    {"type": "children.set", "value": []},
-                ],
-                "B": [
-                    {"type": "children.set", "value": []},
-                ],
-                "C": [
-                    {"type": "children.set", "value": []},
-                    {"type": "children.set", "value": ["A"]},
-                ],
-            },
+            {"B": [UNLINK], "A": [UNLINK], "C": [link("A")]},
         ),
     ],
 )
 def test_force_stack_transactions_no_abandon_unconnected(
-    remote_phids, local_phids, abandoned, no_abandon_unconnected, expected_transactions
+    remote_phids, local_phids, abandoned, no_abandon_unconnected, expected
 ):
     """Test the force_stack_transactions function with no_abandon_unconnected flag."""
-    result = reorganise.force_stack_transactions(
+    transactions = reorganise.force_stack_transactions(
         remote_phids, local_phids, abandoned, no_abandon_unconnected
     )
-    assert result == expected_transactions
+    assert transactions == expected
+    assert list(transactions) == list(expected)
 
 
 @pytest.mark.parametrize(
@@ -939,6 +846,79 @@ def test_apply_transactions_error_names_revision(
         reorganise.reorganise(git, Args())
 
     assert str(e.value) == expected
+
+
+@pytest.mark.parametrize(
+    "force,expected_calls",
+    [
+        (
+            True,
+            [
+                mock.call(rev_id="PHID-A", transactions=[UNLINK]),
+                mock.call(rev_id="PHID-B", transactions=[link("PHID-A")]),
+            ],
+        ),
+        (
+            False,
+            [
+                mock.call(
+                    rev_id="PHID-A",
+                    transactions=[{"type": "children.remove", "value": ["PHID-B"]}],
+                ),
+                mock.call(rev_id="PHID-B", transactions=[link("PHID-A")]),
+            ],
+        ),
+    ],
+    ids=["force", "normal"],
+)
+@mock.patch("mozphab.conduit.ConduitAPI.check")
+@mock.patch("mozphab.commands.reorganise.augment_commits_from_body")
+@mock.patch("mozphab.commands.reorganise.convert_stackgraph_to_linear")
+@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+@mock.patch("mozphab.conduit.ConduitAPI.ids_to_phids")
+@mock.patch("mozphab.conduit.ConduitAPI.apply_transactions_to_revision")
+def test_swap_edits_old_parent_first(
+    m_apply_transactions,
+    m_id2phid,
+    m_get_revs,
+    m_convert_stackgraph_to_linear,
+    _augment_commits,
+    _check,
+    git,
+    force,
+    expected_calls,
+):
+    """Turning A -> B into B -> A unlinks A before linking B to it."""
+    args = argparse.Namespace(
+        yes=True,
+        force=force,
+        no_abandon=False,
+        no_abandon_unconnected=False,
+        no_hyperlinks=True,
+        verbose=False,
+    )
+    m_convert_stackgraph_to_linear.return_value = {"PHID-A": "PHID-B", "PHID-B": None}
+    m_get_revs.return_value = [
+        {
+            "phid": "PHID-A",
+            "id": 1,
+            "fields": {"status": {"value": "needs-review"}, "stackGraph": {}},
+        },
+        {
+            "phid": "PHID-B",
+            "id": 2,
+            "fields": {"status": {"value": "needs-review"}, "stackGraph": {}},
+        },
+    ]
+    m_id2phid.return_value = ["PHID-B", "PHID-A"]
+    mozphab.conduit.set_repo(git)
+    mozphab.conduit.repo.commit_stack = mock.Mock(
+        return_value=[Commit(rev_id=2, name="B"), Commit(rev_id=1, name="A")]
+    )
+
+    reorganise.reorganise(git, args)
+
+    assert m_apply_transactions.call_args_list == expected_calls
 
 
 @mock.patch("mozphab.commands.reorganise.walk_llist")

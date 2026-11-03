@@ -161,7 +161,8 @@ def stack_transactions(
     """Prepare transactions to set the stack as provided in local_phids.
 
     Returns a dict of transactions for PHID as defined in
-    `differential.revision.edit`.
+    `differential.revision.edit`, in the order they must be applied: see
+    `apply_order`.
     """
     remote_list = to_llist(remote_phids)
     local_list = to_llist(local_phids)
@@ -226,17 +227,30 @@ def stack_transactions(
     assert ":".join(walk_llist(remote_list)) == ":".join(walk_llist(local_list))
 
     conduit_transactions = {}
-    for revision, transaction_list in transactions.items():
+    for revision in apply_order(remote_phids, local_phids):
+        transaction_list = transactions[revision]
         if not transaction_list:
             continue
-        conduit_transactions.setdefault(revision, [])
-
-        for trans_type, trans_value in transaction_list:
-            conduit_transactions[revision].append(
-                {"type": trans_type, "value": trans_value}
-            )
+        conduit_transactions[revision] = [
+            {"type": trans_type, "value": trans_value}
+            for trans_type, trans_value in transaction_list
+        ]
 
     return conduit_transactions
+
+
+def apply_order(remote_phids: list[str], local_phids: list[str]) -> list[str]:
+    """Return the order in which to edit the revisions of a stack.
+
+    Phabricator rejects any edit that would create a dependency cycle, so the
+    order matters when a stack is reordered.  Revisions leaving the stack only
+    lose links, which can't create a cycle, so they go first.  The local stack
+    is then edited from the top down: a revision is only ever linked to a
+    child whose own links are already final, and nothing reachable from there
+    can lead back to it.
+    """
+    leaving = [r for r in dict.fromkeys(remote_phids) if r not in local_phids]
+    return leaving + list(reversed(local_phids))
 
 
 def convert_stackgraph_to_linear(
@@ -284,66 +298,32 @@ def force_stack_transactions(
 ) -> dict[str, list[dict]]:
     """Prepare transactions for force mode: synchronize remote to match local exactly.
 
-    Force mode logic:
-    1. Abandon all remote revisions not found locally in the range (unless no_abandon_unconnected is True)
-    2. Unlink all revisions (remove all existing parent-children relationships)
-    3. Relink revisions to match local state exactly
+    Remote revisions not found locally are unlinked, and abandoned unless
+    `no_abandon_unconnected` is set.  Every local revision then has its
+    children set to match the local stack, whatever the remote stack looks
+    like.
 
-    Args:
-        remote_phids: List of remote PHIDs in the stack
-        local_phids: List of local PHIDs in the desired order
-        abandoned_revisions: Set of already abandoned revision PHIDs
-        no_abandon_unconnected: If True, do not abandon remote revisions not found locally
-
-    Returns a dict of transactions for PHID as defined in `differential.revision.edit`.
+    Returns a dict of transactions for PHID as defined in
+    `differential.revision.edit`, in the order they must be applied: see
+    `apply_order`.
     """
     local_list = to_llist(local_phids)
-    transactions = OrderedDict()
 
-    # Initialize transactions for all revisions that will be touched
-    all_phids = set(remote_phids + local_phids)
-    for revision in all_phids:
+    transactions: dict[str, list[dict]] = {}
+    for revision in apply_order(remote_phids, local_phids):
+        if revision in local_list:
+            child = local_list[revision]
+            transactions[revision] = [
+                {"type": "children.set", "value": [child] if child else []}
+            ]
+            continue
+
         transactions[revision] = []
+        if not no_abandon_unconnected and revision not in abandoned_revisions:
+            transactions[revision].append({"type": "abandon", "value": True})
+        transactions[revision].append({"type": "children.set", "value": []})
 
-    # Step 1: Abandon remote revisions not found locally
-    remote_revisions_missing_from_local = [
-        r for r in remote_phids if r not in local_phids
-    ]
-
-    if not no_abandon_unconnected:
-        for revision in remote_revisions_missing_from_local:
-            # Only abandon if not already abandoned
-            if revision not in abandoned_revisions:
-                transactions[revision].append(("abandon", True))
-
-    # Step 2: Unlink all revisions - we'll use children.set with empty list to
-    # remove all children. This effectively unlinks all existing relationships
-    for revision in remote_phids:
-        if revision not in local_phids and not no_abandon_unconnected:
-            # Don't unset children for revisions that will be abandoned - no need to modify
-            # their relationships since they'll be abandoned anyway
-            continue
-        transactions[revision].append(("children.set", []))
-
-    # Step 3: Relink revisions to match local state exactly
-    for revision in local_phids:
-        child = local_list[revision]
-        if child is not None:
-            transactions[revision].append(("children.set", [child]))
-
-    # Clean up empty transaction lists
-    conduit_transactions = {}
-    for revision, transaction_list in transactions.items():
-        if not transaction_list:
-            continue
-        conduit_transactions.setdefault(revision, [])
-
-        for trans_type, trans_value in transaction_list:
-            conduit_transactions[revision].append(
-                {"type": trans_type, "value": trans_value}
-            )
-
-    return conduit_transactions
+    return transactions
 
 
 def show_revision_glossary(
@@ -748,8 +728,8 @@ def add_parser(parser):
     reorg_parser.add_argument(
         "--force",
         action="store_true",
-        help="Force synchronization: abandon remote revisions not found locally, "
-        "unlink all revisions, then relink to match local state.",
+        help="Force synchronization: abandon and unlink remote revisions not found "
+        "locally, then relink every revision to match local state.",
     )
     reorg_parser.add_argument(
         "--no-abandon-unconnected",
