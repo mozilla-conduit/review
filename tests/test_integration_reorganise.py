@@ -390,18 +390,18 @@ Differential Revision: http://example.test/D1
         "differential.revision.search",
         {"constraints": {"phids": ["PHID-2"]}, "attachments": {"reviewers": True}},
     )
-    # Remove the child from PHID-1 and abandon PHID-1
+    # Abandon PHID-2 first since it leaves the stack, then remove it from PHID-1.
     assert call_conduit.call_args_list[3] == mock.call(
         "differential.revision.edit",
         {
-            "transactions": [{"type": "children.remove", "value": ["PHID-2"]}],
-            "objectIdentifier": "PHID-1",
+            "transactions": [{"type": "abandon", "value": True}],
+            "objectIdentifier": "PHID-2",
         },
     )
     assert call_conduit.call_args_list[4] == mock.call(
         "differential.revision.edit",
         {
-            "transactions": [{"type": "abandon", "value": True}],
-            "objectIdentifier": "PHID-2",
+            "transactions": [{"type": "children.remove", "value": ["PHID-2"]}],
+            "objectIdentifier": "PHID-1",
         },
     )
