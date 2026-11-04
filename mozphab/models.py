@@ -60,6 +60,13 @@ class TransactionType(str, Enum):
     CHILDREN_REMOVE = "children.remove"
 
 
+class RefType(str, Enum):
+    """The kinds of ref a Phabricator diff records, eg. the commit it's based on."""
+
+    BASE = "base"
+    BRANCH = "branch"
+
+
 @dataclass(frozen=True)
 class Revision:
     """A revision, parsed from a `differential.revision.search` result."""
@@ -185,7 +192,9 @@ class RemoteDiff:
         fields = data.get("fields", {})
         commits = data.get("attachments", {}).get("commits", {}).get("commits", [])
         base_refs = [
-            ref["identifier"] for ref in fields.get("refs", []) if ref["type"] == "base"
+            ref["identifier"]
+            for ref in fields.get("refs", [])
+            if ref["type"] == RefType.BASE
         ]
         return cls(
             id=int(data["id"]),
