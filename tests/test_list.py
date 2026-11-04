@@ -12,7 +12,7 @@ import pytest
 
 from mozphab import exceptions
 from mozphab.commands import list as list_command
-from mozphab.conduit import RevisionStatus
+from mozphab.models import RevisionStatus
 from mozphab.repository import Repository
 
 

@@ -7,9 +7,10 @@ import json
 from dataclasses import dataclass
 from enum import Enum
 
-from mozphab.conduit import RevisionStatus, conduit
+from mozphab.conduit import conduit
 from mozphab.exceptions import Error
 from mozphab.logger import logger
+from mozphab.models import RevisionStatus
 from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 

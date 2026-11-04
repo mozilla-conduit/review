@@ -14,7 +14,6 @@ import os
 import time
 import urllib.parse as url_parse
 from collections.abc import Iterable, Sequence
-from enum import Enum
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -130,18 +129,6 @@ IDEMPOTENT_CONDUIT_METHODS = frozenset(
 # opposed to `added`, `blocking`, `commented` or the `-older` statuses left
 # behind when a new diff voids an earlier review.
 REVIEWED_REVIEWER_STATUSES = frozenset({"accepted", "rejected", "resigned"})
-
-
-class RevisionStatus(str, Enum):
-    """The statuses of a Phabricator revision."""
-
-    NEEDS_REVIEW = "needs-review"
-    NEEDS_REVISION = "needs-revision"
-    CHANGES_PLANNED = "changes-planned"
-    ACCEPTED = "accepted"
-    PUBLISHED = "published"
-    ABANDONED = "abandoned"
-    DRAFT = "draft"
 
 
 class ConduitAPIError(Error):
