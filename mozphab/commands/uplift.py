@@ -26,6 +26,7 @@ from mozphab.exceptions import (
 from mozphab.logger import (
     logger,
 )
+from mozphab.models import revision_monogram
 from mozphab.profiler import profiler
 from mozphab.repository import (
     Repository,
@@ -142,7 +143,11 @@ def link_assessment(lando_url: str, revision_id: int, assessment_id: int):
         data=payload,
     )
 
-    logger.debug("Linking revision D%s to assessment %s.", revision_id, assessment_id)
+    logger.debug(
+        "Linking revision %s to assessment %s.",
+        revision_monogram(revision_id),
+        assessment_id,
+    )
 
     try:
         with (
@@ -170,7 +175,9 @@ def attempt_link_assessment(
 ) -> bool:
     """Attempt to link an uplift revision to an assessment, returning success status."""
     try:
-        with wait_message(f"Linking assessment {assessment_id} to D{revision_id}"):
+        with wait_message(
+            f"Linking assessment {assessment_id} to {revision_monogram(revision_id)}"
+        ):
             link_assessment(lando_url, revision_id, assessment_id)
     except Error as err:
         logger.warning("Failed to automatically link assessment: %s", err)

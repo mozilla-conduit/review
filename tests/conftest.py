@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import dataclasses
 import io
 import json
 import os
@@ -35,6 +36,7 @@ from mozphab.commands import submit  # noqa: E402
 from mozphab.git import Git  # noqa: E402
 from mozphab.logger import logger  # noqa: E402
 from mozphab.mercurial import Mercurial  # noqa: E402
+from mozphab.models import Revision  # noqa: E402
 
 environment.SHOW_SPINNER = False
 environment.HTTP_ALLOWED = True
@@ -94,6 +96,11 @@ def search_rev(
         },
         "attachments": {"reviewers": {"reviewers": reviewer_entries}},
     }
+
+
+def search_revision(**kwargs) -> Revision:
+    """Return the `Revision` parsed from `search_rev(**kwargs)`."""
+    return Revision.from_conduit(search_rev(**kwargs))
 
 
 def conduit_responses(responses):
@@ -511,6 +518,6 @@ def mock_load_api_token(monkeypatch, request):
         monkeypatch.setattr("mozphab.conduit.ConduitAPI.load_api_token", mock.MagicMock)
 
 
-def with_stack_graph(rev, stack_graph):
-    """Return a copy of the revision dict with stackGraph added to fields."""
-    return {**rev, "fields": {**rev["fields"], "stackGraph": stack_graph}}
+def with_stack_graph(rev: Revision, stack_graph: dict[str, list[str]]) -> Revision:
+    """Return a copy of the revision with `stack_graph` as its stack graph."""
+    return dataclasses.replace(rev, stack_graph=stack_graph)

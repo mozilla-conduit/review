@@ -10,6 +10,7 @@ import pytest
 
 from mozphab import mozphab
 from mozphab.exceptions import Error
+from mozphab.models import Revision
 
 from .conftest import git_out, hg_out, with_stack_graph
 
@@ -475,41 +476,47 @@ def test_hg_patch_with_commit(
     assert "|/   bookmark:    phab-D1" in result
 
 
-REV_1 = {
-    "id": 1,
-    "phid": "PHID-REV-1",
-    "fields": {
-        "title": "title R1",
-        "summary": "\u0105",
-        "diffPHID": "PHID-DIFF-1",
-        "stackGraph": {"PHID-REV-1": []},
-        "status": {"value": "needs-review"},
-    },
-}
+REV_1 = Revision.from_conduit(
+    {
+        "id": 1,
+        "phid": "PHID-REV-1",
+        "fields": {
+            "title": "title R1",
+            "summary": "\u0105",
+            "diffPHID": "PHID-DIFF-1",
+            "stackGraph": {"PHID-REV-1": []},
+            "status": {"value": "needs-review"},
+        },
+    }
+)
 
-REV_2 = {
-    "id": 2,
-    "phid": "PHID-REV-2",
-    "fields": {
-        "title": "title R2",
-        "summary": "\u0105",
-        "diffPHID": "PHID-DIFF-2",
-        "stackGraph": {"PHID-REV-2": []},
-        "status": {"value": "needs-review"},
-    },
-}
+REV_2 = Revision.from_conduit(
+    {
+        "id": 2,
+        "phid": "PHID-REV-2",
+        "fields": {
+            "title": "title R2",
+            "summary": "\u0105",
+            "diffPHID": "PHID-DIFF-2",
+            "stackGraph": {"PHID-REV-2": []},
+            "status": {"value": "needs-review"},
+        },
+    }
+)
 
-REV_BIN = {
-    "id": 3,
-    "phid": "PHID-REV-3",
-    "fields": {
-        "title": "title BIN",
-        "summary": "\u0105",
-        "diffPHID": "PHID-DIFF-3",
-        "stackGraph": {"PHID-REV-3": []},
-        "status": {"value": "needs-review"},
-    },
-}
+REV_BIN = Revision.from_conduit(
+    {
+        "id": 3,
+        "phid": "PHID-REV-3",
+        "fields": {
+            "title": "title BIN",
+            "summary": "\u0105",
+            "diffPHID": "PHID-DIFF-3",
+            "stackGraph": {"PHID-REV-3": []},
+            "status": {"value": "needs-review"},
+        },
+    }
+)
 ATTACHMENTS = {
     "commits": {
         "commits": [

@@ -6,7 +6,7 @@
 import argparse
 import sys
 from collections import OrderedDict
-from collections.abc import Container
+from collections.abc import Container, Mapping, Sequence
 from dataclasses import dataclass
 
 from mozphab.conduit import conduit
@@ -14,6 +14,7 @@ from mozphab.config import Config, config
 from mozphab.exceptions import Error
 from mozphab.helpers import BUG_ID_RE, augment_commits_from_body, prompt
 from mozphab.logger import logger
+from mozphab.models import Revision, revision_monogram
 from mozphab.repository import Repository, StackSelection
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
@@ -254,7 +255,7 @@ def apply_order(remote_phids: list[str], local_phids: list[str]) -> list[str]:
 
 
 def convert_stackgraph_to_linear(
-    stack_graph: dict[str, list[str]],
+    stack_graph: Mapping[str, Sequence[str]],
     phid_to_id: dict[str, int],
 ) -> dict[str, str | None]:
     """Converts the `stackGraph` data from Phabricator to a linear format.
@@ -271,7 +272,9 @@ def convert_stackgraph_to_linear(
                 # Get the ID of the revision with multiple children.
                 rev_id = phid_to_id[predecessor_phid]
 
-                raise Error(f"Revision D{rev_id} has multiple children.")
+                raise Error(
+                    f"Revision {revision_monogram(rev_id)} has multiple children."
+                )
 
             linear_stackgraph[predecessor_phid] = successor_phid
 
@@ -328,7 +331,7 @@ def force_stack_transactions(
 
 def show_revision_glossary(
     transactions: dict[str, list[dict]],
-    revisions: list[dict],
+    revisions: list[Revision],
     repo: Repository,
     hyperlinks_enabled: bool = True,
 ):
@@ -346,23 +349,22 @@ def show_revision_glossary(
         return
 
     # Create a mapping from PHID to revision data
-    phid_to_revision = {revision["phid"]: revision for revision in revisions}
+    phid_to_revision = {revision.phid: revision for revision in revisions}
 
     # Display the glossary
     logger.info("")
     logger.info("Referenced revisions:")
     for phid in sorted(
         referenced_phids,
-        key=lambda p: phid_to_revision[p]["id"] if p in phid_to_revision else 0,
+        key=lambda p: phid_to_revision[p].id if p in phid_to_revision else 0,
     ):
         if phid not in phid_to_revision:
             continue
-        revision_id = f"D{phid_to_revision[phid]['id']}"
         linked_revision_id = linkify_revision_id(
-            revision_id, repo.phab_url, hyperlinks_enabled
+            phid_to_revision[phid].monogram, repo.phab_url, hyperlinks_enabled
         )
         if phid in phid_to_revision:
-            title = phid_to_revision[phid]["fields"].get("title", "(no title)")
+            title = phid_to_revision[phid].title
             linked_title = linkify_bugs_in_text(title, repo.bmo_url, hyperlinks_enabled)
             logger.info(" * %s: %s", linked_revision_id, linked_title)
         else:
@@ -372,7 +374,7 @@ def show_revision_glossary(
 def format_stack(
     phids: list[str],
     title: str,
-    phid_to_revision: dict[str, dict],
+    phid_to_revision: dict[str, Revision],
     repo: Repository,
     hyperlinks_enabled: bool = True,
 ) -> None:
@@ -384,12 +386,11 @@ def format_stack(
     # Reverse the order so bottom patch is at the bottom (stack order)
     reversed_phids = list(reversed(phids))
     for phid in reversed_phids:
-        revision_id = f"D{phid_to_revision[phid]['id']}"
         linked_revision_id = linkify_revision_id(
-            revision_id, repo.phab_url, hyperlinks_enabled
+            phid_to_revision[phid].monogram, repo.phab_url, hyperlinks_enabled
         )
         if phid in phid_to_revision:
-            title_text = phid_to_revision[phid]["fields"].get("title", "(no title)")
+            title_text = phid_to_revision[phid].title
             linked_title_text = linkify_bugs_in_text(
                 title_text, repo.bmo_url, hyperlinks_enabled
             )
@@ -401,12 +402,12 @@ def format_stack(
 def show_verbose_stack_info(
     phabstack_phids: list[str],
     localstack_phids: list[str],
-    revisions: list[dict],
+    revisions: list[Revision],
     repo: Repository,
     hyperlinks_enabled: bool = True,
 ):
     """Show detailed information about the current and future stack shapes."""
-    phid_to_revision = {revision["phid"]: revision for revision in revisions}
+    phid_to_revision = {revision.phid: revision for revision in revisions}
 
     logger.info("")
     logger.info("Stack reorganization details:")
@@ -488,13 +489,13 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
     stack_graph = {
         predecessor: successors
         for revision in revisions
-        for predecessor, successors in revision["fields"]["stackGraph"].items()
+        for predecessor, successors in revision.stack_graph.items()
     }
 
     # Fetch data about any revisions that are missing from local stack.
     revisions = conduit.get_revisions(phids=list(stack_graph.keys()))
 
-    phid_to_id = {revision["phid"]: revision["id"] for revision in revisions}
+    phid_to_id = {revision.phid: revision.id for revision in revisions}
 
     try:
         # Validate the `stackGraph` field from our remote revisions.
@@ -541,9 +542,7 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
 
     localstack_phids = conduit.ids_to_phids(localstack_ids)
     abandoned_revisions = {
-        revision["phid"]
-        for revision in revisions
-        if revision["fields"]["status"]["value"] == "abandoned"
+        revision.phid for revision in revisions if revision.is_abandoned
     }
 
     if options.force:
@@ -578,7 +577,7 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
         if phid not in phid_to_id:
             # Skip PHIDs that are not in our mapping (can happen in tests)
             continue
-        node_id = f"D{phid_to_id[phid]}"
+        node_id = revision_monogram(phid_to_id[phid])
         linked_node_id = linkify_revision_id(node_id, repo.phab_url, options.hyperlinks)
         if any(transaction["type"] == "abandon" for transaction in rev_transactions):
             logger.info(" * {} will be abandoned".format(linked_node_id))
@@ -586,7 +585,7 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
             for t in rev_transactions:
                 if t["type"] == "children.set":
                     if t["value"] and t["value"][0] in phid_to_id:  # Has children
-                        child_id = f"D{phid_to_id[t['value'][0]]}"
+                        child_id = revision_monogram(phid_to_id[t["value"][0]])
                         linked_child_id = linkify_revision_id(
                             child_id, repo.phab_url, options.hyperlinks
                         )
@@ -604,7 +603,7 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
                         )
                 if t["type"] == "children.remove":
                     if t["value"] and t["value"][0] in phid_to_id:
-                        child_id = f"D{phid_to_id[t['value'][0]]}"
+                        child_id = revision_monogram(phid_to_id[t["value"][0]])
                         linked_child_id = linkify_revision_id(
                             child_id, repo.phab_url, options.hyperlinks
                         )
@@ -650,7 +649,9 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
                 # Phabricator's error message doesn't mention it. Revisions
                 # earlier in the loop have already been mutated and are not
                 # rolled back, so say the stack is now half-reorganised.
-                node_id = f"D{phid_to_id[phid]}" if phid in phid_to_id else phid
+                node_id = (
+                    revision_monogram(phid_to_id[phid]) if phid in phid_to_id else phid
+                )
                 partial = (
                     "\nThe stack has been left partially reorganised: "
                     f"{index} revision(s) were updated before this failure. "

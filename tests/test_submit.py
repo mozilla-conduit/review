@@ -20,7 +20,7 @@ from mozphab.config import Config
 from mozphab.diff import Diff
 from mozphab.user import UserData
 
-from .conftest import search_diff, search_rev
+from .conftest import search_diff, search_revision
 
 
 def reviewers_dict(reviewers=None):
@@ -220,7 +220,7 @@ class Commits(unittest.TestCase):
         self.assertEqual(list(errors.values()), [[Contains("goofus is disabled")]])
 
         # An unchanged disabled reviewer should not block unrelated updates.
-        m_revs.return_value = [search_rev(reviewers=["PHID-USER-2"])]
+        m_revs.return_value = [search_revision(reviewers=["PHID-USER-2"])]
         m_diffs.return_value = {"PHID-DIFF-1": search_diff(message="1 r?goofus")}
         _, errors = submit.validate_commit_stack(
             [commit("1", (["goofus"], []), rev_id=1)], submit.SubmitOptions()
@@ -268,9 +268,9 @@ class Commits(unittest.TestCase):
         m_get_users.return_value = []
         m_get_groups.return_value = []
         m_revs.return_value = [
-            search_rev(rev=1),
-            search_rev(rev=2),
-            search_rev(rev=3),
+            search_revision(rev=1),
+            search_revision(rev=2),
+            search_revision(rev=3),
         ]
         m_diffs.return_value = {"PHID-DIFF-1": search_diff()}
         m_whoami.return_value = {"phid": "PHID-USER-1"}
@@ -871,7 +871,7 @@ class Commits(unittest.TestCase):
             )
 
         m_whoami.return_value = {"phid": "PHID-USER-1"}
-        m_get_revisions.return_value = [search_rev()]
+        m_get_revisions.return_value = [search_revision()]
         m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
         m_check_reviewers.return_value = []
 
@@ -894,7 +894,7 @@ class Commits(unittest.TestCase):
         self.assertEqual(list(warnings.values()), [["Missing reviewers"]])
 
         # Submit with existing revision reviewers.
-        m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
+        m_get_revisions.return_value = [search_revision(reviewers=["PHID-USER-2"])]
         warnings, errors = submit.validate_commit_stack(
             [_commit(rev=1)], submit.SubmitOptions()
         )
@@ -902,8 +902,8 @@ class Commits(unittest.TestCase):
 
         # Do not update not changed commits
         m_get_revisions.return_value = [
-            search_rev(),
-            search_rev(rev=2, phid="PHID-REV-2", diff="PHID-DIFF-2"),
+            search_revision(),
+            search_revision(rev=2, phid="PHID-REV-2", diff="PHID-DIFF-2"),
         ]
         m_get_diffs.return_value = {
             "PHID-DIFF-1": search_diff(),
@@ -922,7 +922,7 @@ class Commits(unittest.TestCase):
         )
 
         # Adding only commit-title reviewers is enough to submit the revision.
-        m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
+        m_get_revisions.return_value = [search_revision(reviewers=["PHID-USER-2"])]
         m_get_diffs.return_value = {
             "PHID-DIFF-1": search_diff(
                 node="aaa000aaa000",
@@ -938,7 +938,7 @@ class Commits(unittest.TestCase):
 
         # Reviewers that were previously requested locally but removed in
         # Phabricator should not be re-added on a reviewer-only resubmit.
-        m_get_revisions.return_value = [search_rev(reviewers=[])]
+        m_get_revisions.return_value = [search_revision(reviewers=[])]
         removed_reviewer_commit = _commit(node="aaa000aaa000", rev=1, granted=["alice"])
         warnings, errors = submit.validate_commit_stack(
             [removed_reviewer_commit], submit.SubmitOptions()
@@ -952,7 +952,7 @@ class Commits(unittest.TestCase):
         # Resigned reviewers remain in the revision attachment and should not
         # be re-added even when they are newly introduced in the local title.
         m_get_revisions.return_value = [
-            search_rev(
+            search_revision(
                 reviewers=[
                     {
                         "reviewerPHID": "PHID-USER-2",
@@ -982,7 +982,7 @@ class Commits(unittest.TestCase):
 
         # Reviewers first requested on a WIP diff still need to be added once
         # the revision is ready, even if the commit SHA1 is unchanged.
-        m_get_revisions.return_value = [search_rev(reviewers=[])]
+        m_get_revisions.return_value = [search_revision(reviewers=[])]
         m_get_diffs.return_value = {
             "PHID-DIFF-1": search_diff(
                 node="aaa000aaa000",
@@ -1007,7 +1007,7 @@ class Commits(unittest.TestCase):
 
         # Information about not updating the commit if not changed
         m_whoami.return_value = {"phid": "PHID-USER-1"}
-        m_get_revisions.return_value = [search_rev(reviewers=["PHID-USER-2"])]
+        m_get_revisions.return_value = [search_revision(reviewers=["PHID-USER-2"])]
         m_get_diffs.return_value = {"PHID-DIFF-1": search_diff(node="aaa000aaa000")}
 
         warnings, _ = submit.validate_commit_stack(
@@ -1019,7 +1019,7 @@ class Commits(unittest.TestCase):
         )
 
         # Removing the WIP state from the revision without changing the commit's SHA1
-        m_get_revisions.return_value = [search_rev(status="changes-planned")]
+        m_get_revisions.return_value = [search_revision(status="changes-planned")]
         warnings, _ = submit.validate_commit_stack(
             [_commit(node="aaa000aaa000", rev=1, granted=["alice"])],
             submit.SubmitOptions(),
@@ -1030,7 +1030,7 @@ class Commits(unittest.TestCase):
         )
 
         # Adding the WIP state to the revision without changing the commit's SHA1
-        m_get_revisions.return_value = [search_rev()]
+        m_get_revisions.return_value = [search_revision()]
         warnings, _ = submit.validate_commit_stack(
             [_commit(node="aaa000aaa000", rev=1, granted=["alice"], wip=True)],
             submit.SubmitOptions(wip=True),
@@ -1562,7 +1562,7 @@ def test_ai_review_failure_does_not_abort_submission(
 
     assert result is not None
     m_logger.error.assert_any_call(
-        "Failed to request AI review for D%s: %s", mock.ANY, mock.ANY
+        "Failed to request AI review for %s: %s", mock.ANY, mock.ANY
     )
 
 

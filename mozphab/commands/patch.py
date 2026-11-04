@@ -5,6 +5,7 @@
 import argparse
 import concurrent.futures
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from mozphab.conduit import conduit
@@ -16,6 +17,7 @@ from mozphab.exceptions import CommandError, Error, NonLinearException, NotFound
 from mozphab.helpers import prepare_body, prompt, short_node
 from mozphab.logger import logger
 from mozphab.mercurial import Mercurial
+from mozphab.models import Revision, revision_monogram
 from mozphab.patch import apply_patch
 from mozphab.repository import (
     PatchAttempt,
@@ -163,17 +165,8 @@ def get_diff_author_and_date(diff: dict) -> tuple[str | None, int | None]:
     return author, diff.get("fields", {}).get("dateCreated")
 
 
-def get_diff_by_id(diff_id: int) -> tuple[str, dict]:
-    """Retrieves a diff from Phabricator
-
-    Args:
-    * diff_id: the ID of the diff to retrieve
-
-    Returns:
-    * a tuple containing:
-        * the PHID of the requested diff
-        * the dictionary returned by Phabricator
-    """
+def get_diff_by_id(diff_id: int) -> dict:
+    """Return the diff with the ID `diff_id` from Phabricator."""
     diff_dict = conduit.get_diffs(ids=[diff_id])
     if not diff_dict:
         raise NotFoundError(f"Could not find diff with ID of {diff_id}.")
@@ -181,32 +174,22 @@ def get_diff_by_id(diff_id: int) -> tuple[str, dict]:
     if len(diff_dict) != 1:
         raise Error(f"Unexpected result received from Phabricator for Diff {diff_id}.")
 
-    requested_diff_phid = list(diff_dict.keys())[0]
-    return requested_diff_phid, diff_dict[requested_diff_phid]
+    return next(iter(diff_dict.values()))
 
 
-def update_revision_with_new_diff(revs: list[dict], diff: dict) -> None:
-    """Updates the revision to point to the given diff if they are related
-
-    Args:
-    * revs: list of revisions
-    * diff: the new diff to point to
-
-    Returns:
-    * None if the diff is related to a revision in the list
+def with_requested_diff(diffs: dict[str, dict], diff: dict) -> dict[str, dict]:
+    """Return the diffs keyed by revision PHID, with `diff` replacing its revision's.
 
     Raises:
-    * Error if no relation is found
+    * Error if `diff` doesn't belong to any of the revisions
     """
-    for rev in revs:
-        if diff["fields"]["revisionPHID"] == rev["phid"]:
-            rev["fields"]["diffPHID"] = diff["phid"]
-            return
-
-    raise Error(f"Diff {diff['id']} is not related to any revision in the stack.")
+    revision_phid = diff["fields"]["revisionPHID"]
+    if revision_phid not in diffs:
+        raise Error(f"Diff {diff['id']} is not related to any revision in the stack.")
+    return {**diffs, revision_phid: diff}
 
 
-def resolve_branch_name(options: PatchOptions, rev_id: str) -> str | None:
+def resolve_branch_name(options: PatchOptions, rev_id: int) -> str | None:
     """Resolve the branch name for the resulting patch.
 
     Use the value passed from `--name` on the CLI if possible. If
@@ -229,7 +212,7 @@ def resolve_branch_name(options: PatchOptions, rev_id: str) -> str | None:
 
 
 def _get_ancestors_from_stack_graph(
-    stack_graph: dict[str, list[str]], target_phid: str
+    stack_graph: Mapping[str, Sequence[str]], target_phid: str
 ) -> list[str]:
     """Walk the stackGraph to find ancestor PHIDs of the target revision.
 
@@ -255,7 +238,7 @@ def _get_ancestors_from_stack_graph(
 
 
 def _get_children_from_stack_graph(
-    stack_graph: dict[str, list[str]], target_phid: str
+    stack_graph: Mapping[str, Sequence[str]], target_phid: str
 ) -> list[str]:
     """Walk the stackGraph to find child PHIDs of the target revision.
 
@@ -287,14 +270,11 @@ def _get_children_from_stack_graph(
 
 
 def _filter_abandoned_phids(
-    phids: list[str], related_by_phid: dict[str, dict]
+    phids: list[str], related_by_phid: dict[str, Revision]
 ) -> list[str]:
     """Filter out PHIDs that are abandoned or missing from the response."""
     return [
-        p
-        for p in phids
-        if p in related_by_phid
-        and related_by_phid[p]["fields"]["status"]["value"] != "abandoned"
+        p for p in phids if p in related_by_phid and not related_by_phid[p].is_abandoned
     ]
 
 
@@ -302,7 +282,7 @@ def _fetch_and_filter_related(
     ancestor_phids: list[str],
     children_phids: list[str],
     include_abandoned: bool,
-) -> tuple[list[str], list[str], dict[str, dict]]:
+) -> tuple[list[str], list[str], dict[str, Revision]]:
     """Fetch related revisions and filter out abandoned/inaccessible ones.
 
     Returns updated (ancestor_phids, children_phids, related_by_phid).
@@ -313,7 +293,7 @@ def _fetch_and_filter_related(
 
     with wait_message("Fetching related revisions.."):
         all_related = conduit.get_revisions(phids=all_related_phids)
-    related_by_phid = {r["phid"]: r for r in all_related}
+    related_by_phid = {revision.phid: revision for revision in all_related}
 
     # Filter out abandoned ancestors (always filtered) and any
     # PHIDs that weren't returned (e.g. restricted access).
@@ -330,7 +310,7 @@ def _fetch_and_filter_related(
 
 def _apply_commits(
     repo: Repository,
-    revs: list[dict],
+    revs: list[Revision],
     diffs: dict,
     raw_diffs: dict,
     attempt: PatchAttempt,
@@ -341,23 +321,23 @@ def _apply_commits(
     """
     for rev in revs:
         body = prepare_body(
-            rev["fields"]["title"],
-            rev["fields"]["summary"],
-            rev["id"],
+            rev.title,
+            rev.summary,
+            rev.id,
             repo.phab_url,
         )
-        diff = diffs[rev["fields"]["diffPHID"]]
-        raw = raw_diffs[rev["id"]]
+        diff = diffs[rev.phid]
+        raw = raw_diffs[rev.id]
         author, date_created = get_diff_author_and_date(diff)
 
         try:
-            with wait_message("Applying D%s.." % rev["id"]):
+            with wait_message("Applying %s.." % rev.monogram):
                 repo.apply_patch(raw, body, author, date_created, attempt=attempt)
         except CommandError:
             raise Error("Patch failed to apply")
 
-        if rev["id"] != revs[-1]["id"]:
-            logger.info("D%s applied", rev["id"])
+        if rev.id != revs[-1].id:
+            logger.info("%s applied", rev.monogram)
 
 
 def patch(repo: Repository, args: argparse.Namespace):
@@ -428,7 +408,7 @@ def patch(repo: Repository, args: argparse.Namespace):
                     )
 
     # Get the target revision
-    with wait_message("Fetching D%s.." % options.revision_id):
+    with wait_message("Fetching %s.." % revision_monogram(options.revision_id)):
         revs = conduit.get_revisions(ids=[options.revision_id])
 
     if not revs:
@@ -439,21 +419,17 @@ def patch(repo: Repository, args: argparse.Namespace):
     if not options.skip_dependencies:
         # Use the stackGraph field from the revision to determine
         # ancestors and children without extra API calls.
-        stack_graph = revision["fields"]["stackGraph"]
+        stack_graph = revision.stack_graph
 
         try:
-            children_phids = _get_children_from_stack_graph(
-                stack_graph, revision["phid"]
-            )
+            children_phids = _get_children_from_stack_graph(stack_graph, revision.phid)
             non_linear = False
         except NonLinearException:
             children_phids = []
             non_linear = True
 
         try:
-            ancestor_phids = _get_ancestors_from_stack_graph(
-                stack_graph, revision["phid"]
-            )
+            ancestor_phids = _get_ancestors_from_stack_graph(stack_graph, revision.phid)
         except NonLinearException:
             raise Error("Non linear dependency detected. Unable to patch the stack.")
 
@@ -473,8 +449,9 @@ def patch(repo: Repository, args: argparse.Namespace):
                     "a child commit" if len(children_phids) == 1 else "child commits"
                 )
                 res = prompt(
-                    "Revision D%s has %s.  Would you like to patch the "
-                    "full stack?." % (options.revision_id, children_msg),
+                    "Revision %s has %s.  Would you like to patch the "
+                    "full stack?."
+                    % (revision_monogram(options.revision_id), children_msg),
                     ["Yes", "No", "Always"],
                 )
                 if res == "Always":
@@ -486,9 +463,9 @@ def patch(repo: Repository, args: argparse.Namespace):
             if patch_children:
                 if non_linear and not options.yes:
                     logger.warning(
-                        "Revision D%s has a non-linear successor graph.\n"
+                        "Revision %s has a non-linear successor graph.\n"
                         "Unable to apply the full stack.",
-                        options.revision_id,
+                        revision_monogram(options.revision_id),
                     )
                     res = prompt("Continue with only part of the stack?", ["Yes", "No"])
                     if res == "No":
@@ -509,32 +486,31 @@ def patch(repo: Repository, args: argparse.Namespace):
                 revs.extend(child_revs)
 
     # Set the target id
-    rev_id = revs[-1]["id"]
+    rev_id = revs[-1].id
 
     logger.info(
         "Patching revision%s: %s",
         "s" if len(revs) > 1 else "",
-        " ".join(["D%s" % r["id"] for r in revs]),
+        " ".join(rev.monogram for rev in revs),
     )
 
     # Pull diffs
     with wait_message("Downloading patch information.."):
-        diffs = conduit.get_diffs(phids=[r["fields"]["diffPHID"] for r in revs])
+        fetched = conduit.get_diffs(phids=[r.diff_phid for r in revs])
+    # The diff each revision is patched from, keyed by the revision's PHID.
+    diffs = {rev.phid: fetched[rev.diff_phid] for rev in revs}
 
-    # If a user specifies a diff ID, retrieve the diff and add it to the diff mapping,
-    # and overwrite the diffPHID for the relevant revision
+    # `--diff-id` patches that diff instead of its revision's latest one.
     if options.diff_id:
-        requested_diff_phid, requested_diff = get_diff_by_id(options.diff_id)
-        diffs[requested_diff_phid] = requested_diff
-        update_revision_with_new_diff(revs, requested_diff)
+        diffs = with_requested_diff(diffs, get_diff_by_id(options.diff_id))
 
     if options.create_commit and not options.raw:
         for rev in revs:
-            diff = diffs[rev["fields"]["diffPHID"]]
+            diff = diffs[rev.phid]
             if not diff["attachments"]["commits"]["commits"]:
                 raise Error(
-                    "A diff without commit information detected in revision D%s.\n"
-                    "Use `--no-commit` to patch the working tree." % rev["id"]
+                    "A diff without commit information detected in revision %s.\n"
+                    "Use `--no-commit` to patch the working tree." % rev.monogram
                 )
 
     target_node = ""
@@ -542,7 +518,7 @@ def patch(repo: Repository, args: argparse.Namespace):
     ref_name = None
     attempt = PatchAttempt(target_node)
 
-    base_diff = diffs[revs[0]["fields"]["diffPHID"]]
+    base_diff = diffs[revs[0].phid]
     diff_base_node = None
 
     if not options.raw:
@@ -580,9 +556,9 @@ def patch(repo: Repository, args: argparse.Namespace):
                 )
                 if not target_node:
                     raise Error(
-                        "Unable to find a commit to apply D%s at.\n"
+                        "Unable to find a commit to apply %s at.\n"
                         "Use `--apply-to here` to patch the current commit."
-                        % options.revision_id
+                        % revision_monogram(options.revision_id)
                     )
         elif options.apply_to == "here":
             target_node = repo.get_current_node()
@@ -612,8 +588,8 @@ def patch(repo: Repository, args: argparse.Namespace):
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
             futures = {}
             for rev in revs:
-                diff = diffs[rev["fields"]["diffPHID"]]
-                futures[rev["id"]] = executor.submit(
+                diff = diffs[rev.phid]
+                futures[rev.id] = executor.submit(
                     conduit.call,
                     "differential.getrawdiff",
                     {"diffID": diff["id"]},
@@ -627,20 +603,20 @@ def patch(repo: Repository, args: argparse.Namespace):
 
     if not options.create_commit:
         for rev in revs:
-            raw = raw_diffs[rev["id"]]
-            with wait_message("Applying D%s.." % rev["id"]):
+            raw = raw_diffs[rev.id]
+            with wait_message("Applying %s.." % rev.monogram):
                 apply_patch(raw, repo.path)
-            if rev["id"] != revs[-1]["id"]:
-                logger.info("D%s applied", rev["id"])
+            if rev.id != revs[-1].id:
+                logger.info("%s applied", rev.monogram)
 
     elif options.raw:
         for rev in revs:
-            diff = diffs[rev["fields"]["diffPHID"]]
-            raw = raw_diffs[rev["id"]]
+            diff = diffs[rev.phid]
+            raw = raw_diffs[rev.id]
             body = prepare_body(
-                rev["fields"]["title"],
-                rev["fields"]["summary"],
-                rev["id"],
+                rev.title,
+                rev.summary,
+                rev.id,
                 repo.phab_url,
             )
             author, date_created = get_diff_author_and_date(diff)
@@ -649,8 +625,8 @@ def patch(repo: Repository, args: argparse.Namespace):
             # to be in our logs.
             print(repo.format_patch(raw, body, author, date_created))
 
-            if rev["id"] != revs[-1]["id"]:
-                logger.info("D%s applied", rev["id"])
+            if rev.id != revs[-1].id:
+                logger.info("%s applied", rev.monogram)
 
     else:
         # Applying at the target is cheap, and avoids rebuilds from files
@@ -733,7 +709,7 @@ def patch(repo: Repository, args: argparse.Namespace):
 
             logger.info("Successfully rebased patches to %s", short_node(target_node))
 
-    logger.warning("D%s applied", rev_id)
+    logger.warning("%s applied", revision_monogram(rev_id))
 
 
 def check_revision_id(value: str) -> int:

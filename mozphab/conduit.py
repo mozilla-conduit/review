@@ -37,6 +37,7 @@ from .helpers import (
     strip_differential_revision,
 )
 from .logger import logger
+from .models import Revision
 from .profiler import profiler
 from .simplecache import SimpleCache
 
@@ -390,7 +391,7 @@ class ConduitAPI:
         Returns:
             A list of PHIDs.
         """
-        return [r["phid"] for r in self.get_revisions(ids=rev_ids)]
+        return [revision.phid for revision in self.get_revisions(ids=rev_ids)]
 
     def id_to_phid(self, rev_id: int) -> str:
         """Convert revision id to PHID."""
@@ -409,7 +410,7 @@ class ConduitAPI:
         Returns:
             A list of ids.
         """
-        return ["D{}".format(r["id"]) for r in self.get_revisions(phids=phids)]
+        return [revision.monogram for revision in self.get_revisions(phids=phids)]
 
     def phid_to_id(self, phid: str) -> str:
         """Convert revision PHID to id."""
@@ -421,7 +422,7 @@ class ConduitAPI:
 
     def get_revisions(
         self, ids: Sequence[int] | None = None, phids: list[str] | None = None
-    ) -> list[dict]:
+    ) -> list[Revision]:
         """Get revisions info from Phabricator.
 
         Args:
@@ -472,11 +473,12 @@ class ConduitAPI:
             }
             response = self.call("differential.revision.search", api_call_args)
 
-            for r in response.get("data") or []:
-                phids_by_id[str(r["id"])] = r["phid"]
-                revisions[r["phid"]] = r
-                self.cache.set("rev-id-%s" % r["id"], r["phid"])
-                self.cache.set("rev-%s" % r["phid"], r)
+            for data in response.get("data") or []:
+                revision = Revision.from_conduit(data)
+                phids_by_id[str(revision.id)] = revision.phid
+                revisions[revision.phid] = revision
+                self.cache.set("rev-id-%s" % revision.id, revision.phid)
+                self.cache.set("rev-%s" % revision.phid, revision)
 
         # Return revisions in the same order requested.
         if rev_ids:
@@ -658,7 +660,7 @@ class ConduitAPI:
         commits: list[Commit],
         user_names: Iterable[str],
         group_slugs: Iterable[str],
-    ) -> tuple[dict[int, dict], dict[str, dict]]:
+    ) -> tuple[dict[int, Revision], dict[str, dict]]:
         """Fetch everything `validate_commit_stack` needs in as few round-trips
         as possible.
 
@@ -676,15 +678,13 @@ class ConduitAPI:
         diff PHID.
         """
 
-        def load_revisions_and_diffs() -> tuple[dict[int, dict], dict[str, dict]]:
+        def load_revisions_and_diffs() -> tuple[dict[int, Revision], dict[str, dict]]:
             ids = [commit.rev_id for commit in commits if commit.rev_id]
             revisions = {
-                revision["id"]: revision
+                revision.id: revision
                 for revision in (self.get_revisions(ids=ids) if ids else [])
             }
-            diff_phids = [
-                revision["fields"]["diffPHID"] for revision in revisions.values()
-            ]
+            diff_phids = [revision.diff_phid for revision in revisions.values()]
             diffs = self.get_diffs(phids=diff_phids) if diff_phids else {}
             return revisions, diffs
 
@@ -759,9 +759,7 @@ class ConduitAPI:
 
         if commit.has_reviewers and not commit.wip and commit.rev_id:
             revision = self.get_revisions(ids=[commit.rev_id])[0]
-            diff = self.get_diffs(phids=[revision["fields"]["diffPHID"]])[
-                revision["fields"]["diffPHID"]
-            ]
+            diff = self.get_diffs(phids=[revision.diff_phid])[revision.diff_phid]
             self.add_newly_introduced_reviewers(
                 transactions,
                 commit,
@@ -772,7 +770,7 @@ class ConduitAPI:
         # Update bug id if different
         if commit.bug_id and commit.rev_id:
             revision = revision or self.get_revisions(ids=[commit.rev_id])[0]
-            if revision["fields"]["bugzilla.bug-id"] != commit.bug_id:
+            if revision.bug_id != commit.bug_id:
                 transactions.append({"type": "bugzilla.bug-id", "value": commit.bug_id})
 
         return self.edit_revision(
@@ -813,7 +811,7 @@ class ConduitAPI:
             else:
                 existing_revision = conduit.get_revisions(ids=[revision_id])[0]
 
-            existing_status = existing_revision["fields"]["status"]["value"]
+            existing_status = existing_revision.status
 
         # Set revision for changes-planned or needs-review as required.
         # Phabricator will throw an error if we attempt to set a status to the same
@@ -1036,7 +1034,7 @@ class ConduitAPI:
 
         # Use the repo of the existing revision if this is an update.
         revs = conduit.get_revisions(ids=[commit.rev_id]) if commit.rev_id else []
-        diff_repo_phid = revs[0]["fields"]["repositoryPHID"] if revs else self.repo_phid
+        diff_repo_phid = revs[0].repository_phid if revs else self.repo_phid
 
         api_call_args = {
             "changes": changes,
@@ -1231,12 +1229,11 @@ class ConduitAPI:
         if not commit.rev_id:
             return False
         revs = self.get_revisions(ids=[commit.rev_id])
-        return bool(revs and revs[0]["attachments"]["reviewers"]["reviewers"])
+        return bool(revs and revs[0].reviewer_phids)
 
-    def revision_reviewer_phids(self, revision: dict) -> set[str]:
+    def revision_reviewer_phids(self, revision: Revision) -> set[str]:
         """Return reviewer PHIDs for a Phabricator revision."""
-        reviewers = revision["attachments"]["reviewers"]["reviewers"]
-        return {reviewer["reviewerPHID"] for reviewer in reviewers}
+        return set(revision.reviewer_phids)
 
     def commit_reviewer_transaction_values(self, commit: Commit) -> list[str]:
         """Return reviewer transaction values for a commit's reviewers."""
@@ -1301,16 +1298,15 @@ class ConduitAPI:
         return transaction_values_by_name
 
     def previous_commit_reviewer_names(
-        self, revision: dict, diff: dict | None = None
+        self, revision: Revision, diff: dict | None = None
     ) -> set[str]:
         """Return normalized reviewer names from the previous commit title."""
         if diff is None:
-            diff_phid = revision["fields"]["diffPHID"]
-            diff = self.get_diffs(phids=[diff_phid])[diff_phid]
+            diff = self.get_diffs(phids=[revision.diff_phid])[revision.diff_phid]
 
-        title = diff_commit_title(diff) or revision["fields"].get("title", "")
+        title = diff_commit_title(diff) or revision.title
         cache_key = "reviewer-names-{}-{}-{}".format(
-            revision.get("phid", ""),
+            revision.phid,
             diff.get("phid", ""),
             hashlib.sha256(title.encode()).hexdigest(),
         )
@@ -1335,10 +1331,10 @@ class ConduitAPI:
         self.cache.set(cache_key, reviewer_names)
         return set(reviewer_names)
 
-    def latest_non_wip_diff(self, revision: dict) -> dict | None:
+    def latest_non_wip_diff(self, revision: Revision) -> dict | None:
         """Return the latest diff whose commit was not submitted as WIP."""
         api_call_args = {
-            "constraints": {"revisionPHIDs": [revision["phid"]]},
+            "constraints": {"revisionPHIDs": [revision.phid]},
             "attachments": {"commits": True},
             "order": "newest",
             "limit": 100,
@@ -1368,7 +1364,7 @@ class ConduitAPI:
         return None
 
     def new_commit_reviewer_names(
-        self, commit: Commit, revision: dict, diff: dict | None = None
+        self, commit: Commit, revision: Revision, diff: dict | None = None
     ) -> dict[str, list[str]]:
         """Return reviewer names absent from the previous submitted title."""
         previous_reviewer_names = self.previous_commit_reviewer_names(revision, diff)
@@ -1384,7 +1380,7 @@ class ConduitAPI:
         return reviewer_names
 
     def commit_reviewer_additions(
-        self, commit: Commit, revision: dict, diff: dict | None = None
+        self, commit: Commit, revision: Revision, diff: dict | None = None
     ) -> ReviewerAdditions:
         """Return reviewer names and transaction values to add."""
         reviewer_names_to_add = {"request": [], "granted": []}
@@ -1426,7 +1422,7 @@ class ConduitAPI:
         self,
         transactions: list[dict[str, Any]],
         commit: Commit,
-        revision: dict,
+        revision: Revision,
         diff: dict | None = None,
     ):
         # Existing revisions only add reviewers newly introduced in the local

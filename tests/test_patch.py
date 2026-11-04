@@ -11,6 +11,7 @@ import pytest
 from mozphab import exceptions, helpers, mozphab
 from mozphab.commands import patch
 from mozphab.config import Config
+from mozphab.models import Revision
 from mozphab.repository import PatchAttempt, PatchRefs, Repository
 
 from .conftest import with_stack_graph
@@ -81,7 +82,7 @@ def test_patch_options_from_args():
 
 
 def test_resolve_branch_name():
-    rev_id = "123"
+    rev_id = 123
 
     options = patch.PatchOptions(revision_id=123, name="branch")
     assert (
@@ -125,9 +126,9 @@ def test_check_revision_id():
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
 def test_get_diff_by_id(m_get_diffs):
     m_get_diffs.return_value = {"DIFFPHID-1": {"id": 1}}
-    phid, diff = patch.get_diff_by_id(1)
-    assert phid == "DIFFPHID-1", "Should return PHID as first element"
-    assert diff["id"] == 1, "Should return diff dict as second element"
+    assert patch.get_diff_by_id(1) == {
+        "id": 1
+    }, "The requested diff should be returned."
 
     m_get_diffs.return_value = {}
     with pytest.raises(exceptions.NotFoundError):
@@ -138,22 +139,20 @@ def test_get_diff_by_id(m_get_diffs):
         patch.get_diff_by_id(1)
 
 
-def test_update_revision_with_new_diff():
-    revs = [REV_1]
-    patch.update_revision_with_new_diff(revs, DIFF_3)
-    assert (
-        revs[0]["fields"]["diffPHID"] == "DIFFPHID-3"
-    ), "Should update related revision"
+def test_with_requested_diff():
+    diffs = {"PHID-1": DIFF_1, "PHID-2": DIFF_2}
 
-    revs = [REV_1, REV_2]
-    patch.update_revision_with_new_diff(revs, DIFF_1)
-    assert (
-        revs[0]["fields"]["diffPHID"] == "DIFFPHID-1"
-    ), "Should update related revision when given multiple revisions"
+    assert patch.with_requested_diff(diffs, DIFF_3) == {
+        "PHID-1": DIFF_3,
+        "PHID-2": DIFF_2,
+    }, "The requested diff should replace its revision's diff."
+    assert diffs == {
+        "PHID-1": DIFF_1,
+        "PHID-2": DIFF_2,
+    }, "The diffs passed in should be left unchanged."
 
-    # Should raise an error for unrelated diff
     with pytest.raises(exceptions.Error):
-        patch.update_revision_with_new_diff(revs, DIFF_4)
+        patch.with_requested_diff(diffs, DIFF_4)
 
 
 def test_get_ancestors_from_stack_graph():
@@ -453,17 +452,19 @@ def test_patch(
     m_get_base_ref.return_value = "sha111"
     m_call_conduit.return_value = "raw"  # differential.getrawdiff
     m_get_revisions.return_value = [
-        {
-            "phid": "PHID-1",
-            "id": 1,
-            "fields": {
-                "diffPHID": "DIFFPHID-1",
-                "title": "title",
-                "summary": "summary",
-                "stackGraph": {"PHID-1": []},
-                "status": {"value": "needs-review"},
-            },
-        }
+        Revision.from_conduit(
+            {
+                "phid": "PHID-1",
+                "id": 1,
+                "fields": {
+                    "diffPHID": "DIFFPHID-1",
+                    "title": "title",
+                    "summary": "summary",
+                    "stackGraph": {"PHID-1": []},
+                    "status": {"value": "needs-review"},
+                },
+            }
+        )
     ]
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
     m_git_check_node.return_value = "sha111"
@@ -510,7 +511,7 @@ def test_patch(
     m_get_diffs.side_effect = None
 
     # --diff-id raises NotFoundError
-    m_get_diffs.return_value = {}
+    m_get_diffs.side_effect = [{"DIFFPHID-1": DIFF_1}, {}]
     args = Args(diff_id=100)
     with pytest.raises(exceptions.NotFoundError):
         patch.patch(git, args)
@@ -890,38 +891,44 @@ def test_patch(
     m_print.assert_has_calls((mock.call("raw2"), mock.call("raw1"), mock.call("raw3")))
 
 
-REV_1: dict[str, Any] = {
-    "phid": "PHID-1",
-    "id": 1,
-    "fields": {
-        "diffPHID": "DIFFPHID-1",
-        "title": "title",
-        "summary": "summary",
-        "status": {"value": "needs-review"},
-    },
-}
+REV_1 = Revision.from_conduit(
+    {
+        "phid": "PHID-1",
+        "id": 1,
+        "fields": {
+            "diffPHID": "DIFFPHID-1",
+            "title": "title",
+            "summary": "summary",
+            "status": {"value": "needs-review"},
+        },
+    }
+)
 
-REV_2: dict[str, Any] = {
-    "phid": "PHID-2",
-    "id": 2,
-    "fields": {
-        "diffPHID": "DIFFPHID-2",
-        "title": "title",
-        "summary": "summary",
-        "status": {"value": "needs-review"},
-    },
-}
+REV_2 = Revision.from_conduit(
+    {
+        "phid": "PHID-2",
+        "id": 2,
+        "fields": {
+            "diffPHID": "DIFFPHID-2",
+            "title": "title",
+            "summary": "summary",
+            "status": {"value": "needs-review"},
+        },
+    }
+)
 
-REV_3: dict[str, Any] = {
-    "phid": "PHID-3",
-    "id": 3,
-    "fields": {
-        "diffPHID": "DIFFPHID-3",
-        "title": "title",
-        "summary": "summary",
-        "status": {"value": "needs-review"},
-    },
-}
+REV_3 = Revision.from_conduit(
+    {
+        "phid": "PHID-3",
+        "id": 3,
+        "fields": {
+            "diffPHID": "DIFFPHID-3",
+            "title": "title",
+            "summary": "summary",
+            "status": {"value": "needs-review"},
+        },
+    }
+)
 
 DIFF_1: dict[str, Any] = {
     "id": 1,

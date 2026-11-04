@@ -10,6 +10,7 @@ from mozphab.conduit import conduit
 from mozphab.exceptions import Error, NotFoundError
 from mozphab.helpers import PHABRICATOR_URL_REVISION_PATTERN, prompt
 from mozphab.logger import logger
+from mozphab.models import revision_monogram
 from mozphab.spinner import wait_message
 
 
@@ -71,9 +72,8 @@ def abandon_revisions(options: AbandonOptions):
     already_abandoned = []
 
     for revision in revisions:
-        status = revision["fields"]["status"]["value"]
-        if status == "abandoned":
-            already_abandoned.append(revision["id"])
+        if revision.is_abandoned:
+            already_abandoned.append(revision.id)
         else:
             revisions_to_abandon.append(revision)
 
@@ -81,7 +81,7 @@ def abandon_revisions(options: AbandonOptions):
     if already_abandoned:
         logger.info(
             "Already abandoned: %s",
-            ", ".join(f"D{rev_id}" for rev_id in already_abandoned),
+            ", ".join(revision_monogram(rev_id) for rev_id in already_abandoned),
         )
 
     if not revisions_to_abandon:
@@ -90,7 +90,7 @@ def abandon_revisions(options: AbandonOptions):
 
     logger.warning("The following revisions will be abandoned:")
     for revision in revisions_to_abandon:
-        logger.info(" * D%s: %s", revision["id"], revision["fields"]["title"])
+        logger.info(" * %s: %s", revision.monogram, revision.title)
 
     # Confirmation prompt
     if not options.yes:
@@ -103,9 +103,9 @@ def abandon_revisions(options: AbandonOptions):
         for revision in revisions_to_abandon:
             transactions = [{"type": "abandon", "value": True}]
             conduit.apply_transactions_to_revision(
-                rev_id=revision["phid"], transactions=transactions
+                rev_id=revision.phid, transactions=transactions
             )
-            logger.info("D%s abandoned", revision["id"])
+            logger.info("%s abandoned", revision.monogram)
 
     logger.warning("Completed: %d revision(s) abandoned", len(revisions_to_abandon))
 

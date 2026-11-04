@@ -15,6 +15,7 @@ from mozphab.commands import reorganise
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError
 from mozphab.config import Config
+from mozphab.models import Revision
 
 
 def test_linkify_bugs_in_text_without_bmo_url():
@@ -826,14 +827,12 @@ def test_apply_transactions_error_names_revision(
 
     m_convert_stackgraph_to_linear.return_value = {"PHID-A": None}
     m_get_revs.return_value = [
-        {
-            "phid": "PHID-A",
-            "id": 314841,
-            "fields": {
-                "status": {"value": "closed"},
-                "stackGraph": {"PHID-A": []},
-            },
-        }
+        Revision(
+            id=314841,
+            phid="PHID-A",
+            status="closed",
+            stack_graph={"PHID-A": []},
+        )
     ]
     m_id2phid.return_value = ["PHID-A"]
     mozphab.conduit.set_repo(git)
@@ -901,16 +900,8 @@ def test_swap_edits_old_parent_first(
     )
     m_convert_stackgraph_to_linear.return_value = {"PHID-A": "PHID-B", "PHID-B": None}
     m_get_revs.return_value = [
-        {
-            "phid": "PHID-A",
-            "id": 1,
-            "fields": {"status": {"value": "needs-review"}, "stackGraph": {}},
-        },
-        {
-            "phid": "PHID-B",
-            "id": 2,
-            "fields": {"status": {"value": "needs-review"}, "stackGraph": {}},
-        },
+        Revision(id=1, phid="PHID-A", status="needs-review", stack_graph={}),
+        Revision(id=2, phid="PHID-B", status="needs-review", stack_graph={}),
     ]
     m_id2phid.return_value = ["PHID-B", "PHID-A"]
     mozphab.conduit.set_repo(git)
@@ -1018,23 +1009,16 @@ def test_force_mode_tolerates_nonlinear_stackgraph(
         # First call: preload the local stack. Revisions carry a
         # stackGraph whose shape will be rejected by the linearizer.
         # Second call: fetch missing-from-local PHIDs.
+        stack_graph = {"A": [], "B": ["A"], "Z": ["A"]}
         m_get_revs.side_effect = [
             [
-                {
-                    "id": 1,
-                    "phid": "A",
-                    "fields": {"stackGraph": {"A": [], "B": ["A"], "Z": ["A"]}},
-                },
-                {
-                    "id": 2,
-                    "phid": "B",
-                    "fields": {"stackGraph": {"A": [], "B": ["A"], "Z": ["A"]}},
-                },
+                Revision(id=1, phid="A", stack_graph=stack_graph),
+                Revision(id=2, phid="B", stack_graph=stack_graph),
             ],
             [
-                {"phid": "A", "id": 1, "fields": {"status": {"value": "needs-review"}}},
-                {"phid": "B", "id": 2, "fields": {"status": {"value": "needs-review"}}},
-                {"phid": "Z", "id": 99, "fields": {"status": {"value": "abandoned"}}},
+                Revision(id=1, phid="A", status="needs-review"),
+                Revision(id=2, phid="B", status="needs-review"),
+                Revision(id=99, phid="Z", status="abandoned"),
             ],
         ]
 
@@ -1091,9 +1075,7 @@ def test_non_force_mode_rejects_nonlinear_stackgraph(
         mock.patch("mozphab.conduit.ConduitAPI.get_revisions") as m_get_revs,
         pytest.raises(exceptions.Error, match="multiple children"),
     ):
-        m_get_revs.return_value = [
-            {"id": 1, "phid": "A", "fields": {"stackGraph": {"A": []}}}
-        ]
+        m_get_revs.return_value = [Revision(id=1, phid="A", stack_graph={"A": []})]
         reorganise.reorganise(git, Args())
 
     assert "Remote stack is not linear." in caplog.messages

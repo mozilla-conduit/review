@@ -26,6 +26,7 @@ from mozphab.commits import Commit
 from mozphab.config import Config
 from mozphab.exceptions import Error
 from mozphab.helpers import ORIGINAL_DIFF_REV_RE
+from mozphab.models import Revision
 from mozphab.repository import Repository
 
 
@@ -188,9 +189,9 @@ def test_update_commits_for_uplift_sets_original_revision():
 
     with mock.patch("mozphab.commands.submit.conduit.get_revisions") as m_get_revs:
         m_get_revs.return_value = [
-            {"id": 1, "fields": {"repositoryPHID": "PHID-mc"}},
-            {"id": 2, "fields": {"repositoryPHID": "PHID-beta"}},
-            {"id": 3, "fields": {"repositoryPHID": "PHID-mc"}},
+            Revision(id=1, phid="PHID-DREV-1", repository_phid="PHID-mc"),
+            Revision(id=2, phid="PHID-DREV-2", repository_phid="PHID-beta"),
+            Revision(id=3, phid="PHID-DREV-3", repository_phid="PHID-mc"),
         ]
         update_commits_for_uplift(commits, Repo())
 
@@ -237,7 +238,9 @@ def test_uplift_beta_commit_to_esr():
     )
 
     with mock.patch("mozphab.commands.submit.conduit.get_revisions") as m_get_revs:
-        m_get_revs.return_value = [{"id": 2, "fields": {"repositoryPHID": "PHID-beta"}}]
+        m_get_revs.return_value = [
+            Revision(id=2, phid="PHID-DREV-2", repository_phid="PHID-beta")
+        ]
         update_commits_for_uplift([commit], Repo(phid="PHID-esr"))
 
     reviewers = commit.reviewers
@@ -281,8 +284,8 @@ def test_update_commits_for_uplift_strips_dontbuild():
 
     with mock.patch("mozphab.commands.submit.conduit.get_revisions") as m_get_revs:
         m_get_revs.return_value = [
-            {"id": 1, "fields": {"repositoryPHID": "PHID-mc"}},
-            {"id": 2, "fields": {"repositoryPHID": "PHID-mc"}},
+            Revision(id=1, phid="PHID-DREV-1", repository_phid="PHID-mc"),
+            Revision(id=2, phid="PHID-DREV-2", repository_phid="PHID-mc"),
         ]
         update_commits_for_uplift(commits, Repo())
 

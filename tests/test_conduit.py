@@ -21,7 +21,8 @@ from mozphab.conduit import (
     normalise_reviewer,
 )
 from mozphab.diff import Diff
-from tests.conftest import search_diff, search_rev
+from mozphab.models import Revision
+from tests.conftest import search_diff, search_rev, search_revision
 
 
 class Repo(repository.Repository):
@@ -392,9 +393,9 @@ def test_get_revisions_search_by_revids_ordering(get_revs, m_call):
     """ordering of results must match input when querying by revids"""
     m_call.return_value = multiple_phab_result
     assert get_revs(ids=[2, 1, 3]) == [
-        {"id": 2, "phid": "PHID-2"},
-        {"id": 1, "phid": "PHID-1"},
-        {"id": 3, "phid": "PHID-3"},
+        Revision(id=2, phid="PHID-2"),
+        Revision(id=1, phid="PHID-1"),
+        Revision(id=3, phid="PHID-3"),
     ]
 
 
@@ -402,9 +403,9 @@ def test_get_revisions_search_by_phids_ordering(get_revs, m_call):
     """ordering of results must match input when querying by phids"""
     m_call.return_value = multiple_phab_result
     assert get_revs(phids=["PHID-2", "PHID-1", "PHID-3"]) == [
-        {"id": 2, "phid": "PHID-2"},
-        {"id": 1, "phid": "PHID-1"},
-        {"id": 3, "phid": "PHID-3"},
+        Revision(id=2, phid="PHID-2"),
+        Revision(id=1, phid="PHID-1"),
+        Revision(id=3, phid="PHID-3"),
     ]
 
 
@@ -412,9 +413,9 @@ def test_get_revisions_search_by_revids_missing(get_revs, m_call):
     """phabricator does not return info on all rev ids"""
     m_call.return_value = multiple_phab_result
     assert get_revs(ids=[2, 4, 1, 3]) == [
-        {"id": 2, "phid": "PHID-2"},
-        {"id": 1, "phid": "PHID-1"},
-        {"id": 3, "phid": "PHID-3"},
+        Revision(id=2, phid="PHID-2"),
+        Revision(id=1, phid="PHID-1"),
+        Revision(id=3, phid="PHID-3"),
     ]
 
 
@@ -422,9 +423,9 @@ def test_get_revisions_search_by_phids_missing(get_revs, m_call):
     """phabricator does not return info on all phids, e.g. restricted access"""
     m_call.return_value = multiple_phab_result
     assert get_revs(phids=["PHID-2", "PHID-4", "PHID-1", "PHID-3"]) == [
-        {"id": 2, "phid": "PHID-2"},
-        {"id": 1, "phid": "PHID-1"},
-        {"id": 3, "phid": "PHID-3"},
+        Revision(id=2, phid="PHID-2"),
+        Revision(id=1, phid="PHID-1"),
+        Revision(id=3, phid="PHID-3"),
     ]
 
 
@@ -647,8 +648,8 @@ def test_preload_for_validation(m_call):
     )
 
     assert sorted(revisions) == [1, 2]
-    assert revisions[1]["phid"] == "PHID-DREV-1"
-    assert revisions[2]["phid"] == "PHID-DREV-2"
+    assert revisions[1].phid == "PHID-DREV-1"
+    assert revisions[2].phid == "PHID-DREV-2"
     assert sorted(diffs) == ["PHID-DIFF-1", "PHID-DIFF-2"]
     assert sorted(call.args[0] for call in m_call.call_args_list) == [
         "differential.diff.search",
@@ -1475,7 +1476,7 @@ def test_commit_reviewer_additions(
     ]
     m_get_groups.return_value = []
     commit = Commit(reviewers={"granted": [], "request": [current_reviewer]})
-    revision = search_rev(rev=456, reviewers=remote_reviewers)
+    revision = search_revision(rev=456, reviewers=remote_reviewers)
     diff = search_diff(message=previous_title)
 
     additions = mozphab.conduit.commit_reviewer_additions(commit, revision, diff)
@@ -1510,7 +1511,7 @@ def test_commit_reviewer_additions_from_wip(
     ]
     m_get_groups.return_value = []
     commit = Commit(reviewers={"granted": [], "request": ["alice"]})
-    revision = search_rev(rev=456, reviewers=[])
+    revision = search_revision(rev=456, reviewers=[])
     wip_diff = search_diff(
         diff=2,
         phid="PHID-DIFF-2",
@@ -1543,7 +1544,7 @@ def test_commit_reviewer_additions_resolves_blocking_group(m_get_users, m_get_gr
         {"phid": "PHID-PROJ-1", "name": "reviewers"},
     ]
     commit = Commit(reviewers={"granted": [], "request": ["#reviewers!"]})
-    revision = search_rev(rev=456, reviewers=[])
+    revision = search_revision(rev=456, reviewers=[])
     diff = search_diff(message="Title")
 
     additions = mozphab.conduit.commit_reviewer_additions(commit, revision, diff)
@@ -1558,7 +1559,7 @@ def test_commit_reviewer_additions_resolves_blocking_group(m_get_users, m_get_gr
 
 
 def test_previous_commit_reviewers_pages_wip_history(m_call):
-    revision = search_rev(rev=456)
+    revision = search_revision(rev=456)
     wip_diff = search_diff(
         diff=3,
         phid="PHID-DIFF-3",
@@ -1609,7 +1610,9 @@ def test_previous_commit_reviewers_pages_wip_history(m_call):
 def test_previous_commit_reviewers_uses_revision_title_for_incomplete_wip_diff(
     m_call,
 ):
-    revision = search_rev(rev=456, title="WIP: Title Preview r?bob")
+    revision = Revision.from_conduit(
+        search_rev(rev=456, title="WIP: Title Preview r?bob")
+    )
     incomplete_wip_diff = search_diff(phid="PHID-DIFF-3", message="")
     ready_diff = search_diff(
         diff=1,
@@ -1627,7 +1630,7 @@ def test_previous_commit_reviewers_uses_revision_title_for_incomplete_wip_diff(
 
 
 def test_previous_commit_reviewers_skips_incomplete_history(m_call):
-    revision = search_rev(rev=456)
+    revision = search_revision(rev=456)
     wip_diff = search_diff(
         diff=3,
         phid="PHID-DIFF-3",
@@ -1652,7 +1655,7 @@ def test_previous_commit_reviewers_skips_incomplete_history(m_call):
 class TestEditRevision:
     @staticmethod
     def _get_revisions(status):
-        return [{"fields": {"status": {"value": status}}}]
+        return [Revision(id=1, phid="PHID-DREV-1", status=status)]
 
     @mock.patch("mozphab.repository.conduit.call")
     def test_new_wip(self, m_call):

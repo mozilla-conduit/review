@@ -10,7 +10,7 @@ from enum import Enum
 from mozphab.conduit import conduit
 from mozphab.exceptions import Error
 from mozphab.logger import logger
-from mozphab.models import RevisionStatus
+from mozphab.models import RevisionStatus, revision_monogram
 from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 
@@ -181,7 +181,7 @@ def list_revisions(repo: Repository, args: argparse.Namespace):
                 reviewers.append(username)
 
         # Format output
-        logger.info(f"D{rev_id}: {title}")
+        logger.info(f"{revision_monogram(rev_id)}: {title}")
         logger.info(f"  Status: {status_display}")
         if reviewers and options.verbose:
             reviewer_display = ", ".join(reviewers[:3])

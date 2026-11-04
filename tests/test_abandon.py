@@ -10,6 +10,7 @@ from callee import Contains
 
 from mozphab import exceptions
 from mozphab.commands import abandon
+from mozphab.models import Revision
 
 
 class TestCheckRevisionId(unittest.TestCase):
@@ -58,30 +59,24 @@ class TestAbandonRevisions(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.mock_revisions = [
-            {
-                "id": 123,
-                "phid": "PHID-DREV-123",
-                "fields": {
-                    "title": "Test revision 123",
-                    "status": {"value": "needs-review"},
-                },
-            },
-            {
-                "id": 124,
-                "phid": "PHID-DREV-124",
-                "fields": {
-                    "title": "Test revision 124",
-                    "status": {"value": "abandoned"},
-                },
-            },
-            {
-                "id": 125,
-                "phid": "PHID-DREV-125",
-                "fields": {
-                    "title": "Test revision 125",
-                    "status": {"value": "accepted"},
-                },
-            },
+            Revision(
+                id=123,
+                phid="PHID-DREV-123",
+                title="Test revision 123",
+                status="needs-review",
+            ),
+            Revision(
+                id=124,
+                phid="PHID-DREV-124",
+                title="Test revision 124",
+                status="abandoned",
+            ),
+            Revision(
+                id=125,
+                phid="PHID-DREV-125",
+                title="Test revision 125",
+                status="accepted",
+            ),
         ]
 
     @mock.patch("mozphab.commands.abandon.conduit")

@@ -26,6 +26,7 @@ from mozphab.helpers import (
     update_commit_title_previews,
 )
 from mozphab.logger import logger
+from mozphab.models import RevisionStatus, revision_monogram
 from mozphab.profiler import profiler
 from mozphab.repository import Repository, StackSelection
 from mozphab.spinner import wait_message
@@ -178,12 +179,17 @@ def log_commit_stack_with_messages(
 
     # Keep output in columns by sizing the action column to the longest rev ID.
     max_len = max(
-        (len(f"(D{commit.rev_id})") for commit in commits if commit.rev_id), default=""
+        (
+            len(f"({revision_monogram(commit.rev_id)})")
+            for commit in commits
+            if commit.rev_id
+        ),
+        default="",
     )
     action_template = f"%{max_len}s %s %s"
 
     for commit in reversed(commits):
-        action = f"(D{commit.rev_id})" if commit.rev_id else "(New)"
+        action = f"({revision_monogram(commit.rev_id)})" if commit.rev_id else "(New)"
         logger.info(action_template, action, commit.name, commit.revision_title())
         for message in messages.get(commit.name, []):
             logger.log(
@@ -309,36 +315,29 @@ def validate_commit_stack(
             if commit.name != (dupe := nodes.setdefault(commit.rev_id, commit.name)):
                 errors.setdefault(commit.name, []).append(
                     f"Phabricator revisions should be unique, but commit {dupe} refers "
-                    f"to the same one D{commit.rev_id}."
+                    f"to the same one {revision_monogram(commit.rev_id)}."
                 )
                 # Don't show more for this commit because it's probably wrong.
                 continue
 
-            commit.rev_phid = revision["phid"]
-            fields = revision["fields"]
+            commit.rev_phid = revision.phid
 
             # WIP if either in changes-planned state, or if the revision has the
             # `draft` flag set.
-            revision_is_wip = bool(
-                fields["status"]["value"] == "changes-planned" or fields["isDraft"]
+            revision_is_wip = (
+                revision.status == RevisionStatus.CHANGES_PLANNED or revision.is_draft
             )
 
             # Check if target bug ID is the same as in the Phabricator revision.
-            bug_id_changed = bool(
-                fields.get("bugzilla.bug-id")
-                and commit.bug_id != fields["bugzilla.bug-id"]
-            )
-
-            # Check if revision is closed.
-            revision_is_closed = bool(fields["status"]["closed"])
+            bug_id_changed = bool(revision.bug_id and commit.bug_id != revision.bug_id)
 
             # Check if comandeering is required.
             whoami = conduit.whoami()
-            different_author = fields["authorPHID"] != whoami["phid"]
+            different_author = revision.author_phid != whoami["phid"]
 
             reviewers_changed = False
             if commit.has_reviewers and not commit.wip:
-                diff = diffs[revision["fields"]["diffPHID"]]
+                diff = diffs[revision.diff_phid]
                 reviewer_additions = conduit.commit_reviewer_additions(
                     commit,
                     revision,
@@ -352,8 +351,9 @@ def validate_commit_stack(
             # and we're not changing reviewers
             # and we're not changing the bug ID
             # then don't submit.
-            diff_phid = fields["diffPHID"]
-            diff_commits = diffs[diff_phid]["attachments"]["commits"]["commits"]
+            diff_commits = diffs[revision.diff_phid]["attachments"]["commits"][
+                "commits"
+            ]
             sha1_changed = bool(
                 not diff_commits or commit.node != diff_commits[0]["identifier"]
             )
@@ -362,7 +362,7 @@ def validate_commit_stack(
                 and commit.wip == revision_is_wip
                 and not reviewers_changed
                 and not bug_id_changed
-                and not revision_is_closed
+                and not revision.is_closed
                 and not options.force
                 and not commit.test_plan
             ):
@@ -383,7 +383,7 @@ def validate_commit_stack(
             if bug_id_changed:
                 warnings.setdefault(commit.name, []).append(
                     "Bug ID in Phabricator revision will change from "
-                    f"{fields['bugzilla.bug-id']} to {commit.bug_id}"
+                    f"{revision.bug_id} to {commit.bug_id}"
                 )
             if different_author:
                 warnings.setdefault(commit.name, []).append(
@@ -391,7 +391,7 @@ def validate_commit_stack(
                     'revisions you own. You can "Commandeer" this revision from the '
                     "web interface if you want to become the owner."
                 )
-            if revision_is_closed:
+            if revision.is_closed:
                 warnings.setdefault(commit.name, []).append(
                     "This revision is closed! It will be reopened if submission "
                     "proceeds. You can stop now and refine the stack range."
@@ -399,7 +399,7 @@ def validate_commit_stack(
         elif commit.rev_id:
             errors.setdefault(commit.name, []).append(
                 "Phabricator didn't return a query result for revision "
-                f"D{commit.rev_id}. It might be inaccessible or not exist at all."
+                f"{revision_monogram(commit.rev_id)}. It might be inaccessible or not exist at all."
             )
             # Unrecoverable error for this commit.
             continue
@@ -606,8 +606,10 @@ def update_commits_for_uplift(commits: list[Commit], repo: Repository):
     """Prepares a set of commits for uplifting."""
     with wait_message("Loading revision data..."):
         rev_ids = [commit.rev_id for commit in commits if commit.rev_id]
-        revisions = conduit.get_revisions(ids=rev_ids) if rev_ids else []
-        revisions = {revision["id"]: revision for revision in revisions}
+        revisions = {
+            revision.id: revision
+            for revision in (conduit.get_revisions(ids=rev_ids) if rev_ids else [])
+        }
 
     for commit in commits:
         # Clear all reviewers from the revision.
@@ -621,7 +623,7 @@ def update_commits_for_uplift(commits: list[Commit], repo: Repository):
 
         # Skip when updating an existing revision on the uplift repo.
         revision = revisions.get(commit.rev_id)
-        if not revision or revision["fields"]["repositoryPHID"] == repo.phid:
+        if not revision or revision.repository_phid == repo.phid:
             continue
 
         # When uplifting, ensure the `Differential Revision` line is properly
@@ -1052,8 +1054,8 @@ def _submit(
             else:
                 commit.ai_review_state = AiReviewState.FAILED
                 logger.error(
-                    "Failed to request AI review for D%s: %s",
-                    rev_id,
+                    "Failed to request AI review for %s: %s",
+                    revision_monogram(rev_id),
                     error,
                 )
 
