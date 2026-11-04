@@ -459,3 +459,21 @@ def test_set_as_binary():
         b_mime="pdf/",
     )
     assert change.file_type is Diff.FileType.IMAGE
+
+
+def test_binary_change_metadata_keys():
+    change = Diff.Change("image.png")
+    change.set_as_binary(
+        a_body=b"old", a_mime="image/png", b_body=b"newer", b_mime="image/png"
+    )
+    change.uploads[0]["phid"] = "PHID-FILE-1"
+    change.uploads[1]["phid"] = "PHID-FILE-2"
+
+    assert change.to_conduit("node")["metadata"] == {
+        "old:binary-phid": "PHID-FILE-1",
+        "old:file:size": 3,
+        "old:file:mime-type": "image/png",
+        "new:binary-phid": "PHID-FILE-2",
+        "new:file:size": 5,
+        "new:file:mime-type": "image/png",
+    }, "The metadata keys should start with the upload type's value, `old` or `new`."

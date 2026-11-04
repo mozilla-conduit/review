@@ -23,7 +23,7 @@ from typing import (
 import urllib3
 
 from .commits import WIP_RE, Commit
-from .diff import Diff
+from .diff import Diff, UploadType
 from .environment import INSTALL_CERT_MSG, USER_AGENT
 from .exceptions import (
     CommandError,
@@ -1113,7 +1113,9 @@ class ConduitAPI:
             for change in diff.changes.values():
                 for upload in change.uploads:
                     path = (
-                        change.cur_path if upload["type"] == "new" else change.old_path
+                        change.cur_path
+                        if upload["type"] is UploadType.NEW
+                        else change.old_path
                     )
                     futures.append(executor.submit(self.upload_file, upload, path))
 

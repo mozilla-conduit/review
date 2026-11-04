@@ -3,12 +3,19 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import re
-from enum import IntEnum
+from enum import Enum, IntEnum
 from typing import (
     Any,
 )
 
 from .exceptions import Error
+
+
+class UploadType(str, Enum):
+    """Which side of a binary change an upload holds."""
+
+    OLD = "old"
+    NEW = "new"
 
 
 class Diff:
@@ -139,8 +146,8 @@ class Diff:
             self.binary = True
 
             self.uploads = [
-                {"type": "old", "value": a_body, "mime": a_mime, "phid": None},
-                {"type": "new", "value": b_body, "mime": b_mime, "phid": None},
+                {"type": UploadType.OLD, "value": a_body, "mime": a_mime, "phid": None},
+                {"type": UploadType.NEW, "value": b_body, "mime": b_mime, "phid": None},
             ]
 
             if a_mime.startswith("image/") or b_mime.startswith("image/"):
@@ -152,9 +159,11 @@ class Diff:
             # Record upload information
             metadata = {}
             for upload in self.uploads:
-                metadata["%s:binary-phid" % upload["type"]] = upload["phid"]
-                metadata["%s:file:size" % upload["type"]] = len(upload["value"])
-                metadata["%s:file:mime-type" % upload["type"]] = upload["mime"]
+                # `.value`, as formatting an enum member gives its name.
+                upload_type = upload["type"].value
+                metadata["%s:binary-phid" % upload_type] = upload["phid"]
+                metadata["%s:file:size" % upload_type] = len(upload["value"])
+                metadata["%s:file:mime-type" % upload_type] = upload["mime"]
 
             # Translate hunks
             hunks = [
