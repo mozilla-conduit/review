@@ -11,6 +11,8 @@ from mozphab.models import (
     RemoteDiff,
     Revision,
     RevisionStatus,
+    Transaction,
+    TransactionType,
     revision_monogram,
 )
 
@@ -135,3 +137,27 @@ def test_revision_status_label():
     assert (
         RevisionStatus.ACCEPTED.label == "Accepted"
     ), "A one-word status should be capitalised."
+
+
+def test_transaction_to_conduit():
+    assert Transaction(TransactionType.TITLE, "Title").to_conduit() == {
+        "type": "title",
+        "value": "Title",
+    }, "A text transaction should keep its value."
+    assert Transaction(TransactionType.ABANDON, True).to_conduit() == {
+        "type": "abandon",
+        "value": True,
+    }, "A status transaction should keep its `True` value."
+    assert Transaction(
+        TransactionType.CHILDREN_SET, ("PHID-DREV-1", "PHID-DREV-2")
+    ).to_conduit() == {
+        "type": "children.set",
+        "value": ["PHID-DREV-1", "PHID-DREV-2"],
+    }, "PHIDs should be sent as a list, which is what Conduit expects."
+
+
+def test_transaction_is_frozen():
+    transaction = Transaction(TransactionType.TITLE, "Title")
+
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        transaction.value = "Other"  # type: ignore[misc]

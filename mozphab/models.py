@@ -60,6 +60,23 @@ class TransactionType(str, Enum):
     CHILDREN_REMOVE = "children.remove"
 
 
+@dataclass(frozen=True)
+class Transaction:
+    """A `differential.revision.edit` transaction, eg. setting a revision's title.
+
+    `value` holds PHIDs for the `parents.*`, `children.*` and `reviewers.*` types,
+    `True` for the status changes, and text otherwise.
+    """
+
+    type: TransactionType
+    value: str | bool | tuple[str, ...]
+
+    def to_conduit(self) -> dict:
+        """Return the transaction as `differential.revision.edit` expects it."""
+        value = list(self.value) if isinstance(self.value, tuple) else self.value
+        return {"type": self.type.value, "value": value}
+
+
 class RefType(str, Enum):
     """The kinds of ref a Phabricator diff records, eg. the commit it's based on."""
 
