@@ -6,7 +6,7 @@ import dataclasses
 
 import pytest
 
-from mozphab.models import Revision, revision_monogram
+from mozphab.models import DiffCommit, RemoteDiff, Revision, revision_monogram
 
 from .conftest import search_rev
 
@@ -64,3 +64,59 @@ def test_revision_monogram():
     assert (
         Revision(id=123, phid="PHID-DREV-123").monogram == "D123"
     ), "A revision's monogram should be built from its ID."
+
+
+def test_remote_diff_from_conduit():
+    data = {
+        "id": 5,
+        "phid": "PHID-DIFF-5",
+        "fields": {
+            "revisionPHID": "PHID-DREV-1",
+            "dateCreated": 1547806078,
+            "refs": [
+                {"type": "branch", "identifier": "main"},
+                {"type": "base", "identifier": "abc123"},
+            ],
+        },
+        "attachments": {
+            "commits": {
+                "commits": [
+                    {
+                        "identifier": "def456",
+                        "message": "Bug 1 - Title r?alice\n\nSummary",
+                        "author": {"name": "user", "email": "user@example.com"},
+                    }
+                ]
+            }
+        },
+    }
+
+    diff = RemoteDiff.from_conduit(data)
+
+    assert diff == RemoteDiff(
+        id=5,
+        phid="PHID-DIFF-5",
+        revision_phid="PHID-DREV-1",
+        base_ref="abc123",
+        date_created=1547806078,
+        commits=(
+            DiffCommit(
+                identifier="def456",
+                message="Bug 1 - Title r?alice\n\nSummary",
+                author_name="user",
+                author_email="user@example.com",
+            ),
+        ),
+    ), "Every field should be parsed from the search result."
+    assert (
+        diff.commit_title == "Bug 1 - Title r?alice"
+    ), "The commit title should be the first line of the commit message."
+
+
+def test_remote_diff_from_conduit_without_optional_fields():
+    diff = RemoteDiff.from_conduit({"id": 6, "phid": "PHID-DIFF-6"})
+
+    assert diff == RemoteDiff(
+        id=6, phid="PHID-DIFF-6"
+    ), "Fields missing from the search result should get their defaults."
+    assert diff.commit_title == "", "A diff without commits should have no title."

@@ -95,3 +95,64 @@ def revision_monogram(revision_id: int) -> str:
     Use this when only the ID is at hand; otherwise use `Revision.monogram`.
     """
     return f"D{revision_id}"
+
+
+@dataclass(frozen=True)
+class DiffCommit:
+    """A local commit recorded on a diff, from the diff's `commits` attachment."""
+
+    identifier: str = ""
+    message: str = ""
+    author_name: str | None = None
+    author_email: str | None = None
+
+    @classmethod
+    def from_conduit(cls, data: dict) -> "DiffCommit":
+        """Parse a commit from a diff's `commits` attachment."""
+        author = data.get("author", {})
+        return cls(
+            identifier=data.get("identifier", ""),
+            message=data.get("message", ""),
+            author_name=author.get("name"),
+            author_email=author.get("email"),
+        )
+
+
+@dataclass(frozen=True)
+class RemoteDiff:
+    """A diff on Phabricator, parsed from a `differential.diff.search` result.
+
+    Named to tell it apart from `mozphab.diff.Diff`, the local diff to submit.
+    """
+
+    id: int
+    phid: str
+    revision_phid: str | None = None
+    # The node the diff was based on, if the diff recorded one.
+    base_ref: str | None = None
+    date_created: int | None = None
+    commits: tuple[DiffCommit, ...] = ()
+
+    @property
+    def commit_title(self) -> str:
+        """Return the first line of the recorded commit message, if any."""
+        if not self.commits or not self.commits[0].message:
+            return ""
+        return self.commits[0].message.splitlines()[0]
+
+    @classmethod
+    def from_conduit(cls, data: dict) -> "RemoteDiff":
+        """Parse a diff from its `differential.diff.search` result."""
+        fields = data.get("fields", {})
+        commits = data.get("attachments", {}).get("commits", {}).get("commits", [])
+        base_refs = [
+            ref["identifier"] for ref in fields.get("refs", []) if ref["type"] == "base"
+        ]
+        return cls(
+            id=int(data["id"]),
+            phid=data["phid"],
+            revision_phid=fields.get("revisionPHID"),
+            base_ref=base_refs[0] if base_refs else None,
+            date_created=fields.get("dateCreated"),
+            commits=tuple(DiffCommit.from_conduit(commit) for commit in commits),
+        )
