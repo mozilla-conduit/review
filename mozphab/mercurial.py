@@ -15,6 +15,7 @@ from collections.abc import Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import Enum
 from functools import lru_cache, partial
 from typing import (
     Any,
@@ -70,6 +71,14 @@ DEFAULT_FILE_MODE = "100644"
 LANDING_MERGE_DESC_REVSET = (
     "re:^Merge (autoland to mozilla-central|firefox-autoland to firefox-main)"
 )
+
+
+class HgPhase(str, Enum):
+    """The phases of a Mercurial commit."""
+
+    PUBLIC = "public"
+    DRAFT = "draft"
+    SECRET = "secret"
 
 
 @dataclass(frozen=True)
@@ -594,7 +603,7 @@ class Mercurial(Repository):
 
     def is_public(self, node: str) -> bool:
         """Return `True` if `node` is a public (landed) commit."""
-        return self.hg_log_text(node, select="phase") == "public"
+        return self.hg_log_text(node, select="phase") == HgPhase.PUBLIC
 
     def get_latest_landing_node(self, before: int | None = None) -> str | None:
         """Return the most recent autoland-to-mozilla-central merge in the repo."""
@@ -963,7 +972,7 @@ class Mercurial(Repository):
         )
         for parent in parent_phases:
             (phase, node) = parent.split(" ", 1)
-            if phase != "public":
+            if phase != HgPhase.PUBLIC:
                 logger.warning(
                     "%s is based off non-public commit %s",
                     short_node(ancestor),
