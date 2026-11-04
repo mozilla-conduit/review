@@ -21,6 +21,11 @@ class RevisionStatus(str, Enum):
     ABANDONED = "abandoned"
     DRAFT = "draft"
 
+    @property
+    def label(self) -> str:
+        """Return the status as Phabricator shows it, eg. `Needs Review`."""
+        return self.value.replace("-", " ").title()
+
 
 @dataclass(frozen=True)
 class Revision:
@@ -30,7 +35,7 @@ class Revision:
     phid: str
     title: str = ""
     summary: str = ""
-    status: str = ""
+    status: RevisionStatus | None = None
     is_closed: bool = False
     is_draft: bool = False
     author_phid: str = ""
@@ -71,7 +76,7 @@ class Revision:
             phid=data["phid"],
             title=fields.get("title", ""),
             summary=fields.get("summary", ""),
-            status=status.get("value", ""),
+            status=RevisionStatus(status["value"]) if "value" in status else None,
             is_closed=bool(status.get("closed", False)),
             is_draft=bool(fields.get("isDraft", False)),
             author_phid=fields.get("authorPHID", ""),

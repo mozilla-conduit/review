@@ -70,15 +70,10 @@ class ListOptions:
 
 def format_revision_status(status: str) -> str:
     """Format status string for display."""
-    status_label_mapping = {
-        "needs-review": "Needs Review",
-        "needs-revision": "Needs Revision",
-        "accepted": "Accepted",
-        "changes-planned": "Changes Planned",
-        "abandoned": "Abandoned",
-        "published": "Published",
-    }
-    return status_label_mapping.get(status, status.title())
+    try:
+        return RevisionStatus(status).label
+    except ValueError:
+        return status.title()
 
 
 def list_revisions(repo: Repository, args: argparse.Namespace):

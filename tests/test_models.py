@@ -6,7 +6,13 @@ import dataclasses
 
 import pytest
 
-from mozphab.models import DiffCommit, RemoteDiff, Revision, revision_monogram
+from mozphab.models import (
+    DiffCommit,
+    RemoteDiff,
+    Revision,
+    RevisionStatus,
+    revision_monogram,
+)
 
 from .conftest import search_rev
 
@@ -30,7 +36,7 @@ def test_revision_from_conduit():
         phid="PHID-DREV-12",
         title="Title",
         summary="Summary",
-        status="abandoned",
+        status=RevisionStatus.ABANDONED,
         is_closed=True,
         author_phid="PHID-USER-1",
         diff_phid="PHID-DIFF-1",
@@ -120,3 +126,12 @@ def test_remote_diff_from_conduit_without_optional_fields():
         id=6, phid="PHID-DIFF-6"
     ), "Fields missing from the search result should get their defaults."
     assert diff.commit_title == "", "A diff without commits should have no title."
+
+
+def test_revision_status_label():
+    assert (
+        RevisionStatus.NEEDS_REVIEW.label == "Needs Review"
+    ), "The label should be the status as Phabricator shows it."
+    assert (
+        RevisionStatus.ACCEPTED.label == "Accepted"
+    ), "A one-word status should be capitalised."

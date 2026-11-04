@@ -37,7 +37,7 @@ from .helpers import (
     strip_differential_revision,
 )
 from .logger import logger
-from .models import RemoteDiff, Revision
+from .models import RemoteDiff, Revision, RevisionStatus
 from .profiler import profiler
 from .simplecache import SimpleCache
 
@@ -817,7 +817,7 @@ class ConduitAPI:
             # Existing revisions must make a subsequent API call to set the status to
             # `changes-planned` to match our WIP state.
             plan_changes_transaction = {"type": "plan-changes", "value": True}
-            if existing_status == "changes-planned":
+            if existing_status == RevisionStatus.CHANGES_PLANNED:
                 post_trans.append(plan_changes_transaction)
             else:
                 trans.append(plan_changes_transaction)
@@ -826,7 +826,10 @@ class ConduitAPI:
         # emails being sent before phabbugs has processed the revision.
         # Updates to existing reviews that have been accepted shouldn't be triggered
         # for re-review.
-        elif existing_status and existing_status not in ("needs-review", "accepted"):
+        elif existing_status and existing_status not in (
+            RevisionStatus.NEEDS_REVIEW,
+            RevisionStatus.ACCEPTED,
+        ):
             trans.append({"type": "request-review", "value": True})
 
         # Call differential.revision.edit
@@ -1185,7 +1188,7 @@ class ConduitAPI:
             {
                 "constraints": {
                     "reviewerPHIDs": reviewer_phids,
-                    "statuses": ["needs-review"],
+                    "statuses": [RevisionStatus.NEEDS_REVIEW.value],
                 },
                 "attachments": {"reviewers": True},
                 "limit": limit,

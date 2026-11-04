@@ -15,7 +15,7 @@ from mozphab.commands import reorganise
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError
 from mozphab.config import Config
-from mozphab.models import Revision
+from mozphab.models import Revision, RevisionStatus
 
 
 def test_linkify_bugs_in_text_without_bmo_url():
@@ -830,7 +830,7 @@ def test_apply_transactions_error_names_revision(
         Revision(
             id=314841,
             phid="PHID-A",
-            status="closed",
+            status=RevisionStatus.PUBLISHED,
             stack_graph={"PHID-A": []},
         )
     ]
@@ -900,8 +900,12 @@ def test_swap_edits_old_parent_first(
     )
     m_convert_stackgraph_to_linear.return_value = {"PHID-A": "PHID-B", "PHID-B": None}
     m_get_revs.return_value = [
-        Revision(id=1, phid="PHID-A", status="needs-review", stack_graph={}),
-        Revision(id=2, phid="PHID-B", status="needs-review", stack_graph={}),
+        Revision(
+            id=1, phid="PHID-A", status=RevisionStatus.NEEDS_REVIEW, stack_graph={}
+        ),
+        Revision(
+            id=2, phid="PHID-B", status=RevisionStatus.NEEDS_REVIEW, stack_graph={}
+        ),
     ]
     m_id2phid.return_value = ["PHID-B", "PHID-A"]
     mozphab.conduit.set_repo(git)
@@ -1016,9 +1020,9 @@ def test_force_mode_tolerates_nonlinear_stackgraph(
                 Revision(id=2, phid="B", stack_graph=stack_graph),
             ],
             [
-                Revision(id=1, phid="A", status="needs-review"),
-                Revision(id=2, phid="B", status="needs-review"),
-                Revision(id=99, phid="Z", status="abandoned"),
+                Revision(id=1, phid="A", status=RevisionStatus.NEEDS_REVIEW),
+                Revision(id=2, phid="B", status=RevisionStatus.NEEDS_REVIEW),
+                Revision(id=99, phid="Z", status=RevisionStatus.ABANDONED),
             ],
         ]
 

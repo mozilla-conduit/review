@@ -10,7 +10,7 @@ from callee import Contains
 
 from mozphab import exceptions
 from mozphab.commands import abandon
-from mozphab.models import Revision
+from mozphab.models import Revision, RevisionStatus
 
 
 class TestCheckRevisionId(unittest.TestCase):
@@ -63,19 +63,19 @@ class TestAbandonRevisions(unittest.TestCase):
                 id=123,
                 phid="PHID-DREV-123",
                 title="Test revision 123",
-                status="needs-review",
+                status=RevisionStatus.NEEDS_REVIEW,
             ),
             Revision(
                 id=124,
                 phid="PHID-DREV-124",
                 title="Test revision 124",
-                status="abandoned",
+                status=RevisionStatus.ABANDONED,
             ),
             Revision(
                 id=125,
                 phid="PHID-DREV-125",
                 title="Test revision 125",
-                status="accepted",
+                status=RevisionStatus.ACCEPTED,
             ),
         ]
 
