@@ -46,6 +46,7 @@ from .models import (
 )
 from .profiler import profiler
 from .simplecache import SimpleCache
+from .vcs import Vcs
 
 if TYPE_CHECKING:
     # `repository` imports this module, so the import can only happen when
@@ -963,11 +964,9 @@ class ConduitAPI:
 
     def build_creation_method(self, is_uplift: bool = False) -> str:
         """Build the creationMethod string for differential.creatediff."""
-        creation_method = ["moz-phab", self.repo.vcs]
+        creation_method = ["moz-phab", self.repo.vcs.value]
 
-        if (
-            self.repo.vcs == "git" or self.repo.vcs == "jj"
-        ) and self.repo.is_cinnabar_required:
+        if (self.repo.vcs in (Vcs.GIT, Vcs.JJ)) and self.repo.is_cinnabar_required:
             creation_method.append("cinnabar")
 
         # Add uplift indicator if this is an uplift command
@@ -1068,7 +1067,7 @@ class ConduitAPI:
             "unitStatus": "none",
             "repositoryPHID": diff_repo_phid,
             "sourcePath": self.repo.path,
-            "branch": "HEAD" if self.repo.phab_vcs == "git" else "default",
+            "branch": "HEAD" if self.repo.phab_vcs == Vcs.GIT else "default",
         }
         return self.call("differential.creatediff", api_call_args)
 
@@ -1097,7 +1096,7 @@ class ConduitAPI:
         if commit.tree_hash:
             data[commit.node]["tree"] = commit.tree_hash
 
-        if self.repo.phab_vcs == "hg":
+        if self.repo.phab_vcs == Vcs.HG:
             data[commit.node]["rev"] = commit.node
 
         api_call_args = {

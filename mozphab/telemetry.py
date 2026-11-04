@@ -132,7 +132,7 @@ class Telemetry:
         self.environment.python_version.set(platform.python_version())
 
     def set_vcs(self, repo):
-        self.environment.vcs.name.set(repo.vcs)
+        self.environment.vcs.name.set(repo.vcs.value)
         self.environment.vcs.version.set(repo.vcs_version)
 
     def submit(self):

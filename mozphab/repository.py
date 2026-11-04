@@ -22,6 +22,7 @@ from .helpers import (
 )
 from .logger import logger
 from .spinner import wait_message
+from .vcs import Vcs
 
 MOZILLA_DOMAINS = {
     ".mozilla.org",
@@ -122,6 +123,9 @@ def is_mozilla_phabricator(url: str) -> bool:
 
 
 class Repository(object):
+    # The local VCS, set by each backend.
+    vcs: Vcs
+
     def __init__(
         self,
         path: str,
@@ -133,8 +137,6 @@ class Repository(object):
         self._phid = None
         self._phab_repo = None
         self._phab_vcs: str | None = None
-        # Short name of the local VCS, set by each backend.
-        self.vcs = ""
         self.path = path  # base repository directory
         self.dot_path = dot_path  # .hg/.git directory
         self._arcconfig_files = [
@@ -470,7 +472,9 @@ class Repository(object):
             # This error is captured in Git and not raised if Cinnabar installed.
             logger.warning(
                 "Local VCS ({local}) is different from the one defined in the "
-                "repository ({remote}).".format(local=self.vcs, remote=self.phab_vcs)
+                "repository ({remote}).".format(
+                    local=self.vcs.value, remote=self.phab_vcs
+                )
             )
 
         return True

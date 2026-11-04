@@ -35,6 +35,7 @@ from .subprocess_wrapper import (
     check_output_text,
     subprocess,
 )
+from .vcs import Vcs
 
 
 class Jujutsu(Repository):
@@ -114,7 +115,7 @@ class Jujutsu(Repository):
         # Populate common fields expected from a `Repository`
         super().__init__(path, dot_path, options=options)
 
-        self.vcs = "jj"
+        self.vcs = Vcs.JJ
 
         self.revset = None
         self.branch = None

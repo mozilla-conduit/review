@@ -38,6 +38,7 @@ from .repository import (
 )
 from .spinner import wait_message
 from .telemetry import telemetry
+from .vcs import Vcs
 
 NULL_SHA1 = "0" * 40
 
@@ -82,7 +83,7 @@ class Git(Repository):
 
         super().__init__(path, dot_path, options=options)
 
-        self.vcs = "git"
+        self.vcs = Vcs.GIT
         m = re.search(r"\d+\.\d+\.\d+", self.git.output_text(["--version"]))
         if not m:
             raise Error("Failed to determine Git version.")

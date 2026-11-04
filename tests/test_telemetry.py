@@ -10,6 +10,7 @@ import pytest
 
 from mozphab import telemetry
 from mozphab.bmo import BMOAPIError
+from mozphab.vcs import Vcs
 
 
 @pytest.fixture
@@ -35,7 +36,7 @@ def test_vcs(get_telemetry):
             self.vcs_version = vcs_version
 
     t = get_telemetry
-    t.set_vcs(Repo("hg", "5.2"))
+    t.set_vcs(Repo(Vcs.HG, "5.2"))
     assert "hg" == t.environment.vcs.name.test_get_value()
     assert "5.2" == t.environment.vcs.version.test_get_value()
 

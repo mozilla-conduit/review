@@ -51,6 +51,7 @@ from .repository import (
 from .spinner import clear_terminal_line, wait_message
 from .subprocess_wrapper import debug_log_command, profiler_marker
 from .telemetry import telemetry
+from .vcs import Vcs
 
 MINIMUM_MERCURIAL_VERSION = Version("4.3.3")
 
@@ -91,7 +92,7 @@ class Mercurial(Repository):
         logger.debug("found hg repo in %s", path)
 
         super().__init__(path, dot_path, options=options)
-        self.vcs = "hg"
+        self.vcs = Vcs.HG
         self._hg_binary = config.hg_command[0]
         # Set by `select_stack` once the commit range is known.
         self.revset = ""

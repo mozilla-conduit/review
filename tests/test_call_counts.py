@@ -39,6 +39,7 @@ from mozphab.commands import submit
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPI, conduit
 from mozphab.user import UserData
+from mozphab.vcs import Vcs
 
 PHAB_URL = "http://phab.test"
 REPO_PHID = "PHID-REPO-1"
@@ -229,7 +230,7 @@ def build_fake_repo() -> mock.MagicMock:
     repo = mock.MagicMock()
     repo.phab_url = PHAB_URL
     repo.phab_vcs = "git"
-    repo.vcs = "git"
+    repo.vcs = Vcs.GIT
     repo.phid = REPO_PHID
     repo.path = "/fake"
     repo.dot_path = "/fake/.git"
