@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import re
+from enum import IntEnum
 from typing import (
     Any,
 )
@@ -74,9 +75,9 @@ class Diff:
             self.old_path: str | None = None
             self.cur_path = path
             self.away_paths = []
-            self.kind = Diff.Kind("CHANGE")
+            self.kind = Diff.Kind.CHANGE
             self.binary = False
-            self.file_type = Diff.FileType("TEXT")
+            self.file_type = Diff.FileType.TEXT
             self.uploads = []
             self.hunks = []
 
@@ -143,9 +144,9 @@ class Diff:
             ]
 
             if a_mime.startswith("image/") or b_mime.startswith("image/"):
-                self.file_type = Diff.FileType("IMAGE")
+                self.file_type = Diff.FileType.IMAGE
             else:
-                self.file_type = Diff.FileType("BINARY")
+                self.file_type = Diff.FileType.BINARY
 
         def to_conduit(self, node: str) -> dict[str, Any]:
             # Record upload information
@@ -187,54 +188,41 @@ class Diff:
                 "hunks": hunks,
             }
 
-    class Kind:
-        values = {
-            "ADD": 1,
-            "CHANGE": 2,
-            "DELETE": 3,
-            "MOVE_AWAY": 4,
-            "COPY_AWAY": 5,
-            "MOVE_HERE": 6,
-            "COPY_HERE": 7,
-            "MULTICOPY": 8,
-        }
+    class Kind(IntEnum):
+        """The kinds of change Phabricator records for a file."""
 
-        def __init__(self, name: str):
-            self.value = self.values[name]
-            self.name = name
+        ADD = 1
+        CHANGE = 2
+        DELETE = 3
+        MOVE_AWAY = 4
+        COPY_AWAY = 5
+        MOVE_HERE = 6
+        COPY_HERE = 7
+        MULTICOPY = 8
 
-        def short(self):
-            if self.name == "ADD":
-                return "A "
-            elif self.name == "CHANGE":
-                return "M "
-            elif self.name == "DELETE":
-                return "D "
-            elif self.name == "MOVE_AWAY":
-                return "R>"
-            elif self.name == "MOVE_HERE":
-                return ">R"
-            elif self.name == "COPY_AWAY":
-                return "C>"
-            elif self.name == "COPY_HERE":
-                return ">C"
-            elif self.name == "MULTICOPY":
-                return "C*"
+        def short(self) -> str:
+            """Return the two-character marker for the change, eg. `A ` or `R>`."""
+            return {
+                Diff.Kind.ADD: "A ",
+                Diff.Kind.CHANGE: "M ",
+                Diff.Kind.DELETE: "D ",
+                Diff.Kind.MOVE_AWAY: "R>",
+                Diff.Kind.MOVE_HERE: ">R",
+                Diff.Kind.COPY_AWAY: "C>",
+                Diff.Kind.COPY_HERE: ">C",
+                Diff.Kind.MULTICOPY: "C*",
+            }[self]
 
-    class FileType:
-        values = {
-            "TEXT": 1,
-            "IMAGE": 2,
-            "BINARY": 3,
-            "DIRECTORY": 4,  # Should never show up...
-            "SYMLINK": 5,  # Support symlinks (do we care?)
-            "DELETED": 6,
-            "NORMAL": 7,
-        }
+    class FileType(IntEnum):
+        """The types of file Phabricator records."""
 
-        def __init__(self, name: str):
-            self.value = self.values[name]
-            self.name = name
+        TEXT = 1
+        IMAGE = 2
+        BINARY = 3
+        DIRECTORY = 4  # Should never show up...
+        SYMLINK = 5  # Support symlinks (do we care?)
+        DELETED = 6
+        NORMAL = 7
 
     def __init__(self):
         self.changes = {}
@@ -258,16 +246,16 @@ class Diff:
     ):
         """Determine the correct kind from the letter."""
         if kind == "A":
-            change.kind = self.Kind("ADD")
+            change.kind = self.Kind.ADD
             change.cur_mode = b_mode
 
         elif kind == "D":
-            change.kind = self.Kind("DELETE")
+            change.kind = self.Kind.DELETE
             change.old_mode = a_mode
             change.old_path = a_path
 
         elif kind == "M":
-            change.kind = self.Kind("CHANGE")
+            change.kind = self.Kind.CHANGE
             if a_mode != b_mode:
                 change.old_mode = a_mode
                 change.cur_mode = b_mode
@@ -275,30 +263,30 @@ class Diff:
             assert change.old_path == change.cur_path
 
         elif kind == "R":
-            change.kind = self.Kind("MOVE_HERE")
+            change.kind = self.Kind.MOVE_HERE
             if a_mode != b_mode:
                 change.old_mode = a_mode
                 change.cur_mode = b_mode
 
             change.old_path = a_path
             old = self.change_for(change.old_path)
-            if old.kind.name in {"MOVE_AWAY", "COPY_AWAY"}:
-                old.kind = self.Kind("MULTICOPY")
-            elif old.kind.name != "MULTICOPY":
-                old.kind = self.Kind("MOVE_AWAY")
+            if old.kind in {Diff.Kind.MOVE_AWAY, Diff.Kind.COPY_AWAY}:
+                old.kind = self.Kind.MULTICOPY
+            elif old.kind is not Diff.Kind.MULTICOPY:
+                old.kind = self.Kind.MOVE_AWAY
 
             old.away_paths.append(change.cur_path)
 
         elif kind == "C":
-            change.kind = self.Kind("COPY_HERE")
+            change.kind = self.Kind.COPY_HERE
             if a_mode != b_mode:
                 change.old_mode = a_mode
                 change.cur_mode = b_mode
 
             change.old_path = a_path
             old = self.change_for(change.old_path)
-            if old.kind.name != "MULTICOPY":
-                old.kind = self.Kind("COPY_AWAY")
+            if old.kind is not Diff.Kind.MULTICOPY:
+                old.kind = self.Kind.COPY_AWAY
 
             old.away_paths.append(change.cur_path)
 

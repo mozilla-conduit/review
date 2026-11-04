@@ -26,8 +26,8 @@ def test_create(m_git_out, m_cat_file, git):
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
-    assert change.file_type.name == "TEXT"
-    assert change.kind.name == "ADD"
+    assert change.file_type is Diff.FileType.TEXT
+    assert change.kind is Diff.Kind.ADD
     assert change.cur_mode == "100644"
     assert len(change.hunks) == 1
     assert_attributes(
@@ -78,8 +78,8 @@ b/422c2b7ab3b3c668038da977e4e93a5fc623169c
             "422c2b7ab3b3c668038da977e4e93a5fc623169c",
         ],
     )
-    assert change.file_type.name == "TEXT"
-    assert change.kind.name == "CHANGE"
+    assert change.file_type is Diff.FileType.TEXT
+    assert change.kind is Diff.Kind.CHANGE
     assert change.old_mode is None
     assert change.cur_mode is None
     assert change.old_path == "a"
@@ -112,9 +112,9 @@ def test_create_empty(m_git_out, m_cat_file, git):
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
-    assert change.file_type.name == "TEXT"
+    assert change.file_type is Diff.FileType.TEXT
     assert change.hunks == []
-    assert change.kind.name == "ADD"
+    assert change.kind is Diff.Kind.ADD
     assert change.cur_mode == "100644"
 
 
@@ -131,13 +131,13 @@ def test_change_empty(m_git_out, m_cat_file, git):
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
     assert (
-        change.file_type.name == "TEXT"
+        change.file_type is Diff.FileType.TEXT
     ), "The file should be recognized as a TEXT file"
     assert (
         change.hunks == []
     ), "`change.hunks` should be an empty list when parsing empty files"
     assert (
-        change.kind.name == "CHANGE"
+        change.kind is Diff.Kind.CHANGE
     ), "File mode changes should be recognized as a CHANGE"
     assert (
         change.old_mode == "100644"
@@ -199,7 +199,7 @@ def test_change_empty_hg(
     change = diff.changes.get("fn")
 
     assert (
-        change.kind.name == "CHANGE"
+        change.kind is Diff.Kind.CHANGE
     ), "File mode changes should be recognized as a CHANGE"
     assert (
         change.old_mode == "100644"
@@ -224,7 +224,7 @@ def test_delete_file(m_git_out, m_cat_file, git):
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
-    assert change.file_type.name == "TEXT"
+    assert change.file_type is Diff.FileType.TEXT
     assert_attributes(
         change.hunks[0],
         {
@@ -253,7 +253,7 @@ def test_delete_empty_file(m_git_out, m_cat_file, git):
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
-    assert change.file_type.name == "TEXT"
+    assert change.file_type is Diff.FileType.TEXT
     assert change.hunks == []
 
 
@@ -270,7 +270,7 @@ def test_recognize_binary(m_git_out, m_cat_file, git):
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
-    assert change.file_type.name == "BINARY"
+    assert change.file_type is Diff.FileType.BINARY
     assert change.uploads == [
         {"type": "old", "value": b"", "mime": "application/octet-stream", "phid": None},
         {
@@ -298,7 +298,7 @@ def test_recognize_long_text_as_binary(m_git_out, m_cat_file, git, monkeypatch):
 
     change = git._parse_diff_change(raw, diff)
     m_git_out.assert_not_called()
-    assert change.file_type.name == "BINARY"
+    assert change.file_type is Diff.FileType.BINARY
     assert change.uploads == [
         {"type": "old", "value": b"", "mime": "", "phid": None},
         {"type": "new", "value": content, "mime": "", "phid": None},
@@ -440,7 +440,7 @@ def test_set_as_binary():
         {"type": "old", "value": b"a", "mime": "pdf/", "phid": None},
         {"type": "new", "value": b"b", "mime": "pdf/", "phid": None},
     ]
-    assert change.file_type.name == "BINARY"
+    assert change.file_type is Diff.FileType.BINARY
 
     change = Diff.Change("x")
     change.set_as_binary(
@@ -449,7 +449,7 @@ def test_set_as_binary():
         b_body=b"b",
         b_mime="pdf/",
     )
-    assert change.file_type.name == "IMAGE"
+    assert change.file_type is Diff.FileType.IMAGE
 
     change = Diff.Change("x")
     change.set_as_binary(
@@ -458,4 +458,4 @@ def test_set_as_binary():
         b_body=b"b",
         b_mime="pdf/",
     )
-    assert change.file_type.name == "IMAGE"
+    assert change.file_type is Diff.FileType.IMAGE
