@@ -20,7 +20,7 @@ from mozphab.config import Config
 from mozphab.diff import Diff
 from mozphab.user import UserData
 
-from .conftest import search_diff, search_revision
+from .conftest import search_remote_diff, search_revision
 
 
 def reviewers_dict(reviewers=None):
@@ -172,7 +172,7 @@ class Commits(unittest.TestCase):
 
         check_reviewers.side_effect = fail_gonzo
         m_revs.return_value = []
-        m_diffs.return_value = {"PHID-DIFF-1": search_diff()}
+        m_diffs.return_value = {"PHID-DIFF-1": search_remote_diff()}
         m_whoami.return_value = {"phid": "PHID-USER-1"}
 
         _, errors = submit.validate_commit_stack(
@@ -221,7 +221,7 @@ class Commits(unittest.TestCase):
 
         # An unchanged disabled reviewer should not block unrelated updates.
         m_revs.return_value = [search_revision(reviewers=["PHID-USER-2"])]
-        m_diffs.return_value = {"PHID-DIFF-1": search_diff(message="1 r?goofus")}
+        m_diffs.return_value = {"PHID-DIFF-1": search_remote_diff(message="1 r?goofus")}
         _, errors = submit.validate_commit_stack(
             [commit("1", (["goofus"], []), rev_id=1)], submit.SubmitOptions()
         )
@@ -236,7 +236,7 @@ class Commits(unittest.TestCase):
         check_reviewers.assert_called_once_with({"request": ["alice"], "granted": []})
 
         # A newly introduced disabled reviewer should still fail validation.
-        m_diffs.return_value = {"PHID-DIFF-1": search_diff(message="1 r?alice")}
+        m_diffs.return_value = {"PHID-DIFF-1": search_remote_diff(message="1 r?alice")}
         _, errors = submit.validate_commit_stack(
             [commit("1", (["goofus"], []), rev_id=1)], submit.SubmitOptions()
         )
@@ -245,7 +245,7 @@ class Commits(unittest.TestCase):
         # An unresolved new reviewer on an otherwise unchanged revision must
         # still reach validation instead of being treated as no change.
         m_diffs.return_value = {
-            "PHID-DIFF-1": search_diff(node="same-node", message="1 r?alice")
+            "PHID-DIFF-1": search_remote_diff(node="same-node", message="1 r?alice")
         }
         _, errors = submit.validate_commit_stack(
             [commit("1", (["gonzo"], []), rev_id=1, node="same-node")],
@@ -272,7 +272,7 @@ class Commits(unittest.TestCase):
             search_revision(rev=2),
             search_revision(rev=3),
         ]
-        m_diffs.return_value = {"PHID-DIFF-1": search_diff()}
+        m_diffs.return_value = {"PHID-DIFF-1": search_remote_diff()}
         m_whoami.return_value = {"phid": "PHID-USER-1"}
 
         _, errors = submit.validate_commit_stack(
@@ -872,7 +872,7 @@ class Commits(unittest.TestCase):
 
         m_whoami.return_value = {"phid": "PHID-USER-1"}
         m_get_revisions.return_value = [search_revision()]
-        m_get_diffs.return_value = {"PHID-DIFF-1": search_diff()}
+        m_get_diffs.return_value = {"PHID-DIFF-1": search_remote_diff()}
         m_check_reviewers.return_value = []
 
         warnings, errors = submit.validate_commit_stack([], submit.SubmitOptions())
@@ -906,8 +906,8 @@ class Commits(unittest.TestCase):
             search_revision(rev=2, phid="PHID-REV-2", diff="PHID-DIFF-2"),
         ]
         m_get_diffs.return_value = {
-            "PHID-DIFF-1": search_diff(),
-            "PHID-DIFF-2": search_diff(),
+            "PHID-DIFF-1": search_remote_diff(),
+            "PHID-DIFF-2": search_remote_diff(),
         }
         # we're changing bug id in the first revision to 2
         warnings, _ = submit.validate_commit_stack(
@@ -924,7 +924,7 @@ class Commits(unittest.TestCase):
         # Adding only commit-title reviewers is enough to submit the revision.
         m_get_revisions.return_value = [search_revision(reviewers=["PHID-USER-2"])]
         m_get_diffs.return_value = {
-            "PHID-DIFF-1": search_diff(
+            "PHID-DIFF-1": search_remote_diff(
                 node="aaa000aaa000",
                 message="A r?alice",
             )
@@ -963,7 +963,7 @@ class Commits(unittest.TestCase):
             )
         ]
         m_get_diffs.return_value = {
-            "PHID-DIFF-1": search_diff(
+            "PHID-DIFF-1": search_remote_diff(
                 node="aaa000aaa000",
                 message="A",
             )
@@ -984,7 +984,7 @@ class Commits(unittest.TestCase):
         # the revision is ready, even if the commit SHA1 is unchanged.
         m_get_revisions.return_value = [search_revision(reviewers=[])]
         m_get_diffs.return_value = {
-            "PHID-DIFF-1": search_diff(
+            "PHID-DIFF-1": search_remote_diff(
                 node="aaa000aaa000",
                 message="WIP: A r?alice",
             )
@@ -1008,7 +1008,9 @@ class Commits(unittest.TestCase):
         # Information about not updating the commit if not changed
         m_whoami.return_value = {"phid": "PHID-USER-1"}
         m_get_revisions.return_value = [search_revision(reviewers=["PHID-USER-2"])]
-        m_get_diffs.return_value = {"PHID-DIFF-1": search_diff(node="aaa000aaa000")}
+        m_get_diffs.return_value = {
+            "PHID-DIFF-1": search_remote_diff(node="aaa000aaa000")
+        }
 
         warnings, _ = submit.validate_commit_stack(
             [_commit(node="aaa000aaa000", rev=1, granted=["alice"])],

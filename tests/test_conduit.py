@@ -17,11 +17,10 @@ from mozphab.conduit import (
     ConduitAPI,
     ConduitAPIError,
     conduit,
-    diff_commit_title,
     normalise_reviewer,
 )
 from mozphab.diff import Diff
-from mozphab.models import Revision
+from mozphab.models import RemoteDiff, Revision
 from tests.conftest import search_diff, search_rev, search_revision
 
 
@@ -54,13 +53,29 @@ def test_normalise_reviewer_can_preserve_group_marker():
     [
         (search_diff(message="Title r?alice\n\nBody"), "Title r?alice"),
         (search_diff(message=""), ""),
-        ({"attachments": {"commits": {"commits": [{}]}}}, ""),
-        ({"attachments": {"commits": {"commits": []}}}, ""),
-        ({}, ""),
+        (
+            {
+                "id": 1,
+                "phid": "PHID-DIFF-1",
+                "attachments": {"commits": {"commits": [{}]}},
+            },
+            "",
+        ),
+        (
+            {
+                "id": 1,
+                "phid": "PHID-DIFF-1",
+                "attachments": {"commits": {"commits": []}},
+            },
+            "",
+        ),
+        ({"id": 1, "phid": "PHID-DIFF-1"}, ""),
     ],
 )
 def test_diff_commit_title(diff, expected):
-    assert diff_commit_title(diff) == expected
+    assert (
+        RemoteDiff.from_conduit(diff).commit_title == expected
+    ), "The title should be the first line of the diff's commit message."
 
 
 @pytest.mark.no_mock_token
@@ -540,18 +555,15 @@ def test_get_diffs_search_by_diffids_missing(get_diffs, m_call):
     m_call.return_value = multiple_phab_result
 
     diff_dict = get_diffs(ids=[2, 4, 1, 3])
-    assert diff_dict.get("PHID-1") == {
-        "id": 1,
-        "phid": "PHID-1",
-    }, "Should return dict of Diff 1"
-    assert diff_dict.get("PHID-2") == {
-        "id": 2,
-        "phid": "PHID-2",
-    }, "Should return dict of Diff 2"
-    assert diff_dict.get("PHID-3") == {
-        "id": 3,
-        "phid": "PHID-3",
-    }, "Should return dict of Diff 3"
+    assert diff_dict.get("PHID-1") == RemoteDiff(
+        id=1, phid="PHID-1"
+    ), "Should return Diff 1"
+    assert diff_dict.get("PHID-2") == RemoteDiff(
+        id=2, phid="PHID-2"
+    ), "Should return Diff 2"
+    assert diff_dict.get("PHID-3") == RemoteDiff(
+        id=3, phid="PHID-3"
+    ), "Should return Diff 3"
     assert not diff_dict.get("PHID-4"), "Should not return dict of non-existent diff"
 
 
@@ -560,17 +572,17 @@ def test_get_diffs_cached(get_diffs, m_call):
     m_call.return_value = basic_phab_result
 
     assert get_diffs(phids=["PHID-1"]) == {
-        "PHID-1": {"id": 1, "phid": "PHID-1"}
+        "PHID-1": RemoteDiff(id=1, phid="PHID-1")
     }, "First call populates the cache."
     assert m_call.call_count == 1
 
     assert get_diffs(phids=["PHID-1"]) == {
-        "PHID-1": {"id": 1, "phid": "PHID-1"}
+        "PHID-1": RemoteDiff(id=1, phid="PHID-1")
     }, "Second call with the same PHID must be a cache hit (no extra API call)."
     assert m_call.call_count == 1
 
     assert get_diffs(ids=[1]) == {
-        "PHID-1": {"id": 1, "phid": "PHID-1"}
+        "PHID-1": RemoteDiff(id=1, phid="PHID-1")
     }, "Lookup by ID also uses the cache after the initial phid-based fetch."
     assert m_call.call_count == 1
 
@@ -592,8 +604,8 @@ def test_get_diffs_partial_cache(get_diffs, m_call):
     m_call.return_value = {"data": [{"id": 3, "phid": "PHID-3"}]}
     result = get_diffs(phids=["PHID-1", "PHID-3"])
     assert result == {
-        "PHID-1": {"id": 1, "phid": "PHID-1"},
-        "PHID-3": {"id": 3, "phid": "PHID-3"},
+        "PHID-1": RemoteDiff(id=1, phid="PHID-1"),
+        "PHID-3": RemoteDiff(id=3, phid="PHID-3"),
     }
     assert m_call.call_count == 2
     _, api_args = m_call.call_args.args
@@ -1477,7 +1489,7 @@ def test_commit_reviewer_additions(
     m_get_groups.return_value = []
     commit = Commit(reviewers={"granted": [], "request": [current_reviewer]})
     revision = search_revision(rev=456, reviewers=remote_reviewers)
-    diff = search_diff(message=previous_title)
+    diff = RemoteDiff.from_conduit(search_diff(message=previous_title))
 
     additions = mozphab.conduit.commit_reviewer_additions(commit, revision, diff)
     assert additions.reviewer_names_to_add == {
@@ -1528,7 +1540,9 @@ def test_commit_reviewer_additions_from_wip(
         )
     m_call.return_value = {"data": history, "cursor": {"after": None}}
 
-    additions = mozphab.conduit.commit_reviewer_additions(commit, revision, wip_diff)
+    additions = mozphab.conduit.commit_reviewer_additions(
+        commit, revision, RemoteDiff.from_conduit(wip_diff)
+    )
     assert additions.reviewer_names_to_add == {
         "request": expected_names,
         "granted": [],
@@ -1545,7 +1559,7 @@ def test_commit_reviewer_additions_resolves_blocking_group(m_get_users, m_get_gr
     ]
     commit = Commit(reviewers={"granted": [], "request": ["#reviewers!"]})
     revision = search_revision(rev=456, reviewers=[])
-    diff = search_diff(message="Title")
+    diff = RemoteDiff.from_conduit(search_diff(message="Title"))
 
     additions = mozphab.conduit.commit_reviewer_additions(commit, revision, diff)
 
@@ -1575,12 +1589,12 @@ def test_previous_commit_reviewers_pages_wip_history(m_call):
         {"data": [ready_diff], "cursor": {"after": None}},
     ]
 
-    assert mozphab.conduit.previous_commit_reviewer_names(revision, wip_diff) == {
-        "alice"
-    }
-    assert mozphab.conduit.previous_commit_reviewer_names(revision, wip_diff) == {
-        "alice"
-    }
+    assert mozphab.conduit.previous_commit_reviewer_names(
+        revision, RemoteDiff.from_conduit(wip_diff)
+    ) == {"alice"}
+    assert mozphab.conduit.previous_commit_reviewer_names(
+        revision, RemoteDiff.from_conduit(wip_diff)
+    ) == {"alice"}
     m_call.assert_has_calls(
         [
             mock.call(
@@ -1625,7 +1639,7 @@ def test_previous_commit_reviewers_uses_revision_title_for_incomplete_wip_diff(
     }
 
     assert mozphab.conduit.previous_commit_reviewer_names(
-        revision, incomplete_wip_diff
+        revision, RemoteDiff.from_conduit(incomplete_wip_diff)
     ) == {"alice"}
 
 
@@ -1647,9 +1661,9 @@ def test_previous_commit_reviewers_skips_incomplete_history(m_call):
         "cursor": {"after": None},
     }
 
-    assert mozphab.conduit.previous_commit_reviewer_names(revision, wip_diff) == {
-        "alice"
-    }
+    assert mozphab.conduit.previous_commit_reviewer_names(
+        revision, RemoteDiff.from_conduit(wip_diff)
+    ) == {"alice"}
 
 
 class TestEditRevision:

@@ -17,7 +17,7 @@ from mozphab.exceptions import CommandError, Error, NonLinearException, NotFound
 from mozphab.helpers import prepare_body, prompt, short_node
 from mozphab.logger import logger
 from mozphab.mercurial import Mercurial
-from mozphab.models import Revision, revision_monogram
+from mozphab.models import RemoteDiff, Revision, revision_monogram
 from mozphab.patch import apply_patch
 from mozphab.repository import (
     PatchAttempt,
@@ -70,18 +70,6 @@ class PatchOptions:
             always_full_stack=config.always_full_stack,
             force_vcs=args.force_vcs,
         )
-
-
-def get_base_ref(diff: dict) -> str | None:
-    """Given a diff, return the base revision SHA the diff was based on."""
-    for ref in diff["fields"].get("refs", []):
-        if ref["type"] == "base":
-            return ref["identifier"]
-
-
-def get_patch_date(diff: dict) -> int | None:
-    """Return the diff's creation date, used as the rebase-fallback cutoff."""
-    return diff["fields"].get("dateCreated")
 
 
 def find_public_base(repo: Repository, base_node: str) -> str | None:
@@ -151,21 +139,18 @@ def resolve_base_node(
     return landing_node
 
 
-def get_diff_author_and_date(diff: dict) -> tuple[str | None, int | None]:
+def get_diff_author_and_date(diff: RemoteDiff) -> tuple[str | None, int | None]:
     """Return the author (as `name <email>`) and creation date of `diff`."""
-    try:
-        diff_commits = diff["attachments"]["commits"]["commits"]
-        author = "%s <%s>" % (
-            diff_commits[0]["author"]["name"],
-            diff_commits[0]["author"]["email"],
-        )
-    except (IndexError, KeyError):
-        author = None
+    author = None
+    if diff.commits:
+        commit = diff.commits[0]
+        if commit.author_name is not None and commit.author_email is not None:
+            author = f"{commit.author_name} <{commit.author_email}>"
 
-    return author, diff.get("fields", {}).get("dateCreated")
+    return author, diff.date_created
 
 
-def get_diff_by_id(diff_id: int) -> dict:
+def get_diff_by_id(diff_id: int) -> RemoteDiff:
     """Return the diff with the ID `diff_id` from Phabricator."""
     diff_dict = conduit.get_diffs(ids=[diff_id])
     if not diff_dict:
@@ -177,16 +162,17 @@ def get_diff_by_id(diff_id: int) -> dict:
     return next(iter(diff_dict.values()))
 
 
-def with_requested_diff(diffs: dict[str, dict], diff: dict) -> dict[str, dict]:
+def with_requested_diff(
+    diffs: Mapping[str, RemoteDiff], diff: RemoteDiff
+) -> dict[str, RemoteDiff]:
     """Return the diffs keyed by revision PHID, with `diff` replacing its revision's.
 
     Raises:
     * Error if `diff` doesn't belong to any of the revisions
     """
-    revision_phid = diff["fields"]["revisionPHID"]
-    if revision_phid not in diffs:
-        raise Error(f"Diff {diff['id']} is not related to any revision in the stack.")
-    return {**diffs, revision_phid: diff}
+    if diff.revision_phid not in diffs:
+        raise Error(f"Diff {diff.id} is not related to any revision in the stack.")
+    return {**diffs, diff.revision_phid: diff}
 
 
 def resolve_branch_name(options: PatchOptions, rev_id: int) -> str | None:
@@ -311,8 +297,8 @@ def _fetch_and_filter_related(
 def _apply_commits(
     repo: Repository,
     revs: list[Revision],
-    diffs: dict,
-    raw_diffs: dict,
+    diffs: dict[str, RemoteDiff],
+    raw_diffs: dict[int, str],
     attempt: PatchAttempt,
 ) -> None:
     """Apply each diff in `revs` as a new commit on the base `attempt` checked out.
@@ -507,7 +493,7 @@ def patch(repo: Repository, args: argparse.Namespace):
     if options.create_commit and not options.raw:
         for rev in revs:
             diff = diffs[rev.phid]
-            if not diff["attachments"]["commits"]["commits"]:
+            if not diff.commits:
                 raise Error(
                     "A diff without commit information detected in revision %s.\n"
                     "Use `--no-commit` to patch the working tree." % rev.monogram
@@ -522,7 +508,7 @@ def patch(repo: Repository, args: argparse.Namespace):
     diff_base_node = None
 
     if not options.raw:
-        diff_base_node = get_base_ref(base_diff)
+        diff_base_node = base_diff.base_ref
 
         if options.apply_to == "base":
             if not diff_base_node:
@@ -552,7 +538,7 @@ def patch(repo: Repository, args: argparse.Namespace):
                 # also where the patch stays: `--apply-to base` has no
                 # separate target to rebase onto.
                 target_node = resolve_base_node(
-                    repo, diff_base_node, before=get_patch_date(base_diff)
+                    repo, diff_base_node, before=base_diff.date_created
                 )
                 if not target_node:
                     raise Error(
@@ -592,7 +578,7 @@ def patch(repo: Repository, args: argparse.Namespace):
                 futures[rev.id] = executor.submit(
                     conduit.call,
                     "differential.getrawdiff",
-                    {"diffID": diff["id"]},
+                    {"diffID": diff.id},
                 )
             try:
                 for rev_id_key, future in futures.items():
@@ -636,9 +622,7 @@ def patch(repo: Repository, args: argparse.Namespace):
             _apply_commits(repo, revs, diffs, raw_diffs, attempt)
         except Error:
             base_node = (
-                resolve_base_node(
-                    repo, diff_base_node, before=get_patch_date(base_diff)
-                )
+                resolve_base_node(repo, diff_base_node, before=base_diff.date_created)
                 if options.apply_to != "base" and diff_base_node
                 else None
             )

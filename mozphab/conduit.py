@@ -37,7 +37,7 @@ from .helpers import (
     strip_differential_revision,
 )
 from .logger import logger
-from .models import Revision
+from .models import RemoteDiff, Revision
 from .profiler import profiler
 from .simplecache import SimpleCache
 
@@ -65,15 +65,6 @@ def strip_blocking_phid(transaction_value: str) -> str:
     if transaction_value.startswith("blocking(") and transaction_value.endswith(")"):
         return transaction_value[len("blocking(") : -1]
     return transaction_value
-
-
-def diff_commit_title(diff: dict) -> str:
-    """Return the commit title recorded for a Differential diff."""
-    commits = diff.get("attachments", {}).get("commits", {}).get("commits", [])
-    if not commits:
-        return ""
-    message = commits[0].get("message", "")
-    return message.splitlines()[0] if message else ""
 
 
 class ReviewerAdditions(NamedTuple):
@@ -537,7 +528,7 @@ class ConduitAPI:
 
     def get_diffs(
         self, ids: list[int] | None = None, phids: list[str] | None = None
-    ) -> dict[str, dict]:
+    ) -> dict[str, RemoteDiff]:
         """Get diffs from Phabricator.
 
         Args:
@@ -552,7 +543,7 @@ class ConduitAPI:
         # Serve known diffs from the cache and only query Phabricator for the
         # ones we haven't seen yet. Diffs are immutable once created, so a
         # per-process cache is safe.
-        cached_diffs: dict[str, dict] = {}
+        cached_diffs: dict[str, RemoteDiff] = {}
         if ids:
             uncached_ids = []
             for diff_id in set(ids):
@@ -581,10 +572,11 @@ class ConduitAPI:
             response = self.call("differential.diff.search", api_call_args)
             diff_list = response.get("data", [])
 
-            for diff in diff_list:
-                diff_dict[diff["phid"]] = diff
-                self.cache.set("diff-%s" % diff["phid"], diff)
-                self.cache.set("diff-id-%s" % diff["id"], diff["phid"])
+            for data in diff_list:
+                diff = RemoteDiff.from_conduit(data)
+                diff_dict[diff.phid] = diff
+                self.cache.set("diff-%s" % diff.phid, diff)
+                self.cache.set("diff-id-%s" % diff.id, diff.phid)
 
         return diff_dict
 
@@ -660,7 +652,7 @@ class ConduitAPI:
         commits: list[Commit],
         user_names: Iterable[str],
         group_slugs: Iterable[str],
-    ) -> tuple[dict[int, Revision], dict[str, dict]]:
+    ) -> tuple[dict[int, Revision], dict[str, RemoteDiff]]:
         """Fetch everything `validate_commit_stack` needs in as few round-trips
         as possible.
 
@@ -678,7 +670,9 @@ class ConduitAPI:
         diff PHID.
         """
 
-        def load_revisions_and_diffs() -> tuple[dict[int, Revision], dict[str, dict]]:
+        def load_revisions_and_diffs() -> (
+            tuple[dict[int, Revision], dict[str, RemoteDiff]]
+        ):
             ids = [commit.rev_id for commit in commits if commit.rev_id]
             revisions = {
                 revision.id: revision
@@ -1298,28 +1292,28 @@ class ConduitAPI:
         return transaction_values_by_name
 
     def previous_commit_reviewer_names(
-        self, revision: Revision, diff: dict | None = None
+        self, revision: Revision, diff: RemoteDiff | None = None
     ) -> set[str]:
         """Return normalized reviewer names from the previous commit title."""
         if diff is None:
             diff = self.get_diffs(phids=[revision.diff_phid])[revision.diff_phid]
 
-        title = diff_commit_title(diff) or revision.title
+        title = diff.commit_title or revision.title
         cache_key = "reviewer-names-{}-{}-{}".format(
             revision.phid,
-            diff.get("phid", ""),
+            diff.phid,
             hashlib.sha256(title.encode()).hexdigest(),
         )
         if cache_key in self.cache:
             return set(self.cache.get(cache_key))
 
         if title and WIP_RE.search(title):
-            diff = self.latest_non_wip_diff(revision)
-            if diff is None:
+            non_wip_diff = self.latest_non_wip_diff(revision)
+            if non_wip_diff is None:
                 reviewer_names = set()
                 self.cache.set(cache_key, reviewer_names)
                 return set(reviewer_names)
-            title = diff_commit_title(diff)
+            title = non_wip_diff.commit_title
 
         reviewers = parse_reviewers(title)
 
@@ -1331,7 +1325,7 @@ class ConduitAPI:
         self.cache.set(cache_key, reviewer_names)
         return set(reviewer_names)
 
-    def latest_non_wip_diff(self, revision: Revision) -> dict | None:
+    def latest_non_wip_diff(self, revision: Revision) -> RemoteDiff | None:
         """Return the latest diff whose commit was not submitted as WIP."""
         api_call_args = {
             "constraints": {"revisionPHIDs": [revision.phid]},
@@ -1347,14 +1341,15 @@ class ConduitAPI:
                 page_args["after"] = after
 
             response = self.call("differential.diff.search", page_args)
-            for diff in response.get("data", []):
-                title = diff_commit_title(diff)
+            for data in response.get("data", []):
+                diff = RemoteDiff.from_conduit(data)
+                title = diff.commit_title
                 if not title:
                     # Diffs uploaded outside moz-phab have no local commit
                     # metadata and carry no commit-title reviewer provenance.
                     logger.debug(
                         "Diff %s has no recorded commit title; skipping",
-                        diff.get("id"),
+                        diff.id,
                     )
                     continue
                 if not WIP_RE.search(title):
@@ -1364,7 +1359,7 @@ class ConduitAPI:
         return None
 
     def new_commit_reviewer_names(
-        self, commit: Commit, revision: Revision, diff: dict | None = None
+        self, commit: Commit, revision: Revision, diff: RemoteDiff | None = None
     ) -> dict[str, list[str]]:
         """Return reviewer names absent from the previous submitted title."""
         previous_reviewer_names = self.previous_commit_reviewer_names(revision, diff)
@@ -1380,7 +1375,7 @@ class ConduitAPI:
         return reviewer_names
 
     def commit_reviewer_additions(
-        self, commit: Commit, revision: Revision, diff: dict | None = None
+        self, commit: Commit, revision: Revision, diff: RemoteDiff | None = None
     ) -> ReviewerAdditions:
         """Return reviewer names and transaction values to add."""
         reviewer_names_to_add = {"request": [], "granted": []}
@@ -1423,7 +1418,7 @@ class ConduitAPI:
         transactions: list[dict[str, Any]],
         commit: Commit,
         revision: Revision,
-        diff: dict | None = None,
+        diff: RemoteDiff | None = None,
     ):
         # Existing revisions only add reviewers newly introduced in the local
         # commit title, preserving remote reviewer resignations and Herald changes.

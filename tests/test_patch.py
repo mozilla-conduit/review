@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
+import dataclasses
 from typing import Any
 from unittest import mock
 
@@ -11,7 +12,7 @@ import pytest
 from mozphab import exceptions, helpers, mozphab
 from mozphab.commands import patch
 from mozphab.config import Config
-from mozphab.models import Revision
+from mozphab.models import RemoteDiff, Revision
 from mozphab.repository import PatchAttempt, PatchRefs, Repository
 
 from .conftest import with_stack_graph
@@ -125,16 +126,19 @@ def test_check_revision_id():
 
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
 def test_get_diff_by_id(m_get_diffs):
-    m_get_diffs.return_value = {"DIFFPHID-1": {"id": 1}}
-    assert patch.get_diff_by_id(1) == {
-        "id": 1
-    }, "The requested diff should be returned."
+    m_get_diffs.return_value = {"DIFFPHID-1": RemoteDiff(id=1, phid="DIFFPHID-1")}
+    assert patch.get_diff_by_id(1) == RemoteDiff(
+        id=1, phid="DIFFPHID-1"
+    ), "The requested diff should be returned."
 
     m_get_diffs.return_value = {}
     with pytest.raises(exceptions.NotFoundError):
         patch.get_diff_by_id(1)
 
-    m_get_diffs.return_value = {"DIFFPHID-1": {"id": 1}, "DIFFPHID-2": {"id": 2}}
+    m_get_diffs.return_value = {
+        "DIFFPHID-1": RemoteDiff(id=1, phid="DIFFPHID-1"),
+        "DIFFPHID-2": RemoteDiff(id=2, phid="DIFFPHID-2"),
+    }
     with pytest.raises(exceptions.Error):
         patch.get_diff_by_id(1)
 
@@ -238,16 +242,6 @@ def test_apply_patch(m_check_call, _):
     m_check_call.assert_called_once()
 
 
-def test_base_ref():
-    assert patch.get_base_ref({"fields": {}}) is None
-
-    diff = {"fields": {"refs": [{"identifier": "sha1", "type": "sometype"}]}}
-    assert patch.get_base_ref(diff) is None
-
-    diff = {"fields": {"refs": [{"identifier": "sha1", "type": "base"}]}}
-    assert patch.get_base_ref(diff) == "sha1"
-
-
 @pytest.fixture
 def repo_mock():
     return mock.create_autospec(Repository, instance=True)
@@ -326,25 +320,12 @@ def test_resolve_base_node_passes_before_to_landing_node_lookup(repo_mock):
     repo_mock.get_latest_landing_node.assert_called_once_with(before=1547806078)
 
 
-def test_get_patch_date():
-    # `dateModified` is excluded: because `diffPHID` always points at the
-    # newest diff, `dateModified` only exceeds `dateCreated` for non-content
-    # edits (comments, reviewer changes) -- using it would move the rebase
-    # cutoff forward for reasons unrelated to the patch's actual content.
-    assert patch.get_patch_date({"fields": {"dateCreated": 100}}) == 100
-
-    # No creation date available.
-    assert patch.get_patch_date({"fields": {}}) is None
-
-
 @mock.patch("mozphab.conduit.ConduitAPI.call")
 @mock.patch("mozphab.git.Git.is_worktree_clean")
 @mock.patch("mozphab.commands.patch.config")
 @mock.patch("mozphab.conduit.ConduitAPI.check")
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
-@mock.patch("mozphab.commands.patch.get_base_ref")
-@mock.patch("mozphab.commands.patch.get_patch_date")
 @mock.patch("mozphab.git.Git.before_patch")
 @mock.patch("mozphab.commands.patch.apply_patch")
 @mock.patch("mozphab.commands.patch.prepare_body")
@@ -378,8 +359,6 @@ def test_patch(
     m_prepare_body,
     m_apply_patch,
     m_git_before_patch,
-    m_get_patch_date,
-    m_get_base_ref,
     m_get_diffs,
     m_get_revisions,
     m_git_check_conduit,
@@ -391,7 +370,6 @@ def test_patch(
     # The diff's base is treated as public by default, so `resolve_base_node`
     # uses it directly without needing to fetch or fall back.
     m_git_is_public.return_value = True
-    m_get_patch_date.return_value = 1547806078
     mozphab.conduit.set_repo(git)
 
     class Args(argparse.Namespace):
@@ -449,7 +427,6 @@ def test_patch(
         patch.patch(git, args)
 
     m_config.always_full_stack = False
-    m_get_base_ref.return_value = "sha111"
     m_call_conduit.return_value = "raw"  # differential.getrawdiff
     m_get_revisions.return_value = [
         Revision.from_conduit(
@@ -478,7 +455,6 @@ def test_patch(
         attempt=PatchAttempt("sha111"),
     )
     m_apply_patch.assert_not_called()
-    m_get_base_ref.assert_called_once()
     m_git_before_patch.assert_called_once_with(
         "sha111", DEFAULT_REFS, "phab-D1", assume_yes=False
     )
@@ -527,7 +503,7 @@ def test_patch(
     m_get_diffs.side_effect = None
 
     m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
-    m_get_base_ref.return_value = None
+    m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1_WITHOUT_BASE}
     with pytest.raises(exceptions.Error):
         patch.patch(git, args)
 
@@ -541,7 +517,7 @@ def test_patch(
         "current_sha", DEFAULT_REFS, "phab-D1", assume_yes=False
     )
 
-    m_get_base_ref.return_value = "sha111"
+    m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
     m_git_apply_patch.reset_mock()
     m_git_before_patch.reset_mock()
     # --raw
@@ -590,7 +566,6 @@ def test_patch(
     args = Args(no_commit=True, apply_to="head")
     patch.patch(git, args)
 
-    m_get_base_ref.reset_mock()
     m_apply_patch.reset_mock()
     m_git_rebase_node.reset_mock()
     m_git_before_patch.reset_mock()
@@ -601,7 +576,6 @@ def test_patch(
     # no base resolution or rebase is needed.
     args = Args(apply_to="head")
     patch.patch(git, args)
-    m_get_base_ref.assert_called_once()
     m_git_before_patch.assert_called_once_with(
         "head", DEFAULT_REFS, "phab-D1", assume_yes=False
     )
@@ -771,18 +745,18 @@ def test_patch(
     # Same when the diff has no base ref at all (eg. an older diff, or a
     # web-UI upload).
     m_git_before_patch.reset_mock()
-    m_get_base_ref.return_value = None
+    m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1_WITHOUT_BASE}
     args = Args(apply_to="here")
     with pytest.raises(exceptions.Error):
         patch.patch(git, args)
     m_git_before_patch.assert_called_once()
     m_git_discard_patch_attempt.assert_not_called()
     m_git_apply_patch.side_effect = None
-    m_get_base_ref.return_value = "sha111"
+    m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
 
     # ########## no commit info in diffs
     m_get_diffs.return_value = {
-        "DIFFPHID-1": {"id": 1, "attachments": {"commits": {"commits": []}}}
+        "DIFFPHID-1": RemoteDiff(id=1, phid="DIFFPHID-1", base_ref="sha111")
     }
     m_call_conduit.side_effect = ("raw",)
     args = Args()
@@ -930,64 +904,87 @@ REV_3 = Revision.from_conduit(
     }
 )
 
-DIFF_1: dict[str, Any] = {
-    "id": 1,
-    "phid": "DIFFPHID-1",
-    "fields": {"revisionPHID": "PHID-1", "dateCreated": 1547806078},
-    "attachments": {
-        "commits": {
-            "commits": [
-                {
-                    "author": {
-                        "name": "user",
-                        "email": "author@example.com",
-                        "epoch": 1547806078,
+DIFF_1 = RemoteDiff.from_conduit(
+    {
+        "id": 1,
+        "phid": "DIFFPHID-1",
+        "fields": {
+            "revisionPHID": "PHID-1",
+            "dateCreated": 1547806078,
+            "refs": [{"type": "base", "identifier": "sha111"}],
+        },
+        "attachments": {
+            "commits": {
+                "commits": [
+                    {
+                        "author": {
+                            "name": "user",
+                            "email": "author@example.com",
+                            "epoch": 1547806078,
+                        }
                     }
-                }
-            ]
-        }
-    },
-}
+                ]
+            }
+        },
+    }
+)
 
-DIFF_2: dict[str, Any] = {
-    "id": 2,
-    "phid": "DIFFPHID-2",
-    "attachments": {
-        "commits": {
-            "commits": [{"author": {"name": "user", "email": "author@example.com"}}]
-        }
-    },
-}
+# `DIFF_1`, as if its diff didn't record a base, eg. one uploaded in the web UI.
+DIFF_1_WITHOUT_BASE = dataclasses.replace(DIFF_1, base_ref=None)
 
-DIFF_3: dict[str, Any] = {
-    "id": 3,
-    "phid": "DIFFPHID-3",
-    "fields": {"revisionPHID": "PHID-1", "dateCreated": 1547806078},
-    "attachments": {
-        "commits": {
-            "commits": [
-                {
-                    "author": {
-                        "name": "user 3",
-                        "email": "author@example.com",
-                        "epoch": 1547806078,
+DIFF_2 = RemoteDiff.from_conduit(
+    {
+        "id": 2,
+        "phid": "DIFFPHID-2",
+        "fields": {
+            "dateCreated": 1547806078,
+            "refs": [{"type": "base", "identifier": "sha111"}],
+        },
+        "attachments": {
+            "commits": {
+                "commits": [{"author": {"name": "user", "email": "author@example.com"}}]
+            }
+        },
+    }
+)
+
+DIFF_3 = RemoteDiff.from_conduit(
+    {
+        "id": 3,
+        "phid": "DIFFPHID-3",
+        "fields": {
+            "revisionPHID": "PHID-1",
+            "dateCreated": 1547806078,
+            "refs": [{"type": "base", "identifier": "sha111"}],
+        },
+        "attachments": {
+            "commits": {
+                "commits": [
+                    {
+                        "author": {
+                            "name": "user 3",
+                            "email": "author@example.com",
+                            "epoch": 1547806078,
+                        }
                     }
-                }
-            ]
-        }
-    },
-}
+                ]
+            }
+        },
+    }
+)
 
-DIFF_4 = {
-    "id": 4,
-    "phid": "DIFFPHID-4",
-    "fields": {"revisionPHID": "PHID-100"},
-    "attachments": {
-        "commits": {
-            "commits": [{"author": {"name": "user", "email": "author@example.com"}}]
-        }
-    },
-}
+DIFF_4 = RemoteDiff.from_conduit(
+    {
+        "id": 4,
+        "phid": "DIFFPHID-4",
+        "fields": {"revisionPHID": "PHID-100"},
+        "attachments": {
+            "commits": {
+                "commits": [{"author": {"name": "user", "email": "author@example.com"}}]
+            }
+        },
+    }
+)
 
 
 @pytest.mark.parametrize("force_vcs", [False, True])

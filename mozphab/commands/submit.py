@@ -351,11 +351,9 @@ def validate_commit_stack(
             # and we're not changing reviewers
             # and we're not changing the bug ID
             # then don't submit.
-            diff_commits = diffs[revision.diff_phid]["attachments"]["commits"][
-                "commits"
-            ]
+            diff_commits = diffs[revision.diff_phid].commits
             sha1_changed = bool(
-                not diff_commits or commit.node != diff_commits[0]["identifier"]
+                not diff_commits or commit.node != diff_commits[0].identifier
             )
             if (
                 not sha1_changed

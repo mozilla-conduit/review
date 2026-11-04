@@ -130,6 +130,7 @@ class RemoteDiff:
     revision_phid: str | None = None
     # The node the diff was based on, if the diff recorded one.
     base_ref: str | None = None
+    # Unlike `dateModified`, this doesn't change for comments or reviewer edits.
     date_created: int | None = None
     commits: tuple[DiffCommit, ...] = ()
 

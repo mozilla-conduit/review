@@ -1,7 +1,7 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
-import copy
+import dataclasses
 import os
 import time
 from unittest import mock
@@ -10,7 +10,7 @@ import pytest
 
 from mozphab import mozphab
 from mozphab.exceptions import Error
-from mozphab.models import Revision
+from mozphab.models import RemoteDiff, Revision
 
 from .conftest import git_out, hg_out, with_stack_graph
 
@@ -174,8 +174,7 @@ def test_git_patch_with_commit(
     git_repo_path,
 ):
     sha = git_out("rev-parse", "HEAD").rstrip("\n")
-    diff_1 = copy.deepcopy(DIFF_1)
-    diff_1["fields"]["refs"][0]["identifier"] = sha
+    diff_1 = dataclasses.replace(DIFF_1, base_ref=sha)
     m_get_revs.return_value = [REV_1]
     m_get_diffs.return_value = {"PHID-DIFF-1": diff_1}
     m_call_conduit.side_effect = lambda method, args: {
@@ -285,9 +284,8 @@ def test_git_patch_here_no_branch(
 ):
     """`--apply-to here --no-branch` applies on the current branch, as-is."""
     branch = git_out("rev-parse", "--abbrev-ref", "HEAD").rstrip("\n")
-    diff_1 = copy.deepcopy(DIFF_1)
-    diff_1["fields"]["refs"][0]["identifier"] = git_out("rev-parse", "HEAD").rstrip(
-        "\n"
+    diff_1 = dataclasses.replace(
+        DIFF_1, base_ref=git_out("rev-parse", "HEAD").rstrip("\n")
     )
     m_get_revs.return_value = [REV_1]
     m_get_diffs.return_value = {"PHID-DIFF-1": diff_1}
@@ -331,8 +329,7 @@ def test_git_patch_here_no_branch_declines_fallback(
 ):
     """A failed direct apply does not move the current branch when retry is declined."""
     base = git_out("rev-parse", "HEAD").strip()
-    diff = copy.deepcopy(DIFF_1)
-    diff["fields"]["refs"][0]["identifier"] = base
+    diff = dataclasses.replace(DIFF_1, base_ref=base)
     m_get_revs.return_value = [REV_1]
     if stack:
         rev2 = with_stack_graph(REV_2, {"PHID-REV-2": ["PHID-REV-1"], "PHID-REV-1": []})
@@ -525,16 +522,26 @@ ATTACHMENTS = {
     }
 }
 
-DIFF_1 = {
-    "fields": {
-        "dateCreated": 1547806078,
-        "refs": [{"identifier": "0", "type": "base"}],
-    },
-    "id": 1,
-    "attachments": ATTACHMENTS,
-}
+DIFF_1 = RemoteDiff.from_conduit(
+    {
+        "fields": {
+            "dateCreated": 1547806078,
+            "refs": [{"identifier": "0", "type": "base"}],
+        },
+        "id": 1,
+        "phid": "PHID-DIFF-1",
+        "attachments": ATTACHMENTS,
+    }
+)
 
-DIFF_2 = {"fields": {"dateCreated": 1547806078}, "id": 2, "attachments": ATTACHMENTS}
+DIFF_2 = RemoteDiff.from_conduit(
+    {
+        "fields": {"dateCreated": 1547806078},
+        "id": 2,
+        "phid": "PHID-DIFF-2",
+        "attachments": ATTACHMENTS,
+    }
+)
 
 PATCH_1_META = """\
 # HG changeset patch

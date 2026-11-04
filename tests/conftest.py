@@ -36,7 +36,7 @@ from mozphab.commands import submit  # noqa: E402
 from mozphab.git import Git  # noqa: E402
 from mozphab.logger import logger  # noqa: E402
 from mozphab.mercurial import Mercurial  # noqa: E402
-from mozphab.models import Revision  # noqa: E402
+from mozphab.models import RemoteDiff, Revision  # noqa: E402
 
 environment.SHOW_SPINNER = False
 environment.HTTP_ALLOWED = True
@@ -96,6 +96,11 @@ def search_rev(
         },
         "attachments": {"reviewers": {"reviewers": reviewer_entries}},
     }
+
+
+def search_remote_diff(**kwargs) -> RemoteDiff:
+    """Return the `RemoteDiff` parsed from `search_diff(**kwargs)`."""
+    return RemoteDiff.from_conduit(search_diff(**kwargs))
 
 
 def search_revision(**kwargs) -> Revision:
