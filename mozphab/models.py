@@ -27,6 +27,20 @@ class RevisionStatus(str, Enum):
         return self.value.replace("-", " ").title()
 
 
+class ReviewerStatus(str, Enum):
+    """The statuses of a reviewer on a Phabricator revision."""
+
+    ADDED = "added"
+    BLOCKING = "blocking"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    COMMENTED = "commented"
+    RESIGNED = "resigned"
+    # Left behind when a new diff voids an earlier review.
+    ACCEPTED_OLDER = "accepted-older"
+    REJECTED_OLDER = "rejected-older"
+
+
 @dataclass(frozen=True)
 class Revision:
     """A revision, parsed from a `differential.revision.search` result."""

@@ -10,7 +10,7 @@ from enum import Enum
 from mozphab.conduit import conduit
 from mozphab.exceptions import Error
 from mozphab.logger import logger
-from mozphab.models import RevisionStatus, revision_monogram
+from mozphab.models import ReviewerStatus, RevisionStatus, revision_monogram
 from mozphab.repository import Repository
 from mozphab.spinner import wait_message
 
@@ -168,9 +168,9 @@ def list_revisions(repo: Repository, args: argparse.Namespace):
             reviewer_status = reviewer.get("status", "")
             phid = reviewer.get("reviewerPHID", "")
             username = phid_to_username.get(phid, phid)
-            if reviewer_status == "accepted":
+            if reviewer_status == ReviewerStatus.ACCEPTED:
                 reviewers.append(f"✓ {username}")
-            elif reviewer_status == "rejected":
+            elif reviewer_status == ReviewerStatus.REJECTED:
                 reviewers.append(f"✗ {username}")
             else:
                 reviewers.append(username)

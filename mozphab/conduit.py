@@ -37,7 +37,7 @@ from .helpers import (
     strip_differential_revision,
 )
 from .logger import logger
-from .models import RemoteDiff, Revision, RevisionStatus
+from .models import RemoteDiff, ReviewerStatus, Revision, RevisionStatus
 from .profiler import profiler
 from .simplecache import SimpleCache
 
@@ -120,7 +120,9 @@ IDEMPOTENT_CONDUIT_METHODS = frozenset(
 # Reviewer statuses that mean the reviewer has acted on the current diff, as
 # opposed to `added`, `blocking`, `commented` or the `-older` statuses left
 # behind when a new diff voids an earlier review.
-REVIEWED_REVIEWER_STATUSES = frozenset({"accepted", "rejected", "resigned"})
+REVIEWED_REVIEWER_STATUSES = frozenset(
+    {ReviewerStatus.ACCEPTED, ReviewerStatus.REJECTED, ReviewerStatus.RESIGNED}
+)
 
 
 class ConduitAPIError(Error):
