@@ -10,7 +10,7 @@ from mozphab.conduit import conduit
 from mozphab.exceptions import Error, NotFoundError
 from mozphab.helpers import PHABRICATOR_URL_REVISION_PATTERN, prompt
 from mozphab.logger import logger
-from mozphab.models import revision_monogram
+from mozphab.models import TransactionType, revision_monogram
 from mozphab.spinner import wait_message
 
 
@@ -101,7 +101,7 @@ def abandon_revisions(options: AbandonOptions):
     # Abandon the revisions
     with wait_message("Abandoning revisions..."):
         for revision in revisions_to_abandon:
-            transactions = [{"type": "abandon", "value": True}]
+            transactions = [{"type": TransactionType.ABANDON, "value": True}]
             conduit.apply_transactions_to_revision(
                 rev_id=revision.phid, transactions=transactions
             )

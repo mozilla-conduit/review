@@ -41,6 +41,25 @@ class ReviewerStatus(str, Enum):
     REJECTED_OLDER = "rejected-older"
 
 
+class TransactionType(str, Enum):
+    """The `differential.revision.edit` transactions moz-phab sends."""
+
+    TITLE = "title"
+    SUMMARY = "summary"
+    TEST_PLAN = "testPlan"
+    BUG_ID = "bugzilla.bug-id"
+    COMMENT = "comment"
+    UPDATE = "update"
+    PARENTS_ADD = "parents.add"
+    PLAN_CHANGES = "plan-changes"
+    REQUEST_REVIEW = "request-review"
+    REVIEWERS_SET = "reviewers.set"
+    REVIEWERS_ADD = "reviewers.add"
+    ABANDON = "abandon"
+    CHILDREN_SET = "children.set"
+    CHILDREN_REMOVE = "children.remove"
+
+
 @dataclass(frozen=True)
 class Revision:
     """A revision, parsed from a `differential.revision.search` result."""

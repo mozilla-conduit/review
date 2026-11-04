@@ -26,7 +26,7 @@ from mozphab.helpers import (
     update_commit_title_previews,
 )
 from mozphab.logger import logger
-from mozphab.models import RevisionStatus, revision_monogram
+from mozphab.models import RevisionStatus, TransactionType, revision_monogram
 from mozphab.profiler import profiler
 from mozphab.repository import Repository, StackSelection
 from mozphab.spinner import wait_message
@@ -639,24 +639,26 @@ def update_revision_description(
     # updating the commit title and/or summary is required.
 
     if commit.title != revision["fields"]["title"]:
-        transactions.append({"type": "title", "value": commit.title})
+        transactions.append({"type": TransactionType.TITLE, "value": commit.title})
 
     # The Phabricator API will refuse the new summary value if we include the
     # "Differential Revision:" keyword in the summary body.
     local_body = strip_differential_revision(commit.body).strip()
     remote_body = strip_differential_revision(revision["fields"]["summary"]).strip()
     if local_body != remote_body:
-        transactions.append({"type": "summary", "value": local_body})
+        transactions.append({"type": TransactionType.SUMMARY, "value": local_body})
 
     if commit.test_plan and commit.test_plan != revision["fields"].get("testPlan", ""):
-        transactions.append({"type": "testPlan", "value": commit.test_plan})
+        transactions.append(
+            {"type": TransactionType.TEST_PLAN, "value": commit.test_plan}
+        )
 
 
 def update_revision_bug_id(transactions: list[dict], commit: Commit, revision: dict):
     # Appends differential.revision.edit transaction(s) to `transactions` if
     # updating the commit bug-id is required.
     if commit.bug_id and commit.bug_id != revision["fields"]["bugzilla.bug-id"]:
-        transactions.append({"type": "bugzilla.bug-id", "value": commit.bug_id})
+        transactions.append({"type": TransactionType.BUG_ID, "value": commit.bug_id})
 
 
 def local_uplift_if_possible(

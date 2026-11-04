@@ -37,7 +37,13 @@ from .helpers import (
     strip_differential_revision,
 )
 from .logger import logger
-from .models import RemoteDiff, ReviewerStatus, Revision, RevisionStatus
+from .models import (
+    RemoteDiff,
+    ReviewerStatus,
+    Revision,
+    RevisionStatus,
+    TransactionType,
+)
 from .profiler import profiler
 from .simplecache import SimpleCache
 
@@ -713,16 +719,20 @@ class ConduitAPI:
     ) -> dict:
         """Create a new revision in Phabricator."""
         transactions = [
-            {"type": "title", "value": commit.revision_title()},
-            {"type": "summary", "value": commit.body},
+            {"type": TransactionType.TITLE, "value": commit.revision_title()},
+            {"type": TransactionType.SUMMARY, "value": commit.body},
         ]
         if commit.test_plan:
-            transactions.append({"type": "testPlan", "value": commit.test_plan})
+            transactions.append(
+                {"type": TransactionType.TEST_PLAN, "value": commit.test_plan}
+            )
         if commit.has_reviewers and not commit.wip:
             self.set_initial_revision_reviewers(transactions, commit)
 
         if commit.bug_id:
-            transactions.append({"type": "bugzilla.bug-id", "value": commit.bug_id})
+            transactions.append(
+                {"type": TransactionType.BUG_ID, "value": commit.bug_id}
+            )
 
         return self.edit_revision(
             transactions=transactions,
@@ -741,15 +751,20 @@ class ConduitAPI:
         """Update an existing revision in Phabricator."""
         # Update the title and summary
         transactions = [
-            {"type": "title", "value": commit.revision_title()},
-            {"type": "summary", "value": strip_differential_revision(commit.body)},
+            {"type": TransactionType.TITLE, "value": commit.revision_title()},
+            {
+                "type": TransactionType.SUMMARY,
+                "value": strip_differential_revision(commit.body),
+            },
         ]
         if commit.test_plan:
-            transactions.append({"type": "testPlan", "value": commit.test_plan})
+            transactions.append(
+                {"type": TransactionType.TEST_PLAN, "value": commit.test_plan}
+            )
 
         # Add update comment
         if comment:
-            transactions.append({"type": "comment", "value": comment})
+            transactions.append({"type": TransactionType.COMMENT, "value": comment})
 
         revision = None
 
@@ -767,7 +782,9 @@ class ConduitAPI:
         if commit.bug_id and commit.rev_id:
             revision = revision or self.get_revisions(ids=[commit.rev_id])[0]
             if revision.bug_id != commit.bug_id:
-                transactions.append({"type": "bugzilla.bug-id", "value": commit.bug_id})
+                transactions.append(
+                    {"type": TransactionType.BUG_ID, "value": commit.bug_id}
+                )
 
         return self.edit_revision(
             transactions=transactions,
@@ -791,11 +808,13 @@ class ConduitAPI:
 
         # diff_phid is not present for changes in revision settings (like WIP)
         if diff_phid:
-            trans.append({"type": "update", "value": diff_phid})
+            trans.append({"type": TransactionType.UPDATE, "value": diff_phid})
 
         # Add revision parents.
         if parent_rev_phid:
-            trans.append({"type": "parents.add", "value": [parent_rev_phid]})
+            trans.append(
+                {"type": TransactionType.PARENTS_ADD, "value": [parent_rev_phid]}
+            )
 
         existing_status = None
         if rev_id:
@@ -818,7 +837,10 @@ class ConduitAPI:
             # revision, we can add the `plan-changes` transaction to our create call.
             # Existing revisions must make a subsequent API call to set the status to
             # `changes-planned` to match our WIP state.
-            plan_changes_transaction = {"type": "plan-changes", "value": True}
+            plan_changes_transaction = {
+                "type": TransactionType.PLAN_CHANGES,
+                "value": True,
+            }
             if existing_status == RevisionStatus.CHANGES_PLANNED:
                 post_trans.append(plan_changes_transaction)
             else:
@@ -832,7 +854,7 @@ class ConduitAPI:
             RevisionStatus.NEEDS_REVIEW,
             RevisionStatus.ACCEPTED,
         ):
-            trans.append({"type": "request-review", "value": True})
+            trans.append({"type": TransactionType.REQUEST_REVIEW, "value": True})
 
         # Call differential.revision.edit
         api_call_args: dict[str, Any] = {"transactions": trans}
@@ -1413,7 +1435,7 @@ class ConduitAPI:
         """Append the reviewers.set transaction used when creating a revision."""
         transactions.append(
             {
-                "type": "reviewers.set",
+                "type": TransactionType.REVIEWERS_SET,
                 "value": self.commit_reviewer_transaction_values(commit),
             }
         )
@@ -1431,7 +1453,7 @@ class ConduitAPI:
         if additions.transaction_values_to_add:
             transactions.append(
                 {
-                    "type": "reviewers.add",
+                    "type": TransactionType.REVIEWERS_ADD,
                     "value": additions.transaction_values_to_add,
                 }
             )

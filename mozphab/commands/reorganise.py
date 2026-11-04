@@ -14,7 +14,7 @@ from mozphab.config import Config, config
 from mozphab.exceptions import Error
 from mozphab.helpers import BUG_ID_RE, augment_commits_from_body, prompt
 from mozphab.logger import logger
-from mozphab.models import Revision, revision_monogram
+from mozphab.models import Revision, TransactionType, revision_monogram
 from mozphab.repository import Repository, StackSelection
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
@@ -143,11 +143,11 @@ def remove_or_set_child(
     # Set children if child is present.
     child = local_list[revision]
     if child is not None:
-        return ("children.set", [child])
+        return (TransactionType.CHILDREN_SET, [child])
 
     # Remove child if the last child is a parent remotely
     if revision in remote_list and remote_list[revision] is not None:
-        return ("children.remove", [remote_list[revision]])
+        return (TransactionType.CHILDREN_REMOVE, [remote_list[revision]])
 
     # No transaction otherwise.
     return None
@@ -179,7 +179,7 @@ def stack_transactions(
     for revision in remote_revisions_missing_from_local:
         child = remote_list[revision]
         if child is not None:
-            transactions[revision].append(("children.remove", [child]))
+            transactions[revision].append((TransactionType.CHILDREN_REMOVE, [child]))
 
         remote_list[revision] = None
         walk_llist(remote_list, allow_multiple_heads=True)
@@ -220,7 +220,7 @@ def stack_transactions(
             )
         elif revision not in abandoned_revisions:
             # Avoid abandoning a revision if it is already in `abandoned` state.
-            transactions[revision].append(("abandon", True))
+            transactions[revision].append((TransactionType.ABANDON, True))
 
         del remote_list[revision]
         walk_llist(remote_list, allow_multiple_heads=True)
@@ -317,14 +317,21 @@ def force_stack_transactions(
         if revision in local_list:
             child = local_list[revision]
             transactions[revision] = [
-                {"type": "children.set", "value": [child] if child else []}
+                {
+                    "type": TransactionType.CHILDREN_SET,
+                    "value": [child] if child else [],
+                }
             ]
             continue
 
         transactions[revision] = []
         if not no_abandon_unconnected and revision not in abandoned_revisions:
-            transactions[revision].append({"type": "abandon", "value": True})
-        transactions[revision].append({"type": "children.set", "value": []})
+            transactions[revision].append(
+                {"type": TransactionType.ABANDON, "value": True}
+            )
+        transactions[revision].append(
+            {"type": TransactionType.CHILDREN_SET, "value": []}
+        )
 
     return transactions
 
@@ -341,7 +348,10 @@ def show_revision_glossary(
     for phid, rev_transactions in transactions.items():
         referenced_phids.add(phid)
         for transaction in rev_transactions:
-            if transaction["type"] in ["children.set", "children.remove"]:
+            if transaction["type"] in (
+                TransactionType.CHILDREN_SET,
+                TransactionType.CHILDREN_REMOVE,
+            ):
                 if transaction["value"]:
                     referenced_phids.update(transaction["value"])
 
@@ -579,11 +589,14 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
             continue
         node_id = revision_monogram(phid_to_id[phid])
         linked_node_id = linkify_revision_id(node_id, repo.phab_url, options.hyperlinks)
-        if any(transaction["type"] == "abandon" for transaction in rev_transactions):
+        if any(
+            transaction["type"] == TransactionType.ABANDON
+            for transaction in rev_transactions
+        ):
             logger.info(" * {} will be abandoned".format(linked_node_id))
         else:
             for t in rev_transactions:
-                if t["type"] == "children.set":
+                if t["type"] == TransactionType.CHILDREN_SET:
                     if t["value"] and t["value"][0] in phid_to_id:  # Has children
                         child_id = revision_monogram(phid_to_id[t["value"][0]])
                         linked_child_id = linkify_revision_id(
@@ -601,7 +614,7 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
                                 linked_node_id
                             )
                         )
-                if t["type"] == "children.remove":
+                if t["type"] == TransactionType.CHILDREN_REMOVE:
                     if t["value"] and t["value"][0] in phid_to_id:
                         child_id = revision_monogram(phid_to_id[t["value"][0]])
                         linked_child_id = linkify_revision_id(
