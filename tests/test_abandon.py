@@ -10,7 +10,7 @@ from callee import Contains
 
 from mozphab import exceptions
 from mozphab.commands import abandon
-from mozphab.models import Revision, RevisionStatus
+from mozphab.models import Revision, RevisionStatus, Transaction, TransactionType
 
 
 class TestCheckRevisionId(unittest.TestCase):
@@ -102,11 +102,11 @@ class TestAbandonRevisions(unittest.TestCase):
         expected_calls = [
             mock.call(
                 rev_id="PHID-DREV-123",
-                transactions=[{"type": "abandon", "value": True}],
+                transactions=[Transaction(TransactionType.ABANDON, True)],
             ),
             mock.call(
                 rev_id="PHID-DREV-125",
-                transactions=[{"type": "abandon", "value": True}],
+                transactions=[Transaction(TransactionType.ABANDON, True)],
             ),
         ]
         mock_conduit.apply_transactions_to_revision.assert_has_calls(expected_calls)
@@ -195,7 +195,8 @@ class TestAbandonRevisions(unittest.TestCase):
 
         # Verify abandonment call was made
         mock_conduit.apply_transactions_to_revision.assert_called_once_with(
-            rev_id="PHID-DREV-123", transactions=[{"type": "abandon", "value": True}]
+            rev_id="PHID-DREV-123",
+            transactions=[Transaction(TransactionType.ABANDON, True)],
         )
 
     @mock.patch("mozphab.commands.abandon.conduit")
@@ -215,11 +216,11 @@ class TestAbandonRevisions(unittest.TestCase):
         expected_calls = [
             mock.call(
                 rev_id="PHID-DREV-123",
-                transactions=[{"type": "abandon", "value": True}],
+                transactions=[Transaction(TransactionType.ABANDON, True)],
             ),
             mock.call(
                 rev_id="PHID-DREV-125",
-                transactions=[{"type": "abandon", "value": True}],
+                transactions=[Transaction(TransactionType.ABANDON, True)],
             ),
         ]
         mock_conduit.apply_transactions_to_revision.assert_has_calls(expected_calls)

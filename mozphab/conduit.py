@@ -872,11 +872,18 @@ class ConduitAPI:
 
         return revision
 
-    def apply_transactions_to_revision(self, rev_id: str, transactions: list[dict]):
+    def apply_transactions_to_revision(
+        self, rev_id: str, transactions: list[Transaction]
+    ):
         """Apply transactions to the specified revision."""
         self.call(
             "differential.revision.edit",
-            {"objectIdentifier": rev_id, "transactions": transactions},
+            {
+                "objectIdentifier": rev_id,
+                "transactions": [
+                    transaction.to_conduit() for transaction in transactions
+                ],
+            },
         )
 
     def request_ai_review(self, rev_id: int) -> dict:

@@ -15,7 +15,7 @@ from mozphab.commands import reorganise
 from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError
 from mozphab.config import Config
-from mozphab.models import Revision, RevisionStatus
+from mozphab.models import Revision, RevisionStatus, Transaction, TransactionType
 
 
 def test_linkify_bugs_in_text_without_bmo_url():
@@ -37,12 +37,12 @@ def test_linkify_bugs_in_text_without_bmo_url():
         (
             ("ABC", "A"),
             {
-                "A": [{"type": "children.remove", "value": ["B"]}],
+                "A": [Transaction(TransactionType.CHILDREN_REMOVE, ("B",))],
                 "B": [
-                    {"type": "children.remove", "value": ["C"]},
-                    {"type": "abandon", "value": True},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("C",)),
+                    Transaction(TransactionType.ABANDON, True),
                 ],
-                "C": [{"type": "abandon", "value": True}],
+                "C": [Transaction(TransactionType.ABANDON, True)],
             },
             set(),
         ),
@@ -50,11 +50,11 @@ def test_linkify_bugs_in_text_without_bmo_url():
             ("ABC", "B"),
             {
                 "A": [
-                    {"type": "children.remove", "value": ["B"]},
-                    {"type": "abandon", "value": True},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("B",)),
+                    Transaction(TransactionType.ABANDON, True),
                 ],
-                "B": [{"type": "children.remove", "value": ["C"]}],
-                "C": [{"type": "abandon", "value": True}],
+                "B": [Transaction(TransactionType.CHILDREN_REMOVE, ("C",))],
+                "C": [Transaction(TransactionType.ABANDON, True)],
             },
             set(),
         ),
@@ -62,12 +62,12 @@ def test_linkify_bugs_in_text_without_bmo_url():
             ("ABC", "C"),
             {
                 "A": [
-                    {"type": "children.remove", "value": ["B"]},
-                    {"type": "abandon", "value": True},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("B",)),
+                    Transaction(TransactionType.ABANDON, True),
                 ],
                 "B": [
-                    {"type": "children.remove", "value": ["C"]},
-                    {"type": "abandon", "value": True},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("C",)),
+                    Transaction(TransactionType.ABANDON, True),
                 ],
             },
             set(),
@@ -76,11 +76,11 @@ def test_linkify_bugs_in_text_without_bmo_url():
             ("ABC", "C"),
             {
                 "A": [
-                    {"type": "children.remove", "value": ["B"]},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("B",)),
                 ],
                 "B": [
-                    {"type": "children.remove", "value": ["C"]},
-                    {"type": "abandon", "value": True},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("C",)),
+                    Transaction(TransactionType.ABANDON, True),
                 ],
             },
             {"A"},
@@ -89,8 +89,8 @@ def test_linkify_bugs_in_text_without_bmo_url():
         (
             ("AB", "BA"),
             {
-                "A": [{"type": "children.remove", "value": ["B"]}],
-                "B": [{"type": "children.set", "value": ["A"]}],
+                "A": [Transaction(TransactionType.CHILDREN_REMOVE, ("B",))],
+                "B": [Transaction(TransactionType.CHILDREN_SET, ("A",))],
             },
             set(),
         ),
@@ -98,8 +98,8 @@ def test_linkify_bugs_in_text_without_bmo_url():
             ("ABC", "BC"),
             {
                 "A": [
-                    {"type": "children.remove", "value": ["B"]},
-                    {"type": "abandon", "value": True},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("B",)),
+                    Transaction(TransactionType.ABANDON, True),
                 ]
             },
             set(),
@@ -107,103 +107,111 @@ def test_linkify_bugs_in_text_without_bmo_url():
         (
             ("ABC", "ACB"),
             {
-                "A": [{"type": "children.set", "value": ["C"]}],
-                "B": [{"type": "children.remove", "value": ["C"]}],
-                "C": [{"type": "children.set", "value": ["B"]}],
+                "A": [Transaction(TransactionType.CHILDREN_SET, ("C",))],
+                "B": [Transaction(TransactionType.CHILDREN_REMOVE, ("C",))],
+                "C": [Transaction(TransactionType.CHILDREN_SET, ("B",))],
             },
             set(),
         ),
         (
             ("ABC", "BAC"),
             {
-                "A": [{"type": "children.set", "value": ["C"]}],
-                "B": [{"type": "children.set", "value": ["A"]}],
+                "A": [Transaction(TransactionType.CHILDREN_SET, ("C",))],
+                "B": [Transaction(TransactionType.CHILDREN_SET, ("A",))],
             },
             set(),
         ),
         (
             ("ABC", "CAB"),
             {
-                "B": [{"type": "children.remove", "value": ["C"]}],
-                "C": [{"type": "children.set", "value": ["A"]}],
+                "B": [Transaction(TransactionType.CHILDREN_REMOVE, ("C",))],
+                "C": [Transaction(TransactionType.CHILDREN_SET, ("A",))],
             },
             set(),
         ),
         (
             ("ABC", "CBA"),
             {
-                "A": [{"type": "children.remove", "value": ["B"]}],
-                "B": [{"type": "children.set", "value": ["A"]}],
-                "C": [{"type": "children.set", "value": ["B"]}],
+                "A": [Transaction(TransactionType.CHILDREN_REMOVE, ("B",))],
+                "B": [Transaction(TransactionType.CHILDREN_SET, ("A",))],
+                "C": [Transaction(TransactionType.CHILDREN_SET, ("B",))],
             },
             set(),
         ),
         # Insert
-        (("ABC", "DABC"), {"D": [{"type": "children.set", "value": ["A"]}]}, set()),
+        (
+            ("ABC", "DABC"),
+            {"D": [Transaction(TransactionType.CHILDREN_SET, ("A",))]},
+            set(),
+        ),
         (
             ("ABC", "ADBC"),
             {
-                "A": [{"type": "children.set", "value": ["D"]}],
-                "D": [{"type": "children.set", "value": ["B"]}],
+                "A": [Transaction(TransactionType.CHILDREN_SET, ("D",))],
+                "D": [Transaction(TransactionType.CHILDREN_SET, ("B",))],
             },
             set(),
         ),
         (
             ("ABC", "ABDC"),
             {
-                "B": [{"type": "children.set", "value": ["D"]}],
-                "D": [{"type": "children.set", "value": ["C"]}],
+                "B": [Transaction(TransactionType.CHILDREN_SET, ("D",))],
+                "D": [Transaction(TransactionType.CHILDREN_SET, ("C",))],
             },
             set(),
         ),
         (
             ("ABC", "BCAD"),
             {
-                "A": [{"type": "children.set", "value": ["D"]}],
-                "C": [{"type": "children.set", "value": ["A"]}],
+                "A": [Transaction(TransactionType.CHILDREN_SET, ("D",))],
+                "C": [Transaction(TransactionType.CHILDREN_SET, ("A",))],
             },
             set(),
         ),
-        (([], ["A", "B"]), {"A": [{"type": "children.set", "value": ["B"]}]}, set()),
+        (
+            ([], ["A", "B"]),
+            {"A": [Transaction(TransactionType.CHILDREN_SET, ("B",))]},
+            set(),
+        ),
         # Insert and reorder
         (
             ("ABC", "DCAB"),
             {
-                "B": [{"type": "children.remove", "value": ["C"]}],
-                "C": [{"type": "children.set", "value": ["A"]}],
-                "D": [{"type": "children.set", "value": ["C"]}],
+                "B": [Transaction(TransactionType.CHILDREN_REMOVE, ("C",))],
+                "C": [Transaction(TransactionType.CHILDREN_SET, ("A",))],
+                "D": [Transaction(TransactionType.CHILDREN_SET, ("C",))],
             },
             set(),
         ),
         (
             ("ABC", "CDAB"),
             {
-                "B": [{"type": "children.remove", "value": ["C"]}],
-                "C": [{"type": "children.set", "value": ["D"]}],
-                "D": [{"type": "children.set", "value": ["A"]}],
+                "B": [Transaction(TransactionType.CHILDREN_REMOVE, ("C",))],
+                "C": [Transaction(TransactionType.CHILDREN_SET, ("D",))],
+                "D": [Transaction(TransactionType.CHILDREN_SET, ("A",))],
             },
             set(),
         ),
         (
             ("ABC", "CADB"),
             {
-                "A": [{"type": "children.set", "value": ["D"]}],
-                "B": [{"type": "children.remove", "value": ["C"]}],
-                "C": [{"type": "children.set", "value": ["A"]}],
-                "D": [{"type": "children.set", "value": ["B"]}],
+                "A": [Transaction(TransactionType.CHILDREN_SET, ("D",))],
+                "B": [Transaction(TransactionType.CHILDREN_REMOVE, ("C",))],
+                "C": [Transaction(TransactionType.CHILDREN_SET, ("A",))],
+                "D": [Transaction(TransactionType.CHILDREN_SET, ("B",))],
             },
             set(),
         ),
         (
             ("ABC", "CABD"),
             {
-                "B": [{"type": "children.set", "value": ["D"]}],
-                "C": [{"type": "children.set", "value": ["A"]}],
+                "B": [Transaction(TransactionType.CHILDREN_SET, ("D",))],
+                "C": [Transaction(TransactionType.CHILDREN_SET, ("A",))],
             },
             set(),
         ),
         # Nothing in common
-        (("A", "B"), {"A": [{"type": "abandon", "value": True}]}, set()),
+        (("A", "B"), {"A": [Transaction(TransactionType.ABANDON, True)]}, set()),
     ],
 )
 def test_stack_transactions_with_abandon(phids, transactions, abandoned):
@@ -220,9 +228,9 @@ def test_stack_transactions_with_abandon(phids, transactions, abandoned):
         (
             ("ABC", "A"),
             {
-                "A": [{"type": "children.remove", "value": ["B"]}],
+                "A": [Transaction(TransactionType.CHILDREN_REMOVE, ("B",))],
                 "B": [
-                    {"type": "children.remove", "value": ["C"]},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("C",)),
                 ],
             },
             set(),
@@ -231,9 +239,9 @@ def test_stack_transactions_with_abandon(phids, transactions, abandoned):
             ("ABC", "B"),
             {
                 "A": [
-                    {"type": "children.remove", "value": ["B"]},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("B",)),
                 ],
-                "B": [{"type": "children.remove", "value": ["C"]}],
+                "B": [Transaction(TransactionType.CHILDREN_REMOVE, ("C",))],
             },
             set(),
         ),
@@ -241,10 +249,10 @@ def test_stack_transactions_with_abandon(phids, transactions, abandoned):
             ("ABC", "C"),
             {
                 "A": [
-                    {"type": "children.remove", "value": ["B"]},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("B",)),
                 ],
                 "B": [
-                    {"type": "children.remove", "value": ["C"]},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("C",)),
                 ],
             },
             set(),
@@ -253,10 +261,10 @@ def test_stack_transactions_with_abandon(phids, transactions, abandoned):
             ("ABC", "C"),
             {
                 "A": [
-                    {"type": "children.remove", "value": ["B"]},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("B",)),
                 ],
                 "B": [
-                    {"type": "children.remove", "value": ["C"]},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("C",)),
                 ],
             },
             {"A"},
@@ -265,7 +273,7 @@ def test_stack_transactions_with_abandon(phids, transactions, abandoned):
             ("ABC", "BC"),
             {
                 "A": [
-                    {"type": "children.remove", "value": ["B"]},
+                    Transaction(TransactionType.CHILDREN_REMOVE, ("B",)),
                 ]
             },
             set(),
@@ -530,12 +538,12 @@ def test_convert_stackgraph_to_linear_fail(stack_graph):
         reorganise.convert_stackgraph_to_linear(stack_graph, phids_to_ids)
 
 
-UNLINK = {"type": "children.set", "value": []}
-ABANDON = {"type": "abandon", "value": True}
+UNLINK = Transaction(TransactionType.CHILDREN_SET, ())
+ABANDON = Transaction(TransactionType.ABANDON, True)
 
 
 def link(child):
-    return {"type": "children.set", "value": [child]}
+    return Transaction(TransactionType.CHILDREN_SET, (child,))
 
 
 def test_apply_order():
@@ -689,8 +697,8 @@ def test_reorg_force_mode(
     m_id2phid.return_value = rev_ids
 
     # Mock return values for transactions
-    m_force_trans.return_value = {"A": [{"type": "children.set", "value": []}]}
-    m_stack_trans.return_value = {"A": [{"type": "children.set", "value": []}]}
+    m_force_trans.return_value = {"A": [Transaction(TransactionType.CHILDREN_SET, ())]}
+    m_stack_trans.return_value = {"A": [Transaction(TransactionType.CHILDREN_SET, ())]}
 
     reorganise.reorganise(git, Args())
 
@@ -766,7 +774,7 @@ VALIDATION_ERROR = (
         # The very first revision fails: nothing has been changed yet, so no
         # partial-reorganisation warning.
         (
-            {"PHID-A": [{"type": "abandon", "value": True}]},
+            {"PHID-A": [Transaction(TransactionType.ABANDON, True)]},
             [ConduitAPIError(VALIDATION_ERROR)],
             f"D314841: Phabricator Error: {VALIDATION_ERROR}",
         ),
@@ -774,8 +782,8 @@ VALIDATION_ERROR = (
         # server-side and isn't rolled back.
         (
             {
-                "PHID-A": [{"type": "abandon", "value": True}],
-                "PHID-B": [{"type": "abandon", "value": True}],
+                "PHID-A": [Transaction(TransactionType.ABANDON, True)],
+                "PHID-B": [Transaction(TransactionType.ABANDON, True)],
             },
             [None, ConduitAPIError(VALIDATION_ERROR)],
             f"PHID-B: Phabricator Error: {VALIDATION_ERROR}\n"
@@ -786,7 +794,7 @@ VALIDATION_ERROR = (
         # The failing PHID has no known revision ID (it wasn't in the
         # `differential.revision.search` response): fall back to the PHID.
         (
-            {"PHID-B": [{"type": "abandon", "value": True}]},
+            {"PHID-B": [Transaction(TransactionType.ABANDON, True)]},
             [ConduitAPIError(VALIDATION_ERROR)],
             f"PHID-B: Phabricator Error: {VALIDATION_ERROR}",
         ),
@@ -862,7 +870,9 @@ def test_apply_transactions_error_names_revision(
             [
                 mock.call(
                     rev_id="PHID-A",
-                    transactions=[{"type": "children.remove", "value": ["PHID-B"]}],
+                    transactions=[
+                        Transaction(TransactionType.CHILDREN_REMOVE, ("PHID-B",))
+                    ],
                 ),
                 mock.call(rev_id="PHID-B", transactions=[link("PHID-A")]),
             ],
@@ -1004,7 +1014,7 @@ def test_force_mode_tolerates_nonlinear_stackgraph(
     m_convert_stackgraph_to_linear.side_effect = exceptions.Error(
         "Revision D99 has multiple children."
     )
-    m_force_trans.return_value = {"A": [{"type": "children.set", "value": []}]}
+    m_force_trans.return_value = {"A": [Transaction(TransactionType.CHILDREN_SET, ())]}
 
     mozphab.conduit.set_repo(git)
     mozphab.conduit.repo.commit_stack = mock.Mock(return_value=commits)
