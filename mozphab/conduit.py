@@ -42,6 +42,7 @@ from .models import (
     ReviewerStatus,
     Revision,
     RevisionStatus,
+    Transaction,
     TransactionType,
 )
 from .profiler import profiler
@@ -720,20 +721,18 @@ class ConduitAPI:
     ) -> dict:
         """Create a new revision in Phabricator."""
         transactions = [
-            {"type": TransactionType.TITLE, "value": commit.revision_title()},
-            {"type": TransactionType.SUMMARY, "value": commit.body},
+            Transaction(TransactionType.TITLE, commit.revision_title()),
+            Transaction(TransactionType.SUMMARY, commit.body),
         ]
         if commit.test_plan:
             transactions.append(
-                {"type": TransactionType.TEST_PLAN, "value": commit.test_plan}
+                Transaction(TransactionType.TEST_PLAN, commit.test_plan)
             )
         if commit.has_reviewers and not commit.wip:
             self.set_initial_revision_reviewers(transactions, commit)
 
         if commit.bug_id:
-            transactions.append(
-                {"type": TransactionType.BUG_ID, "value": commit.bug_id}
-            )
+            transactions.append(Transaction(TransactionType.BUG_ID, commit.bug_id))
 
         return self.edit_revision(
             transactions=transactions,
@@ -752,20 +751,19 @@ class ConduitAPI:
         """Update an existing revision in Phabricator."""
         # Update the title and summary
         transactions = [
-            {"type": TransactionType.TITLE, "value": commit.revision_title()},
-            {
-                "type": TransactionType.SUMMARY,
-                "value": strip_differential_revision(commit.body),
-            },
+            Transaction(TransactionType.TITLE, commit.revision_title()),
+            Transaction(
+                TransactionType.SUMMARY, strip_differential_revision(commit.body)
+            ),
         ]
         if commit.test_plan:
             transactions.append(
-                {"type": TransactionType.TEST_PLAN, "value": commit.test_plan}
+                Transaction(TransactionType.TEST_PLAN, commit.test_plan)
             )
 
         # Add update comment
         if comment:
-            transactions.append({"type": TransactionType.COMMENT, "value": comment})
+            transactions.append(Transaction(TransactionType.COMMENT, comment))
 
         revision = None
 
@@ -783,9 +781,7 @@ class ConduitAPI:
         if commit.bug_id and commit.rev_id:
             revision = revision or self.get_revisions(ids=[commit.rev_id])[0]
             if revision.bug_id != commit.bug_id:
-                transactions.append(
-                    {"type": TransactionType.BUG_ID, "value": commit.bug_id}
-                )
+                transactions.append(Transaction(TransactionType.BUG_ID, commit.bug_id))
 
         return self.edit_revision(
             transactions=transactions,
@@ -797,7 +793,7 @@ class ConduitAPI:
 
     def edit_revision(
         self,
-        transactions: list[dict] | None = None,
+        transactions: list[Transaction] | None = None,
         diff_phid: str | None = None,
         rev_id: int | str | None = None,
         wip: bool | None = False,
@@ -805,17 +801,15 @@ class ConduitAPI:
     ) -> dict:
         """Edit (create or update) a revision."""
         trans = transactions or []
-        post_trans = []
+        post_trans: list[Transaction] = []
 
         # diff_phid is not present for changes in revision settings (like WIP)
         if diff_phid:
-            trans.append({"type": TransactionType.UPDATE, "value": diff_phid})
+            trans.append(Transaction(TransactionType.UPDATE, diff_phid))
 
         # Add revision parents.
         if parent_rev_phid:
-            trans.append(
-                {"type": TransactionType.PARENTS_ADD, "value": [parent_rev_phid]}
-            )
+            trans.append(Transaction(TransactionType.PARENTS_ADD, (parent_rev_phid,)))
 
         existing_status = None
         if rev_id:
@@ -838,10 +832,7 @@ class ConduitAPI:
             # revision, we can add the `plan-changes` transaction to our create call.
             # Existing revisions must make a subsequent API call to set the status to
             # `changes-planned` to match our WIP state.
-            plan_changes_transaction = {
-                "type": TransactionType.PLAN_CHANGES,
-                "value": True,
-            }
+            plan_changes_transaction = Transaction(TransactionType.PLAN_CHANGES, True)
             if existing_status == RevisionStatus.CHANGES_PLANNED:
                 post_trans.append(plan_changes_transaction)
             else:
@@ -855,10 +846,12 @@ class ConduitAPI:
             RevisionStatus.NEEDS_REVIEW,
             RevisionStatus.ACCEPTED,
         ):
-            trans.append({"type": TransactionType.REQUEST_REVIEW, "value": True})
+            trans.append(Transaction(TransactionType.REQUEST_REVIEW, True))
 
         # Call differential.revision.edit
-        api_call_args: dict[str, Any] = {"transactions": trans}
+        api_call_args: dict[str, Any] = {
+            "transactions": [transaction.to_conduit() for transaction in trans]
+        }
         if rev_id:
             api_call_args["objectIdentifier"] = rev_id
         revision = self.call("differential.revision.edit", api_call_args)
@@ -871,7 +864,9 @@ class ConduitAPI:
                 "differential.revision.edit",
                 {
                     "objectIdentifier": rev_id,
-                    "transactions": post_trans,
+                    "transactions": [
+                        transaction.to_conduit() for transaction in post_trans
+                    ],
                 },
             )
 
@@ -1431,19 +1426,19 @@ class ConduitAPI:
         )
 
     def set_initial_revision_reviewers(
-        self, transactions: list[dict[str, Any]], commit: Commit
+        self, transactions: list[Transaction], commit: Commit
     ):
         """Append the reviewers.set transaction used when creating a revision."""
         transactions.append(
-            {
-                "type": TransactionType.REVIEWERS_SET,
-                "value": self.commit_reviewer_transaction_values(commit),
-            }
+            Transaction(
+                TransactionType.REVIEWERS_SET,
+                tuple(self.commit_reviewer_transaction_values(commit)),
+            )
         )
 
     def add_newly_introduced_reviewers(
         self,
-        transactions: list[dict[str, Any]],
+        transactions: list[Transaction],
         commit: Commit,
         revision: Revision,
         diff: RemoteDiff | None = None,
@@ -1453,10 +1448,10 @@ class ConduitAPI:
         additions = self.commit_reviewer_additions(commit, revision, diff)
         if additions.transaction_values_to_add:
             transactions.append(
-                {
-                    "type": TransactionType.REVIEWERS_ADD,
-                    "value": additions.transaction_values_to_add,
-                }
+                Transaction(
+                    TransactionType.REVIEWERS_ADD,
+                    tuple(additions.transaction_values_to_add),
+                )
             )
 
     def check_for_invalid_reviewers(self, reviewers: dict) -> list[dict[str, Any]]:

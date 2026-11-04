@@ -18,6 +18,7 @@ from mozphab.commits import Commit
 from mozphab.conduit import ConduitAPIError
 from mozphab.config import Config
 from mozphab.diff import Diff
+from mozphab.models import Transaction, TransactionType
 from mozphab.user import UserData
 
 from .conftest import search_remote_diff, search_revision
@@ -1374,14 +1375,10 @@ class TestUpdateCommitSummary(unittest.TestCase):
         t = []
 
         expected = [
-            {
-                "type": "reviewers.set",
-                "value": [
-                    "PHID-USER-1",
-                    "blocking(PHID-USER-2)",
-                    "blocking(PHID-USER-3)",
-                ],
-            }
+            Transaction(
+                TransactionType.REVIEWERS_SET,
+                ("PHID-USER-1", "blocking(PHID-USER-2)", "blocking(PHID-USER-3)"),
+            )
         ]
         mozphab.conduit.set_initial_revision_reviewers(t, c)
 
