@@ -265,6 +265,68 @@ def _apply_commits(
             logger.info("%s applied", rev.monogram)
 
 
+def resolve_target_node(
+    repo: Repository,
+    options: PatchOptions,
+    diff_base_node: str | None,
+    base_diff: RemoteDiff,
+) -> str:
+    """Return the node to apply the patches at, as `--apply-to` says.
+
+    `diff_base_node` is the base the first diff recorded, if any.
+    """
+    if options.apply_to == "here":
+        return repo.get_current_node()
+
+    if options.apply_to == "base":
+        if not diff_base_node:
+            raise Error(
+                "Base commit not found in diff. "
+                "Use `--apply-to here` to patch current commit."
+            )
+
+        # The diff's base commit isn't necessarily in the repository: it
+        # can belong to another, unlanded patch stack, or simply have
+        # never been fetched. Resolve it here, so `before_patch` is never
+        # handed a node that can't be checked out.
+        try:
+            with wait_message("Checking base %s.." % short_node(diff_base_node)):
+                return repo.check_node(diff_base_node)
+        except NotFoundError as e:
+            if options.mode is ApplyMode.WORKING_TREE:
+                # Nothing is committed, so there's nothing that could be
+                # rebased from a different base later on.
+                msg = "Unknown revision: %s" % short_node(diff_base_node)
+                if str(e):
+                    msg += "\n%s" % str(e)
+                msg += "\nUse --apply-to to set the base commit."
+                raise Error(msg)
+
+            # Apply at the closest public (landed) commit instead. This is
+            # also where the patch stays: `--apply-to base` has no
+            # separate target to rebase onto.
+            public_base_node = resolve_base_node(
+                repo, diff_base_node, before=base_diff.date_created
+            )
+            if not public_base_node:
+                raise Error(
+                    "Unable to find a commit to apply %s at.\n"
+                    "Use `--apply-to here` to patch the current commit."
+                    % revision_monogram(options.revision_id)
+                )
+            return public_base_node
+
+    # Otherwise `--apply-to` names the commit to apply the patches on top of.
+    try:
+        with wait_message("Checking target %s.." % short_node(options.apply_to)):
+            return repo.check_node(options.apply_to)
+    except NotFoundError as e:
+        msg = "Unknown target revision: %s" % short_node(options.apply_to)
+        if str(e):
+            msg += "\n%s" % str(e)
+        raise Error(msg)
+
+
 def fetch_revision_stack(options: PatchOptions) -> list[Revision] | None:
     """Return the revisions to patch, root first, or `None` if the user stops.
 
@@ -564,55 +626,7 @@ def patch(repo: Repository, args: argparse.Namespace):
     if options.mode is not ApplyMode.PRINT:
         diff_base_node = base_diff.base_ref
 
-        if options.apply_to == "base":
-            if not diff_base_node:
-                raise Error(
-                    "Base commit not found in diff. "
-                    "Use `--apply-to here` to patch current commit."
-                )
-
-            # The diff's base commit isn't necessarily in the repository: it
-            # can belong to another, unlanded patch stack, or simply have
-            # never been fetched. Resolve it here, so `before_patch` is never
-            # handed a node that can't be checked out.
-            try:
-                with wait_message("Checking base %s.." % short_node(diff_base_node)):
-                    target_node = repo.check_node(diff_base_node)
-            except NotFoundError as e:
-                if options.mode is ApplyMode.WORKING_TREE:
-                    # Nothing is committed, so there's nothing that could be
-                    # rebased from a different base later on.
-                    msg = "Unknown revision: %s" % short_node(diff_base_node)
-                    if str(e):
-                        msg += "\n%s" % str(e)
-                    msg += "\nUse --apply-to to set the base commit."
-                    raise Error(msg)
-
-                # Apply at the closest public (landed) commit instead. This is
-                # also where the patch stays: `--apply-to base` has no
-                # separate target to rebase onto.
-                target_node = resolve_base_node(
-                    repo, diff_base_node, before=base_diff.date_created
-                )
-                if not target_node:
-                    raise Error(
-                        "Unable to find a commit to apply %s at.\n"
-                        "Use `--apply-to here` to patch the current commit."
-                        % revision_monogram(options.revision_id)
-                    )
-        elif options.apply_to == "here":
-            target_node = repo.get_current_node()
-        else:
-            try:
-                with wait_message(
-                    "Checking target %s.." % short_node(options.apply_to)
-                ):
-                    target_node = repo.check_node(options.apply_to)
-            except NotFoundError as e:
-                msg = "Unknown target revision: %s" % short_node(options.apply_to)
-                if str(e):
-                    msg += "\n%s" % str(e)
-                raise Error(msg)
+        target_node = resolve_target_node(repo, options, diff_base_node, base_diff)
 
         ref_name = resolve_branch_name(options, rev_id)
         if options.mode is ApplyMode.COMMIT:

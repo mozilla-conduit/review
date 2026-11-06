@@ -1072,3 +1072,39 @@ def test_fetch_revision_stack(m_get_revisions):
         mock.call(ids=[2]),
         mock.call(phids=["PHID-1", "PHID-3"]),
     ], "The ancestors and children should be fetched in a single call."
+
+
+def test_resolve_target_node(repo_mock):
+    repo_mock.get_current_node.return_value = "current"
+    repo_mock.check_node.side_effect = lambda node: f"resolved-{node}"
+    base_diff = RemoteDiff(id=1, phid="PHID-DIFF-1")
+
+    assert (
+        patch.resolve_target_node(
+            repo_mock, patch.PatchOptions(revision_id=1), "base", base_diff
+        )
+        == "resolved-base"
+    ), "`--apply-to base` should apply at the diff's base."
+    assert (
+        patch.resolve_target_node(
+            repo_mock,
+            patch.PatchOptions(revision_id=1, apply_to="here"),
+            None,
+            base_diff,
+        )
+        == "current"
+    ), "`--apply-to here` should apply at the current node."
+    assert (
+        patch.resolve_target_node(
+            repo_mock,
+            patch.PatchOptions(revision_id=1, apply_to="abc"),
+            None,
+            base_diff,
+        )
+        == "resolved-abc"
+    ), "`--apply-to NODE` should apply at the given node."
+
+    with pytest.raises(exceptions.Error, match="Base commit not found in diff"):
+        patch.resolve_target_node(
+            repo_mock, patch.PatchOptions(revision_id=1), None, base_diff
+        )
