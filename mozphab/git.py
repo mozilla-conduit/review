@@ -167,8 +167,8 @@ class Git(Repository):
         return None
 
     def is_index_modified(self) -> bool:
-        """Are there any changes added to the staging area."""
-        return bool(self.git.output(["diff-index", "HEAD"]))
+        """Are there any uncommitted changes to tracked files."""
+        return bool(self.git.output(["status", "--porcelain", "-uno"]))
 
     def is_worktree_clean(self) -> bool:
         return all(

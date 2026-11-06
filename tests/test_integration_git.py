@@ -172,13 +172,16 @@ Differential Revision: http://example.test/D123
 def test_submit_leaves_worktree_untouched(
     in_process, git_repo_path: pathlib.Path, init_sha
 ):
-    """Submit must not touch worktree files or rewrite the index.
+    """Submit must not touch worktree files.
 
     `Git.cleanup` / `Git.finalize` used to `git checkout` the branch
     unconditionally to restore HEAD. Submit never moves HEAD (it rewrites
     commits with `commit-tree` + `update-ref`), so that checkout only ever
-    re-stat'd the worktree and rewrote `.git/index`, which is enough to
-    invalidate a build system's caches on a large tree.
+    re-stat'd the worktree, which is enough to invalidate a build system's
+    caches on a large tree.
+
+    `.git/index` isn't watched: the uncommitted-changes check runs
+    `git status`, which may opportunistically refresh the index.
     """
     call_conduit.reset_mock()
     call_conduit.side_effect = (
@@ -199,8 +202,7 @@ def test_submit_leaves_worktree_untouched(
     git_out("add", ".")
     git_out("commit", "-m", "Bug 1 - mtime test r?alice")
 
-    index = git_repo_path / ".git" / "index"
-    watched = [git_repo_path / "X", index]
+    watched = [git_repo_path / "X"]
     before = {path: path.stat().st_mtime_ns for path in watched}
 
     mozphab.main(["submit", "--yes", "--bug", "1", init_sha], is_development=True)
