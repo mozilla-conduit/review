@@ -15,7 +15,7 @@ from mozphab.config import (
     config,
 )
 from mozphab.exceptions import CommandError, Error, NonLinearException, NotFoundError
-from mozphab.helpers import prepare_body, prompt, short_node
+from mozphab.helpers import assert_never, prepare_body, prompt, short_node
 from mozphab.logger import logger
 from mozphab.mercurial import Mercurial
 from mozphab.models import RemoteDiff, Revision, revision_monogram
@@ -106,6 +106,39 @@ class StackShape:
     # Whether a revision below the requested one has more than one child, in
     # which case `child_phids` is empty.
     children_non_linear: bool = False
+
+
+class FailurePolicy(Enum):
+    """What `patch` does when the patches don't apply at the target."""
+
+    RAISE = "raise"
+    # Apply at the closest public base instead, then rebase onto the target.
+    RETRY = "retry"
+    # Warn before retrying, and ask first unless `--yes` was given.
+    CONFIRM_RETRY = "confirm-retry"
+
+
+@dataclass(frozen=True)
+class PatchPlan:
+    """What `patch` applies, and where, decided before the repository changes."""
+
+    mode: ApplyMode
+    # The revisions to patch, root first.
+    revisions: tuple[Revision, ...]
+    # The diff each revision is patched from, keyed by the revision's PHID.
+    diffs: Mapping[str, RemoteDiff]
+    # The node to apply the patches at, or `""` when printing them.
+    target_node: str = ""
+    refs: PatchRefs = PatchRefs()
+    # The name to give the `refs`, or `None` to create none.
+    ref_name: str | None = None
+    # The base the first diff recorded, and when it was created.
+    diff_base_node: str | None = None
+    diff_base_date: int | None = None
+    on_failure: FailurePolicy = FailurePolicy.RAISE
+    # The branch checked out before patching, if any.
+    original_branch: str | None = None
+    assume_yes: bool = False
 
 
 def find_public_base(repo: Repository, base_node: str) -> str | None:
@@ -233,17 +266,17 @@ def resolve_branch_name(options: PatchOptions, rev_id: int) -> str | None:
     return options.branch_name_template.format(rev_id=rev_id)
 
 
-def _apply_commits(
+def apply_commits(
     repo: Repository,
-    revs: list[Revision],
-    diffs: dict[str, RemoteDiff],
+    plan: PatchPlan,
     raw_diffs: dict[int, str],
     attempt: PatchAttempt,
 ) -> None:
-    """Apply each diff in `revs` as a new commit on the base `attempt` checked out.
+    """Apply each patch in `plan` as a new commit on the base `attempt` checked out.
 
     Raises Error if a patch fails to apply.
     """
+    revs = plan.revisions
     for rev in revs:
         body = prepare_body(
             rev.title,
@@ -251,7 +284,7 @@ def _apply_commits(
             rev.id,
             repo.phab_url,
         )
-        diff = diffs[rev.phid]
+        diff = plan.diffs[rev.phid]
         raw = raw_diffs[rev.id]
         author, date_created = get_diff_author_and_date(diff)
 
@@ -515,6 +548,247 @@ def ask_include_children(
     return include
 
 
+def check_environment(repo: Repository, options: PatchOptions):
+    """Check Phabricator can be reached and, unless printing, the repository."""
+    # The Phabricator ping, the VCS check, and the worktree-cleanness check
+    # are independent: run them concurrently when all three are needed.
+    # When printing only the ping runs, so skip the pool overhead.
+    if options.mode is ApplyMode.PRINT:
+        with wait_message("Checking connection to Phabricator."):
+            if not conduit.check():
+                raise Error("Failed to use Conduit API")
+    else:
+        with wait_message("Checking environment.."):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                ping_future = executor.submit(conduit.check)
+                vcs_future = (
+                    None if options.force_vcs else executor.submit(repo.check_vcs)
+                )
+                clean_future = executor.submit(repo.is_worktree_clean)
+
+                if not ping_future.result():
+                    raise Error("Failed to use Conduit API")
+
+                # Propagate exceptions from repo.check_vcs.
+                if vcs_future:
+                    vcs_future.result()
+
+                if not clean_future.result():
+                    raise Error(
+                        "Uncommitted changes present. Please %s them or commit "
+                        "before patching."
+                        % ("shelve" if isinstance(repo, Mercurial) else "stash")
+                    )
+
+
+def build_patch_plan(
+    repo: Repository, options: PatchOptions, revisions: list[Revision]
+) -> PatchPlan:
+    """Decide what to apply and where, reading but not changing the repository."""
+    with wait_message("Downloading patch information.."):
+        fetched = conduit.get_diffs(
+            phids=[revision.diff_phid for revision in revisions]
+        )
+    diffs = {revision.phid: fetched[revision.diff_phid] for revision in revisions}
+
+    # `--diff-id` patches that diff instead of its revision's latest one.
+    if options.diff_id:
+        diffs = with_requested_diff(diffs, get_diff_by_id(options.diff_id))
+
+    if options.mode is ApplyMode.COMMIT:
+        for revision in revisions:
+            if not diffs[revision.phid].commits:
+                raise Error(
+                    "A diff without commit information detected in revision %s.\n"
+                    "Use `--no-commit` to patch the working tree." % revision.monogram
+                )
+
+    if options.mode is ApplyMode.PRINT:
+        return PatchPlan(mode=options.mode, revisions=tuple(revisions), diffs=diffs)
+
+    base_diff = diffs[revisions[0].phid]
+    diff_base_node = base_diff.base_ref
+    target_node = resolve_target_node(repo, options, diff_base_node, base_diff)
+    ref_name = resolve_branch_name(options, revisions[-1].id)
+
+    if options.mode is not ApplyMode.COMMIT:
+        return PatchPlan(
+            mode=options.mode,
+            revisions=tuple(revisions),
+            diffs=diffs,
+            target_node=target_node,
+            refs=options.refs,
+            ref_name=ref_name,
+            assume_yes=options.yes,
+        )
+
+    if options.apply_to == "base" or not diff_base_node:
+        on_failure = FailurePolicy.RAISE
+    elif options.apply_to == "here" and diff_base_node != target_node:
+        on_failure = FailurePolicy.CONFIRM_RETRY
+    else:
+        on_failure = FailurePolicy.RETRY
+
+    return PatchPlan(
+        mode=options.mode,
+        revisions=tuple(revisions),
+        diffs=diffs,
+        target_node=target_node,
+        refs=options.refs,
+        ref_name=ref_name,
+        diff_base_node=diff_base_node,
+        diff_base_date=base_diff.date_created,
+        on_failure=on_failure,
+        original_branch=repo.get_current_branch(),
+        assume_yes=options.yes,
+    )
+
+
+def download_raw_diffs(plan: PatchPlan) -> dict[int, str]:
+    """Download each revision's raw diff in parallel, keyed by revision ID."""
+    raw_diffs = {}
+    with wait_message("Downloading patches.."):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {}
+            for revision in plan.revisions:
+                diff = plan.diffs[revision.phid]
+                futures[revision.id] = executor.submit(
+                    conduit.call,
+                    "differential.getrawdiff",
+                    {"diffID": diff.id},
+                )
+            try:
+                for revision_id, future in futures.items():
+                    raw_diffs[revision_id] = future.result()
+            except Exception:
+                executor.shutdown(wait=False, cancel_futures=True)
+                raise
+    return raw_diffs
+
+
+def print_patches(repo: Repository, plan: PatchPlan):
+    """Print each patch in the format the VCS imports."""
+    raw_diffs = download_raw_diffs(plan)
+    for revision in plan.revisions:
+        diff = plan.diffs[revision.phid]
+        body = prepare_body(
+            revision.title,
+            revision.summary,
+            revision.id,
+            repo.phab_url,
+        )
+        author, date_created = get_diff_author_and_date(diff)
+
+        # print rather than use logger.info; there's no need for this
+        # to be in our logs.
+        print(repo.format_patch(raw_diffs[revision.id], body, author, date_created))
+
+        if revision.id != plan.revisions[-1].id:
+            logger.info("%s applied", revision.monogram)
+
+
+def apply_to_working_tree(repo: Repository, plan: PatchPlan):
+    """Apply each patch to the working tree at the target, without committing."""
+    repo.before_patch(
+        plan.target_node, plan.refs, plan.ref_name, assume_yes=plan.assume_yes
+    )
+    raw_diffs = download_raw_diffs(plan)
+    for revision in plan.revisions:
+        with wait_message("Applying %s.." % revision.monogram):
+            apply_patch(raw_diffs[revision.id], repo.path)
+        if revision.id != plan.revisions[-1].id:
+            logger.info("%s applied", revision.monogram)
+
+
+def confirm_retry(plan: PatchPlan) -> bool:
+    """Warn that retrying can move the checkout, and ask unless `--yes` was given."""
+    if plan.original_branch:
+        logger.warning(
+            "Retrying may switch you off the current branch %s and "
+            "leave you at the latest landed revision if the retry "
+            "or rebase fails.",
+            plan.original_branch,
+        )
+    else:
+        logger.warning(
+            "Retrying may switch your checkout and leave it at the "
+            "latest landed revision if the retry or rebase fails."
+        )
+    if plan.assume_yes:
+        return True
+
+    retry = prompt(
+        "The patch failed to apply here. Retry at the latest landed "
+        "revision and rebase onto %s" % short_node(plan.target_node),
+        ["No", "Yes"],
+    )
+    return retry == "Yes"
+
+
+def commit_patches(repo: Repository, plan: PatchPlan):
+    """Commit each patch at the target, retrying at a public base if `plan` allows.
+
+    Applying at the target is cheap, and avoids rebuilds from files touched
+    only by a rebase, but it fails when the target and the diff's base have
+    diverged.
+    """
+    attempt = repo.before_patch(
+        plan.target_node, plan.refs, plan.ref_name, assume_yes=plan.assume_yes
+    )
+    raw_diffs = download_raw_diffs(plan)
+
+    try:
+        apply_commits(repo, plan, raw_diffs, attempt)
+        return
+    except Error:
+        base_node = (
+            resolve_base_node(repo, plan.diff_base_node, before=plan.diff_base_date)
+            if plan.on_failure is not FailurePolicy.RAISE and plan.diff_base_node
+            else None
+        )
+        if base_node is None or base_node == plan.target_node:
+            # Nothing else to try: the patch was already applied at the
+            # diff's own base, the diff has no base ref (eg. an older
+            # diff, or a web-UI upload), or no public commit could be
+            # resolved. The original failure is the useful one.
+            raise
+
+        if plan.on_failure is FailurePolicy.CONFIRM_RETRY and not confirm_retry(plan):
+            repo.discard_patch_attempt(
+                attempt,
+                keep_branch=True,
+                original_branch=plan.original_branch,
+            )
+            raise
+
+    logger.warning(
+        "Failed to apply at %s; retrying at %s, then rebasing.",
+        short_node(plan.target_node),
+        short_node(base_node),
+    )
+
+    repo.discard_patch_attempt(attempt)
+    attempt = repo.before_patch(
+        base_node, plan.refs, plan.ref_name, assume_yes=plan.assume_yes
+    )
+    apply_commits(repo, plan, raw_diffs, attempt)
+
+    try:
+        with wait_message("Rebasing to %s.." % short_node(plan.target_node)):
+            repo.rebase_node(base_node, plan.target_node)
+    except CommandError:
+        repo.abort_rebase()
+        message = (
+            "Failed to rebase the patches to %s; they have been left "
+            "applied at %s." % (short_node(plan.target_node), short_node(base_node))
+        )
+        if plan.original_branch:
+            message += " The original branch was %s." % plan.original_branch
+        raise Error(message)
+
+    logger.info("Successfully rebased patches to %s", short_node(plan.target_node))
+
+
 def patch(repo: Repository, args: argparse.Namespace):
     """Patch repository from Phabricator's revisions.
 
@@ -552,216 +826,30 @@ def patch(repo: Repository, args: argparse.Namespace):
     * Error if `--diff-id` does not belong to any revision in the stack
     """
     options = PatchOptions.from_args(args, config)
+    check_environment(repo, options)
 
-    # The Phabricator ping, the VCS check, and the worktree-cleanness check
-    # are independent: run them concurrently when all three are needed.
-    # When printing only the ping runs, so skip the pool overhead.
-    if options.mode is ApplyMode.PRINT:
-        with wait_message("Checking connection to Phabricator."):
-            if not conduit.check():
-                raise Error("Failed to use Conduit API")
-    else:
-        with wait_message("Checking environment.."):
-            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-                ping_future = executor.submit(conduit.check)
-                vcs_future = (
-                    None if options.force_vcs else executor.submit(repo.check_vcs)
-                )
-                clean_future = executor.submit(repo.is_worktree_clean)
-
-                if not ping_future.result():
-                    raise Error("Failed to use Conduit API")
-
-                # Propagate exceptions from repo.check_vcs.
-                if vcs_future:
-                    vcs_future.result()
-
-                if not clean_future.result():
-                    raise Error(
-                        "Uncommitted changes present. Please %s them or commit "
-                        "before patching."
-                        % ("shelve" if isinstance(repo, Mercurial) else "stash")
-                    )
-
-    revs = fetch_revision_stack(options)
-    if revs is None:
+    revisions = fetch_revision_stack(options)
+    if revisions is None:
         return
-
-    # Set the target id
-    rev_id = revs[-1].id
 
     logger.info(
         "Patching revision%s: %s",
-        "s" if len(revs) > 1 else "",
-        " ".join(rev.monogram for rev in revs),
+        "s" if len(revisions) > 1 else "",
+        " ".join(revision.monogram for revision in revisions),
     )
 
-    # Pull diffs
-    with wait_message("Downloading patch information.."):
-        fetched = conduit.get_diffs(phids=[r.diff_phid for r in revs])
-    # The diff each revision is patched from, keyed by the revision's PHID.
-    diffs = {rev.phid: fetched[rev.diff_phid] for rev in revs}
+    plan = build_patch_plan(repo, options, revisions)
+    match plan.mode:
+        case ApplyMode.PRINT:
+            print_patches(repo, plan)
+        case ApplyMode.WORKING_TREE:
+            apply_to_working_tree(repo, plan)
+        case ApplyMode.COMMIT:
+            commit_patches(repo, plan)
+        case _:
+            assert_never(plan.mode)
 
-    # `--diff-id` patches that diff instead of its revision's latest one.
-    if options.diff_id:
-        diffs = with_requested_diff(diffs, get_diff_by_id(options.diff_id))
-
-    if options.mode is ApplyMode.COMMIT:
-        for rev in revs:
-            diff = diffs[rev.phid]
-            if not diff.commits:
-                raise Error(
-                    "A diff without commit information detected in revision %s.\n"
-                    "Use `--no-commit` to patch the working tree." % rev.monogram
-                )
-
-    target_node = ""
-    current_branch = None
-    ref_name = None
-    attempt = PatchAttempt(target_node)
-
-    base_diff = diffs[revs[0].phid]
-    diff_base_node = None
-
-    if options.mode is not ApplyMode.PRINT:
-        diff_base_node = base_diff.base_ref
-
-        target_node = resolve_target_node(repo, options, diff_base_node, base_diff)
-
-        ref_name = resolve_branch_name(options, rev_id)
-        if options.mode is ApplyMode.COMMIT:
-            current_branch = repo.get_current_branch()
-
-        attempt = repo.before_patch(
-            target_node, options.refs, ref_name, assume_yes=options.yes
-        )
-
-    # Fetch raw diffs in parallel.
-    raw_diffs = {}
-    with wait_message("Downloading patches.."):
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {}
-            for rev in revs:
-                diff = diffs[rev.phid]
-                futures[rev.id] = executor.submit(
-                    conduit.call,
-                    "differential.getrawdiff",
-                    {"diffID": diff.id},
-                )
-            try:
-                for rev_id_key, future in futures.items():
-                    raw_diffs[rev_id_key] = future.result()
-            except Exception:
-                executor.shutdown(wait=False, cancel_futures=True)
-                raise
-
-    if options.mode is ApplyMode.WORKING_TREE:
-        for rev in revs:
-            raw = raw_diffs[rev.id]
-            with wait_message("Applying %s.." % rev.monogram):
-                apply_patch(raw, repo.path)
-            if rev.id != revs[-1].id:
-                logger.info("%s applied", rev.monogram)
-
-    elif options.mode is ApplyMode.PRINT:
-        for rev in revs:
-            diff = diffs[rev.phid]
-            raw = raw_diffs[rev.id]
-            body = prepare_body(
-                rev.title,
-                rev.summary,
-                rev.id,
-                repo.phab_url,
-            )
-            author, date_created = get_diff_author_and_date(diff)
-
-            # print rather than use logger.info; there's no need for this
-            # to be in our logs.
-            print(repo.format_patch(raw, body, author, date_created))
-
-            if rev.id != revs[-1].id:
-                logger.info("%s applied", rev.monogram)
-
-    else:
-        # Applying at the target is cheap, and avoids rebuilds from files
-        # touched only by a rebase, but it fails when the target and the
-        # diff's base have diverged.
-        try:
-            _apply_commits(repo, revs, diffs, raw_diffs, attempt)
-        except Error:
-            base_node = (
-                resolve_base_node(repo, diff_base_node, before=base_diff.date_created)
-                if options.apply_to != "base" and diff_base_node
-                else None
-            )
-            can_retry = base_node is not None and base_node != target_node
-            if (
-                options.apply_to == "here"
-                and diff_base_node
-                and diff_base_node != target_node
-                and can_retry
-            ):
-                if current_branch:
-                    logger.warning(
-                        "Retrying may switch you off the current branch %s and "
-                        "leave you at the latest landed revision if the retry "
-                        "or rebase fails.",
-                        current_branch,
-                    )
-                else:
-                    logger.warning(
-                        "Retrying may switch your checkout and leave it at the "
-                        "latest landed revision if the retry or rebase fails."
-                    )
-                if not options.yes:
-                    retry = prompt(
-                        "The patch failed to apply here. Retry at the latest landed "
-                        "revision and rebase onto %s" % short_node(target_node),
-                        ["No", "Yes"],
-                    )
-                    if retry != "Yes":
-                        repo.discard_patch_attempt(
-                            attempt,
-                            keep_branch=True,
-                            original_branch=current_branch,
-                        )
-                        raise
-
-            if base_node is None or base_node == target_node:
-                # Nothing else to try: the patch was already applied at the
-                # diff's own base, the diff has no base ref (eg. an older
-                # diff, or a web-UI upload), or no public commit could be
-                # resolved. The original failure is the useful one.
-                raise
-
-            logger.warning(
-                "Failed to apply at %s; retrying at %s, then rebasing.",
-                short_node(target_node),
-                short_node(base_node),
-            )
-
-            repo.discard_patch_attempt(attempt)
-            attempt = repo.before_patch(
-                base_node, options.refs, ref_name, assume_yes=options.yes
-            )
-            _apply_commits(repo, revs, diffs, raw_diffs, attempt)
-
-            try:
-                with wait_message("Rebasing to %s.." % short_node(target_node)):
-                    repo.rebase_node(base_node, target_node)
-            except CommandError:
-                repo.abort_rebase()
-                message = (
-                    "Failed to rebase the patches to %s; they have been left "
-                    "applied at %s." % (short_node(target_node), short_node(base_node))
-                )
-                if current_branch:
-                    message += " The original branch was %s." % current_branch
-                raise Error(message)
-
-            logger.info("Successfully rebased patches to %s", short_node(target_node))
-
-    logger.warning("%s applied", revision_monogram(rev_id))
+    logger.warning("%s applied", revisions[-1].monogram)
 
 
 def check_revision_id(value: str) -> int:

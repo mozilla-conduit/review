@@ -15,6 +15,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from itertools import zip_longest
 from shutil import which
+from typing import NoReturn
 
 from mozphab import environment
 from mozphab.profiler import Category, MarkerType, profiler
@@ -71,6 +72,14 @@ DONTBUILD_RE = re.compile(r"\s*\(?DONTBUILD\)?(?:\s*\(NPOTB\))?")
 
 
 VALID_EMAIL_RE = re.compile(r"[^@ \t\r\n]+@[^@ \t\r\n]+\.[^@ \t\r\n]+")
+
+
+def assert_never(value: NoReturn) -> NoReturn:
+    """Fail type checking, and raise at runtime, if a `match` misses a case.
+
+    Replace with `typing.assert_never` once Python 3.11 is the minimum version.
+    """
+    raise AssertionError(f"Unhandled value: {value!r}")
 
 
 def which_path(path: str) -> str | None:

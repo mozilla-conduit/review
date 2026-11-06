@@ -1108,3 +1108,35 @@ def test_resolve_target_node(repo_mock):
         patch.resolve_target_node(
             repo_mock, patch.PatchOptions(revision_id=1), None, base_diff
         )
+
+
+@pytest.mark.parametrize(
+    "apply_to, diff_base_node, expected",
+    [
+        ("base", "base-node", patch.FailurePolicy.RAISE),
+        ("here", None, patch.FailurePolicy.RAISE),
+        ("here", "base-node", patch.FailurePolicy.CONFIRM_RETRY),
+        ("here", "current", patch.FailurePolicy.RETRY),
+        ("abc", "base-node", patch.FailurePolicy.RETRY),
+    ],
+)
+@mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
+def test_build_patch_plan_failure_policy(
+    m_get_diffs, repo_mock, apply_to, diff_base_node, expected
+):
+    """`--apply-to` decides whether a failed patch is retried at a public base."""
+    repo_mock.get_current_node.return_value = "current"
+    repo_mock.check_node.side_effect = lambda node: node
+    repo_mock.get_current_branch.return_value = "feature"
+    m_get_diffs.return_value = {
+        "DIFFPHID-1": dataclasses.replace(DIFF_1, base_ref=diff_base_node)
+    }
+
+    plan = patch.build_patch_plan(
+        repo_mock, patch.PatchOptions(revision_id=1, apply_to=apply_to), [REV_1]
+    )
+
+    assert (
+        plan.on_failure is expected
+    ), f"`--apply-to {apply_to}` should give the {expected.name} failure policy."
+    assert plan.original_branch == "feature", "The current branch should be kept."
