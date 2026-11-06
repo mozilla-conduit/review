@@ -752,6 +752,81 @@ description
 
 
 @pytest.mark.parametrize(
+    "current_message,amended",
+    (
+        ("title\n\ndescription", False),
+        ("title\n\nold description", True),
+        ("title", True),
+    ),
+)
+@mock.patch("mozphab.git.Git._commit_tree")
+@mock.patch("mozphab.git.Git.git_out_text")
+def test_amend_commit_skips_unchanged_message(
+    m_git_out_text, m_commit_tree, git, current_message, amended
+):
+    m_git_out_text.return_value = current_message
+    commit = Commit(
+        name="abc",
+        node="abcdef",
+        title="title",
+        body="description",
+        parent="parent",
+        tree_hash="tree",
+        author_name="Conduit User",
+        author_email="conduit@mozilla.bugs",
+        author_date="Tue, 22 Jan 2019 13:42:48 +0000",
+    )
+
+    git.amend_commit(commit, [commit])
+
+    m_git_out_text.assert_called_once_with(
+        ["show", "-s", "--format=%s%n%n%b", "abcdef"]
+    )
+    assert m_commit_tree.called == amended
+    if amended:
+        assert m_commit_tree.call_args.args[2] == "title\n\ndescription"
+
+
+@pytest.mark.parametrize(
+    "description,expected_message",
+    (
+        ("title\n\ndescription\n", "title\n\ndescription"),
+        ("title\n", "title"),
+    ),
+)
+@mock.patch("mozphab.git.Git.git_call")
+@mock.patch("mozphab.git.Git._commit_tree")
+@mock.patch("mozphab.git.Git._get_commits_info")
+def test_rebase_branch_keeps_commit_message(
+    m_get_commits_info, m_commit_tree, m_git_call, git, description, expected_message
+):
+    m_get_commits_info.return_value = [
+        """\
+Tue, 22 Jan 2019 13:42:48 +0000
+Conduit User
+conduit@mozilla.bugs
+4912923
+b18312ffe929d3482f1d7b1e9716a1885c7a61b8
+aaa000aaa000aaa000aaa000aaa000aaa000aaa0
+"""
+        + description
+    ]
+    m_commit_tree.return_value = "new_node"
+
+    git._rebase_branch("refs/heads/topic", "new_base", "upstream")
+
+    m_commit_tree.assert_called_once_with(
+        "new_base",
+        "b18312ffe929d3482f1d7b1e9716a1885c7a61b8",
+        expected_message,
+        "Conduit User",
+        "conduit@mozilla.bugs",
+        "Tue, 22 Jan 2019 13:42:48 +0000",
+    )
+    m_git_call.assert_called_once_with(["update-ref", "refs/heads/topic", "new_node"])
+
+
+@pytest.mark.parametrize(
     "cinnabar_required,remotes,unified_head",
     (
         (True, ["origin"], "remotes/origin/bookmarks/beta"),

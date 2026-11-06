@@ -16,6 +16,7 @@ ARC_COMMIT_DESC_TEMPLATE = """
 {title}
 
 Summary:
+
 {body}
 
 Test Plan:
@@ -108,6 +109,9 @@ class Commit:
 
     @property
     def message(self) -> str:
+        """Return the full commit message: the title and body separated by a blank line."""
+        if not self.body:
+            return self.title
         return f"{self.title}\n\n{self.body}"
 
     def to_dict(self) -> dict:

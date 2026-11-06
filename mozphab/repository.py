@@ -251,7 +251,8 @@ class Repository(object):
             node          SHA1 in stack
             orig-node     an original SHA1 of the commit
             title         first line of commit description (unaltered)
-            body          commit description, excluding first line
+            body          commit description, excluding the first line and the
+                          blank line after it (no leading or trailing blank lines)
             title-preview title with bug-id and reviewer modifications
             bug-id        bmo bug-id
             bug-id-orig   original bug-id from commit desc

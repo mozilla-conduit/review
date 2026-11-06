@@ -258,7 +258,7 @@ class Jujutsu(Repository):
                     submit=True,
                     title=desc[0],
                     title_preview=desc[0],
-                    body="\n".join(desc[1:]).rstrip(),
+                    body="\n".join(desc[1:]).lstrip("\n").rstrip(),
                     bug_id=None,
                     reviewers={"request": [], "granted": []},
                     rev_id=None,
@@ -310,7 +310,7 @@ class Jujutsu(Repository):
             commit: Information about the commit to be amended
             commits: List of commits within the stack
         """
-        updated_message = f"{commit.title}\n{commit.body}"
+        updated_message = commit.message
 
         # # TODO: apply this optimization
         # current_body = self.git_out(

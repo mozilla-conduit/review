@@ -162,8 +162,8 @@ def amend_revision_url(body: str, new_url: str) -> str:
     """Append or replace the Differential Revision URL in a commit body."""
     body = strip_differential_revision(body)
     if body:
-        body += "\n"
-    body += "\nDifferential Revision: %s" % new_url
+        body += "\n\n"
+    body += "Differential Revision: %s" % new_url
     return body
 
 

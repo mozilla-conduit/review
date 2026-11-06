@@ -82,3 +82,12 @@ def test_commit_to_dict_defaults_are_serializable():
     assert commit_dict["rev_id"] is None
     assert commit_dict["submit"] is False
     assert commit_dict["test_plan"] == ""
+
+
+def test_commit_message_joins_title_and_body_with_a_blank_line():
+    commit = Commit(title="title", body="description\n\nmore")
+    assert commit.message == "title\n\ndescription\n\nmore"
+
+
+def test_commit_message_of_a_title_only_commit_is_the_title():
+    assert Commit(title="title").message == "title"

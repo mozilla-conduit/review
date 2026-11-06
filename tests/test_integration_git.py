@@ -898,7 +898,7 @@ def test_submit_update_uplift(in_process, git_repo_path: pathlib.Path, init_sha)
                 {"type": "title", "value": "Bug 1 - Ą"},
                 {
                     "type": "summary",
-                    "value": "\nOriginal Revision: http://example.test/D999",
+                    "value": "Original Revision: http://example.test/D999",
                 },
                 {"type": "update", "value": "PHID-DIFF-2"},
             ],
@@ -1315,7 +1315,7 @@ def test_uplift_create(
                 {"type": "title", "value": "Bug 1 - Ą"},
                 {
                     "type": "summary",
-                    "value": "\nOriginal Revision: http://example.test/D1",
+                    "value": "Original Revision: http://example.test/D1",
                 },
                 {"type": "bugzilla.bug-id", "value": "1"},
                 {"type": "update", "value": "PHID-DIFF-2"},
@@ -1369,13 +1369,11 @@ def test_empty_file(in_process, git_repo_path: pathlib.Path, init_sha):
 
     mozphab.main(["submit", "--yes", "--bug", "1", init_sha], is_development=True)
 
-    log = git_out("log", "--format=%s%n%n%b", "-1")
-    expected = """
-Bug 1 - A
-
-Differential Revision: http://example.test/D123
-"""
-    assert log.strip() == expected.strip()
+    # Check the raw message: `%b` would hide a stray blank line after the title.
+    assert (
+        git_out("log", "--format=%B", "-1")
+        == "Bug 1 - A\n\nDifferential Revision: http://example.test/D123\n"
+    )
     assert (
         mock.call(
             "differential.creatediff",

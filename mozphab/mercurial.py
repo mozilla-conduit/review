@@ -560,7 +560,7 @@ class Mercurial(Repository):
                     orig_node=node,
                     title=desc[0],
                     title_preview=desc[0],
-                    body="\n".join(desc[1:]).rstrip(),
+                    body="\n".join(desc[1:]).lstrip("\n").rstrip(),
                     bug_id=None,
                     reviewers={"request": [], "granted": []},
                     rev_id=None,
@@ -753,7 +753,7 @@ class Mercurial(Repository):
             parent = commit
 
     def amend_commit(self, commit: Commit, commits: list[Commit]):
-        updated_body = "%s\n%s" % (commit.title, commit.body)
+        updated_body = commit.message
         current_body = self.hg_out_text(["log", "-T", "{desc}", "-r", commit.node])
         if current_body == updated_body:
             logger.debug("not amending commit %s, unchanged", commit.name)

@@ -137,7 +137,7 @@ class Helpers(unittest.TestCase):
 
     def test_amend_commit_message_body_with_new_revision_url(self):
         self.assertEqual(
-            "\nDifferential Revision: http://phabricator.test/D123",
+            "Differential Revision: http://phabricator.test/D123",
             submit.amend_revision_url("", "http://phabricator.test/D123"),
         )
         self.assertEqual(
@@ -145,9 +145,9 @@ class Helpers(unittest.TestCase):
             submit.amend_revision_url("title", "http://phabricator.test/D123"),
         )
         self.assertEqual(
-            "\nDifferential Revision: http://phabricator.test/D123",
+            "Differential Revision: http://phabricator.test/D123",
             submit.amend_revision_url(
-                "\nDifferential Revision: http://phabricator.test/D999",
+                "Differential Revision: http://phabricator.test/D999",
                 "http://phabricator.test/D123",
             ),
         )

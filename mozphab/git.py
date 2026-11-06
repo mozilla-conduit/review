@@ -543,7 +543,7 @@ class Git(Repository):
             submit=True,
             title=desc[0],
             title_preview=desc[0],
-            body="\n".join(desc[1:]).rstrip(),
+            body="\n".join(desc[1:]).lstrip("\n").rstrip(),
             bug_id=None,
             reviewers={"request": [], "granted": []},
             rev_id=None,
@@ -812,9 +812,13 @@ class Git(Repository):
             commit: Information about the commit to be amended
             commits: List of commits within the stack
         """
-        updated_body = f"{commit.title}\n{commit.body}"
+        updated_body = commit.message
 
-        current_body = self.git_out_text(["show", "-s", "--format=%s%n%b", commit.node])
+        # `%b` omits the blank line after the subject, so ask for one explicitly
+        # to get the same form as `Commit.message`.
+        current_body = self.git_out_text(
+            ["show", "-s", "--format=%s%n%n%b", commit.node]
+        )
         if current_body == updated_body:
             logger.debug("not amending commit %s, unchanged", commit.name)
             return
@@ -845,7 +849,7 @@ class Git(Repository):
             new_parent_sha = self._commit_tree(
                 new_parent_sha,
                 stack_commit.tree_hash,
-                f"{stack_commit.title}\n{stack_commit.body}",
+                stack_commit.message,
                 stack_commit.author_name,
                 stack_commit.author_email,
                 stack_commit.author_date,
