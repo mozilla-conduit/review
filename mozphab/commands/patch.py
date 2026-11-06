@@ -347,6 +347,94 @@ def _apply_commits(
             logger.info("%s applied", rev.monogram)
 
 
+def fetch_revision_stack(options: PatchOptions) -> list[Revision] | None:
+    """Return the revisions to patch, root first, or `None` if the user stops.
+
+    Asks whether to include the children of the requested revision, unless
+    `--yes` or `patch.always_full_stack` says to.
+    """
+    # Get the target revision
+    with wait_message("Fetching %s.." % revision_monogram(options.revision_id)):
+        revs = conduit.get_revisions(ids=[options.revision_id])
+
+    if not revs:
+        raise Error("Revision not found")
+
+    revision = revs[0]
+
+    if options.skip_dependencies:
+        return revs
+
+    # Use the stackGraph field from the revision to determine
+    # ancestors and children without extra API calls.
+    stack_graph = revision.stack_graph
+
+    try:
+        children_phids = _get_children_from_stack_graph(stack_graph, revision.phid)
+        non_linear = False
+    except NonLinearException:
+        children_phids = []
+        non_linear = True
+
+    try:
+        ancestor_phids = _get_ancestors_from_stack_graph(stack_graph, revision.phid)
+    except NonLinearException:
+        raise Error("Non linear dependency detected. Unable to patch the stack.")
+
+    # Fetch all related revisions to get metadata and filter out
+    # abandoned or inaccessible ones.
+    ancestor_phids, children_phids, related_by_phid = _fetch_and_filter_related(
+        ancestor_phids, children_phids, options.include_abandoned
+    )
+
+    patch_children = True
+    if children_phids:
+        if options.yes or options.always_full_stack:
+            patch_children = True
+
+        else:
+            children_msg = (
+                "a child commit" if len(children_phids) == 1 else "child commits"
+            )
+            res = prompt(
+                "Revision %s has %s.  Would you like to patch the "
+                "full stack?." % (revision_monogram(options.revision_id), children_msg),
+                ["Yes", "No", "Always"],
+            )
+            if res == "Always":
+                config.always_full_stack = True
+                config.write()
+
+            patch_children = res == "Yes" or res == "Always"
+
+        if patch_children:
+            if non_linear and not options.yes:
+                logger.warning(
+                    "Revision %s has a non-linear successor graph.\n"
+                    "Unable to apply the full stack.",
+                    revision_monogram(options.revision_id),
+                )
+                res = prompt("Continue with only part of the stack?", ["Yes", "No"])
+                if res == "No":
+                    return None
+
+    # Build the final revisions list from already-fetched data.
+    child_phids = children_phids if (children_phids and patch_children) else []
+
+    if ancestor_phids or child_phids:
+        ancestor_revs = [related_by_phid[p] for p in ancestor_phids]
+        child_revs = [related_by_phid[p] for p in child_phids]
+
+        if ancestor_revs:
+            revs.extend(ancestor_revs)
+            revs.reverse()
+
+        if child_revs:
+            revs.extend(child_revs)
+
+    return revs
+
+
 def patch(repo: Repository, args: argparse.Namespace):
     """Patch repository from Phabricator's revisions.
 
@@ -415,83 +503,9 @@ def patch(repo: Repository, args: argparse.Namespace):
                         % ("shelve" if isinstance(repo, Mercurial) else "stash")
                     )
 
-    # Get the target revision
-    with wait_message("Fetching %s.." % revision_monogram(options.revision_id)):
-        revs = conduit.get_revisions(ids=[options.revision_id])
-
-    if not revs:
-        raise Error("Revision not found")
-
-    revision = revs[0]
-
-    if not options.skip_dependencies:
-        # Use the stackGraph field from the revision to determine
-        # ancestors and children without extra API calls.
-        stack_graph = revision.stack_graph
-
-        try:
-            children_phids = _get_children_from_stack_graph(stack_graph, revision.phid)
-            non_linear = False
-        except NonLinearException:
-            children_phids = []
-            non_linear = True
-
-        try:
-            ancestor_phids = _get_ancestors_from_stack_graph(stack_graph, revision.phid)
-        except NonLinearException:
-            raise Error("Non linear dependency detected. Unable to patch the stack.")
-
-        # Fetch all related revisions to get metadata and filter out
-        # abandoned or inaccessible ones.
-        ancestor_phids, children_phids, related_by_phid = _fetch_and_filter_related(
-            ancestor_phids, children_phids, options.include_abandoned
-        )
-
-        patch_children = True
-        if children_phids:
-            if options.yes or options.always_full_stack:
-                patch_children = True
-
-            else:
-                children_msg = (
-                    "a child commit" if len(children_phids) == 1 else "child commits"
-                )
-                res = prompt(
-                    "Revision %s has %s.  Would you like to patch the "
-                    "full stack?."
-                    % (revision_monogram(options.revision_id), children_msg),
-                    ["Yes", "No", "Always"],
-                )
-                if res == "Always":
-                    config.always_full_stack = True
-                    config.write()
-
-                patch_children = res == "Yes" or res == "Always"
-
-            if patch_children:
-                if non_linear and not options.yes:
-                    logger.warning(
-                        "Revision %s has a non-linear successor graph.\n"
-                        "Unable to apply the full stack.",
-                        revision_monogram(options.revision_id),
-                    )
-                    res = prompt("Continue with only part of the stack?", ["Yes", "No"])
-                    if res == "No":
-                        return
-
-        # Build the final revisions list from already-fetched data.
-        child_phids = children_phids if (children_phids and patch_children) else []
-
-        if ancestor_phids or child_phids:
-            ancestor_revs = [related_by_phid[p] for p in ancestor_phids]
-            child_revs = [related_by_phid[p] for p in child_phids]
-
-            if ancestor_revs:
-                revs.extend(ancestor_revs)
-                revs.reverse()
-
-            if child_revs:
-                revs.extend(child_revs)
+    revs = fetch_revision_stack(options)
+    if revs is None:
+        return
 
     # Set the target id
     rev_id = revs[-1].id

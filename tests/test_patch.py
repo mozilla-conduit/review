@@ -1006,3 +1006,21 @@ def test_patch_force_vcs_skips_the_vcs_check(_check, force_vcs):
     assert (
         repo.check_vcs.called != force_vcs
     ), "The VCS should be checked unless `--force-vcs` is given."
+
+
+@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+def test_fetch_revision_stack(m_get_revisions):
+    stack_graph = {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-2"]}
+    target = with_stack_graph(REV_2, stack_graph)
+
+    m_get_revisions.return_value = [target]
+    assert patch.fetch_revision_stack(
+        patch.PatchOptions(revision_id=2, skip_dependencies=True)
+    ) == [target], "`--skip-dependencies` should only patch the requested revision."
+
+    m_get_revisions.side_effect = ([target], [REV_1, REV_3])
+    assert patch.fetch_revision_stack(patch.PatchOptions(revision_id=2, yes=True)) == [
+        REV_1,
+        target,
+        REV_3,
+    ], "The ancestors and children should be patched in stack order, root first."
