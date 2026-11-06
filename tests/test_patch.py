@@ -54,13 +54,20 @@ def test_patch_options_from_args():
     ), "`patch.always_full_stack` should be read into the options."
 
     options = patch.PatchOptions.from_args(patch_args(no_commit=True), config)
-    assert not options.create_commit, "`--no-commit` should disable committing."
+    assert (
+        options.mode is patch.ApplyMode.WORKING_TREE
+    ), "`--no-commit` should apply the patches to the working tree."
+
+    options = patch.PatchOptions.from_args(patch_args(raw=True, no_commit=True), config)
+    assert (
+        options.mode is patch.ApplyMode.PRINT
+    ), "`--raw` should print the patches even when not committing."
 
     config.create_commit = False
     options = patch.PatchOptions.from_args(patch_args(), config)
     assert (
-        not options.create_commit
-    ), "`patch.create_commit = False` should disable committing."
+        options.mode is patch.ApplyMode.WORKING_TREE
+    ), "`patch.create_commit = False` should apply the patches to the working tree."
 
     config.branch_name_template = "phab/D{rev_id}"
     options = patch.PatchOptions.from_args(patch_args(), config)
@@ -90,7 +97,7 @@ def test_resolve_branch_name():
         patch.resolve_branch_name(options, rev_id) == "branch"
     ), "Branch name passed via args should take precedent."
 
-    options = patch.PatchOptions(revision_id=123, create_commit=False)
+    options = patch.PatchOptions(revision_id=123, mode=patch.ApplyMode.WORKING_TREE)
     assert (
         patch.resolve_branch_name(options, rev_id) is None
     ), "No branch name should be used when not creating a commit."

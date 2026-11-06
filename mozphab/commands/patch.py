@@ -7,6 +7,7 @@ import concurrent.futures
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import Enum
 
 from mozphab.conduit import conduit
 from mozphab.config import (
@@ -27,14 +28,27 @@ from mozphab.repository import (
 from mozphab.spinner import wait_message
 
 
+class ApplyMode(Enum):
+    """How `patch` applies the patches it downloads."""
+
+    # Commit each patch, the default.
+    COMMIT = "commit"
+
+    # Apply the patches to the working tree without committing them, from
+    # `--no-commit` or `patch.create_commit = False`.
+    WORKING_TREE = "working-tree"
+
+    # Print the patches rather than applying them, from `--raw`.
+    PRINT = "print"
+
+
 @dataclass(frozen=True)
 class PatchOptions:
     """The command line flags and config knobs that control `patch`, resolved once."""
 
     revision_id: int
     diff_id: int | None = None
-    raw: bool = False
-    create_commit: bool = True
+    mode: ApplyMode = ApplyMode.COMMIT
     # Where to apply the patches: `base`, `here` or a node.
     apply_to: str = "base"
     name: str | None = None
@@ -51,11 +65,18 @@ class PatchOptions:
     @classmethod
     def from_args(cls, args: argparse.Namespace, config: Config) -> "PatchOptions":
         """Build the options from the parsed command line and the user's config."""
+        # `--raw` overrides not committing.
+        if args.raw:
+            mode = ApplyMode.PRINT
+        elif args.no_commit or not config.create_commit:
+            mode = ApplyMode.WORKING_TREE
+        else:
+            mode = ApplyMode.COMMIT
+
         return cls(
             revision_id=args.revision_id,
             diff_id=args.diff_id,
-            raw=args.raw,
-            create_commit=not args.no_commit and config.create_commit,
+            mode=mode,
             apply_to=args.apply_to or config.apply_patch_to,
             name=args.name,
             branch_name_template=config.branch_name_template,
@@ -189,8 +210,8 @@ def resolve_branch_name(options: PatchOptions, rev_id: int) -> str | None:
         # Return the value passed from the CLI.
         return options.name
 
-    if not options.create_commit:
-        # `no_commit` implies no branch name.
+    if options.mode is not ApplyMode.COMMIT:
+        # Nothing is committed, so there's no branch to name.
         return None
 
     # Build the branch name from the configured template.
@@ -335,14 +356,15 @@ def patch(repo: Repository, args: argparse.Namespace):
     * create a new branch/bookmark/topic
     * apply the patches and commit the changes
 
-    options.create_commit is False - no commit will be created after applying
-        diffs; patches are applied directly at the target, without any of the
-        base-resolution or rebasing described below.
+    options.mode - how the patches are applied:
+        COMMIT - commit each patch, as described below
+        WORKING_TREE - apply the patches to the working tree at the target,
+            without any of the base-resolution or rebasing described below
+        PRINT - only print out the diffs
     options.apply_to - <base|here|NODE> (default: base)
         base - apply on top of the diff's own base commit
         here - apply on top of the current commit/checkout
         NODE - apply on top of the given commit
-    options.raw is True - only print out the diffs (--force doesn't change anything)
 
     The patch is applied directly at the target above whenever that's possible.
     When creating commits and it isn't -- the diff's base commit is missing
@@ -365,8 +387,8 @@ def patch(repo: Repository, args: argparse.Namespace):
 
     # The Phabricator ping, the VCS check, and the worktree-cleanness check
     # are independent: run them concurrently when all three are needed.
-    # In --raw mode only the ping runs, so skip the pool overhead.
-    if options.raw:
+    # When printing only the ping runs, so skip the pool overhead.
+    if options.mode is ApplyMode.PRINT:
         with wait_message("Checking connection to Phabricator."):
             if not conduit.check():
                 raise Error("Failed to use Conduit API")
@@ -490,7 +512,7 @@ def patch(repo: Repository, args: argparse.Namespace):
     if options.diff_id:
         diffs = with_requested_diff(diffs, get_diff_by_id(options.diff_id))
 
-    if options.create_commit and not options.raw:
+    if options.mode is ApplyMode.COMMIT:
         for rev in revs:
             diff = diffs[rev.phid]
             if not diff.commits:
@@ -507,7 +529,7 @@ def patch(repo: Repository, args: argparse.Namespace):
     base_diff = diffs[revs[0].phid]
     diff_base_node = None
 
-    if not options.raw:
+    if options.mode is not ApplyMode.PRINT:
         diff_base_node = base_diff.base_ref
 
         if options.apply_to == "base":
@@ -525,7 +547,7 @@ def patch(repo: Repository, args: argparse.Namespace):
                 with wait_message("Checking base %s.." % short_node(diff_base_node)):
                     target_node = repo.check_node(diff_base_node)
             except NotFoundError as e:
-                if not options.create_commit:
+                if options.mode is ApplyMode.WORKING_TREE:
                     # Nothing is committed, so there's nothing that could be
                     # rebased from a different base later on.
                     msg = "Unknown revision: %s" % short_node(diff_base_node)
@@ -561,7 +583,7 @@ def patch(repo: Repository, args: argparse.Namespace):
                 raise Error(msg)
 
         ref_name = resolve_branch_name(options, rev_id)
-        if options.create_commit:
+        if options.mode is ApplyMode.COMMIT:
             current_branch = repo.get_current_branch()
 
         attempt = repo.before_patch(
@@ -587,7 +609,7 @@ def patch(repo: Repository, args: argparse.Namespace):
                 executor.shutdown(wait=False, cancel_futures=True)
                 raise
 
-    if not options.create_commit:
+    if options.mode is ApplyMode.WORKING_TREE:
         for rev in revs:
             raw = raw_diffs[rev.id]
             with wait_message("Applying %s.." % rev.monogram):
@@ -595,7 +617,7 @@ def patch(repo: Repository, args: argparse.Namespace):
             if rev.id != revs[-1].id:
                 logger.info("%s applied", rev.monogram)
 
-    elif options.raw:
+    elif options.mode is ApplyMode.PRINT:
         for rev in revs:
             diff = diffs[rev.phid]
             raw = raw_diffs[rev.id]
