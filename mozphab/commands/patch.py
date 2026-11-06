@@ -93,6 +93,21 @@ class PatchOptions:
         )
 
 
+@dataclass(frozen=True)
+class StackShape:
+    """The revisions around the requested one in its stack, from its `stackGraph`."""
+
+    # From the requested revision's parent up to the root.
+    ancestor_phids: tuple[str, ...] = ()
+
+    # From the requested revision's child down to the leaf.
+    child_phids: tuple[str, ...] = ()
+
+    # Whether a revision below the requested one has more than one child, in
+    # which case `child_phids` is empty.
+    children_non_linear: bool = False
+
+
 def find_public_base(repo: Repository, base_node: str) -> str | None:
     """Try to resolve `base_node` to a public (landed) commit.
 
@@ -218,103 +233,6 @@ def resolve_branch_name(options: PatchOptions, rev_id: int) -> str | None:
     return options.branch_name_template.format(rev_id=rev_id)
 
 
-def _get_ancestors_from_stack_graph(
-    stack_graph: Mapping[str, Sequence[str]], target_phid: str
-) -> list[str]:
-    """Walk the stackGraph to find ancestor PHIDs of the target revision.
-
-    Returns a list of ancestor PHIDs ordered from direct parent to root.
-    Raises NonLinearException if any ancestor has multiple parents.
-    """
-    ancestors = []
-    current = target_phid
-    seen = {target_phid}
-    while True:
-        parents = stack_graph.get(current, [])
-        if not parents:
-            break
-        if len(parents) > 1:
-            raise NonLinearException()
-        parent = parents[0]
-        if parent in seen:
-            break
-        seen.add(parent)
-        ancestors.append(parent)
-        current = parent
-    return ancestors
-
-
-def _get_children_from_stack_graph(
-    stack_graph: Mapping[str, Sequence[str]], target_phid: str
-) -> list[str]:
-    """Walk the stackGraph to find child PHIDs of the target revision.
-
-    Returns a list of child PHIDs ordered from direct child to leaf.
-    Raises NonLinearException if any revision has multiple children.
-    """
-    # Build reverse mapping: parent_phid -> [child_phids]
-    children_map: dict[str, list[str]] = {}
-    for phid, parents in stack_graph.items():
-        for parent in parents:
-            children_map.setdefault(parent, []).append(phid)
-
-    children = []
-    current = target_phid
-    seen = {target_phid}
-    while True:
-        kids = children_map.get(current, [])
-        if not kids:
-            break
-        if len(kids) > 1:
-            raise NonLinearException()
-        child = kids[0]
-        if child in seen:
-            break
-        seen.add(child)
-        children.append(child)
-        current = child
-    return children
-
-
-def _filter_abandoned_phids(
-    phids: list[str], related_by_phid: dict[str, Revision]
-) -> list[str]:
-    """Filter out PHIDs that are abandoned or missing from the response."""
-    return [
-        p for p in phids if p in related_by_phid and not related_by_phid[p].is_abandoned
-    ]
-
-
-def _fetch_and_filter_related(
-    ancestor_phids: list[str],
-    children_phids: list[str],
-    include_abandoned: bool,
-) -> tuple[list[str], list[str], dict[str, Revision]]:
-    """Fetch related revisions and filter out abandoned/inaccessible ones.
-
-    Returns updated (ancestor_phids, children_phids, related_by_phid).
-    """
-    all_related_phids = ancestor_phids + children_phids
-    if not all_related_phids:
-        return ancestor_phids, children_phids, {}
-
-    with wait_message("Fetching related revisions.."):
-        all_related = conduit.get_revisions(phids=all_related_phids)
-    related_by_phid = {revision.phid: revision for revision in all_related}
-
-    # Filter out abandoned ancestors (always filtered) and any
-    # PHIDs that weren't returned (e.g. restricted access).
-    ancestor_phids = _filter_abandoned_phids(ancestor_phids, related_by_phid)
-    # Filter out abandoned children unless --include-abandoned is set.
-    # Also drop PHIDs missing from the response.
-    if not include_abandoned:
-        children_phids = _filter_abandoned_phids(children_phids, related_by_phid)
-    else:
-        children_phids = [p for p in children_phids if p in related_by_phid]
-
-    return ancestor_phids, children_phids, related_by_phid
-
-
 def _apply_commits(
     repo: Repository,
     revs: list[Revision],
@@ -353,86 +271,186 @@ def fetch_revision_stack(options: PatchOptions) -> list[Revision] | None:
     Asks whether to include the children of the requested revision, unless
     `--yes` or `patch.always_full_stack` says to.
     """
-    # Get the target revision
-    with wait_message("Fetching %s.." % revision_monogram(options.revision_id)):
-        revs = conduit.get_revisions(ids=[options.revision_id])
-
-    if not revs:
-        raise Error("Revision not found")
-
-    revision = revs[0]
-
+    revision = fetch_revision(options.revision_id)
     if options.skip_dependencies:
-        return revs
+        return [revision]
 
-    # Use the stackGraph field from the revision to determine
-    # ancestors and children without extra API calls.
-    stack_graph = revision.stack_graph
+    shape = stack_shape(revision)
+    related_by_phid = fetch_related_revisions(shape.ancestor_phids + shape.child_phids)
+    ancestors, children = filter_stack(
+        shape, related_by_phid, options.include_abandoned
+    )
 
+    include = ask_include_children(options, children, shape.children_non_linear)
+    if include is None:
+        return None
+    return [*ancestors, revision, *(children if include else ())]
+
+
+def fetch_revision(revision_id: int) -> Revision:
+    """Return the revision `revision_id` from Phabricator."""
+    with wait_message("Fetching %s.." % revision_monogram(revision_id)):
+        revisions = conduit.get_revisions(ids=[revision_id])
+
+    if not revisions:
+        raise Error("Revision not found")
+    return revisions[0]
+
+
+def stack_shape(revision: Revision) -> StackShape:
+    """Return the PHIDs around `revision` in its stack, from its `stackGraph`.
+
+    Raises `Error` if the ancestors aren't linear, as the stack can't be patched.
+    """
     try:
-        children_phids = _get_children_from_stack_graph(stack_graph, revision.phid)
-        non_linear = False
-    except NonLinearException:
-        children_phids = []
-        non_linear = True
-
-    try:
-        ancestor_phids = _get_ancestors_from_stack_graph(stack_graph, revision.phid)
+        ancestor_phids = get_ancestors_from_stack_graph(
+            revision.stack_graph, revision.phid
+        )
     except NonLinearException:
         raise Error("Non linear dependency detected. Unable to patch the stack.")
 
-    # Fetch all related revisions to get metadata and filter out
-    # abandoned or inaccessible ones.
-    ancestor_phids, children_phids, related_by_phid = _fetch_and_filter_related(
-        ancestor_phids, children_phids, options.include_abandoned
+    try:
+        child_phids = get_children_from_stack_graph(revision.stack_graph, revision.phid)
+    except NonLinearException:
+        return StackShape(
+            ancestor_phids=tuple(ancestor_phids), children_non_linear=True
+        )
+    return StackShape(
+        ancestor_phids=tuple(ancestor_phids), child_phids=tuple(child_phids)
     )
 
-    patch_children = True
-    if children_phids:
-        if options.yes or options.always_full_stack:
-            patch_children = True
 
-        else:
-            children_msg = (
-                "a child commit" if len(children_phids) == 1 else "child commits"
-            )
-            res = prompt(
-                "Revision %s has %s.  Would you like to patch the "
-                "full stack?." % (revision_monogram(options.revision_id), children_msg),
-                ["Yes", "No", "Always"],
-            )
-            if res == "Always":
-                config.always_full_stack = True
-                config.write()
+def get_ancestors_from_stack_graph(
+    stack_graph: Mapping[str, Sequence[str]], target_phid: str
+) -> list[str]:
+    """Walk the stackGraph to find ancestor PHIDs of the target revision.
 
-            patch_children = res == "Yes" or res == "Always"
+    Returns a list of ancestor PHIDs ordered from direct parent to root.
+    Raises NonLinearException if any ancestor has multiple parents.
+    """
+    ancestors = []
+    current = target_phid
+    seen = {target_phid}
+    while True:
+        parents = stack_graph.get(current, [])
+        if not parents:
+            break
+        if len(parents) > 1:
+            raise NonLinearException()
+        parent = parents[0]
+        if parent in seen:
+            break
+        seen.add(parent)
+        ancestors.append(parent)
+        current = parent
+    return ancestors
 
-        if patch_children:
-            if non_linear and not options.yes:
-                logger.warning(
-                    "Revision %s has a non-linear successor graph.\n"
-                    "Unable to apply the full stack.",
-                    revision_monogram(options.revision_id),
-                )
-                res = prompt("Continue with only part of the stack?", ["Yes", "No"])
-                if res == "No":
-                    return None
 
-    # Build the final revisions list from already-fetched data.
-    child_phids = children_phids if (children_phids and patch_children) else []
+def get_children_from_stack_graph(
+    stack_graph: Mapping[str, Sequence[str]], target_phid: str
+) -> list[str]:
+    """Walk the stackGraph to find child PHIDs of the target revision.
 
-    if ancestor_phids or child_phids:
-        ancestor_revs = [related_by_phid[p] for p in ancestor_phids]
-        child_revs = [related_by_phid[p] for p in child_phids]
+    Returns a list of child PHIDs ordered from direct child to leaf.
+    Raises NonLinearException if any revision has multiple children.
+    """
+    # Build reverse mapping: parent_phid -> [child_phids]
+    children_map: dict[str, list[str]] = {}
+    for phid, parents in stack_graph.items():
+        for parent in parents:
+            children_map.setdefault(parent, []).append(phid)
 
-        if ancestor_revs:
-            revs.extend(ancestor_revs)
-            revs.reverse()
+    children = []
+    current = target_phid
+    seen = {target_phid}
+    while True:
+        kids = children_map.get(current, [])
+        if not kids:
+            break
+        if len(kids) > 1:
+            raise NonLinearException()
+        child = kids[0]
+        if child in seen:
+            break
+        seen.add(child)
+        children.append(child)
+        current = child
+    return children
 
-        if child_revs:
-            revs.extend(child_revs)
 
-    return revs
+def fetch_related_revisions(phids: Sequence[str]) -> dict[str, Revision]:
+    """Return the revisions `phids` from Phabricator, keyed by PHID."""
+    if not phids:
+        return {}
+
+    with wait_message("Fetching related revisions.."):
+        revisions = conduit.get_revisions(phids=list(phids))
+    return {revision.phid: revision for revision in revisions}
+
+
+def filter_stack(
+    shape: StackShape,
+    related_by_phid: Mapping[str, Revision],
+    include_abandoned: bool,
+) -> tuple[tuple[Revision, ...], tuple[Revision, ...]]:
+    """Return the ancestors to patch, root first, and the children, child first.
+
+    Revisions Phabricator didn't return, eg. ones the user can't see, are dropped,
+    as are abandoned ancestors and, unless `include_abandoned`, abandoned children.
+    """
+
+    def keep(phid: str, allow_abandoned: bool) -> bool:
+        revision = related_by_phid.get(phid)
+        return revision is not None and (allow_abandoned or not revision.is_abandoned)
+
+    ancestors = tuple(
+        related_by_phid[phid]
+        for phid in reversed(shape.ancestor_phids)
+        if keep(phid, allow_abandoned=False)
+    )
+    children = tuple(
+        related_by_phid[phid]
+        for phid in shape.child_phids
+        if keep(phid, allow_abandoned=include_abandoned)
+    )
+    return ancestors, children
+
+
+def ask_include_children(
+    options: PatchOptions, children: Sequence[Revision], children_non_linear: bool
+) -> bool | None:
+    """Return whether to patch the children too, or `None` if the user stops.
+
+    Asks unless `--yes` or `patch.always_full_stack` says to include them, and
+    saves `patch.always_full_stack` when the user answers "Always".
+    """
+    if not children:
+        return False
+
+    if options.yes or options.always_full_stack:
+        include = True
+    else:
+        children_msg = "a child commit" if len(children) == 1 else "child commits"
+        answer = prompt(
+            "Revision %s has %s.  Would you like to patch the "
+            "full stack?." % (revision_monogram(options.revision_id), children_msg),
+            ["Yes", "No", "Always"],
+        )
+        if answer == "Always":
+            config.always_full_stack = True
+            config.write()
+        include = answer in ("Yes", "Always")
+
+    if include and children_non_linear and not options.yes:
+        logger.warning(
+            "Revision %s has a non-linear successor graph.\n"
+            "Unable to apply the full stack.",
+            revision_monogram(options.revision_id),
+        )
+        if prompt("Continue with only part of the stack?", ["Yes", "No"]) == "No":
+            return None
+
+    return include
 
 
 def patch(repo: Repository, args: argparse.Namespace):

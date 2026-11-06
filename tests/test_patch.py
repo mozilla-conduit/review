@@ -12,7 +12,7 @@ import pytest
 from mozphab import exceptions, helpers, mozphab
 from mozphab.commands import patch
 from mozphab.config import Config
-from mozphab.models import RemoteDiff, Revision
+from mozphab.models import RemoteDiff, Revision, RevisionStatus
 from mozphab.repository import PatchAttempt, PatchRefs, Repository
 
 from .conftest import with_stack_graph
@@ -167,48 +167,146 @@ def test_with_requested_diff():
 
 
 def test_get_ancestors_from_stack_graph():
-    get_ancestors = patch._get_ancestors_from_stack_graph
-
-    # No parents — empty result.
-    assert get_ancestors({"PHID-1": []}, "PHID-1") == []
-
-    # Linear chain: PHID-3 -> PHID-2 -> PHID-1 (root).
+    get_ancestors = patch.get_ancestors_from_stack_graph
     stack = {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-2"]}
-    assert get_ancestors(stack, "PHID-3") == ["PHID-2", "PHID-1"]
 
-    # Target in the middle of a chain.
-    assert get_ancestors(stack, "PHID-2") == ["PHID-1"]
+    assert get_ancestors({"PHID-1": []}, "PHID-1") == [], "A root has no ancestors."
+    assert get_ancestors(stack, "PHID-3") == [
+        "PHID-2",
+        "PHID-1",
+    ], "The ancestors should run from the parent up to the root."
+    assert get_ancestors(stack, "PHID-2") == [
+        "PHID-1"
+    ], "Only the revisions above the target should be ancestors."
+    assert get_ancestors({}, "PHID-UNKNOWN") == [], "An unknown PHID has no ancestors."
 
-    # Non-linear: a revision with two parents raises NonLinearException.
-    stack = {"PHID-1": [], "PHID-2": [], "PHID-3": ["PHID-1", "PHID-2"]}
     with pytest.raises(exceptions.NonLinearException):
-        get_ancestors(stack, "PHID-3")
-
-    # Target PHID not in graph — empty result.
-    assert get_ancestors({}, "PHID-UNKNOWN") == []
+        get_ancestors(
+            {"PHID-1": [], "PHID-2": [], "PHID-3": ["PHID-1", "PHID-2"]}, "PHID-3"
+        )
 
 
 def test_get_children_from_stack_graph():
-    get_children = patch._get_children_from_stack_graph
-
-    # No children — empty result.
-    assert get_children({"PHID-1": []}, "PHID-1") == []
-
-    # Linear chain: PHID-1 (root) -> PHID-2 -> PHID-3.
+    get_children = patch.get_children_from_stack_graph
     stack = {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-2"]}
-    assert get_children(stack, "PHID-1") == ["PHID-2", "PHID-3"]
 
-    # Target in the middle.
-    assert get_children(stack, "PHID-2") == ["PHID-3"]
+    assert get_children({"PHID-1": []}, "PHID-1") == [], "A leaf has no children."
+    assert get_children(stack, "PHID-1") == [
+        "PHID-2",
+        "PHID-3",
+    ], "The children should run from the child down to the leaf."
+    assert get_children(stack, "PHID-2") == [
+        "PHID-3"
+    ], "Only the revisions below the target should be children."
 
-    # Non-linear: two children of the same parent raises NonLinearException.
-    stack = {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-1"]}
     with pytest.raises(exceptions.NonLinearException):
-        get_children(stack, "PHID-1")
+        get_children(
+            {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-1"]}, "PHID-1"
+        )
 
-    # Leaf node — empty result.
-    stack = {"PHID-1": [], "PHID-2": ["PHID-1"]}
-    assert get_children(stack, "PHID-2") == []
+
+def test_stack_shape():
+    middle = with_stack_graph(
+        REV_2, {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-2"]}
+    )
+    assert patch.stack_shape(middle) == patch.StackShape(
+        ancestor_phids=("PHID-1",), child_phids=("PHID-3",)
+    ), "The shape should hold the PHIDs above and below the revision."
+
+    forked_below = with_stack_graph(
+        REV_1, {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-1"]}
+    )
+    assert patch.stack_shape(forked_below) == patch.StackShape(
+        children_non_linear=True
+    ), "Non-linear children should be flagged rather than listed."
+
+    merged_above = with_stack_graph(
+        REV_3, {"PHID-1": [], "PHID-2": [], "PHID-3": ["PHID-1", "PHID-2"]}
+    )
+    with pytest.raises(exceptions.Error, match="Non linear dependency"):
+        patch.stack_shape(merged_above)
+
+
+def test_filter_stack():
+    abandoned_1 = dataclasses.replace(REV_1, status=RevisionStatus.ABANDONED)
+    abandoned_3 = dataclasses.replace(REV_3, status=RevisionStatus.ABANDONED)
+    shape = patch.StackShape(
+        ancestor_phids=("PHID-2", "PHID-1"), child_phids=("PHID-3", "PHID-4")
+    )
+
+    assert patch.filter_stack(
+        shape, {"PHID-1": REV_1, "PHID-2": REV_2, "PHID-3": REV_3}, False
+    ) == (
+        (REV_1, REV_2),
+        (REV_3,),
+    ), "Ancestors should be root first, and PHIDs Phabricator didn't return dropped."
+
+    related = {"PHID-1": abandoned_1, "PHID-2": REV_2, "PHID-3": abandoned_3}
+    assert patch.filter_stack(shape, related, False) == (
+        (REV_2,),
+        (),
+    ), "Abandoned ancestors and children should be dropped."
+    assert patch.filter_stack(shape, related, True) == (
+        (REV_2,),
+        (abandoned_3,),
+    ), "`--include-abandoned` should keep abandoned children, but not ancestors."
+
+
+@pytest.fixture
+def m_prompt(monkeypatch):
+    m_prompt = mock.Mock()
+    monkeypatch.setattr(patch, "prompt", m_prompt)
+    return m_prompt
+
+
+@pytest.fixture
+def m_config(monkeypatch):
+    m_config = mock.Mock()
+    monkeypatch.setattr(patch, "config", m_config)
+    return m_config
+
+
+def test_ask_include_children_without_asking(m_prompt):
+    options = patch.PatchOptions(revision_id=1)
+
+    assert (
+        patch.ask_include_children(options, (), children_non_linear=False) is False
+    ), "There are no children to include."
+    assert (
+        patch.ask_include_children(
+            dataclasses.replace(options, yes=True), (REV_2,), children_non_linear=False
+        )
+        is True
+    ), "`--yes` should include the children."
+    assert (
+        patch.ask_include_children(
+            dataclasses.replace(options, always_full_stack=True),
+            (REV_2,),
+            children_non_linear=False,
+        )
+        is True
+    ), "`patch.always_full_stack` should include the children."
+    m_prompt.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "answer,expected", [("Yes", True), ("No", False), ("Always", True)]
+)
+def test_ask_include_children_asks(m_prompt, m_config, answer, expected):
+    m_prompt.return_value = answer
+    options = patch.PatchOptions(revision_id=1)
+
+    assert (
+        patch.ask_include_children(options, (REV_2, REV_3), children_non_linear=False)
+        is expected
+    ), f"Answering {answer} should decide whether to include the children."
+    m_prompt.assert_called_once_with(
+        "Revision D1 has child commits.  Would you like to patch the full stack?.",
+        ["Yes", "No", "Always"],
+    )
+    assert m_config.write.called == (
+        answer == "Always"
+    ), "Only answering `Always` should save `patch.always_full_stack`."
 
 
 def test_strip_depends_on():
@@ -429,9 +527,6 @@ def test_patch(
         patch.patch(git, args)
 
     m_git_is_worktree_clean.return_value = True
-    m_get_revisions.return_value = []
-    with pytest.raises(exceptions.Error):
-        patch.patch(git, args)
 
     m_config.always_full_stack = False
     m_call_conduit.return_value = "raw"  # differential.getrawdiff
@@ -534,13 +629,6 @@ def test_patch(
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_not_called()
     m_print.assert_called_with("raw")
-
-    # skip-dependencies
-    m_get_revisions.reset_mock()
-    args = Args(raw=True, skip_dependencies=True)
-    patch.patch(git, args)
-    # Only the initial revision fetch should happen, no related revisions.
-    m_get_revisions.assert_called_once()
 
     m_git_before_patch.reset_mock()
     # --no_commit
@@ -821,56 +909,6 @@ def test_patch(
         e.value
     ), "The original apply failure should be the one reported."
 
-    # successors
-    m_get_revisions.reset_mock()
-    # PHID-2 is a child of PHID-1
-    rev1 = with_stack_graph(REV_1, {"PHID-1": [], "PHID-2": ["PHID-1"]})
-    m_get_revisions.side_effect = ([rev1], [REV_2])
-    m_call_conduit.side_effect = lambda m, a: "raw%s" % a["diffID"]
-    m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1, "DIFFPHID-2": DIFF_2}
-    args = Args(revision_id=1, raw=True, yes=True)
-    patch.patch(git, args)
-    assert m_get_revisions.call_args_list == [
-        mock.call(ids=[1]),
-        mock.call(phids=["PHID-2"]),
-    ]
-
-    # multiple successors (non-linear: PHID-2 and PHID-3 are both children of PHID-1)
-    m_get_revisions.reset_mock()
-    rev1 = with_stack_graph(
-        REV_1,
-        {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-1"]},
-    )
-    m_get_revisions.side_effect = ([rev1],)
-    m_call_conduit.side_effect = ("raw",)
-    m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
-    patch.patch(git, args)
-    m_get_revisions.assert_called_once_with(ids=[1])
-
-    # ########## ancestors and children batched in single get_revisions call
-    m_print.reset_mock()
-    m_get_revisions.reset_mock()
-    # Stack: PHID-2 (root) -> PHID-1 (target) -> PHID-3 (child)
-    rev1 = with_stack_graph(
-        REV_1,
-        {"PHID-2": [], "PHID-1": ["PHID-2"], "PHID-3": ["PHID-1"]},
-    )
-    m_get_revisions.side_effect = ([rev1], [REV_2, REV_3])
-    m_call_conduit.side_effect = lambda m, a: "raw%s" % a["diffID"]
-    m_get_diffs.return_value = {
-        "DIFFPHID-1": DIFF_1,
-        "DIFFPHID-2": DIFF_2,
-        "DIFFPHID-3": DIFF_3,
-    }
-    args = Args(revision_id=1, raw=True, yes=True)
-    patch.patch(git, args)
-    # Verify ancestors and children are fetched in a single batched call.
-    assert m_get_revisions.call_args_list == [
-        mock.call(ids=[1]),
-        mock.call(phids=["PHID-2", "PHID-3"]),
-    ]
-    m_print.assert_has_calls((mock.call("raw2"), mock.call("raw1"), mock.call("raw3")))
-
 
 REV_1 = Revision.from_conduit(
     {
@@ -1013,14 +1051,24 @@ def test_fetch_revision_stack(m_get_revisions):
     stack_graph = {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-2"]}
     target = with_stack_graph(REV_2, stack_graph)
 
+    m_get_revisions.return_value = []
+    with pytest.raises(exceptions.Error, match="Revision not found"):
+        patch.fetch_revision_stack(patch.PatchOptions(revision_id=2))
+
     m_get_revisions.return_value = [target]
     assert patch.fetch_revision_stack(
         patch.PatchOptions(revision_id=2, skip_dependencies=True)
     ) == [target], "`--skip-dependencies` should only patch the requested revision."
+    m_get_revisions.assert_called_with(ids=[2])
 
+    m_get_revisions.reset_mock()
     m_get_revisions.side_effect = ([target], [REV_1, REV_3])
     assert patch.fetch_revision_stack(patch.PatchOptions(revision_id=2, yes=True)) == [
         REV_1,
         target,
         REV_3,
     ], "The ancestors and children should be patched in stack order, root first."
+    assert m_get_revisions.call_args_list == [
+        mock.call(ids=[2]),
+        mock.call(phids=["PHID-1", "PHID-3"]),
+    ], "The ancestors and children should be fetched in a single call."
