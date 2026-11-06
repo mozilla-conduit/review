@@ -519,6 +519,18 @@ def ask_include_children(
     Asks unless `--yes` or `patch.always_full_stack` says to include them, and
     saves `patch.always_full_stack` when the user answers "Always".
     """
+    if children_non_linear:
+        # The children can't be patched, but the rest of the stack still can.
+        if not options.yes:
+            logger.warning(
+                "Revision %s has a non-linear successor graph.\n"
+                "Unable to apply the full stack.",
+                revision_monogram(options.revision_id),
+            )
+            if prompt("Continue with only part of the stack?", ["Yes", "No"]) == "No":
+                return None
+        return False
+
     if not children:
         return False
 
@@ -535,15 +547,6 @@ def ask_include_children(
             config.always_full_stack = True
             config.write()
         include = answer in ("Yes", "Always")
-
-    if include and children_non_linear and not options.yes:
-        logger.warning(
-            "Revision %s has a non-linear successor graph.\n"
-            "Unable to apply the full stack.",
-            revision_monogram(options.revision_id),
-        )
-        if prompt("Continue with only part of the stack?", ["Yes", "No"]) == "No":
-            return None
 
     return include
 

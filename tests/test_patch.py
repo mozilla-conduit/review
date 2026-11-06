@@ -1046,6 +1046,28 @@ def test_patch_force_vcs_skips_the_vcs_check(_check, force_vcs):
     ), "The VCS should be checked unless `--force-vcs` is given."
 
 
+@pytest.mark.parametrize("answer,expected", [("Yes", False), ("No", None)])
+def test_ask_include_children_non_linear(m_prompt, answer, expected):
+    m_prompt.return_value = answer
+    options = patch.PatchOptions(revision_id=1)
+
+    assert (
+        patch.ask_include_children(options, (), children_non_linear=True) is expected
+    ), f"Answering {answer} should patch the rest of the stack, or stop."
+    m_prompt.assert_called_once_with(
+        "Continue with only part of the stack?", ["Yes", "No"]
+    )
+
+    m_prompt.reset_mock()
+    assert (
+        patch.ask_include_children(
+            dataclasses.replace(options, yes=True), (), children_non_linear=True
+        )
+        is False
+    ), "`--yes` should patch the rest of the stack without asking."
+    m_prompt.assert_not_called()
+
+
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
 def test_fetch_revision_stack(m_get_revisions):
     stack_graph = {"PHID-1": [], "PHID-2": ["PHID-1"], "PHID-3": ["PHID-2"]}
