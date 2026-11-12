@@ -2,11 +2,14 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+from __future__ import annotations
+
 import argparse
 import logging
 import textwrap
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 from mozphab import environment
 from mozphab.checks import DIFF_CHECKS, OVERRIDE_HINTS, failed_checks
@@ -35,11 +38,37 @@ from mozphab.user import UserData
 
 
 @dataclass(frozen=True)
+class MergeConflict:
+    """The merge conflict an uplift hit, to show before its resolution."""
+
+    # The file holding the conflicted tree as a raw unified diff.
+    path: Path
+
+    # The SHA, or a prefix of it, of the commit whose revision shows the conflict.
+    commit: str
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> MergeConflict | None:
+        """Build the merge conflict from `--merge-conflict` and its commit, if given."""
+        if args.merge_conflict is None and args.merge_conflict_commit is None:
+            return None
+
+        if args.merge_conflict is None or args.merge_conflict_commit is None:
+            raise Error(
+                "`--merge-conflict` and `--merge-conflict-commit` must be used "
+                "together."
+            )
+
+        return cls(path=args.merge_conflict, commit=args.merge_conflict_commit)
+
+
+@dataclass(frozen=True)
 class UpliftSettings:
     """The `uplift` flags that change how `submit` runs."""
 
     train: str | None = None
     no_rebase: bool = False
+    merge_conflict: MergeConflict | None = None
 
 
 @dataclass(frozen=True)
@@ -86,15 +115,24 @@ class SubmitOptions:
         return self.uplift is not None
 
     @property
+    def merge_conflict(self) -> MergeConflict | None:
+        """Return the merge conflict `uplift` was given, if any."""
+        return self.uplift.merge_conflict if self.uplift else None
+
+    @property
     def can_prompt(self) -> bool:
         """Return `True` if `submit` may ask questions, which `--yes` never allows."""
         return not self.yes and (self.interactive or not self.auto_submit)
 
     @classmethod
-    def from_args(cls, args: argparse.Namespace, config: Config) -> "SubmitOptions":
+    def from_args(cls, args: argparse.Namespace, config: Config) -> SubmitOptions:
         """Build the options from the parsed command line and the user's config."""
         uplift = (
-            UpliftSettings(train=args.train, no_rebase=args.no_rebase)
+            UpliftSettings(
+                train=args.train,
+                no_rebase=args.no_rebase,
+                merge_conflict=MergeConflict.from_args(args),
+            )
             if args.command == "uplift"
             else None
         )

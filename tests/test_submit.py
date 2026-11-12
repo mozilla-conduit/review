@@ -1900,3 +1900,62 @@ def test_force_vcs_skips_the_vcs_check(
     assert (
         m_repo.check_vcs.called != force_vcs
     ), "The VCS should be checked unless `--force-vcs` is given."
+
+
+def test_submit_options_from_args_merge_conflict(tmp_path):
+    """`--merge-conflict` and `--merge-conflict-commit` set the uplift's conflict."""
+    test_config = Config(should_access_file=False)
+    conflict_path = tmp_path / "conflict.diff"
+
+    options = submit.SubmitOptions.from_args(
+        mozphab.parse_args(
+            [
+                "uplift",
+                "--train",
+                "beta",
+                "--merge-conflict",
+                str(conflict_path),
+                "--merge-conflict-commit",
+                "abc123",
+            ]
+        ),
+        test_config,
+    )
+    assert options.uplift is not None, "`uplift` should have uplift settings."
+    assert options.uplift.merge_conflict == submit.MergeConflict(
+        path=conflict_path, commit="abc123"
+    ), "`--merge-conflict` and its commit should be passed to `submit`."
+    assert (
+        options.merge_conflict is options.uplift.merge_conflict
+    ), "`SubmitOptions.merge_conflict` should be the uplift's merge conflict."
+
+    options = submit.SubmitOptions.from_args(
+        mozphab.parse_args(["uplift", "--train", "beta"]), test_config
+    )
+    assert options.uplift is not None, "`uplift` should have uplift settings."
+    assert (
+        options.uplift.merge_conflict is None
+    ), "Uplifts without `--merge-conflict` shouldn't have a merge conflict."
+
+    options = submit.SubmitOptions.from_args(
+        mozphab.parse_args(["submit"]), test_config
+    )
+    assert (
+        options.merge_conflict is None
+    ), "`submit` without `uplift` shouldn't have a merge conflict."
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        ["--merge-conflict", "conflict.diff"],
+        ["--merge-conflict-commit", "abc123"],
+    ],
+)
+def test_submit_options_from_args_merge_conflict_needs_both_flags(flags):
+    """`--merge-conflict` and `--merge-conflict-commit` can't be used alone."""
+    test_config = Config(should_access_file=False)
+    args = mozphab.parse_args(["uplift", "--train", "beta", *flags])
+
+    with pytest.raises(exceptions.Error, match="must be used together"):
+        submit.SubmitOptions.from_args(args, test_config)

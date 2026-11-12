@@ -300,4 +300,17 @@ def add_parser(parser):
         type=Path,
         help=argparse.SUPPRESS,
     )
+    # Lando passes the conflict a cherry-pick hit, so the revision of the
+    # commit resolving it can show the conflict before its resolution.
+    uplift_parser.add_argument(
+        "--merge-conflict",
+        dest="merge_conflict",
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
+    uplift_parser.add_argument(
+        "--merge-conflict-commit",
+        dest="merge_conflict_commit",
+        help=argparse.SUPPRESS,
+    )
     uplift_parser.set_defaults(func=uplift, needs_repo=True, needs_user_data=True)
