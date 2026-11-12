@@ -20,7 +20,7 @@ from mozphab.conduit import (
     normalise_reviewer,
 )
 from mozphab.diff import Diff
-from mozphab.models import RemoteDiff, Revision
+from mozphab.models import CreateRawDiffResult, RemoteDiff, Revision
 from tests.conftest import search_diff, search_rev, search_revision
 
 
@@ -1114,6 +1114,26 @@ def test_create_diffs_names_failing_commit(m_create_diff, git):
         mozphab.conduit.create_diffs(commit_diffs)
 
     assert str(e.value) == "commit-1: Phabricator Error: no soup for you"
+
+
+@mock.patch("mozphab.repository.conduit.call")
+def test_create_raw_diff(m_call):
+    """`create_raw_diff` sends the raw text and returns the new diff's ID and PHID."""
+    m_call.return_value = {
+        "id": 12,
+        "phid": "PHID-DIFF-12",
+        "uri": "http://example.test/differential/diff/12/",
+    }
+
+    raw_diff = mozphab.conduit.create_raw_diff("<<<<<<< HEAD", "PHID-REPO-1")
+
+    m_call.assert_called_once_with(
+        "differential.createrawdiff",
+        {"diff": "<<<<<<< HEAD", "repositoryPHID": "PHID-REPO-1"},
+    )
+    assert raw_diff == CreateRawDiffResult(
+        id=12, phid="PHID-DIFF-12"
+    ), "`create_raw_diff` should return the ID and PHID of the created diff."
 
 
 @mock.patch("mozphab.repository.conduit.call")

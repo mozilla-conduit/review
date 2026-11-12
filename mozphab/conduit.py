@@ -38,6 +38,7 @@ from .helpers import (
 )
 from .logger import logger
 from .models import (
+    CreateRawDiffResult,
     RemoteDiff,
     ReviewerStatus,
     Revision,
@@ -90,6 +91,7 @@ CONDUIT_MAX_RETRIES = 3
 # the URLs shown in profiler markers, as these URLs are truncated.
 PROFILER_HIDDEN_ARGS_METHODS = {
     "differential.creatediff",
+    "differential.createrawdiff",
     "file.upload",
     "file.uploadchunk",
 }
@@ -1072,6 +1074,17 @@ class ConduitAPI:
             "branch": "HEAD" if self.repo.phab_vcs == Vcs.GIT else "default",
         }
         return self.call("differential.creatediff", api_call_args)
+
+    def create_raw_diff(self, diff_text: str, repo_phid: str) -> CreateRawDiffResult:
+        """Create a diff in the repository `repo_phid` from a raw unified diff.
+
+        Unlike `create_diff`, the diff isn't built from a local commit, so it
+        skips the checks `submit` runs, eg. for conflict markers.
+        """
+        api_call_args = {"diff": diff_text, "repositoryPHID": repo_phid}
+        return CreateRawDiffResult.from_conduit(
+            self.call("differential.createrawdiff", api_call_args)
+        )
 
     def set_diff_property(
         self,

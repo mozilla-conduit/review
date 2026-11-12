@@ -221,3 +221,19 @@ class RemoteDiff:
             date_created=fields.get("dateCreated"),
             commits=tuple(DiffCommit.from_conduit(commit) for commit in commits),
         )
+
+
+@dataclass(frozen=True)
+class CreateRawDiffResult:
+    """The diff `differential.createrawdiff` created, identified by its ID and PHID."""
+
+    # The ID of the new diff.
+    id: int
+
+    # The PHID of the new diff.
+    phid: str
+
+    @classmethod
+    def from_conduit(cls, data: dict) -> "CreateRawDiffResult":
+        """Parse a diff from its `differential.createrawdiff` result."""
+        return cls(id=int(data["id"]), phid=data["phid"])
