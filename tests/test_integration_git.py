@@ -1348,6 +1348,156 @@ def test_uplift_create(
     commits = data["commits"]
     assert len(commits) == 1, "One commit should have been created."
     assert data["commits"][0]["rev_id"] == "2", "Output should contain new revision."
+    assert (
+        data["merge_conflict"] is None
+    ), "Output should have no merge conflict without `--merge-conflict`."
+
+
+@mock.patch("mozphab.repository.get_lando_url_for_phabricator")
+def test_uplift_create_with_merge_conflict(
+    m_lando_url,
+    in_process,
+    git_repo_path: pathlib.Path,
+    init_sha: str,
+    tmp_path: Path,
+):
+    """The revision shows the merge conflict as its first diff, then its resolution."""
+    m_lando_url.return_value = "https://lando.example.com"
+
+    call_conduit.reset_mock()
+    call_conduit.side_effect = [
+        # diffusion.repository.search
+        {
+            "data": [
+                {
+                    "phid": "PHID-BETA-2",
+                    "fields": {
+                        "shortName": "firefox-beta",
+                        "defaultBranch": "beta",
+                        "callsign": "BETA",
+                        "vcs": "git",
+                    },
+                }
+            ]
+        },
+        # diffusion.repository.search
+        {"data": [{"fields": {"shortName": "firefox-beta"}}]},
+        # conduit.ping
+        {},
+        # differential.revision.search
+        {"data": [search_rev()]},
+        # differential.createrawdiff
+        {
+            "id": 1,
+            "phid": "PHID-DIFF-1",
+            "uri": "http://example.test/differential/diff/1/",
+        },
+        # differential.creatediff
+        {"phid": "PHID-DIFF-2", "diffid": "2"},
+        # differential.revision.edit
+        {"object": {"id": "2", "phid": "PHID-DREV-2"}},
+        # differential.revision.edit
+        {"object": {"id": "2", "phid": "PHID-DREV-2"}},
+        # differential.setdiffproperty
+        {},
+    ]
+
+    # Fake a `beta` branch on the `origin` remote.
+    git_out("remote", "add", "origin", "https://example.com/git-repo")
+    remote_branches = git_repo_path / ".git" / "refs" / "remotes" / "origin"
+    remote_branches.mkdir(parents=True)
+    shutil.copy(
+        git_repo_path / ".git" / "refs" / "heads" / "main",
+        remote_branches / "beta",
+    )
+
+    testfile = git_repo_path / "X"
+    testfile.write_text("resolved\n", encoding="utf-8")
+    git_out("add", "X")
+    msgfile = git_repo_path / "msg"
+    msgfile.write_text(
+        "Bug 1 - Ą r=alice\n\nDifferential Revision: http://example.test/D1",
+        encoding="utf-8",
+    )
+    git_out("commit", "--file", "msg")
+    head_sha = git_out("rev-parse", "HEAD").strip()
+
+    conflict_diff = (
+        "diff --git a/X b/X\n"
+        "new file mode 100644\n"
+        "--- /dev/null\n"
+        "+++ b/X\n"
+        "@@ -0,0 +1,5 @@\n"
+        "+<<<<<<< HEAD\n"
+        "+beta\n"
+        "+=======\n"
+        "+central\n"
+        "+>>>>>>> theirs\n"
+    )
+    conflict_file = tmp_path / "conflict.diff"
+    conflict_file.write_text(conflict_diff, encoding="utf-8")
+    out_file = tmp_path / "output.json"
+
+    mozphab.main(
+        [
+            "uplift",
+            "--yes",
+            "--no-rebase",
+            "--train",
+            "firefox-beta",
+            "--output-file",
+            str(out_file),
+            "--merge-conflict",
+            str(conflict_file),
+            "--merge-conflict-commit",
+            head_sha[:12],
+            init_sha,
+            "HEAD",
+        ],
+        is_development=True,
+    )
+
+    call_conduit.assert_any_call(
+        "differential.createrawdiff",
+        {"diff": conflict_diff, "repositoryPHID": "PHID-BETA-2"},
+    )
+    edits = [
+        call.args[1]
+        for call in call_conduit.call_args_list
+        if call.args[0] == "differential.revision.edit"
+    ]
+    assert edits == [
+        {
+            "transactions": [
+                {"type": "title", "value": "Bug 1 - Ą"},
+                {
+                    "type": "summary",
+                    "value": "Original Revision: http://example.test/D1",
+                },
+                {"type": "bugzilla.bug-id", "value": "1"},
+                {"type": "update", "value": "PHID-DIFF-1"},
+            ]
+        },
+        {
+            "objectIdentifier": "2",
+            "transactions": [{"type": "update", "value": "PHID-DIFF-2"}],
+        },
+    ], "The revision should be created with the conflict, then updated to resolve it."
+    call_conduit.assert_any_call(
+        "differential.setdiffproperty",
+        Matching(lambda args: args["diff_id"] == "2"),
+    )
+
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+    assert (
+        data["commits"][0]["rev_id"] == "2"
+    ), "Output should contain the new revision."
+    assert data["merge_conflict"] == {
+        "rev_id": "2",
+        "diff_id": 1,
+        "diff_phid": "PHID-DIFF-1",
+        "resolution_diff_id": 2,
+    }, "Output should contain the revision and the diffs to compare."
 
 
 def test_empty_file(in_process, git_repo_path: pathlib.Path, init_sha):

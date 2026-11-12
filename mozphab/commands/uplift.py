@@ -10,6 +10,7 @@ import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 
+from mozphab.commits import Commit
 from mozphab.conduit import (
     conduit,
 )
@@ -186,6 +187,19 @@ def attempt_link_assessment(
         return True
 
 
+def merge_conflict_output(commits: list[Commit]) -> dict | None:
+    """Return the revision and diff showing the uplift's merge conflict, if any."""
+    for commit in commits:
+        if commit.merge_conflict:
+            return {
+                "rev_id": commit.rev_id,
+                "diff_id": commit.merge_conflict.conflict.id,
+                "diff_phid": commit.merge_conflict.conflict.phid,
+                "resolution_diff_id": commit.merge_conflict.resolution_id,
+            }
+    return None
+
+
 def uplift(repo: Repository, args: argparse.Namespace, user_data: UserData):
     options = UpliftOptions.from_args(args, config)
 
@@ -235,7 +249,10 @@ def uplift(repo: Repository, args: argparse.Namespace, user_data: UserData):
 
     # Output machine-readable data to a file.
     if options.output_file:
-        data = {"commits": [commit.to_dict() for commit in commits]}
+        data = {
+            "commits": [commit.to_dict() for commit in commits],
+            "merge_conflict": merge_conflict_output(commits),
+        }
 
         with options.output_file.open("w") as f:
             json.dump(data, f)
