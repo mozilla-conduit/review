@@ -14,11 +14,11 @@ from callee import Contains
 
 from mozphab import exceptions, helpers, mozphab, repository
 from mozphab.commands import submit
-from mozphab.commits import Commit
+from mozphab.commits import Commit, MergeConflictDiffs
 from mozphab.conduit import ConduitAPIError
 from mozphab.config import Config
 from mozphab.diff import Diff
-from mozphab.models import Transaction, TransactionType
+from mozphab.models import CreateRawDiffResult, Transaction, TransactionType
 from mozphab.user import UserData
 
 from .conftest import search_remote_diff, search_revision
@@ -53,6 +53,7 @@ def commit(
         body=body,
         rev_id=rev_id,
         node=node,
+        orig_node=node,
         submit=submit,
         wip=wip,
     )
@@ -1959,3 +1960,188 @@ def test_submit_options_from_args_merge_conflict_needs_both_flags(flags):
 
     with pytest.raises(exceptions.Error, match="must be used together"):
         submit.SubmitOptions.from_args(args, test_config)
+
+
+@pytest.fixture
+def merge_conflict(tmp_path) -> submit.MergeConflict:
+    conflict_path = tmp_path / "conflict.diff"
+    conflict_path.write_text("<<<<<<< HEAD\n=======\n>>>>>>> theirs\n")
+    return submit.MergeConflict(path=conflict_path, commit="abc")
+
+
+@pytest.fixture
+def m_conflict_conduit(m_conduit, m_repo):
+    """Return the `m_conduit` of an uplift whose conflict diff is `PHID-DIFF-7`."""
+    m_repo.phid = "PHID-BETA"
+    m_conduit.create_raw_diff.return_value = CreateRawDiffResult(
+        id=7, phid="PHID-DIFF-7"
+    )
+    return m_conduit
+
+
+def merge_conflict_options(merge_conflict, **overrides):
+    """Return the options of a `moz-phab uplift --merge-conflict` run."""
+    return submit_options(
+        uplift=submit.UpliftSettings(
+            train="beta", no_rebase=True, merge_conflict=merge_conflict
+        ),
+        **overrides,
+    )
+
+
+def revision_calls(m_conduit) -> list[str]:
+    """Return the names of the `conduit` calls creating diffs and revisions."""
+    names = {
+        "create_raw_diff",
+        "create_diff",
+        "create_diffs",
+        "create_revision",
+        "update_revision",
+        "edit_revision",
+        "apply_transactions_to_revision",
+        "set_diff_property",
+    }
+    return [name for name, _, _ in m_conduit.mock_calls if name in names]
+
+
+def test_merge_conflict_new_revision(
+    m_conflict_conduit, m_repo, m_validate, m_logger, m_config, merge_conflict
+):
+    """A new revision gets the merge conflict diff first, then its resolution."""
+    commits = [commit(bug_id="1", node="abc" + "0" * 37)]
+    m_repo.commit_stack.return_value = commits
+
+    submit._submit(m_repo, merge_conflict_options(merge_conflict), UserData())
+
+    assert revision_calls(m_conflict_conduit) == [
+        "create_raw_diff",
+        "create_diff",
+        "create_revision",
+        "apply_transactions_to_revision",
+        "set_diff_property",
+    ], "The conflict diff should be created before the resolution's diff."
+    m_conflict_conduit.create_raw_diff.assert_called_once_with(
+        "<<<<<<< HEAD\n=======\n>>>>>>> theirs\n", "PHID-BETA"
+    )
+    assert (
+        m_conflict_conduit.create_revision.call_args.args[1] == "PHID-DIFF-7"
+    ), "The revision should be created with the conflict diff."
+    m_conflict_conduit.apply_transactions_to_revision.assert_called_once_with(
+        "123",
+        [Transaction(TransactionType.UPDATE, "PHID-DIFF-1")],
+    )
+    assert (
+        m_conflict_conduit.set_diff_property.call_args.args[0] == "1"
+    ), "`set_diff_property` should describe the resolution's diff."
+    assert commits[0].merge_conflict == MergeConflictDiffs(
+        conflict=CreateRawDiffResult(id=7, phid="PHID-DIFF-7"), resolution_id=1
+    ), "The conflict and resolution diffs should be recorded on the commit."
+
+
+def test_find_merge_conflict_commit_matches_original_sha():
+    """The merge conflict commit is found by its SHA from before any rebase."""
+    rebased = commit(node="def" + "0" * 37)
+    rebased.orig_node = "abc" + "0" * 37
+    other = commit(node="abd" + "0" * 37)
+
+    assert (
+        submit.find_merge_conflict_commit([rebased, other], "abc") is rebased
+    ), "`find_merge_conflict_commit` should match the commit's original SHA."
+
+
+def test_merge_conflict_only_for_matching_commit(
+    m_conflict_conduit, m_repo, m_validate, m_logger, m_config, merge_conflict
+):
+    """Only the commit matching `--merge-conflict-commit` gets the conflict diff."""
+    commits = [
+        commit(bug_id="1", node="def" + "0" * 37),
+        commit(bug_id="1", node="abc" + "0" * 37),
+    ]
+    m_repo.commit_stack.return_value = commits
+
+    submit._submit(m_repo, merge_conflict_options(merge_conflict), UserData())
+
+    assert revision_calls(m_conflict_conduit) == [
+        "create_raw_diff",
+        "create_diffs",
+        "create_revision",
+        "set_diff_property",
+        "create_revision",
+        "apply_transactions_to_revision",
+        "set_diff_property",
+    ], "Only the second commit's revision should get the resolution as an update."
+    first_diffs = [
+        call.args[1] for call in m_conflict_conduit.create_revision.call_args_list
+    ]
+    assert first_diffs == [
+        "PHID-DIFF-1",
+        "PHID-DIFF-7",
+    ], "Only the matching commit's revision should be created with the conflict."
+    assert (
+        commits[0].merge_conflict is None
+    ), "The other commit shouldn't record a merge conflict."
+
+
+def test_merge_conflict_skipped_on_update(
+    m_conflict_conduit, m_repo, m_validate, m_logger, m_config, merge_conflict
+):
+    """The conflict isn't uploaded when the commit updates an existing revision."""
+    commits = [
+        commit(
+            bug_id="1",
+            node="abc" + "0" * 37,
+            body="Differential Revision: http://example.test/D5",
+        )
+    ]
+    m_repo.commit_stack.return_value = commits
+
+    submit._submit(m_repo, merge_conflict_options(merge_conflict), UserData())
+
+    m_conflict_conduit.create_raw_diff.assert_not_called()
+    assert (
+        m_conflict_conduit.update_revision.call_args.kwargs["diff_phid"]
+        == "PHID-DIFF-1"
+    ), "The existing revision should be updated with the commit's own diff."
+    m_logger.warning.assert_any_call(
+        "Not uploading the merge conflict of %s, as it updates %s.",
+        commits[0].name,
+        "D5",
+    )
+    assert (
+        commits[0].merge_conflict is None
+    ), "No merge conflict should be recorded when it isn't uploaded."
+
+
+@pytest.mark.parametrize(
+    "sha,message",
+    [
+        ("fff", "isn't one of the commits to submit"),
+        ("", "isn't one of the commits to submit"),
+        ("ab", "matches more than one of the commits"),
+    ],
+)
+def test_merge_conflict_commit_must_match_one_commit(
+    m_conflict_conduit,
+    m_repo,
+    m_validate,
+    m_logger,
+    m_config,
+    merge_conflict,
+    sha,
+    message,
+):
+    """`--merge-conflict-commit` must match exactly one commit to submit."""
+    m_repo.commit_stack.return_value = [
+        commit(bug_id="1", node="abc" + "0" * 37),
+        commit(bug_id="1", node="abd" + "0" * 37),
+    ]
+    options = merge_conflict_options(
+        submit.MergeConflict(path=merge_conflict.path, commit=sha)
+    )
+
+    with pytest.raises(exceptions.Error, match=message):
+        submit._submit(m_repo, options, UserData())
+
+    assert (
+        revision_calls(m_conflict_conduit) == []
+    ), "Nothing should be submitted when the merge conflict commit doesn't match."

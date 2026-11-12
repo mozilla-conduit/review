@@ -13,7 +13,7 @@ from pathlib import Path
 
 from mozphab import environment
 from mozphab.checks import DIFF_CHECKS, OVERRIDE_HINTS, failed_checks
-from mozphab.commits import AiReviewState, Commit
+from mozphab.commits import AiReviewState, Commit, MergeConflictDiffs
 from mozphab.conduit import ConduitAPIError, conduit, normalise_reviewer
 from mozphab.config import Config, config
 from mozphab.diff import Diff
@@ -29,7 +29,12 @@ from mozphab.helpers import (
     update_commit_title_previews,
 )
 from mozphab.logger import logger
-from mozphab.models import RevisionStatus, TransactionType, revision_monogram
+from mozphab.models import (
+    RevisionStatus,
+    Transaction,
+    TransactionType,
+    revision_monogram,
+)
 from mozphab.profiler import profiler
 from mozphab.repository import Repository, StackSelection
 from mozphab.spinner import wait_message
@@ -756,6 +761,94 @@ def local_uplift_if_possible(
     return False, unified_head
 
 
+def upload_merge_conflict(
+    repo: Repository, commits: list[Commit], options: SubmitOptions
+):
+    """Upload the merge conflict `uplift` was given, if any, to its commit's revision.
+
+    Phabricator orders a revision's diffs by ID, so this must run before
+    `_prepare_diffs` creates the commits' own diffs.
+    """
+    if not options.merge_conflict:
+        return
+
+    commit = find_merge_conflict_commit(commits, options.merge_conflict.commit)
+    commit.merge_conflict = create_merge_conflict_diff(
+        commit, options.merge_conflict, repo
+    )
+
+
+def find_merge_conflict_commit(commits: list[Commit], sha: str) -> Commit:
+    """Return the commit in `commits` whose original SHA is, or starts with, `sha`.
+
+    The original SHA is the one `uplift` was given, before any rebase onto the train.
+    """
+    matches = [commit for commit in commits if sha and commit.orig_node.startswith(sha)]
+    if not matches:
+        raise Error(
+            f"The merge conflict commit {sha} isn't one of the commits to submit."
+        )
+    if len(matches) > 1:
+        raise Error(
+            f"The merge conflict commit {sha} matches more than one of the commits "
+            "to submit."
+        )
+    return matches[0]
+
+
+def create_merge_conflict_diff(
+    commit: Commit, merge_conflict: MergeConflict, repo: Repository
+) -> MergeConflictDiffs | None:
+    """Create the diff showing `commit`'s merge conflict, if its revision is new.
+
+    Phabricator orders a revision's diffs by ID, so this must run before the
+    diff of `commit` itself is created.
+    """
+    if commit.rev_id:
+        logger.warning(
+            "Not uploading the merge conflict of %s, as it updates %s.",
+            commit.name,
+            revision_monogram(commit.rev_id),
+        )
+        return None
+
+    try:
+        diff_text = merge_conflict.path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise Error(f"Unable to read the merge conflict: {exc}") from exc
+
+    with wait_message("Submitting the merge conflict diff..."):
+        return MergeConflictDiffs(conduit.create_raw_diff(diff_text, repo.phid))
+
+
+def create_new_revision(
+    commit: Commit, diff: Diff, parent_rev_phid: str | None
+) -> dict:
+    """Create the revision for `commit`, showing its merge conflict first if it has one.
+
+    A revision with a merge conflict is created with the conflict diff, then updated
+    with `diff`, its resolution, so the two can be compared on Phabricator. Lando
+    never submits these as WIP, so the update leaves the status to Phabricator.
+    """
+    first_diff_phid = (
+        commit.merge_conflict.conflict.phid if commit.merge_conflict else diff.phid
+    )
+    with wait_message("Creating a new revision..."):
+        rev = conduit.create_revision(
+            commit, first_diff_phid, parent_rev_phid=parent_rev_phid
+        )
+
+    if commit.merge_conflict:
+        with wait_message("Attaching the merge conflict resolution..."):
+            conduit.apply_transactions_to_revision(
+                str(rev["object"]["id"]),
+                [Transaction(TransactionType.UPDATE, diff.phid)],
+            )
+        commit.merge_conflict.resolution_id = int(diff.id)
+
+    return rev
+
+
 def check_override_hints(commit: Commit, diff: Diff, can_prompt: bool):
     """Warn about changes Lando needs an override hint in the title to land.
 
@@ -980,6 +1073,8 @@ def _submit(
 
     has_new_revisions = any(not commit.rev_id for commit in commits if commit.submit)
 
+    upload_merge_conflict(repo, commits, options)
+
     # Prepare every diff (get_diff + upload + creatediff) up front, creating
     # them on Phabricator in parallel. The revision phase below still runs
     # serially due to parent_rev_phid chaining and amend_commit mutating
@@ -1032,18 +1127,17 @@ def _submit(
                     # doesn't mention it.
                     raise Error(f"D{commit.rev_id}: {e}") from e
         else:
-            with wait_message("Creating a new revision..."):
-                rev = conduit.create_revision(
-                    commit,
-                    diff.phid,
-                    # Set the parent revision if one is available, unless
-                    # --no-stack was passed.
-                    parent_rev_phid=(
-                        previous_commit.rev_phid
-                        if previous_commit and not options.no_stack
-                        else None
-                    ),
-                )
+            rev = create_new_revision(
+                commit,
+                diff,
+                # Set the parent revision if one is available, unless
+                # --no-stack was passed.
+                parent_rev_phid=(
+                    previous_commit.rev_phid
+                    if previous_commit and not options.no_stack
+                    else None
+                ),
+            )
 
         # Set revision ID and PHID from the Conduit API response.
         commit.rev_id = rev["object"]["id"]

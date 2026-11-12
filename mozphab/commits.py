@@ -7,10 +7,12 @@ from dataclasses import (
     asdict,
     dataclass,
     field,
+    fields,
 )
 from enum import Enum
 
 from mozphab.logger import logger
+from mozphab.models import CreateRawDiffResult
 
 ARC_COMMIT_DESC_TEMPLATE = """
 {title}
@@ -32,10 +34,26 @@ Bug #: {bug_id}
 WIP_RE = re.compile(r"^(?:WIP[: ]|WIP$)", flags=re.IGNORECASE)
 
 
-class AiReviewState(Enum):
+# Subclassing `str` lets `json.dump` write a state as its value, eg. in `to_dict`.
+class AiReviewState(str, Enum):
     NOT_REQUESTED = "not requested"
     REQUESTED = "requested"
     FAILED = "failed"
+
+
+# The `metadata` of a `Commit` field that `Commit.to_dict` leaves out.
+NOT_IN_DICT = {"in_dict": False}
+
+
+@dataclass
+class MergeConflictDiffs:
+    """The diffs showing an uplift's merge conflict on a revision, then its resolution."""
+
+    # The diff showing the merge conflict, uploaded before the resolution.
+    conflict: CreateRawDiffResult
+
+    # The ID of the diff resolving the conflict, once it's attached.
+    resolution_id: int | None = None
 
 
 @dataclass
@@ -65,6 +83,12 @@ class Commit:
     wip: bool | None = None
     ai_review_state: AiReviewState = AiReviewState.NOT_REQUESTED
     reviewers: dict[str, list[str]] = field(default_factory=dict)
+
+    # The diffs showing the merge conflict an uplift of this commit hit, if any.
+    # `uplift` reports them once in its own output, so they aren't in `to_dict`.
+    merge_conflict: MergeConflictDiffs | None = field(
+        default=None, metadata=NOT_IN_DICT
+    )
 
     @property
     def has_reviewers(self) -> bool:
@@ -115,14 +139,15 @@ class Commit:
         return f"{self.title}\n\n{self.body}"
 
     def to_dict(self) -> dict:
-        """Convert the `Commit` to a `dict`."""
+        """Convert the `Commit` to a `dict`, leaving out fields marked `NOT_IN_DICT`."""
+        left_out = {
+            commit_field.name
+            for commit_field in fields(self)
+            if not commit_field.metadata.get("in_dict", True)
+        }
         return asdict(
             self,
-            # NOTE: once we are on Python 3.11 as the minimum version,
-            # we can convert `AiReviewState` to a `StrEnum` and remove
-            # this code.
-            dict_factory=lambda fields: {
-                key: value.value if isinstance(value, Enum) else value
-                for key, value in fields
+            dict_factory=lambda items: {
+                name: value for name, value in items if name not in left_out
             },
         )

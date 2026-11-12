@@ -4,7 +4,8 @@
 
 import json
 
-from mozphab.commits import Commit
+from mozphab.commits import Commit, MergeConflictDiffs
+from mozphab.models import CreateRawDiffResult
 
 
 def test_commit_to_dict_json_roundtrip():
@@ -91,3 +92,29 @@ def test_commit_message_joins_title_and_body_with_a_blank_line():
 
 def test_commit_message_of_a_title_only_commit_is_the_title():
     assert Commit(title="title").message == "title"
+
+
+def test_commit_to_dict_leaves_out_merge_conflict():
+    commit = Commit(
+        name="commit-1",
+        merge_conflict=MergeConflictDiffs(
+            conflict=CreateRawDiffResult(id=7, phid="PHID-DIFF-7"), resolution_id=8
+        ),
+    )
+
+    commit_dict = commit.to_dict()
+
+    assert (
+        "merge_conflict" not in commit_dict
+    ), "`to_dict` should leave out fields marked `NOT_IN_DICT`."
+    assert commit_dict["name"] == "commit-1", "`to_dict` should keep the other fields."
+
+
+def test_commit_to_dict_copies_values():
+    commit = Commit(reviewers={"granted": ["r1"]})
+
+    commit.to_dict()["reviewers"]["granted"].append("r2")
+
+    assert commit.reviewers == {
+        "granted": ["r1"]
+    }, "Changing the `dict` from `to_dict` shouldn't change the `Commit`."
