@@ -2,12 +2,14 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-"""Typed, immutable views of the data returned by the Phabricator Conduit API."""
+"""Typed, immutable views of the data returned by the Phabricator Conduit API
+and the Bugzilla API."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
+from typing import ClassVar
 
 
 class RevisionStatus(str, Enum):
@@ -148,6 +150,52 @@ class Revision:
                 }
             ),
             reviewer_phids=tuple(reviewer["reviewerPHID"] for reviewer in reviewers),
+        )
+
+
+# The Bugzilla login of the assignee of bugs that nobody is assigned to.
+BUGZILLA_NOBODY = "nobody@mozilla.org"
+CONTRIBUTOR_KEYWORDS = frozenset({"good-first-bug", "good-next-bug"})
+
+
+@dataclass(frozen=True)
+class Bug:
+    """A bug, parsed from a Bugzilla `/bug` result."""
+
+    # The fields to ask Bugzilla for, with `include_fields`.
+    FIELDS: ClassVar[tuple[str, ...]] = ("id", "assigned_to", "keywords", "mentors")
+
+    id: str
+    assigned_to: str
+    keywords: frozenset[str] = frozenset()
+    mentors: tuple[str, ...] = ()
+
+    @property
+    def is_assigned(self) -> bool:
+        """Return `True` if somebody is assigned to the bug."""
+        return self.assigned_to.lower() != BUGZILLA_NOBODY
+
+    @property
+    def is_for_contributors(self) -> bool:
+        """Return `True` if the bug is suitable for contributors to work on.
+
+        Bugs are suitable if they're mentored, or have the `good-first-bug` or
+        `good-next-bug` keyword.
+        """
+        return bool(self.mentors or self.keywords & CONTRIBUTOR_KEYWORDS)
+
+    def is_assigned_to(self, login: str) -> bool:
+        """Return `True` if the Bugzilla user `login` is assigned to the bug."""
+        return self.assigned_to.lower() == login.lower()
+
+    @classmethod
+    def from_bmo(cls, data: dict) -> "Bug":
+        """Parse a bug from a Bugzilla `/bug` result."""
+        return cls(
+            id=str(data["id"]),
+            assigned_to=data["assigned_to"],
+            keywords=frozenset(data.get("keywords", ())),
+            mentors=tuple(data.get("mentors", ())),
         )
 
 

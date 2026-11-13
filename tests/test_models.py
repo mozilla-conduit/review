@@ -7,6 +7,7 @@ import dataclasses
 import pytest
 
 from mozphab.models import (
+    Bug,
     DiffCommit,
     RemoteDiff,
     Revision,
@@ -161,3 +162,47 @@ def test_transaction_is_frozen():
 
     with pytest.raises(dataclasses.FrozenInstanceError):
         transaction.value = "Other"  # type: ignore[misc]
+
+
+def test_bug_from_bmo():
+    bug = Bug.from_bmo(
+        {
+            "id": 123,
+            "assigned_to": "Me@example.com",
+            "keywords": ["good-first-bug", "perf"],
+            "mentors": ["mentor@example.com"],
+        }
+    )
+    assert bug == Bug(
+        id="123",
+        assigned_to="Me@example.com",
+        keywords=frozenset({"good-first-bug", "perf"}),
+        mentors=("mentor@example.com",),
+    )
+    assert bug.is_assigned
+    assert bug.is_assigned_to("me@example.com"), "Logins should match in any case."
+    assert not bug.is_assigned_to("x@y.com")
+
+    with pytest.raises(KeyError):
+        Bug.from_bmo({"id": 123})
+
+
+@pytest.mark.parametrize(
+    "keywords,mentors,is_for_contributors",
+    [
+        ((), (), False),
+        (("perf",), (), False),
+        (("good-first-bug",), (), True),
+        (("good-next-bug",), (), True),
+        ((), ("mentor@example.com",), True),
+    ],
+)
+def test_bug_is_for_contributors(keywords, mentors, is_for_contributors):
+    bug = Bug(
+        id="1",
+        assigned_to="nobody@mozilla.org",
+        keywords=frozenset(keywords),
+        mentors=mentors,
+    )
+    assert not bug.is_assigned
+    assert bug.is_for_contributors is is_for_contributors

@@ -9,6 +9,7 @@ import pytest
 
 from mozphab.bmo import BMOAPIError, bmo
 from mozphab.exceptions import Error
+from mozphab.models import Bug
 
 
 @mock.patch("mozphab.bmo.BMOAPI._req_with_retries")
@@ -102,3 +103,17 @@ def test_req_with_retries(m_get):
     m_get.side_effect = None
     m_get.return_value = {"message": "test"}
     assert bmo._req_with_retries("test")["message"] == "test"
+
+
+@mock.patch("mozphab.bmo.BMOAPI.get")
+@mock.patch("mozphab.bmo.conduit")
+def test_bugs(m_conduit, m_get):
+    m_get.return_value = {"bugs": [{"id": 123, "assigned_to": "me@example.com"}]}
+    assert bmo.bugs(["123", "456"]) == [Bug(id="123", assigned_to="me@example.com")]
+    m_get.assert_called_once_with(
+        "bug?id=123%2C456&include_fields=id%2Cassigned_to%2Ckeywords%2Cmentors",
+        headers={"X-PHABRICATOR-TOKEN": mock.ANY},
+    )
+
+    m_get.return_value = {"bugs": []}
+    assert bmo.bugs(["123"]) == [], "Bugs the user can't see should be left out."

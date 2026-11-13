@@ -13,12 +13,13 @@ import pytest
 from callee import Contains
 
 from mozphab import exceptions, helpers, mozphab, repository
+from mozphab.bmo import BMOAPIError
 from mozphab.commands import submit
 from mozphab.commits import Commit, MergeConflictDiffs
 from mozphab.conduit import ConduitAPIError
 from mozphab.config import Config
 from mozphab.diff import Diff
-from mozphab.models import CreateRawDiffResult, Transaction, TransactionType
+from mozphab.models import Bug, CreateRawDiffResult, Transaction, TransactionType
 from mozphab.user import UserData
 
 from .conftest import search_remote_diff, search_revision
@@ -2145,3 +2146,180 @@ def test_merge_conflict_commit_must_match_one_commit(
     assert (
         revision_calls(m_conflict_conduit) == []
     ), "Nothing should be submitted when the merge conflict commit doesn't match."
+
+
+def contributor(is_employee: bool | None = False) -> UserData:
+    user_data = UserData()
+    user_data.is_employee = is_employee
+    return user_data
+
+
+def bug(bug_id="2", assigned_to="nobody@mozilla.org", keywords=(), mentors=()):
+    return Bug(
+        id=bug_id,
+        assigned_to=assigned_to,
+        keywords=frozenset(keywords),
+        mentors=tuple(mentors),
+    )
+
+
+@mock.patch("mozphab.commands.submit.bmo")
+def test_find_unassigned_bugs(m_bmo):
+    repo = repository.Repository("", "", "http://phab")
+    repo.bmo_url = "https://bmo.test"
+    submit.conduit.set_repo(repo)
+    m_bmo.whoami.return_value = {"name": "Me@example.com"}
+    mine = bug("1", assigned_to="me@example.com")
+    unassigned = bug("2")
+    taken = bug("3", assigned_to="x@y.com")
+    # Bugzilla doesn't return the bugs in the order they were asked for.
+    m_bmo.bugs.return_value = [taken, unassigned, mine]
+
+    commits = [commit(bug_id=bug_id) for bug_id in ("1", "2", "3", "4", "2")]
+    assert submit.find_unassigned_bugs(commits, contributor()) == [
+        unassigned,
+        taken,
+    ], "Bugs not assigned to the user should be found, in the order of the stack."
+    m_bmo.bugs.assert_called_once_with(
+        ["1", "2", "3", "4"]
+    ), "Each bug should be asked for once, in a single request."
+
+    m_bmo.reset_mock()
+    for user_data in (contributor(True), contributor(None)):
+        assert not submit.find_unassigned_bugs(commits, user_data)
+    m_bmo.whoami.assert_not_called()
+
+    assert not submit.find_unassigned_bugs(
+        [
+            commit(bug_id="2", rev_id=1),
+            commit(bug_id="2", submit=False),
+            commit(bug_id=None),
+        ],
+        contributor(),
+    ), "Only new revisions with a bug should be checked."
+    m_bmo.whoami.assert_not_called()
+
+    repo.bmo_url = None
+    assert not submit.find_unassigned_bugs(commits, contributor())
+    repo.bmo_url = "https://bmo.test"
+
+    m_bmo.bugs.side_effect = BMOAPIError("nope")
+    assert not submit.find_unassigned_bugs(
+        commits, contributor()
+    ), "The check should be skipped if the bugs can't be looked up."
+
+    m_bmo.bugs.side_effect = None
+    m_bmo.whoami.side_effect = BMOAPIError("nope")
+    assert not submit.find_unassigned_bugs(commits, contributor())
+
+
+UNASSIGNED_GFB = bug("2", keywords=["good-first-bug"])
+UNASSIGNED_MENTORED = bug("2", mentors=["mentor@example.com"])
+UNASSIGNED = bug("2", keywords=["perf"])
+TAKEN = bug("3", assigned_to="x@y.com")
+TAKEN_GFB = bug("3", assigned_to="x@y.com", keywords=["good-next-bug"])
+
+
+@pytest.mark.parametrize(
+    "unassigned,options,answer,expected",
+    [
+        ([], submit.SubmitOptions(), None, True),
+        ([UNASSIGNED], submit.SubmitOptions(), "Yes", True),
+        ([UNASSIGNED], submit.SubmitOptions(), "No", False),
+        ([UNASSIGNED], submit.SubmitOptions(yes=True), None, True),
+        ([UNASSIGNED], submit.SubmitOptions(auto_submit=True), None, True),
+    ],
+)
+@mock.patch("mozphab.commands.submit.prompt")
+@mock.patch("mozphab.commands.submit.find_unassigned_bugs")
+def test_confirm_unassigned_bugs(
+    m_find, m_prompt, unassigned, options, answer, expected
+):
+    m_find.return_value = unassigned
+    m_prompt.return_value = answer
+
+    with mock.patch.object(submit, "logger") as m_logger:
+        assert submit.confirm_unassigned_bugs([], options, contributor()) is expected
+
+    assert m_logger.warning.called == bool(unassigned)
+    assert m_prompt.called == (bool(unassigned) and options.can_prompt)
+
+
+def unassigned_bugs_warning(unassigned: list[Bug]) -> str:
+    with (
+        mock.patch.object(submit, "find_unassigned_bugs", return_value=unassigned),
+        mock.patch.object(submit, "logger") as m_logger,
+    ):
+        submit.confirm_unassigned_bugs(
+            [], submit.SubmitOptions(yes=True), contributor()
+        )
+    args = m_logger.warning.call_args.args
+    # Join the wrapped lines back up to check the sentences.
+    return " ".join((args[0] % args[1:]).split())
+
+
+SUITABLE = [
+    "Bug 2 is not assigned to you.",
+    "may be closed without review, as reviewer time is limited.",
+    "Before submitting a patch, comment on the bug",
+    "please follow the guidelines for contributing code",
+]
+NOT_SUITABLE = ["someone else", "mentored", "something to work on", "really think"]
+
+
+@pytest.mark.parametrize(
+    "unassigned,present,absent",
+    [
+        ([UNASSIGNED_GFB], SUITABLE, NOT_SUITABLE),
+        ([UNASSIGNED_MENTORED], SUITABLE, NOT_SUITABLE),
+        (
+            [UNASSIGNED],
+            [
+                "Bug 2 is not assigned to you.",
+                "isn't mentored or marked as a good-first-bug or good-next-bug",
+                "as reviewer time is limited.",
+                "If you're looking for something to work on",
+            ],
+            ["someone else", "guidelines", "really think"],
+        ),
+        *(
+            (
+                [taken],
+                [
+                    "Bug 3 is assigned to someone else, who may already be "
+                    "working on it.",
+                    "may be closed without review. If you really think nobody is "
+                    "working on it, comment on the bug to ask to be assigned",
+                    "guidelines for contributing code",
+                ],
+                ["reviewer time", "mentored", "something to work on", "Before"],
+            )
+            for taken in (TAKEN, TAKEN_GFB)
+        ),
+        (
+            [UNASSIGNED_GFB, TAKEN],
+            [
+                "Bug 2 is not assigned to you. Bug 3 is assigned to someone else",
+                "as reviewer time is limited.",
+                "Before submitting a patch",
+                "guidelines for contributing code",
+            ],
+            ["mentored", "something to work on", "really think"],
+        ),
+        (
+            [UNASSIGNED, TAKEN],
+            [
+                "Bug 2 is not assigned to you. It isn't mentored",
+                "If you're looking for something to work on",
+            ],
+            ["guidelines"],
+        ),
+    ],
+)
+def test_unassigned_bugs_warning(unassigned, present, absent):
+    text = unassigned_bugs_warning(unassigned)
+    assert submit.CONTRIBUTING_URL in text
+    for phrase in present:
+        assert phrase in text
+    for phrase in absent:
+        assert phrase not in text

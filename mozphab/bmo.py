@@ -12,6 +12,7 @@ from .conduit import conduit
 from .environment import USER_AGENT
 from .exceptions import Error
 from .logger import logger
+from .models import Bug
 from .profiler import profiler
 
 
@@ -87,6 +88,21 @@ class BMOAPI:
         return self._req_with_retries(
             "whoami", headers={"X-PHABRICATOR-TOKEN": conduit.load_api_token()}
         )
+
+    def bugs(self, bug_ids: list[str]) -> list[Bug]:
+        """Return the bugs with the given IDs, fetched in a single request.
+
+        Bugs that don't exist, or that the user can't see, eg. security bugs,
+        are left out.
+        """
+        query = url_parse.urlencode(
+            {"id": ",".join(bug_ids), "include_fields": ",".join(Bug.FIELDS)}
+        )
+        res = self.get(
+            f"bug?{query}",
+            headers={"X-PHABRICATOR-TOKEN": conduit.load_api_token()},
+        )
+        return [Bug.from_bmo(bug) for bug in res.get("bugs", [])]
 
 
 bmo = BMOAPI()

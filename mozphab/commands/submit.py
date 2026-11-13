@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mozphab import environment
+from mozphab.bmo import BMOAPIError, bmo
 from mozphab.checks import DIFF_CHECKS, OVERRIDE_HINTS, failed_checks
 from mozphab.commits import AiReviewState, Commit, MergeConflictDiffs
 from mozphab.conduit import ConduitAPIError, conduit, normalise_reviewer
@@ -30,6 +31,7 @@ from mozphab.helpers import (
 )
 from mozphab.logger import logger
 from mozphab.models import (
+    Bug,
     RevisionStatus,
     Transaction,
     TransactionType,
@@ -320,6 +322,109 @@ def show_review_queue_reminder(
         conduit.repo.phab_url,
         config.filename,
     )
+
+
+CONTRIBUTING_URL = (
+    "https://firefox-source-docs.mozilla.org/setup/contributing_code.html"
+    "#how-to-contribute-code-to-firefox"
+)
+
+
+def find_unassigned_bugs(commits: list[Commit], user_data: UserData) -> list[Bug]:
+    """Return the bugs of new revisions that a contributor isn't assigned to.
+
+    Staff, and users whose status is unknown, are never checked.  Bugs that
+    can't be looked up are skipped rather than warned about.
+    """
+    if user_data.is_employee is not False or not conduit.repo.bmo_url:
+        return []
+
+    bug_ids = list(
+        dict.fromkeys(
+            commit.bug_id
+            for commit in commits
+            if commit.submit and not commit.rev_id and commit.bug_id
+        )
+    )
+    if not bug_ids:
+        return []
+
+    try:
+        login = bmo.whoami()["name"]
+        bugs = bmo.bugs(bug_ids)
+    except (BMOAPIError, KeyError) as e:
+        logger.debug("Failed to check the assignees of the bugs: %s", e)
+        return []
+
+    unassigned = [bug for bug in bugs if not bug.is_assigned_to(login)]
+    return sorted(unassigned, key=lambda bug: bug_ids.index(bug.id))
+
+
+def is_unsuitable(bug: Bug) -> bool:
+    """Return `True` if the bug is unassigned but not suitable for contributors.
+
+    A bug is suitable for contributors if it's mentored, or marked as a good
+    first or next bug.
+    """
+    return not bug.is_assigned and not bug.is_for_contributors
+
+
+def describe_unassigned_bug(bug: Bug) -> str:
+    if bug.is_assigned:
+        text = (
+            f"Bug {bug.id} is assigned to someone else, who may already be "
+            "working on it."
+        )
+    else:
+        text = f"Bug {bug.id} is not assigned to you."
+    if is_unsuitable(bug):
+        text += (
+            " It isn't mentored or marked as a good-first-bug or good-next-bug, "
+            "so it may not be a suitable bug to work on."
+        )
+    return textwrap.fill(text, width=72, break_on_hyphens=False)
+
+
+def confirm_unassigned_bugs(
+    commits: list[Commit], options: SubmitOptions, user_data: UserData
+) -> bool:
+    """Warn contributors submitting for bugs they aren't assigned to.
+
+    Return `False` if the user chose not to submit.
+    """
+    with wait_message("Checking bug assignees..."):
+        unassigned = find_unassigned_bugs(commits, user_data)
+    if not unassigned:
+        return True
+
+    if all(bug.is_assigned for bug in unassigned):
+        advice = (
+            "Patches for bugs that aren't assigned to you may be closed without "
+            "review. If you really think nobody is working on it, comment on the "
+            "bug to ask to be assigned, and wait for a reply."
+        )
+    else:
+        advice = (
+            "Patches for bugs that aren't assigned to you may be closed without "
+            "review, as reviewer time is limited. Before submitting a patch, "
+            "comment on the bug to ask to be assigned, and wait for a reply."
+        )
+    docs = (
+        "If you're looking for something to work on, start here:"
+        if any(is_unsuitable(bug) for bug in unassigned)
+        else "As a reminder, please follow the guidelines for contributing code:"
+    )
+    logger.warning(
+        "\n%s\n\n%s\n\n%s\n-> %s\n",
+        "\n".join(describe_unassigned_bug(bug) for bug in unassigned),
+        textwrap.fill(advice, width=72, break_on_hyphens=False),
+        docs,
+        CONTRIBUTING_URL,
+    )
+
+    if not options.can_prompt:
+        return True
+    return prompt("Submit anyway", ["No", "Yes"]) == "Yes"
 
 
 def validate_commit_stack(
@@ -1051,6 +1156,9 @@ def _submit(
 
     telemetry().submission.preparation_time.stop()
     telemetry().submission.commits_count.add(len(commits))
+
+    if not confirm_unassigned_bugs(commits, options, user_data):
+        return []
 
     # Confirmation prompt.
     if options.yes:
