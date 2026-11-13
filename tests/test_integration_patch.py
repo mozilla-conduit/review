@@ -106,6 +106,77 @@ def test_patch_raw(
     ]
 
 
+@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+@mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
+@mock.patch("mozphab.conduit.ConduitAPI.call")
+@mock.patch("builtins.print")
+def test_patch_format_patch(
+    m_print,
+    m_call_conduit,
+    m_get_diffs,
+    m_get_revs,
+    in_process,
+    hg_repo_path,
+    git_repo_path,
+    tmp_path,
+):
+    def init(path):
+        os.chdir(path)
+        m_get_revs.return_value = [REV_1]
+        m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1}
+        m_get_revs.side_effect = None
+        m_call_conduit.side_effect = None
+
+    # git: a `git format-patch`-style mailbox that `git am` creates commits from.
+    init(git_repo_path)
+
+    m_print.reset_mock()
+    m_call_conduit.return_value = PATCH_1_DIFF
+    mozphab.main(["patch", "D1", "--format-patch"], is_development=True)
+    assert m_print.call_args_list == [mock.call(PATCH_1_MBOX + PATCH_1_DIFF)]
+
+    mbox = tmp_path / "D1.patch"
+    mbox.write_text(m_print.call_args[0][0] + "\n", encoding="utf-8")
+    git_out("am", str(mbox))
+    # `%B` is followed by the newline `log` ends each commit with.
+    assert git_out("log", "-1", "--format=%an <%ae>%n%at%n%B") == (
+        "user <author@example.com>\n"
+        "1547806078\n"
+        "title R1\n"
+        "\n"
+        "ą\n"
+        "\n"
+        "Differential Revision: http://example.test/D1\n"
+        "\n"
+    ), "`git am` should recreate the author, date and full commit message."
+    assert (git_repo_path / "X").read_text() == "a\n"
+
+    m_print.reset_mock()
+    # Stack: REV_1 (root) -> REV_2 (child). Target is D2.
+    rev2_with_graph = with_stack_graph(
+        REV_2, {"PHID-REV-2": ["PHID-REV-1"], "PHID-REV-1": []}
+    )
+    m_get_revs.side_effect = ([rev2_with_graph], [REV_1])
+    m_get_diffs.return_value = {"PHID-DIFF-1": DIFF_1, "PHID-DIFF-2": DIFF_2}
+    m_call_conduit.side_effect = lambda method, args: {
+        1: PATCH_1_DIFF,
+        2: PATCH_2_DIFF,
+    }[args["diffID"]]
+    mozphab.main(["patch", "D2", "--format-patch"], is_development=True)
+    assert m_print.call_args_list == [
+        mock.call(PATCH_1_MBOX + PATCH_1_DIFF),
+        mock.call(PATCH_2_MBOX + PATCH_2_DIFF),
+    ]
+
+    # hg: the same `hg import`-able changeset patch as `--raw`.
+    init(hg_repo_path)
+
+    m_print.reset_mock()
+    m_call_conduit.return_value = PATCH_1_DIFF
+    mozphab.main(["patch", "D1", "--format-patch"], is_development=True)
+    assert m_print.call_args_list == [mock.call(PATCH_1_META + PATCH_1_DIFF)]
+
+
 @mock.patch("mozphab.mercurial.Mercurial.is_public", return_value=True)
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
@@ -553,6 +624,18 @@ title R1
 
 Differential Revision: http://example.test/D1
 """
+PATCH_1_MBOX = """\
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: user <author@example.com>
+Date: Fri, 18 Jan 2019 10:07:58 -0000
+Subject: [PATCH] title R1
+
+ą
+
+Differential Revision: http://example.test/D1
+
+---
+"""
 PATCH_1_DIFF = """\
 diff --git a/X b/X
 new file mode 100644
@@ -572,6 +655,18 @@ title R2
 ą
 
 Differential Revision: http://example.test/D2
+"""
+PATCH_2_MBOX = """\
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: user <author@example.com>
+Date: Fri, 18 Jan 2019 10:07:58 -0000
+Subject: [PATCH] title R2
+
+ą
+
+Differential Revision: http://example.test/D2
+
+---
 """
 PATCH_2_DIFF = """\
 diff --git a/X b/X

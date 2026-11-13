@@ -14,6 +14,7 @@ from .diff import Diff
 from .exceptions import CommandError, Error
 from .git import Git
 from .helpers import (
+    format_as_git_patch,
     is_valid_email,
     short_node,
     temporary_binary_file,
@@ -538,9 +539,16 @@ class Jujutsu(Repository):
             )
 
     def format_patch(
-        self, diff: str, body: str, author: str | None, author_date: int | None
+        self,
+        diff: str,
+        body: str,
+        author: str | None,
+        author_date: int | None,
+        include_preamble: bool = False,
     ) -> str:
-        return diff
+        if not include_preamble:
+            return diff
+        return format_as_git_patch(diff, body, author, author_date)
 
     def fetch_from_upstream(self):
         """Fetch latest changes from upstream remote without merging."""

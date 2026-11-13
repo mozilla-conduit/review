@@ -536,6 +536,33 @@ def test_short_node():
     assert helpers.short_node("mozilla-central") == "mozilla-central"
 
 
+def test_format_as_git_patch():
+    diff = "diff --git a/X b/X\n--- a/X\n+++ b/X\n@@ -1 +1 @@\n-a\n+b\n"
+    body = "title\n\nsummary line\n\nDifferential Revision: http://example.test/D1"
+
+    assert helpers.format_as_git_patch(
+        diff, body, "user <author@example.com>", 1547806078
+    ) == (
+        "From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001\n"
+        "From: user <author@example.com>\n"
+        "Date: Fri, 18 Jan 2019 10:07:58 -0000\n"
+        "Subject: [PATCH] title\n"
+        "\n"
+        "summary line\n"
+        "\n"
+        "Differential Revision: http://example.test/D1\n"
+        "\n"
+        "---\n" + diff
+    ), "The patch should carry the author, date and full commit message."
+
+    assert helpers.format_as_git_patch(diff, "title", None, None) == (
+        "From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001\n"
+        "Subject: [PATCH] title\n"
+        "\n"
+        "---\n" + diff
+    ), "An unknown author and date should be left out, as should an empty body."
+
+
 def test_temporary_file_unicode():
     message = "ćwikła"
     with helpers.temporary_file(message) as fname:

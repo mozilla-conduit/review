@@ -41,6 +41,10 @@ class ApplyMode(Enum):
     # Print the patches rather than applying them, from `--raw`.
     PRINT = "print"
 
+    # Like `PRINT`, but each diff is preceded by a preamble carrying its author,
+    # date and full commit message, from `--format-patch`.
+    FORMAT_PATCH = "format-patch"
+
 
 @dataclass(frozen=True)
 class PatchOptions:
@@ -65,9 +69,11 @@ class PatchOptions:
     @classmethod
     def from_args(cls, args: argparse.Namespace, config: Config) -> "PatchOptions":
         """Build the options from the parsed command line and the user's config."""
-        # `--raw` overrides not committing.
+        # `--raw` and `--format-patch` override not committing.
         if args.raw:
             mode = ApplyMode.PRINT
+        elif args.format_patch:
+            mode = ApplyMode.FORMAT_PATCH
         elif args.no_commit or not config.create_commit:
             mode = ApplyMode.WORKING_TREE
         else:
@@ -556,7 +562,7 @@ def check_environment(repo: Repository, options: PatchOptions):
     # The Phabricator ping, the VCS check, and the worktree-cleanness check
     # are independent: run them concurrently when all three are needed.
     # When printing only the ping runs, so skip the pool overhead.
-    if options.mode is ApplyMode.PRINT:
+    if options.mode in (ApplyMode.PRINT, ApplyMode.FORMAT_PATCH):
         with wait_message("Checking connection to Phabricator."):
             if not conduit.check():
                 raise Error("Failed to use Conduit API")
@@ -598,15 +604,22 @@ def build_patch_plan(
     if options.diff_id:
         diffs = with_requested_diff(diffs, get_diff_by_id(options.diff_id))
 
-    if options.mode is ApplyMode.COMMIT:
+    # Creating a commit, or printing the preamble `--format-patch` creates one
+    # from, needs the diff's commit information.
+    if options.mode in (ApplyMode.COMMIT, ApplyMode.FORMAT_PATCH):
+        advice = (
+            "Use `--raw` to print the diff alone."
+            if options.mode is ApplyMode.FORMAT_PATCH
+            else "Use `--no-commit` to patch the working tree."
+        )
         for revision in revisions:
             if not diffs[revision.phid].commits:
                 raise Error(
                     "A diff without commit information detected in revision %s.\n"
-                    "Use `--no-commit` to patch the working tree." % revision.monogram
+                    "%s" % (revision.monogram, advice)
                 )
 
-    if options.mode is ApplyMode.PRINT:
+    if options.mode in (ApplyMode.PRINT, ApplyMode.FORMAT_PATCH):
         return PatchPlan(mode=options.mode, revisions=tuple(revisions), diffs=diffs)
 
     base_diff = diffs[revisions[0].phid]
@@ -684,7 +697,15 @@ def print_patches(repo: Repository, plan: PatchPlan):
 
         # print rather than use logger.info; there's no need for this
         # to be in our logs.
-        print(repo.format_patch(raw_diffs[revision.id], body, author, date_created))
+        print(
+            repo.format_patch(
+                raw_diffs[revision.id],
+                body,
+                author,
+                date_created,
+                include_preamble=plan.mode is ApplyMode.FORMAT_PATCH,
+            )
+        )
 
         if revision.id != plan.revisions[-1].id:
             logger.info("%s applied", revision.monogram)
@@ -806,6 +827,9 @@ def patch(repo: Repository, args: argparse.Namespace):
         WORKING_TREE - apply the patches to the working tree at the target,
             without any of the base-resolution or rebasing described below
         PRINT - only print out the diffs
+        FORMAT_PATCH - like PRINT, but print each diff with a preamble (the
+            author, date and full commit message) in the form the VCS imports
+            commits from
     options.apply_to - <base|here|NODE> (default: base)
         base - apply on top of the diff's own base commit
         here - apply on top of the current commit/checkout
@@ -843,7 +867,7 @@ def patch(repo: Repository, args: argparse.Namespace):
 
     plan = build_patch_plan(repo, options, revisions)
     match plan.mode:
-        case ApplyMode.PRINT:
+        case ApplyMode.PRINT | ApplyMode.FORMAT_PATCH:
             print_patches(repo, plan)
         case ApplyMode.WORKING_TREE:
             apply_to_working_tree(repo, plan)
@@ -883,7 +907,7 @@ def add_parser(parser):
         "revision_id", type=check_revision_id, help="Revision number."
     )
 
-    # `--apply-to` and `--raw` are mutually exclusive.
+    # `--apply-to`, `--raw` and `--format-patch` are mutually exclusive.
     patch_group = patch_parser.add_mutually_exclusive_group()
     patch_group.add_argument(
         "--apply-to",
@@ -896,6 +920,13 @@ def add_parser(parser):
     )
     patch_group.add_argument(
         "--raw", action="store_true", help="Prints out the raw diff to the STDOUT."
+    )
+    patch_group.add_argument(
+        "--format-patch",
+        action="store_true",
+        dest="format_patch",
+        help="Prints each patch with its author, date and full commit message to "
+        "the STDOUT, in the form `git am` (or `hg import`) creates commits from.",
     )
 
     patch_parser.add_argument(

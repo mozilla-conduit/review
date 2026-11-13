@@ -715,8 +715,15 @@ class Mercurial(Repository):
             self.hg(commit_cmd)
 
     def format_patch(
-        self, diff: str, body: str, author: str | None, author_date: int | None
+        self,
+        diff: str,
+        body: str,
+        author: str | None,
+        author_date: int | None,
+        include_preamble: bool = False,
     ) -> str:
+        # To preserve the original behavior of `--raw` with Mercurial repos, the
+        # preamble is always included, whatever `include_preamble` says.
         changeset = ["# HG changeset patch"]
         if author:
             changeset.append("# User {}".format(author))

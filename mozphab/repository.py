@@ -394,9 +394,18 @@ class Repository(object):
         """Apply the patch and commit the changes, as part of `attempt` if given."""
 
     def format_patch(
-        self, diff: str, body: str, author: str | None, author_date: int | None
+        self,
+        diff: str,
+        body: str,
+        author: str | None,
+        author_date: int | None,
+        include_preamble: bool = False,
     ) -> str:
-        """Format a patch appropriate for importing."""
+        """Format a patch appropriate for importing.
+
+        With `include_preamble`, the patch also carries the author, date and full
+        commit message in the form the VCS imports commits from.
+        """
         raise NotImplementedError()
 
     def fetch_from_upstream(self):

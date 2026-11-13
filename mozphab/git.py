@@ -21,6 +21,7 @@ from .exceptions import CommandError, Error, NotFoundError
 from .gitcommand import GitCommand
 from .helpers import (
     create_hunk_lines,
+    format_as_git_patch,
     is_valid_email,
     prompt,
     short_node,
@@ -727,9 +728,16 @@ class Git(Repository):
         self.commit(body, author, author_date)
 
     def format_patch(
-        self, diff: str, body: str, author: str | None, author_date: int | None
+        self,
+        diff: str,
+        body: str,
+        author: str | None,
+        author_date: int | None,
+        include_preamble: bool = False,
     ) -> str:
-        return diff
+        if not include_preamble:
+            return diff
+        return format_as_git_patch(diff, body, author, author_date)
 
     def _get_current_head(self) -> str:
         """Return current's HEAD symbolic link."""

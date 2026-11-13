@@ -73,8 +73,11 @@ def assert_api_token_is_present(repo: Repository, args: argparse.Namespace):
 
 
 def should_disable_logging(args: argparse.Namespace) -> bool:
-    # Ensure that `patch --raw ..` only outputs the patch
-    if args.command == "patch" and getattr(args, "raw", False):
+    # Ensure that `patch --raw ..` and `patch --format-patch ..` only output
+    # the patches
+    if args.command == "patch" and (
+        getattr(args, "raw", False) or getattr(args, "format_patch", False)
+    ):
         return True
 
     # Ensure that `list --format json` only outputs JSON

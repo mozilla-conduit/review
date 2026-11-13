@@ -13,6 +13,7 @@ import sys
 import tempfile
 from collections.abc import Callable
 from contextlib import contextmanager
+from email.utils import formatdate
 from itertools import zip_longest
 from shutil import which
 from typing import NoReturn
@@ -462,6 +463,31 @@ def prepare_body(
     body = f"{title}\n\n{summary}"
 
     return body
+
+
+def format_as_git_patch(
+    diff: str, body: str, author: str | None, author_date: int | None
+) -> str:
+    """Format `diff` as a `git format-patch`-style (mailbox) patch.
+
+    The patch carries the full commit message, `body`, so that `git am` creates a
+    commit with it, and with `author` and `author_date` when they are known.
+    """
+    title, _, message = body.partition("\n")
+    lines = ["From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001"]
+    if author:
+        lines.append(f"From: {author}")
+    if author_date is not None:
+        lines.append(f"Date: {formatdate(author_date)}")
+    lines.append(f"Subject: [PATCH] {title}")
+    lines.append("")
+    message = message.strip("\n")
+    if message:
+        lines.append(message)
+        lines.append("")
+    lines.append("---")
+    lines.append(diff)
+    return "\n".join(lines)
 
 
 def short_node(text: str) -> str:

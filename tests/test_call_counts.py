@@ -103,6 +103,7 @@ def build_patch_args(target_rev_id: int) -> argparse.Namespace:
     args.revision_id = target_rev_id
     args.no_commit = False
     args.raw = False
+    args.format_patch = False
     args.apply_to = "base"
     args.yes = True
     args.skip_dependencies = False

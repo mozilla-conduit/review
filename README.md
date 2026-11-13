@@ -259,7 +259,13 @@ This behavior can be modified with the following options:
    working directory with an external tool:
    `$ moz-phab patch D123 --raw | patch -p1`.
    `$ moz-phab patch D123 --raw | hg import`.
-   `$ moz-phab patch D123 --raw | git am`.
+
+- `--format-patch` Like `--raw`, but print each diff with a preamble carrying the
+   author, date and full commit message, in the form the VCS creates commits
+   from (a `git format-patch`-style mailbox for Git and Jujutsu; the `--raw`
+   output already has it for Mercurial). It can be used to create the commits
+   with an external tool:
+   `$ moz-phab patch D123 --format-patch | git am`.
 
 - `--no-commit` Use the `git apply` command (also for Mercurial repos) to patch
    the diffs. No commit or branch is created.

@@ -63,6 +63,13 @@ def test_patch_options_from_args():
         options.mode is patch.ApplyMode.PRINT
     ), "`--raw` should print the patches even when not committing."
 
+    options = patch.PatchOptions.from_args(
+        patch_args(format_patch=True, no_commit=True), config
+    )
+    assert (
+        options.mode is patch.ApplyMode.FORMAT_PATCH
+    ), "`--format-patch` should print the patches with the preamble."
+
     config.create_commit = False
     options = patch.PatchOptions.from_args(patch_args(), config)
     assert (
@@ -483,6 +490,7 @@ def test_patch(
             revision_id=123,
             no_commit=False,
             raw=False,
+            format_patch=False,
             apply_to="base",
             yes=False,
             skip_dependencies=False,
@@ -497,6 +505,7 @@ def test_patch(
             self.revision_id = revision_id
             self.no_commit = no_commit
             self.raw = raw
+            self.format_patch = format_patch
             self.apply_to = apply_to
             self.yes = yes
             self.skip_dependencies = skip_dependencies
@@ -629,6 +638,32 @@ def test_patch(
     m_git_apply_patch.assert_not_called()
     m_apply_patch.assert_not_called()
     m_print.assert_called_with("raw")
+
+    # --format-patch
+    m_print.reset_mock()
+    args = Args(format_patch=True)
+    patch.patch(git, args)
+    m_git_before_patch.assert_not_called()
+    m_git_apply_patch.assert_not_called()
+    m_apply_patch.assert_not_called()
+    m_print.assert_called_once_with(
+        helpers.format_as_git_patch(
+            "raw",
+            m_prepare_body.return_value,
+            "user <author@example.com>",
+            DIFF_1.date_created,
+        )
+    )
+
+    # --format-patch needs the commit information the preamble is built from,
+    # whereas --raw doesn't.
+    m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1_WITHOUT_COMMITS}
+    with pytest.raises(exceptions.Error, match="Use `--raw`"):
+        patch.patch(git, Args(format_patch=True))
+    m_print.reset_mock()
+    patch.patch(git, Args(raw=True))
+    m_print.assert_called_once_with("raw")
+    m_get_diffs.return_value = {"DIFFPHID-1": DIFF_1}
 
     m_git_before_patch.reset_mock()
     # --no_commit
@@ -976,6 +1011,7 @@ DIFF_1 = RemoteDiff.from_conduit(
 
 # `DIFF_1`, as if its diff didn't record a base, eg. one uploaded in the web UI.
 DIFF_1_WITHOUT_BASE = dataclasses.replace(DIFF_1, base_ref=None)
+DIFF_1_WITHOUT_COMMITS = dataclasses.replace(DIFF_1, commits=())
 
 DIFF_2 = RemoteDiff.from_conduit(
     {
