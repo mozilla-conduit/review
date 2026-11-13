@@ -14,7 +14,13 @@ from mozphab.config import Config, config
 from mozphab.exceptions import Error
 from mozphab.helpers import BUG_ID_RE, augment_commits_from_body, prompt
 from mozphab.logger import logger
-from mozphab.models import Revision, Transaction, TransactionType, revision_monogram
+from mozphab.models import (
+    Revision,
+    RevisionStatus,
+    Transaction,
+    TransactionType,
+    revision_monogram,
+)
 from mozphab.repository import Repository, StackSelection
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
@@ -250,6 +256,67 @@ def apply_order(remote_phids: list[str], local_phids: list[str]) -> list[str]:
     return leaving + list(reversed(local_phids))
 
 
+def landed_base_transactions(
+    stack_graph: Mapping[str, Sequence[str]],
+    landed: set[str],
+    remote_phids: list[str],
+    local_phids: list[str],
+) -> dict[str, list[Transaction]]:
+    """Make the bottom of the local stack the only one depending on landed revisions."""
+    if not local_phids:
+        return {}
+    bottom = local_phids[0]
+    # The landed revision the stack is based on.
+    base = next(
+        (
+            parent
+            for phid in [bottom, *remote_phids, *local_phids]
+            for parent in sorted(stack_graph.get(phid, []))
+            if parent in landed
+        ),
+        None,
+    )
+    transactions = {}
+    for phid in local_phids:
+        current = {parent for parent in stack_graph.get(phid, []) if parent in landed}
+        wanted: set[str] = {base} if base and phid == bottom else set()
+        rev_transactions = []
+        if current - wanted:
+            rev_transactions.append(
+                Transaction(
+                    TransactionType.PARENTS_REMOVE, tuple(sorted(current - wanted))
+                )
+            )
+        if wanted - current:
+            rev_transactions.append(
+                Transaction(
+                    TransactionType.PARENTS_ADD, tuple(sorted(wanted - current))
+                )
+            )
+        if rev_transactions:
+            transactions[phid] = rev_transactions
+    return transactions
+
+
+def connected_revisions(
+    stack_graph: Mapping[str, Sequence[str]], phids: list[str]
+) -> dict[str, Sequence[str]]:
+    """Return the part of `stack_graph` connected to `phids`."""
+    connected = set(phids)
+    pending = list(phids)
+    while pending:
+        phid = pending.pop()
+        neighbours = [
+            *stack_graph.get(phid, []),
+            *(child for child, parents in stack_graph.items() if phid in parents),
+        ]
+        for neighbour in neighbours:
+            if neighbour not in connected:
+                connected.add(neighbour)
+                pending.append(neighbour)
+    return {phid: parents for phid, parents in stack_graph.items() if phid in connected}
+
+
 def convert_stackgraph_to_linear(
     stack_graph: Mapping[str, Sequence[str]],
     phid_to_id: dict[str, int],
@@ -340,6 +407,8 @@ def show_revision_glossary(
             if transaction.type in (
                 TransactionType.CHILDREN_SET,
                 TransactionType.CHILDREN_REMOVE,
+                TransactionType.PARENTS_ADD,
+                TransactionType.PARENTS_REMOVE,
             ) and isinstance(transaction.value, tuple):
                 referenced_phids.update(transaction.value)
 
@@ -485,9 +554,9 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
     # Merge all the existing stackgraphs into one. Any repeated keys
     # will have the same values.
     stack_graph = {
-        predecessor: successors
+        phid: parents
         for revision in revisions
-        for predecessor, successors in revision.stack_graph.items()
+        for phid, parents in revision.stack_graph.items()
     }
 
     # Fetch data about any revisions that are missing from local stack.
@@ -495,15 +564,32 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
 
     phid_to_id = {revision.phid: revision.id for revision in revisions}
 
+    localstack_phids = conduit.ids_to_phids(localstack_ids)
+    # Landed revisions aren't part of the stack to reorganise.
+    landed_revisions = {
+        revision.phid
+        for revision in revisions
+        if revision.status == RevisionStatus.PUBLISHED
+        and revision.phid not in localstack_phids
+    }
+    unlanded_stack_graph = connected_revisions(
+        {
+            phid: [parent for parent in parents if parent not in landed_revisions]
+            for phid, parents in stack_graph.items()
+            if phid not in landed_revisions
+        },
+        localstack_phids,
+    )
+
     try:
         # Validate the `stackGraph` field from our remote revisions.
-        phabstack = convert_stackgraph_to_linear(stack_graph, phid_to_id)
+        phabstack = convert_stackgraph_to_linear(unlanded_stack_graph, phid_to_id)
     except Error as e:
         if options.force:
             # Lingering links from abandoned revisions can leave a predecessor
             # with multiple successors, which convert_stackgraph_to_linear
             # rejects. force_stack_transactions only needs the set of remote
-            # PHIDs (not their order), so fall back to the raw graph keys.
+            # PHIDs (not their order), so fall back to the graph keys.
             logger.warning(
                 "Remote stack has nonlinear links (%s); continuing in force mode.",
                 e,
@@ -533,12 +619,11 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
                     )
                 )
                 raise
-    elif phabstack is None and stack_graph:
-        phabstack_phids = list(stack_graph.keys())
+    elif phabstack is None and unlanded_stack_graph:
+        phabstack_phids = list(unlanded_stack_graph.keys())
     else:
         phabstack_phids = []
 
-    localstack_phids = conduit.ids_to_phids(localstack_ids)
     abandoned_revisions = {
         revision.phid for revision in revisions if revision.is_abandoned
     }
@@ -561,6 +646,13 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
         except Error:
             logger.error("Unable to prepare stack transactions.")
             raise
+
+    # No revision of the local stack is an ancestor of a landed one, so editing
+    # the links to landed revisions can't create a cycle, whatever the order.
+    for phid, rev_transactions in landed_base_transactions(
+        stack_graph, landed_revisions, phabstack_phids, localstack_phids
+    ).items():
+        transactions.setdefault(phid, []).extend(rev_transactions)
 
     if not transactions:
         logger.info("Reorganisation is not needed.")
@@ -620,6 +712,25 @@ def reorganise_inner(repo: Repository, options: ReorgOptions):
                                 parent=linked_node_id,
                             )
                         )
+                if transaction.type in (
+                    TransactionType.PARENTS_ADD,
+                    TransactionType.PARENTS_REMOVE,
+                ) and isinstance(transaction.value, tuple):
+                    action = (
+                        "will depend on"
+                        if transaction.type == TransactionType.PARENTS_ADD
+                        else "will no longer depend on"
+                    )
+                    for parent in transaction.value:
+                        if parent in phid_to_id:
+                            linked_parent_id = linkify_revision_id(
+                                revision_monogram(phid_to_id[parent]),
+                                repo.phab_url,
+                                options.hyperlinks,
+                            )
+                            logger.info(
+                                f" * {linked_node_id} {action} {linked_parent_id}"
+                            )
 
     # Show glossary with commit messages for all referenced revisions (but not in verbose mode)
     if not options.verbose:

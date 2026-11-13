@@ -405,3 +405,72 @@ Differential Revision: http://example.test/D1
             "objectIdentifier": "PHID-1",
         },
     )
+
+
+def test_reorganise_on_landed_base(in_process, git_repo_path, init_sha):
+    # Remote: D3 (landed) -> D1 -> D2, local: D2 -> D1.
+    stack_graph = {"PHID-3": [], "PHID-1": ["PHID-3"], "PHID-2": ["PHID-1"]}
+    call_conduit.reset_mock()
+    call_conduit.side_effect = (
+        {},  # ping
+        {
+            "data": [
+                {
+                    "phid": f"PHID-{i}",
+                    "id": i,
+                    "fields": {
+                        "stackGraph": stack_graph,
+                        "status": {"value": "needs-review"},
+                    },
+                }
+                for i in (1, 2)
+            ]
+        },  # differential.revision.search
+        {
+            "data": [
+                {
+                    "phid": "PHID-3",
+                    "id": 3,
+                    "fields": {
+                        "stackGraph": stack_graph,
+                        "status": {"value": "published"},
+                    },
+                }
+            ]
+        },  # differential.revision.search
+        {"data": [{"phid": "PHID-1", "id": 1}]},  # differential.edit_revision
+        {"data": [{"phid": "PHID-2", "id": 2}]},  # differential.edit_revision
+    )
+
+    f = git_repo_path / "X"
+    for content, rev_id in (("B", 2), ("A", 1)):
+        f.write_text(content)
+        git_out("add", ".")
+        (git_repo_path / "msg").write_text(
+            f"Bug 1: {content} r?alice\n\n"
+            f"Differential Revision: http://example.test/D{rev_id}\n"
+        )
+        git_out("commit", "--file", "msg")
+    mozphab.main(["reorg", "--yes", init_sha], is_development=True)
+
+    edits = [
+        (args[1]["objectIdentifier"], args[1]["transactions"])
+        for args, _kwargs in call_conduit.call_args_list
+        if args[0] == "differential.revision.edit"
+    ]
+    assert edits == [
+        (
+            "PHID-1",
+            [
+                {"type": "children.remove", "value": ["PHID-2"]},
+                {"type": "parents.remove", "value": ["PHID-3"]},
+            ],
+        ),
+        (
+            "PHID-2",
+            [
+                {"type": "children.set", "value": ["PHID-1"]},
+                {"type": "parents.add", "value": ["PHID-3"]},
+            ],
+        ),
+    ]

@@ -1171,3 +1171,66 @@ def test_reorg_options_from_args():
     assert not reorganise.ReorgOptions.from_args(
         args, test_config
     ).hyperlinks, "`ui.hyperlinks = False` should disable hyperlinks."
+
+
+@pytest.mark.parametrize(
+    "stack_graph,remote,local,expected",
+    (
+        # Reversed stack: the new bottom depends on the landed base.
+        (
+            {"L1": [], "L2": ["L1"], "A": ["L2"], "B": ["A"]},
+            ["A", "B"],
+            ["B", "A"],
+            {
+                "B": [Transaction(TransactionType.PARENTS_ADD, ("L2",))],
+                "A": [Transaction(TransactionType.PARENTS_REMOVE, ("L2",))],
+            },
+        ),
+        # Landed revisions with multiple landed children are left alone.
+        (
+            {"L1": [], "L2": ["L1"], "L3": ["L1"], "A": ["L3"], "B": ["A"]},
+            ["A", "B"],
+            ["A", "B"],
+            {},
+        ),
+        # Removing the bottom revision moves the base under the new bottom.
+        (
+            {"L1": [], "L2": ["L1"], "A": ["L2"], "B": ["A"]},
+            ["A", "B"],
+            ["B"],
+            {"B": [Transaction(TransactionType.PARENTS_ADD, ("L2",))]},
+        ),
+        # A standalone revision added under the stack depends on the base.
+        (
+            {"L": [], "B": ["L"], "A": []},
+            [],
+            ["A", "B"],
+            {
+                "A": [Transaction(TransactionType.PARENTS_ADD, ("L",))],
+                "B": [Transaction(TransactionType.PARENTS_REMOVE, ("L",))],
+            },
+        ),
+        # Only one landed parent is kept, whatever their order in `stackGraph`.
+        (
+            {"L1": [], "L2": [], "A": ["L2", "L1"]},
+            [],
+            ["A"],
+            {"A": [Transaction(TransactionType.PARENTS_REMOVE, ("L2",))]},
+        ),
+    ),
+)
+def test_landed_base_transactions(stack_graph, remote, local, expected):
+    landed = {phid for phid in stack_graph if phid.startswith("L")}
+    assert (
+        reorganise.landed_base_transactions(stack_graph, landed, remote, local)
+        == expected
+    )
+
+
+def test_connected_revisions():
+    # O1 <- O2 also depends on L, but isn't connected to A <- B without it.
+    stack_graph = {"A": [], "B": ["A"], "O1": [], "O2": ["O1"]}
+    assert reorganise.connected_revisions(stack_graph, ["B"]) == {
+        "A": [],
+        "B": ["A"],
+    }

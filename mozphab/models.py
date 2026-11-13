@@ -53,6 +53,7 @@ class TransactionType(str, Enum):
     COMMENT = "comment"
     UPDATE = "update"
     PARENTS_ADD = "parents.add"
+    PARENTS_REMOVE = "parents.remove"
     PLAN_CHANGES = "plan-changes"
     REQUEST_REVIEW = "request-review"
     REVIEWERS_SET = "reviewers.set"
