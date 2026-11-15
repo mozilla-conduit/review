@@ -96,6 +96,9 @@ PROFILER_HIDDEN_ARGS_METHODS = {
     "file.uploadchunk",
 }
 
+# Phabricator's search endpoints return one page of at most this many results.
+CONDUIT_SEARCH_PAGE_SIZE = 100
+
 # urllib3 PoolManager sizing. moz-phab talks to a single Phabricator host so
 # one pool is enough in practice; a small num_pools cap leaves headroom for
 # uncommon hosts (e.g. file.querychunks redirects) without unbounded growth.
@@ -423,6 +426,26 @@ class ConduitAPI:
 
         raise NotFoundError("revision {} not found".format(phid))
 
+    def search_in_pages(
+        self, method: str, key: str, values: list, attachments: dict
+    ) -> list[dict]:
+        """Call a `*.search` method constrained on `key` for every value in `values`.
+
+        `values` is split into chunks of `CONDUIT_SEARCH_PAGE_SIZE` so each call
+        fits in one result page.  Each value must match at most one result (e.g.
+        `ids` or `phids`), otherwise a chunk's results could be truncated.
+
+        Returns the combined `data` of all calls.
+        """
+        data = []
+        for start in range(0, len(values), CONDUIT_SEARCH_PAGE_SIZE):
+            api_call_args = {
+                "constraints": {key: values[start : start + CONDUIT_SEARCH_PAGE_SIZE]},
+                "attachments": attachments,
+            }
+            data.extend(self.call(method, api_call_args).get("data") or [])
+        return data
+
     def get_revisions(
         self, ids: Sequence[int] | None = None, phids: list[str] | None = None
     ) -> list[Revision]:
@@ -470,13 +493,12 @@ class ConduitAPI:
 
         # Query Phabricator if we don't have cached values for revisions.
         if query_values:
-            api_call_args = {
-                "constraints": {query_field: sorted(query_values)},
-                "attachments": {"reviewers": True},
-            }
-            response = self.call("differential.revision.search", api_call_args)
-
-            for data in response.get("data") or []:
+            for data in self.search_in_pages(
+                "differential.revision.search",
+                query_field,
+                sorted(query_values),
+                {"reviewers": True},
+            ):
                 revision = Revision.from_conduit(data)
                 phids_by_id[str(revision.id)] = revision.phid
                 revisions[revision.phid] = revision
@@ -564,7 +586,7 @@ class ConduitAPI:
                     cached_diffs[phid] = diff
                 else:
                     uncached_ids.append(diff_id)
-            constraints = {"ids": uncached_ids} if uncached_ids else None
+            constraint_key, constraint_values = "ids", uncached_ids
         else:
             uncached_phids = []
             for phid in set(phids or []):
@@ -572,23 +594,20 @@ class ConduitAPI:
                     cached_diffs[phid] = diff
                 else:
                     uncached_phids.append(phid)
-            constraints = {"phids": uncached_phids} if uncached_phids else None
+            constraint_key, constraint_values = "phids", uncached_phids
 
         diff_dict = dict(cached_diffs)
 
-        if constraints is not None:
-            api_call_args = {
-                "constraints": constraints,
-                "attachments": {"commits": True},
-            }
-            response = self.call("differential.diff.search", api_call_args)
-            diff_list = response.get("data", [])
-
-            for data in diff_list:
-                diff = RemoteDiff.from_conduit(data)
-                diff_dict[diff.phid] = diff
-                self.cache.set("diff-%s" % diff.phid, diff)
-                self.cache.set("diff-id-%s" % diff.id, diff.phid)
+        for data in self.search_in_pages(
+            "differential.diff.search",
+            constraint_key,
+            constraint_values,
+            {"commits": True},
+        ):
+            diff = RemoteDiff.from_conduit(data)
+            diff_dict[diff.phid] = diff
+            self.cache.set("diff-%s" % diff.phid, diff)
+            self.cache.set("diff-id-%s" % diff.id, diff.phid)
 
         return diff_dict
 

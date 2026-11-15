@@ -1074,7 +1074,7 @@ def _submit(
     if not commits:
         raise Error("Failed to find any commits to submit")
     n_commits = len(commits)
-    if n_commits > 100:
+    if n_commits > 200:
         raise Error(
             f"Unable to create a stack with {n_commits} unpublished commits.\n\n"
             "This is usually the result of a failure to detect the correct "

@@ -14,6 +14,7 @@ from immutabledict import immutabledict
 from mozphab import exceptions, mozphab, repository
 from mozphab.commits import Commit
 from mozphab.conduit import (
+    CONDUIT_SEARCH_PAGE_SIZE,
     ConduitAPI,
     ConduitAPIError,
     conduit,
@@ -441,6 +442,38 @@ def test_get_revisions_search_by_phids_missing(get_revs, m_call):
         Revision(id=2, phid="PHID-2"),
         Revision(id=1, phid="PHID-1"),
         Revision(id=3, phid="PHID-3"),
+    ]
+
+
+def echo_search(method, api_call_args):
+    """Return one result per id or phid in the search constraints."""
+    ((key, values),) = api_call_args["constraints"].items()
+    if key == "ids":
+        return {"data": [{"id": v, "phid": "PHID-%s" % v} for v in values]}
+    return {"data": [{"id": int(v[5:]), "phid": v} for v in values]}
+
+
+def paged_values(values):
+    page_size = CONDUIT_SEARCH_PAGE_SIZE
+    return [values[:page_size], values[page_size:]]
+
+
+@pytest.mark.parametrize("key", ("ids", "phids"))
+def test_get_revisions_search_in_pages(get_revs, m_call, key):
+    """more values than fit in a result page are queried in pages and merged"""
+    m_call.side_effect = echo_search
+    ids = list(range(1, CONDUIT_SEARCH_PAGE_SIZE + 2))
+    values = ids if key == "ids" else ["PHID-%s" % i for i in ids]
+
+    revs = get_revs(**{key: values})
+
+    assert [r.id for r in revs] == ids
+    assert m_call.call_args_list == [
+        mock.call(
+            "differential.revision.search",
+            {"constraints": {key: page}, "attachments": {"reviewers": True}},
+        )
+        for page in paged_values(sorted(values))
     ]
 
 
@@ -1846,3 +1879,20 @@ def test_conduit_instances_have_their_own_cache():
 
     assert "whoami" in first.cache, "The instance should keep what it cached."
     assert "whoami" not in second.cache, "Other instances shouldn't share the cache."
+
+
+@pytest.mark.parametrize("key", ("ids", "phids"))
+def test_get_diffs_search_in_pages(get_diffs, m_call, key):
+    """more values than fit in a result page are queried in pages and merged"""
+    m_call.side_effect = echo_search
+    ids = list(range(1, CONDUIT_SEARCH_PAGE_SIZE + 2))
+    values = ids if key == "ids" else ["PHID-%s" % i for i in ids]
+
+    diffs = get_diffs(**{key: values})
+
+    assert sorted(d.id for d in diffs.values()) == ids
+    pages = [c.args[1]["constraints"][key] for c in m_call.call_args_list]
+    assert [len(p) for p in pages] == [
+        len(p) for p in paged_values(values)
+    ], "Should request one full page and one partial page"
+    assert sorted(v for p in pages for v in p) == sorted(values)
