@@ -380,13 +380,16 @@ def test_git_patch_here_no_branch(
 
 @pytest.mark.parametrize("stack", [False, True], ids=["single", "partial-stack"])
 @pytest.mark.parametrize("no_branch", [False, True], ids=["branch", "no-branch"])
+@pytest.mark.parametrize(
+    "base_kind", ["public", "missing", "current-unlanded", "current-public"]
+)
 @mock.patch("mozphab.commands.patch.prompt", return_value="No")
 @mock.patch("mozphab.git.Git.is_public", return_value=True)
 @mock.patch("mozphab.git.Git.fetch_from_upstream")
 @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
 @mock.patch("mozphab.conduit.ConduitAPI.call")
-def test_git_patch_here_no_branch_declines_fallback(
+def test_git_patch_here_without_retry_restores_branch(
     m_call_conduit,
     m_get_diffs,
     m_get_revs,
@@ -397,15 +400,14 @@ def test_git_patch_here_no_branch_declines_fallback(
     git_repo_path,
     stack,
     no_branch,
+    base_kind,
 ):
-    """A failed direct apply does not move the current branch when retry is declined."""
+    """Restore the original tip when a retry is declined or unnecessary."""
     base = git_out("rev-parse", "HEAD").strip()
-    diff = dataclasses.replace(DIFF_1, base_ref=base)
     m_get_revs.return_value = [REV_1]
     if stack:
         rev2 = with_stack_graph(REV_2, {"PHID-REV-2": ["PHID-REV-1"], "PHID-REV-1": []})
         m_get_revs.side_effect = ([rev2], [REV_1])
-    m_get_diffs.return_value = {"PHID-DIFF-1": diff, "PHID-DIFF-2": DIFF_2}
     m_call_conduit.side_effect = lambda method, args: {
         "conduit.ping": {},
         "diffusion.repository.search": {
@@ -427,6 +429,16 @@ def test_git_patch_here_no_branch_declines_fallback(
     branch = git_out("symbolic-ref", "--short", "HEAD").strip()
     tip = git_out("rev-parse", "HEAD").strip()
 
+    if base_kind == "missing":
+        base = "a" * 40
+    elif base_kind in ("current-unlanded", "current-public"):
+        base = tip
+    m_is_public.return_value = base_kind != "current-unlanded"
+    m_get_diffs.return_value = {
+        "PHID-DIFF-1": dataclasses.replace(DIFF_1, base_ref=base),
+        "PHID-DIFF-2": DIFF_2,
+    }
+
     args = ["patch", "D2" if stack else "D1", "--apply-to", "here"]
     if no_branch:
         args.append("--no-branch")
@@ -437,7 +449,10 @@ def test_git_patch_here_no_branch_declines_fallback(
             is_development=True,
         )
 
-    m_prompt.assert_called_once()
+    if base_kind == "current-public":
+        m_prompt.assert_not_called()
+    else:
+        m_prompt.assert_called_once()
     m_fetch_from_upstream.assert_not_called()
     assert git_out("symbolic-ref", "--short", "HEAD").strip() == branch
     assert git_out("rev-parse", "HEAD").strip() == tip

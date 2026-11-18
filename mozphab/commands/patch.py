@@ -142,32 +142,17 @@ class PatchPlan:
     diff_base_node: str | None = None
     diff_base_date: int | None = None
     on_failure: FailurePolicy = FailurePolicy.RAISE
+    # The diff's public base, if it was resolved locally during planning.
+    fallback_base_node: str | None = None
     # The branch checked out before patching, if any.
     original_branch: str | None = None
     assume_yes: bool = False
 
 
-def find_public_base(repo: Repository, base_node: str) -> str | None:
-    """Try to resolve `base_node` to a public (landed) commit.
-
-    Makes two symmetric attempts around a single fetch: check whether
-    `base_node` already exists locally and is public, and if not, fetch from
-    upstream and check again. Returns the resolved node, or `None` if it
-    can't be found at all, or isn't public even after fetching.
-    """
+def find_local_public_base(repo: Repository, base_node: str) -> str | None:
+    """Return the resolved base if it is available locally and public."""
     try:
         with wait_message("Checking base revision %s.." % short_node(base_node)):
-            resolved = repo.check_node(base_node)
-        if repo.is_public(resolved):
-            return resolved
-    except NotFoundError:
-        pass
-
-    with wait_message("Fetching from upstream.."):
-        repo.fetch_from_upstream()
-
-    try:
-        with wait_message("Re-checking base revision %s.." % short_node(base_node)):
             resolved = repo.check_node(base_node)
     except NotFoundError:
         return None
@@ -176,7 +161,11 @@ def find_public_base(repo: Repository, base_node: str) -> str | None:
 
 
 def resolve_base_node(
-    repo: Repository, base_node: str, before: int | None = None
+    repo: Repository,
+    base_node: str,
+    before: int | None = None,
+    *,
+    fetch_first: bool = False,
 ) -> str | None:
     """Resolve the commit to apply a patch to when using the rebase strategy.
 
@@ -187,10 +176,19 @@ def resolve_base_node(
     patch's own timestamp), so we don't rebase onto changes that landed
     after the patch was written.
 
+    Set `fetch_first` if planning already checked for a local public base.
     Returns `None` if neither can be found, eg. in a repository that has no
     autoland-to-mozilla-central merges at all.
     """
-    resolved = find_public_base(repo, base_node)
+    if not fetch_first:
+        resolved = find_local_public_base(repo, base_node)
+        if resolved is not None:
+            return resolved
+
+    with wait_message("Fetching from upstream.."):
+        repo.fetch_from_upstream()
+
+    resolved = find_local_public_base(repo, base_node)
     if resolved is not None:
         return resolved
 
@@ -638,10 +636,16 @@ def build_patch_plan(
             assume_yes=options.yes,
         )
 
+    fallback_base_node = None
     if options.apply_to == "base" or not diff_base_node:
         on_failure = FailurePolicy.RAISE
-    elif options.apply_to == "here" and diff_base_node != target_node:
-        on_failure = FailurePolicy.CONFIRM_RETRY
+    elif options.apply_to == "here":
+        fallback_base_node = find_local_public_base(repo, diff_base_node)
+        on_failure = (
+            FailurePolicy.RAISE
+            if fallback_base_node == target_node
+            else FailurePolicy.CONFIRM_RETRY
+        )
     else:
         on_failure = FailurePolicy.RETRY
 
@@ -655,6 +659,7 @@ def build_patch_plan(
         diff_base_node=diff_base_node,
         diff_base_date=base_diff.date_created,
         on_failure=on_failure,
+        fallback_base_node=fallback_base_node,
         original_branch=repo.get_current_branch(),
         assume_yes=options.yes,
     )
@@ -716,24 +721,35 @@ def apply_to_working_tree(repo: Repository, plan: PatchPlan):
 
 def confirm_retry(plan: PatchPlan) -> bool:
     """Warn that retrying can move the checkout, and ask unless `--yes` was given."""
+    fallback = (
+        short_node(plan.fallback_base_node)
+        if plan.fallback_base_node
+        else "a public base revision"
+    )
     if plan.original_branch:
         logger.warning(
-            "Retrying may switch you off the current branch %s and "
-            "leave you at the latest landed revision if the retry "
-            "or rebase fails.",
+            "Retrying may switch you off the current branch %s and leave you at %s "
+            "if the retry or rebase fails.",
             plan.original_branch,
+            fallback,
         )
     else:
         logger.warning(
-            "Retrying may switch your checkout and leave it at the "
-            "latest landed revision if the retry or rebase fails."
+            "Retrying may switch your checkout and leave it at %s "
+            "if the retry or rebase fails.",
+            fallback,
         )
     if plan.assume_yes:
         return True
 
+    retry_action = (
+        f"Retry at {fallback}"
+        if plan.fallback_base_node
+        else "Find a public base revision to retry at"
+    )
     retry = prompt(
-        "The patch failed to apply here. Retry at the latest landed "
-        "revision and rebase onto %s" % short_node(plan.target_node),
+        f"The patch failed to apply here. {retry_action} "
+        f"and rebase onto {short_node(plan.target_node)}",
         ["No", "Yes"],
     )
     return retry == "Yes"
@@ -755,24 +771,32 @@ def commit_patches(repo: Repository, plan: PatchPlan):
         apply_commits(repo, plan, raw_diffs, attempt)
         return
     except Error:
-        base_node = (
-            resolve_base_node(repo, plan.diff_base_node, before=plan.diff_base_date)
-            if plan.on_failure is not FailurePolicy.RAISE and plan.diff_base_node
-            else None
-        )
-        if base_node is None or base_node == plan.target_node:
-            # Nothing else to try: the patch was already applied at the
-            # diff's own base, the diff has no base ref (eg. an older
-            # diff, or a web-UI upload), or no public commit could be
-            # resolved. The original failure is the useful one.
-            raise
-
-        if plan.on_failure is FailurePolicy.CONFIRM_RETRY and not confirm_retry(plan):
+        base_node = plan.fallback_base_node
+        needs_confirmation = plan.on_failure is FailurePolicy.CONFIRM_RETRY
+        # Restore the checkout if the plan found no different base to try
+        # locally or the user declined the fallback.
+        if base_node == plan.target_node or (
+            needs_confirmation and not confirm_retry(plan)
+        ):
             repo.discard_patch_attempt(
                 attempt,
                 keep_branch=True,
                 original_branch=plan.original_branch,
             )
+            raise
+
+        if plan.on_failure is FailurePolicy.RAISE:
+            raise
+
+        if base_node is None and plan.diff_base_node:
+            base_node = resolve_base_node(
+                repo,
+                plan.diff_base_node,
+                before=plan.diff_base_date,
+                fetch_first=needs_confirmation,
+            )
+        if base_node is None or base_node == plan.target_node:
+            # No different public base was found. Surface the original failure.
             raise
 
     logger.warning(

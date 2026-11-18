@@ -812,8 +812,7 @@ def test_patch(
     with pytest.raises(exceptions.Error, match="Patch failed to apply"):
         patch.patch(git, args)
     m_prompt.assert_called_once_with(
-        "The patch failed to apply here. Retry at the latest landed revision "
-        "and rebase onto current_sha",
+        "The patch failed to apply here. Retry at sha111 and rebase onto current_sha",
         ["No", "Yes"],
     )
     m_git_before_patch.assert_called_once_with(
@@ -833,8 +832,11 @@ def test_patch(
     m_prompt.reset_mock()
     m_prompt.return_value = "Yes"
     m_git_before_patch.reset_mock()
+    m_git_check_node.reset_mock()
     m_git_apply_patch.side_effect = [exceptions.CommandError("boom"), mock.DEFAULT]
     patch.patch(git, args)
+    m_git_check_node.assert_called_once_with("sha111")
+    m_git_fetch_from_upstream.assert_not_called()
     m_git_discard_patch_attempt.assert_called_once_with(PatchAttempt("current_sha"))
     m_git_rebase_node.assert_called_once_with("sha111", "current_sha")
     m_git_apply_patch.side_effect = None
@@ -849,10 +851,10 @@ def test_patch(
     patch.patch(git, args)
     m_prompt.assert_not_called()
     m_warning.assert_any_call(
-        "Retrying may switch you off the current branch %s and "
-        "leave you at the latest landed revision if the retry "
-        "or rebase fails.",
+        "Retrying may switch you off the current branch %s and leave you at %s "
+        "if the retry or rebase fails.",
         "original-branch",
+        "sha111",
     )
     m_git_discard_patch_attempt.assert_called_once_with(PatchAttempt("current_sha"))
     m_git_rebase_node.assert_called_once_with("sha111", "current_sha")
@@ -1169,22 +1171,30 @@ def test_resolve_target_node(repo_mock):
 
 
 @pytest.mark.parametrize(
-    "apply_to, diff_base_node, expected",
+    "apply_to, diff_base_node, is_public, expected, fallback_base_node",
     [
-        ("base", "base-node", patch.FailurePolicy.RAISE),
-        ("here", None, patch.FailurePolicy.RAISE),
-        ("here", "base-node", patch.FailurePolicy.CONFIRM_RETRY),
-        ("here", "current", patch.FailurePolicy.RETRY),
-        ("abc", "base-node", patch.FailurePolicy.RETRY),
+        ("base", "base-node", True, patch.FailurePolicy.RAISE, None),
+        ("here", None, True, patch.FailurePolicy.RAISE, None),
+        ("here", "base-node", True, patch.FailurePolicy.CONFIRM_RETRY, "base-node"),
+        ("here", "current", True, patch.FailurePolicy.RAISE, "current"),
+        ("here", "current", False, patch.FailurePolicy.CONFIRM_RETRY, None),
+        ("abc", "base-node", True, patch.FailurePolicy.RETRY, None),
     ],
 )
 @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
 def test_build_patch_plan_failure_policy(
-    m_get_diffs, repo_mock, apply_to, diff_base_node, expected
+    m_get_diffs,
+    repo_mock,
+    apply_to,
+    diff_base_node,
+    is_public,
+    expected,
+    fallback_base_node,
 ):
     """`--apply-to` decides whether a failed patch is retried at a public base."""
     repo_mock.get_current_node.return_value = "current"
     repo_mock.check_node.side_effect = lambda node: node
+    repo_mock.is_public.return_value = is_public
     repo_mock.get_current_branch.return_value = "feature"
     m_get_diffs.return_value = {
         "DIFFPHID-1": dataclasses.replace(DIFF_1, base_ref=diff_base_node)
@@ -1197,4 +1207,56 @@ def test_build_patch_plan_failure_policy(
     assert (
         plan.on_failure is expected
     ), f"`--apply-to {apply_to}` should give the {expected.name} failure policy."
+    assert plan.fallback_base_node == fallback_base_node
+    repo_mock.fetch_from_upstream.assert_not_called()
+    repo_mock.get_latest_landing_node.assert_not_called()
     assert plan.original_branch == "feature", "The current branch should be kept."
+
+
+@pytest.mark.parametrize("assume_yes", [False, True])
+@mock.patch("mozphab.commands.patch.prompt", return_value="Yes")
+@mock.patch("mozphab.commands.patch.apply_commits")
+@mock.patch("mozphab.commands.patch.download_raw_diffs", return_value={})
+@mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
+def test_patch_here_accepts_fallback_from_current_unlanded_base(
+    m_get_diffs, m_download, m_apply, m_prompt, repo_mock, assume_yes
+):
+    """Retrying from an unlanded current commit needs consent before fetching."""
+    repo_mock.get_current_node.return_value = "current"
+    repo_mock.get_current_branch.return_value = "feature"
+    repo_mock.check_node.side_effect = lambda node: node
+    repo_mock.is_public.return_value = False
+    repo_mock.get_latest_landing_node.return_value = "landed"
+    m_get_diffs.return_value = {
+        "DIFFPHID-1": dataclasses.replace(DIFF_1, base_ref="current")
+    }
+    m_apply.side_effect = [exceptions.Error("Patch failed to apply"), None]
+
+    def accept_retry(*args):
+        repo_mock.fetch_from_upstream.assert_not_called()
+        repo_mock.get_latest_landing_node.assert_not_called()
+        return "Yes"
+
+    m_prompt.side_effect = accept_retry
+    plan = patch.build_patch_plan(
+        repo_mock,
+        patch.PatchOptions(revision_id=1, apply_to="here", yes=assume_yes),
+        [REV_1],
+    )
+    patch.commit_patches(repo_mock, plan)
+
+    if assume_yes:
+        m_prompt.assert_not_called()
+    else:
+        m_prompt.assert_called_once_with(
+            "The patch failed to apply here. Find a public base revision to retry at "
+            "and rebase onto current",
+            ["No", "Yes"],
+        )
+    assert repo_mock.check_node.call_args_list == [mock.call("current")] * 2
+    repo_mock.fetch_from_upstream.assert_called_once()
+    repo_mock.get_latest_landing_node.assert_called_once_with(
+        before=DIFF_1.date_created
+    )
+    repo_mock.rebase_node.assert_called_once_with("landed", "current")
+    assert m_apply.call_count == 2
