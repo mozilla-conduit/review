@@ -30,6 +30,7 @@ def jj():
         ("get_public_node", ("git_sha",), {}, "hg_sha"),
         ("is_public", ("sha111",), {}, True),
         ("get_latest_landing_node", (), {"before": 1547806078}, "landing_sha"),
+        ("get_patches", (["sha111", "sha222"],), {}, {"sha111": "patch"}),
     ),
 )
 def test_delegates_to_git(jj, method, args, kwargs, return_value):

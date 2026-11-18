@@ -300,6 +300,13 @@ class Jujutsu(Repository):
         """Create a Diff object with changes."""
         return self.__git_repo.get_diff(commit, less_context)
 
+    def get_patches(self, nodes: list[str]) -> dict[str, bytes]:
+        """Return the patch of each commit, with the whole files as context.
+
+        See `Repository.get_patches`.
+        """
+        return self.__git_repo.get_patches(nodes)
+
     def amend_commit(self, commit: Commit, commits: list[Commit]):
         """Amend the commit with an updated message.
 

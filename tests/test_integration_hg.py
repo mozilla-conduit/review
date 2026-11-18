@@ -5,6 +5,7 @@
 import os
 import platform
 import shutil
+import subprocess
 from unittest import mock
 
 import pytest
@@ -13,6 +14,7 @@ from callee import Contains, Matching, StartsWith
 from mozphab import mozphab
 from mozphab.commits import Commit
 from mozphab.mercurial import Mercurial
+from mozphab.repository import same_changes
 
 from .conftest import hg_out, write_text
 
@@ -1617,3 +1619,62 @@ def test_apply_patch_diff_in_body_is_not_applied(in_process, hg_repo_path):
     assert (
         log_desc == malicious_body
     ), "The entire body should be preserved as the commit message."
+
+
+def test_get_patches(hg_repo_path):
+    def node():
+        return hg_out("log", "-r", ".", "-T", "{node}")
+
+    def commit(message, lines, binary):
+        content = "".join(f"{line}\n" for line in lines).encode("latin-1")
+        (hg_repo_path / "X").write_bytes(content)
+        (hg_repo_path / "B").write_bytes(binary)
+        hg_out("addremove")
+        hg_out("commit", "-m", message)
+        return node()
+
+    lines = [f"line {i}" for i in range(20)]
+    base = commit("Base", lines, b"\0a")
+
+    def stack(parent_edits, child_edits, binary=b"\0b", parent="Parent"):
+        """Commit `child_edits` of lines on top of a commit making `parent_edits`."""
+        hg_out("update", base)
+        edited = list(lines)
+        for index, line in parent_edits.items():
+            edited[index] = line
+        # Make each parent different, so that it isn't an empty commit.
+        write_text("P", parent)
+        commit(parent, edited, b"\0a")
+        for index, line in child_edits.items():
+            edited[index] = line
+        return commit("Child", edited, binary)
+
+    patched = {15: "patched"}
+    original = stack({}, patched)
+    # Phabricator's raw diff of the original commit.
+    submitted = subprocess.check_output(
+        ["hg", "log", "--patch", "--git", "--config", "diff.unified=5"]
+        + ["-T", "", "-r", original]
+    )
+    # Rewording or changing the parent elsewhere makes the same changes.
+    same = [stack({}, patched, parent="Reworded"), stack({2: "changed"}, patched)]
+    # Changing a context line doesn't, nor do whitespace, line ending, encoding
+    # and binary changes.
+    changed = [
+        stack({13: "changed"}, patched),
+        stack({}, {15: "patched "}),
+        stack({}, {15: "patched\r"}),
+        stack({}, {15: "patch\xe9"}),
+        stack({}, patched, binary=b"\0c"),
+    ]
+
+    # The user's diff config doesn't change the patches.
+    with open(".hg/hgrc", "a") as f:
+        f.write("\n[diff]\nunified = 10\nignorews = true\n")
+    nodes = [original, *same, *changed]
+    patches = Mercurial(str(hg_repo_path)).get_patches(nodes)
+    assert len(set(nodes)) == len(nodes)
+    for same_node in [original, *same]:
+        assert same_changes(patches[same_node], submitted)
+    for changed_node in changed:
+        assert not same_changes(patches[changed_node], submitted)

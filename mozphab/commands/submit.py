@@ -8,8 +8,11 @@ import argparse
 import logging
 import textwrap
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+
+import urllib3
 
 from mozphab import environment
 from mozphab.bmo import BMOAPIError, bmo
@@ -18,7 +21,7 @@ from mozphab.commits import AiReviewState, Commit, MergeConflictDiffs
 from mozphab.conduit import ConduitAPIError, conduit, normalise_reviewer
 from mozphab.config import Config, config
 from mozphab.diff import Diff
-from mozphab.exceptions import Error
+from mozphab.exceptions import CommandError, Error
 from mozphab.helpers import (
     BLOCKING_REVIEWERS_RE,
     augment_commits_from_body,
@@ -32,13 +35,16 @@ from mozphab.helpers import (
 from mozphab.logger import logger
 from mozphab.models import (
     Bug,
+    DiffCommit,
+    RemoteDiff,
+    Revision,
     RevisionStatus,
     Transaction,
     TransactionType,
     revision_monogram,
 )
 from mozphab.profiler import profiler
-from mozphab.repository import Repository, StackSelection
+from mozphab.repository import Repository, StackSelection, same_changes
 from mozphab.spinner import wait_message
 from mozphab.telemetry import telemetry
 from mozphab.user import UserData
@@ -427,16 +433,72 @@ def confirm_unassigned_bugs(
     return prompt("Submit anyway", ["No", "Yes"]) == "Yes"
 
 
-def validate_commit_stack(
-    commits: list[Commit], options: SubmitOptions
-) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-    """Validate commit stack is suitable for review.
+def same_message_and_author(commit: Commit, phab_commit: DiffCommit) -> bool:
+    """Whether `commit` has the message and author recorded on Phabricator.
 
-    Return collections of warnings and errors.
+    The author date is left out, as `moz-phab patch` doesn't preserve it.
     """
+    return (
+        phab_commit.author_name == commit.author_name
+        and phab_commit.author_email == commit.author_email
+        and phab_commit.message == commit.build_arc_commit_message()
+    )
 
-    # Preload reviewers and groups in a single batch so the per-commit
-    # check_for_invalid_reviewers() calls below hit the cache.
+
+def sha1_changed(commit: Commit, diff: RemoteDiff) -> bool:
+    """Return `True` if `commit` isn't the commit recorded on `diff`."""
+    return not diff.commits or diff.commits[0].identifier != commit.node
+
+
+def find_unchanged_patches(
+    repo: Repository,
+    commits: list[Commit],
+    revisions: Mapping[int, Revision],
+    diffs: Mapping[str, RemoteDiff],
+) -> frozenset[str]:
+    """Return the nodes of the rewritten commits whose patch and message are unchanged.
+
+    Rewriting a commit, e.g. by rewording an earlier one of the stack, changes
+    its SHA1, but not necessarily what Lando would land: the raw diff of the
+    revision's current diff. Comparing the patches is only an optimisation, so
+    if it fails, the commits are treated as changed.
+    """
+    # The diff to compare each rewritten commit with, keyed by node.
+    rewritten = {}
+    for commit in commits:
+        if not commit.rev_id or not (revision := revisions.get(commit.rev_id)):
+            continue
+        diff = diffs[revision.diff_phid]
+        if (
+            sha1_changed(commit, diff)
+            and diff.commits
+            and same_message_and_author(commit, diff.commits[0])
+        ):
+            rewritten[commit.node] = diff.id
+    if not rewritten:
+        return frozenset()
+
+    try:
+        raw_diffs = conduit.get_raw_diffs(rewritten.values())
+        patches = repo.get_patches(list(rewritten))
+        return frozenset(
+            node
+            for node, diff_id in rewritten.items()
+            if same_changes(patches[node], raw_diffs[diff_id].encode())
+        )
+    except (Error, CommandError, OSError, urllib3.exceptions.HTTPError) as e:
+        logger.debug("Failed to compare patches of commits with a new SHA1: %s", e)
+        return frozenset()
+
+
+def preload_revision_data(
+    commits: list[Commit],
+) -> tuple[dict[int, Revision], dict[str, RemoteDiff]]:
+    """Load the commits' revisions and their current diffs, keyed by ID and PHID.
+
+    The reviewers and groups are loaded in the same batch, so the per-commit
+    `check_for_invalid_reviewers` calls of `validate_commit_stack` hit the cache.
+    """
     all_user_names = set()
     all_group_slugs = set()
     for commit in commits:
@@ -449,9 +511,22 @@ def validate_commit_stack(
                     all_user_names.add(normalised)
 
     with wait_message("Loading revision data..."):
-        revisions, diffs = conduit.preload_for_validation(
-            commits, all_user_names, all_group_slugs
-        )
+        return conduit.preload_for_validation(commits, all_user_names, all_group_slugs)
+
+
+def validate_commit_stack(
+    commits: list[Commit],
+    options: SubmitOptions,
+    unchanged_patches: frozenset[str] = frozenset(),
+) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """Validate commit stack is suitable for review.
+
+    `unchanged_patches` holds the nodes of the commits that were rewritten,
+    but whose patch and message are unchanged: see `find_unchanged_patches`.
+
+    Return collections of warnings and errors.
+    """
+    revisions, diffs = preload_revision_data(commits)
 
     warnings = {}
     errors = {}
@@ -494,17 +569,14 @@ def validate_commit_stack(
                 reviewer_names_to_validate = reviewer_additions.reviewer_names_to_add
                 reviewers_changed = any(reviewer_names_to_validate.values())
 
-            # If SHA1 hasn't changed
+            # If neither the SHA1 nor the patch has changed
             # and we're not changing the WIP or draft status
             # and we're not changing reviewers
             # and we're not changing the bug ID
             # then don't submit.
-            diff_commits = diffs[revision.diff_phid].commits
-            sha1_changed = bool(
-                not diff_commits or commit.node != diff_commits[0].identifier
-            )
+            new_sha1 = sha1_changed(commit, diffs[revision.diff_phid])
             if (
-                not sha1_changed
+                (not new_sha1 or commit.node in unchanged_patches)
                 and commit.wip == revision_is_wip
                 and not reviewers_changed
                 and not bug_id_changed
@@ -513,6 +585,13 @@ def validate_commit_stack(
                 and not commit.test_plan
             ):
                 commit.submit = False
+                if new_sha1:
+                    logger.debug(
+                        "%s: the SHA1 changed, but the patch and the message are "
+                        "the same as on %s.",
+                        commit.name,
+                        revision.monogram,
+                    )
                 warnings.setdefault(commit.name, []).append(
                     "This revision has not changed and will not be submitted."
                 )
@@ -1117,7 +1196,16 @@ def _submit(
     )
 
     with wait_message("Checking commits..."):
-        warnings, errors = validate_commit_stack(commits, options)
+        # `validate_commit_stack` loads the same data again, from the cache.
+        revisions, diffs = preload_revision_data(commits)
+        unchanged_patches = (
+            frozenset()
+            if options.force
+            else find_unchanged_patches(repo, commits, revisions, diffs)
+        )
+        warnings, errors = validate_commit_stack(
+            commits, options, unchanged_patches=unchanged_patches
+        )
     if errors:
         log_commit_stack_with_messages(commits, errors, "- ", "  ", logging.ERROR)
         raise Error("Unable to submit commits")

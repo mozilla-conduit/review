@@ -109,6 +109,186 @@ class PatchAttempt:
     branch: str | None = None
 
 
+def parse_patches(log: bytes) -> dict[str, bytes]:
+    """Return the patches of a log, keyed by node.
+
+    Each entry of the log starts with a NUL character followed by the commit's
+    node on its own line, then the patch.
+    """
+    patches = {}
+    for entry in log.split(b"\0")[1:]:
+        node, _, patch = entry.partition(b"\n")
+        patches[node.decode()] = patch
+    return patches
+
+
+@dataclass(frozen=True)
+class PatchHunk:
+    """A hunk of a patch, from its `@@` line to the next one."""
+
+    # The line of the file the hunk starts at, before the patch.
+    old_start: int
+    # The lines after the `@@` line, starting with ` `, `-`, `+` or `\`.
+    lines: tuple[bytes, ...]
+
+
+@dataclass(frozen=True)
+class FilePatch:
+    """The part of a patch changing one file."""
+
+    # The rest of the `diff --git` line, eg. `a/path b/path`.
+    key: bytes
+    # The lines between the `diff --git` line and the first hunk.
+    header: tuple[bytes, ...]
+    hunks: tuple[PatchHunk, ...]
+
+
+def split_patch(patch: bytes) -> list[FilePatch]:
+    """Split `patch` into the changes to each file, sorted by path."""
+    files = []
+    for section in (b"\n" + patch).split(b"\ndiff --git ")[1:]:
+        key, *lines = section.rstrip(b"\n").split(b"\n")
+        header: list[bytes] = []
+        # The line each hunk starts at, with its lines.
+        hunks: list[tuple[int, list[bytes]]] = []
+        for line in lines:
+            if line.startswith(b"@@"):
+                # The `@@` line is ASCII, even if the context after it isn't.
+                old_start = Diff.parse_git_diff(line.decode("ascii", "replace"))[0]
+                hunks.append((old_start, []))
+            elif hunks:
+                hunks[-1][1].append(line)
+            else:
+                header.append(line)
+        files.append(
+            FilePatch(
+                key,
+                tuple(header),
+                tuple(PatchHunk(start, tuple(lines)) for start, lines in hunks),
+            )
+        )
+    # A file can have several sections, e.g. when replacing a symlink with it.
+    return sorted(files, key=lambda file: file.key)
+
+
+def normalize_header(header: tuple[bytes, ...]) -> list[bytes]:
+    """Leave out of the header of a file what Phabricator's raw diffs don't have.
+
+    Git and Phabricator encode binary data differently, so only the blob IDs of
+    the `index` line are kept for binary files. Text files don't need them.
+    """
+    binary = b"GIT binary patch" in header
+    if binary:
+        header = header[: header.index(b"GIT binary patch")]
+    return [
+        line.split(b" ")[1] if line.startswith(b"index ") else line
+        for line in header
+        if not line.startswith((b"similarity index ", b"dissimilarity index "))
+        and (binary or not line.startswith(b"index "))
+    ]
+
+
+def hunk_sides(hunk: PatchHunk) -> tuple[list[bytes], list[bytes]]:
+    """Return the lines of a file a hunk covers, before and after the hunk."""
+    old_lines: list[bytes] = []
+    new_lines: list[bytes] = []
+    sides = []
+    for line in hunk.lines:
+        if line.startswith(b"\\"):
+            # "\ No newline at end of file" is about the previous line.
+            for side in sides:
+                side[-1] += b"\n" + line
+            continue
+        sides = []
+        if line.startswith((b" ", b"-")):
+            sides.append(old_lines)
+        if line.startswith((b" ", b"+")):
+            sides.append(new_lines)
+        for side in sides:
+            side.append(line[1:])
+    return old_lines, new_lines
+
+
+def apply_hunks(
+    file_lines: list[bytes], hunks: tuple[PatchHunk, ...]
+) -> list[bytes] | None:
+    """Apply `hunks` to `file_lines` like `git apply`, or return `None` if they don't.
+
+    Hunks apply where their context matches, and only have to apply at the
+    line they start at if it matches several places.
+    """
+    positions: dict[bytes, list[int]] = {}
+    for position, line in enumerate(file_lines):
+        positions.setdefault(line, []).append(position)
+    # The position each hunk applies at, with the lines it covers and replaces.
+    replacements = []
+    for hunk in hunks:
+        hunk_old_lines, hunk_new_lines = hunk_sides(hunk)
+        if not hunk_old_lines:
+            # Only adding lines to an empty file is unambiguous.
+            starts = [0] if not file_lines else []
+        else:
+            starts = [
+                start
+                for start in positions.get(hunk_old_lines[0], [])
+                if file_lines[start : start + len(hunk_old_lines)] == hunk_old_lines
+            ]
+        # Hunks starting at the first line, or without trailing context, have
+        # to match at the beginning or the end of the file.
+        if hunk.old_start <= 1:
+            starts = [start for start in starts if start == 0]
+        last_line = next(
+            line for line in reversed(hunk.lines) if not line.startswith(b"\\")
+        )
+        if not last_line.startswith(b" "):
+            starts = [
+                start
+                for start in starts
+                if start + len(hunk_old_lines) == len(file_lines)
+            ]
+        if len(starts) > 1 and hunk.old_start - 1 in starts:
+            starts = [hunk.old_start - 1]
+        if len(starts) != 1:
+            return None
+        replacements.append((starts[0], len(hunk_old_lines), hunk_new_lines))
+    result = list(file_lines)
+    end = len(file_lines)
+    for start, length, replacement in sorted(replacements, reverse=True):
+        if start + length > end:
+            # The hunks overlap.
+            return None
+        result[start : start + length] = replacement
+        end = start
+    return result
+
+
+def same_changes(patch: bytes, raw_diff: bytes) -> bool:
+    """Return whether `patch` and Phabricator's `raw_diff` make the same changes.
+
+    `patch` has the whole files as context, so the files before and after the
+    changes are rebuilt from it, and `raw_diff` is applied to the former. The
+    line numbers of the raw diff only matter for hunks whose context matches
+    several places, so that a patch that rebases cleanly is the same.
+    """
+    files, raw_files = split_patch(patch), split_patch(raw_diff)
+    if len(files) != len(raw_files):
+        return False
+    for file, raw_file in zip(files, raw_files, strict=True):
+        if file.key != raw_file.key:
+            return False
+        if normalize_header(file.header) != normalize_header(raw_file.header):
+            return False
+        file_old_lines: list[bytes] = []
+        file_new_lines: list[bytes] = []
+        for hunk in file.hunks:
+            hunk_old_lines, hunk_new_lines = hunk_sides(hunk)
+            file_old_lines += hunk_old_lines
+            file_new_lines += hunk_new_lines
+        if apply_hunks(file_old_lines, raw_file.hunks) != file_new_lines:
+            return False
+    return True
+
+
 def get_lando_url_for_phabricator(phab_url: str) -> str:
     """Return the Lando URL for the given Phabricator URL."""
     return LANDO_URL_MAPPING[phab_url.rstrip("/")]
@@ -522,6 +702,14 @@ class Repository(object):
     def get_public_node(self, node: str) -> str:
         """Hashtag in a remote VCS."""
         return node
+
+    def get_patches(self, nodes: list[str]) -> dict[str, bytes]:
+        """Return the patch of each commit, keyed by node.
+
+        The context of each hunk is large enough to cover the entire file, so
+        the file's content before and after the commit can be rebuilt from it.
+        """
+        raise NotImplementedError()
 
     def get_public_base_node(self, node: str) -> str | None:
         """Return the public ancestor automation should use as the diff base."""

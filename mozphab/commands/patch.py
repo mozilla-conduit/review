@@ -662,24 +662,14 @@ def build_patch_plan(
 
 def download_raw_diffs(plan: PatchPlan) -> dict[int, str]:
     """Download each revision's raw diff in parallel, keyed by revision ID."""
-    raw_diffs = {}
     with wait_message("Downloading patches.."):
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {}
-            for revision in plan.revisions:
-                diff = plan.diffs[revision.phid]
-                futures[revision.id] = executor.submit(
-                    conduit.call,
-                    "differential.getrawdiff",
-                    {"diffID": diff.id},
-                )
-            try:
-                for revision_id, future in futures.items():
-                    raw_diffs[revision_id] = future.result()
-            except Exception:
-                executor.shutdown(wait=False, cancel_futures=True)
-                raise
-    return raw_diffs
+        raw_diffs = conduit.get_raw_diffs(
+            plan.diffs[revision.phid].id for revision in plan.revisions
+        )
+    return {
+        revision.id: raw_diffs[plan.diffs[revision.phid].id]
+        for revision in plan.revisions
+    }
 
 
 def print_patches(repo: Repository, plan: PatchPlan):

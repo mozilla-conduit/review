@@ -9,6 +9,7 @@ import os
 import pathlib
 import platform
 import shutil
+import subprocess
 from pathlib import Path
 from unittest import mock
 
@@ -16,6 +17,8 @@ import pytest
 from callee import Contains, Matching
 
 from mozphab import exceptions, mozphab
+from mozphab.git import Git
+from mozphab.repository import same_changes
 
 from .conftest import conduit_responses, git_out, search_diff, search_rev
 
@@ -1205,7 +1208,9 @@ def test_submit_update_revision_not_found(
         {},
         # diffusion.repository.search
         {"data": [{"phid": "PHID-REPO-1", "fields": {"vcs": "git"}}]},
-        # differential.revision.search
+        # differential.revision.search, from `_submit`, then from
+        # `validate_commit_stack`, as missing revisions aren't cached.
+        {"data": []},
         {"data": []},
     )
     testfile = git_repo_path / "X"
@@ -1814,3 +1819,123 @@ def test_submit_update_without_test_plan_preserves_existing(
         "No testPlan transaction should be sent when --test-plan is not used, "
         "even if the revision already has a test plan"
     )
+
+
+def raw_diff(node, *args):
+    """Return the patch of `node` as Phabricator's raw diffs have it."""
+    return subprocess.check_output(
+        ["git", "log", "--no-walk", "--patch", "--unified=5", *args, "--format=", node]
+    )
+
+
+def test_get_patches(git_command, git_repo_path: pathlib.Path):
+    def commit(message, lines, binary):
+        content = "".join(f"{line}\n" for line in lines).encode("latin-1")
+        (git_repo_path / "X").write_bytes(content)
+        (git_repo_path / "B").write_bytes(binary)
+        git_out("add", ".")
+        git_out("commit", "--allow-empty", "-m", message)
+        return git_out("rev-parse", "HEAD").strip()
+
+    lines = [f"line {i}" for i in range(20)]
+    base = commit("Base", lines, b"\0a")
+
+    def stack(parent_edits, child_edits, binary=b"\0a", parent="Parent"):
+        """Commit `child_edits` of lines on top of a commit making `parent_edits`."""
+        git_out("checkout", "--quiet", "--detach", base)
+        edited = list(lines)
+        for index, line in parent_edits.items():
+            edited[index] = line
+        commit(parent, edited, b"\0a")
+        for index, line in child_edits.items():
+            edited[index] = line
+        return commit("Child", edited, binary)
+
+    patched = {15: "patched"}
+    original = stack({}, patched, binary=b"\0b")
+    submitted = raw_diff(original, "--binary")
+    # Rewording or changing the parent elsewhere makes the same changes.
+    same = [
+        stack({}, patched, binary=b"\0b", parent="Reworded"),
+        stack({2: "changed"}, patched, binary=b"\0b"),
+    ]
+    # Changing a context line doesn't, nor do whitespace, line ending, encoding
+    # and binary changes.
+    changed = [
+        stack({13: "changed"}, patched, binary=b"\0b"),
+        stack({}, {15: "patched "}, binary=b"\0b"),
+        stack({}, {15: "patched\r"}, binary=b"\0b"),
+        stack({}, {15: "patch\xe9"}, binary=b"\0b"),
+        stack({}, patched, binary=b"\0c"),
+    ]
+
+    # The user's diff config doesn't change the patches.
+    git_out("config", "diff.noprefix", "true")
+    git_out("config", "diff.suppressBlankEmpty", "true")
+    nodes = [original, *same, *changed]
+    patches = Git(str(git_repo_path)).get_patches(nodes)
+    assert len(set(nodes)) == len(nodes)
+    for node in [original, *same]:
+        assert same_changes(patches[node], submitted)
+    for node in changed:
+        assert not same_changes(patches[node], submitted)
+
+
+def test_get_patches_repeated_context(git_command, git_repo_path: pathlib.Path):
+    block = [f"line {i}\n" for i in range(12)]
+
+    def commit(edited_block):
+        git_out("checkout", "--quiet", "--detach", base)
+        blocks = [list(block), list(block)]
+        blocks[edited_block][6] = "changed\n"
+        (git_repo_path / "X").write_text("".join(blocks[0] + blocks[1]))
+        git_out("commit", "-am", "Change")
+        return git_out("rev-parse", "HEAD").strip()
+
+    (git_repo_path / "X").write_text("".join(block * 2))
+    git_out("add", "X")
+    git_out("commit", "-m", "Base")
+    base = git_out("rev-parse", "HEAD").strip()
+    original = commit(1)
+    submitted = raw_diff(original)
+
+    # The context of the change matches both blocks, so changing the first one
+    # instead changes what the raw diff would apply.
+    moved = commit(0)
+    patches = Git(str(git_repo_path)).get_patches([original, moved])
+    assert same_changes(patches[original], submitted)
+    assert not same_changes(patches[moved], submitted)
+
+
+def test_get_patches_copy(git_command, git_repo_path: pathlib.Path):
+    lines = [f"line {i}\n" for i in range(40)]
+
+    def commit(message, edits, copy_edits=None):
+        for index, line in edits.items():
+            lines[index] = line
+        (git_repo_path / "X").write_text("".join(lines))
+        if copy_edits is not None:
+            copy = list(lines)
+            for index, line in copy_edits.items():
+                copy[index] = line
+            (git_repo_path / "Y").write_text("".join(copy))
+        git_out("add", ".")
+        git_out("commit", "-m", message)
+        return git_out("rev-parse", "HEAD").strip()
+
+    base = commit("Base", {})
+    commit("A", {10: "a\n"})
+    old_b = commit("B", {30: "b\n"}, copy_edits={5: "y\n"})
+    # Phabricator stores Y as a copy of X.
+    submitted = raw_diff(old_b, "-M", "-C")
+
+    # Changing A elsewhere in the copied file changes B's changes.
+    git_out("reset", "--quiet", "--hard", base)
+    lines = [f"line {i}\n" for i in range(40)]
+    commit("Changed A", {10: "changed\n"})
+    git_out("cherry-pick", old_b)
+    new_b = git_out("rev-parse", "HEAD").strip()
+
+    patches = Git(str(git_repo_path)).get_patches([old_b, new_b])
+    assert same_changes(patches[old_b], submitted)
+    assert not same_changes(patches[new_b], submitted)

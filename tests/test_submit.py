@@ -19,7 +19,15 @@ from mozphab.commits import Commit, MergeConflictDiffs
 from mozphab.conduit import ConduitAPIError
 from mozphab.config import Config
 from mozphab.diff import Diff
-from mozphab.models import Bug, CreateRawDiffResult, Transaction, TransactionType
+from mozphab.exceptions import CommandError
+from mozphab.models import (
+    Bug,
+    CreateRawDiffResult,
+    DiffCommit,
+    RemoteDiff,
+    Transaction,
+    TransactionType,
+)
 from mozphab.user import UserData
 
 from .conftest import search_remote_diff, search_revision
@@ -1101,6 +1109,123 @@ class Commits(unittest.TestCase):
         )
         self.assertEqual((warnings, errors), ({}, {}))
 
+    @mock.patch("mozphab.conduit.ConduitAPI.get_groups")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_users")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+    @mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
+    @mock.patch("mozphab.conduit.ConduitAPI.whoami")
+    @mock.patch("mozphab.conduit.ConduitAPI.check_for_invalid_reviewers")
+    def test_rewritten_but_unchanged(
+        self,
+        m_check_reviewers,
+        m_whoami,
+        m_get_diffs,
+        m_get_revisions,
+        m_get_users,
+        m_get_groups,
+    ):
+        m_get_users.return_value = []
+        m_get_groups.return_value = []
+        m_check_reviewers.return_value = []
+        m_whoami.return_value = {"phid": "PHID-USER-1"}
+
+        def _commit(i, title="A"):
+            c = commit(
+                node=f"new{i}" * 8,
+                # The previous title has the reviewers, so none are added.
+                title=f"{title} r=alice",
+                rev_id=i,
+                bug_id="1",
+                reviewers=([], ["alice"]),
+            )
+            c.author_name = "Author"
+            c.author_email = "author@example.com"
+            c.author_date_epoch = 1000
+            return c
+
+        # Revisions D1 to D3 were submitted from the "old" commits, which have
+        # since been rewritten as the "new" commits, e.g. by `moz-phab patch`,
+        # which doesn't preserve the author date.
+        m_get_revisions.return_value = [
+            search_revision(
+                rev=i,
+                phid=f"PHID-DREV-{i}",
+                diff=f"PHID-DIFF-{i}",
+                reviewers=["PHID-USER-2"],
+            )
+            for i in range(1, 4)
+        ]
+        m_get_diffs.return_value = {
+            f"PHID-DIFF-{i}": RemoteDiff(
+                id=i,
+                phid=f"PHID-DIFF-{i}",
+                commits=(
+                    DiffCommit(
+                        identifier=f"old{i}" * 8,
+                        message=_commit(i).build_arc_commit_message(),
+                        author_name="Author",
+                        author_email="author@example.com",
+                    ),
+                ),
+            )
+            for i in range(1, 4)
+        }
+        raw_diffs = {
+            i: f"diff --git a/X b/X\n@@ -{i},2 +{i},2 @@\n a\n-b\n+{i}\n"
+            for i in (2, 3)
+        }
+
+        def call(method, args):
+            assert method == "differential.getrawdiff"
+            return raw_diffs[args["diffID"]]
+
+        def find_unchanged_patches(commits):
+            revisions, diffs = submit.preload_revision_data(commits)
+            return submit.find_unchanged_patches(repo, commits, revisions, diffs)
+
+        repo = mock.Mock()
+        repo.get_patches.return_value = {
+            "new2" * 8: b"diff --git a/X b/X\n@@ -1,2 +1,2 @@\n a\n-b\n+changed\n",
+            "new3" * 8: b"diff --git a/X b/X\n@@ -1,2 +1,2 @@\n a\n-b\n+3\n",
+        }
+
+        # Only the commit whose message and patch are unchanged is found.
+        commits = [_commit(1, title="reworded"), _commit(2), _commit(3)]
+        with mock.patch("mozphab.conduit.ConduitAPI.call", side_effect=call) as m_call:
+            unchanged = find_unchanged_patches(commits)
+        self.assertEqual(unchanged, frozenset(["new3" * 8]))
+        # Patches are only compared when the message is the same.
+        repo.get_patches.assert_called_once_with(["new2" * 8, "new3" * 8])
+        self.assertEqual(m_call.call_count, 2)
+
+        # The revisions with an unchanged patch and message aren't submitted.
+        warnings, _ = submit.validate_commit_stack(
+            commits, submit.SubmitOptions(), unchanged_patches=unchanged
+        )
+        self.assertEqual([c.submit for c in commits], [True, True, False])
+        self.assertEqual(
+            warnings, {commits[2].name: [Contains("revision has not changed")]}
+        )
+
+        # With --force, everything is submitted.
+        commits = [_commit(3)]
+        submit.validate_commit_stack(
+            commits, submit.SubmitOptions(force=True), unchanged_patches=unchanged
+        )
+        self.assertTrue(commits[0].submit)
+
+        # Changing the author is submitted, without comparing patches.
+        repo.get_patches.reset_mock()
+        commits = [_commit(3)]
+        commits[0].author_email = "other@example.com"
+        self.assertEqual(find_unchanged_patches(commits), frozenset())
+        repo.get_patches.assert_not_called()
+
+        # Failing to compare the patches submits the commits.
+        repo.get_patches.side_effect = CommandError("boom")
+        with mock.patch("mozphab.conduit.ConduitAPI.call", side_effect=call):
+            self.assertEqual(find_unchanged_patches([_commit(3)]), frozenset())
+
     def test_update_commits_from_options(self):
         def lwr(revs):
             return [r.lower() for r in revs]
@@ -1481,7 +1606,13 @@ def m_repo():
 
 @pytest.fixture
 def m_validate():
-    with mock.patch("mozphab.commands.submit.validate_commit_stack") as m:
+    with (
+        mock.patch("mozphab.commands.submit.validate_commit_stack") as m,
+        # `_submit` loads the data to validate the commits with first.
+        mock.patch(
+            "mozphab.commands.submit.preload_revision_data", return_value=({}, {})
+        ),
+    ):
         m.return_value = ([], {})
         yield m
 

@@ -48,6 +48,7 @@ from .repository import (
     Repository,
     RepositoryOptions,
     StackSelection,
+    parse_patches,
 )
 from .spinner import clear_terminal_line, wait_message
 from .subprocess_wrapper import debug_log_command, profiler_marker
@@ -287,6 +288,28 @@ class Mercurial(Repository):
     def hg_log_text(self, revset: str, select: str = "node") -> str:
         """Return the `hg log` output as a single string."""
         return self.hg_out_text(self.hg_log_command(revset, select))
+
+    def get_patches(self, nodes: list[str]) -> dict[str, bytes]:
+        """Return the patch of each commit, with the whole files as context.
+
+        See `Repository.get_patches`.
+        """
+        log = self.hg_out_binary(
+            [
+                "log",
+                "--patch",
+                "--git",
+                # HGPLAIN doesn't reset the user's diff options.
+                *("--config", f"diff.unified={environment.MAX_CONTEXT_SIZE}"),
+                *("--config", "diff.ignorews=false"),
+                *("--config", "diff.ignorewsamount=false"),
+                *("--config", "diff.ignorewseol=false"),
+                *("--config", "diff.ignoreblanklines=false"),
+                *("-T", r"\0{node}\n"),
+                *[arg for node in nodes for arg in ("-r", node)],
+            ]
+        )
+        return parse_patches(log)
 
     def get_public_base_node(self, node: str) -> str | None:
         """Return the public ancestor automation should use as the diff base.

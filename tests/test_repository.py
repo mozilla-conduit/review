@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import difflib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -16,12 +17,15 @@ from mozphab.git import Git
 from mozphab.jujutsu import Jujutsu
 from mozphab.mercurial import Mercurial
 from mozphab.repository import (
+    PatchHunk,
     PatchRefs,
     Repository,
     RepositoryOptions,
     StackSelection,
+    apply_hunks,
     get_lando_url_for_phabricator,
     is_mozilla_phabricator,
+    same_changes,
 )
 
 from .conftest import git_out, hg_out, jj_out, write_text
@@ -290,3 +294,117 @@ def test_discard_patch_attempt_removes_the_named_ref(vcs_repo: VcsRepo):
     assert (
         "phab-D1" not in vcs_repo.named_refs()
     ), "Discarding the attempt should remove the branch or bookmark it created."
+
+
+def test_same_changes():
+    # A patch with the whole files as context.
+    patch = b"""\
+diff --git a/A b/A
+index 1111111..2222222 100644
+--- a/A
++++ b/A
+@@ -1,5 +1,5 @@
+ a
+ b
+-c
++C
+ d
+ e
+diff --git a/B b/B
+similarity index 90%
+copy from A
+copy to B
+--- a/B
++++ b/B
+@@ -1,2 +1,2 @@
+-x
++y
+\\ No newline at end of file
+"""
+    # Phabricator's raw diffs list the files in another order, without the
+    # blob IDs and similarity, and the line numbers can differ after a rebase.
+    raw_diff = b"""\
+diff --git a/B b/B
+copy from A
+copy to B
+--- a/B
++++ b/B
+@@ -1,2 +1,2 @@
+-x
++y
+\\ No newline at end of file
+diff --git a/A b/A
+--- a/A
++++ b/A
+@@ -20,3 +20,3 @@
+ b
+-c
++C
+ d
+"""
+    assert same_changes(patch, raw_diff)
+    for changed in (
+        raw_diff.replace(b"+C", b"+C "),
+        raw_diff.replace(b" d\n", b" D\n"),
+        raw_diff.replace(b"copy from A", b"copy from Z"),
+        raw_diff.replace(b"\\ No newline at end of file\n", b""),
+    ):
+        assert not same_changes(patch, changed)
+
+    # Line numbers matter when the context matches several places.
+    repeated = (
+        b"diff --git a/A b/A\n@@ -1,8 +1,8 @@\n 0\n a\n-b\n+c\n x\n a\n b\n x\n 0\n"
+    )
+    hunk = b"diff --git a/A b/A\n@@ -%d,3 +%d,3 @@\n a\n-b\n+c\n x\n"
+    assert same_changes(repeated, hunk % (2, 2))
+    assert not same_changes(repeated, hunk % (5, 5))
+
+    # Like `git apply`, hunks starting at the first line, or without trailing
+    # context, only apply at the beginning or the end of the file.
+    def full_patch(before, after):
+        """A patch with the whole file as context, changing `before` to `after`."""
+        diff = difflib.diff_bytes(
+            difflib.unified_diff, before, after, n=len(before), lineterm=b""
+        )
+        return b"diff --git a/A b/A\n" + b"\n".join(list(diff)[2:])
+
+    numbers = [b"%d" % i for i in range(1, 21)]
+    start = b"diff --git a/A b/A\n@@ -1,3 +1,3 @@\n 1\n-2\n+two\n 3\n"
+    rebased = [b"0", *numbers]
+    assert same_changes(full_patch(numbers, [b"1", b"two", *numbers[2:]]), start)
+    assert not same_changes(
+        full_patch(rebased, [b"0", b"1", b"two", *numbers[2:]]), start
+    )
+    end = b"diff --git a/A b/A\n@@ -19,2 +19,2 @@\n 19\n-20\n+twenty\n"
+    assert same_changes(full_patch(numbers, [*numbers[:-1], b"twenty"]), end)
+    assert not same_changes(
+        full_patch([*numbers, b"21"], [*numbers[:-1], b"twenty", b"21"]), end
+    )
+    # Elsewhere, they apply wherever their context matches.
+    middle = b"diff --git a/A b/A\n@@ -9,3 +9,3 @@\n 9\n-10\n+ten\n 11\n"
+    assert same_changes(
+        full_patch(rebased, [b"0", *numbers[:9], b"ten", *numbers[10:]]), middle
+    )
+
+    # Binary files are compared with their blob IDs, as Git and Phabricator
+    # encode their data differently.
+    binary = b"diff --git a/C b/C\nindex %s 100644\nGIT binary patch\nliteral 1\n%s\n"
+    raw_binary = b"diff --git a/C b/C\nindex %s\nGIT binary patch\nliteral 1\n%s\n"
+    assert same_changes(binary % (b"1..2", b"Data"), raw_binary % (b"1..2", b"Other"))
+    assert not same_changes(
+        binary % (b"1..2", b"Data"), raw_binary % (b"1..3", b"Data")
+    )
+
+
+def test_apply_hunks():
+    lines = [b"a", b"b", b"c", b"d"]
+    first = PatchHunk(1, (b" a", b"-b", b"+B", b" c"))
+    second = PatchHunk(2, (b" b", b"-c", b"+C", b" d"))
+    assert apply_hunks(lines, (first,)) == [b"a", b"B", b"c", b"d"]
+    assert apply_hunks(lines, (second,)) == [b"a", b"b", b"C", b"d"]
+    assert (
+        apply_hunks(lines, (first, second)) is None
+    ), "Hunks covering the same lines shouldn't apply together."
+    assert (
+        apply_hunks(lines, (PatchHunk(1, (b" x", b"-b", b"+B")),)) is None
+    ), "A hunk whose context doesn't match shouldn't apply."

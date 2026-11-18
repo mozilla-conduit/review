@@ -60,6 +60,9 @@ if TYPE_CHECKING:
 # `upload_files_from_diff` pools (5 workers each).
 DIFF_CREATION_MAX_WORKERS = 5
 
+# How many raw diffs `ConduitAPI.get_raw_diffs` downloads concurrently.
+RAW_DIFF_MAX_WORKERS = 4
+
 
 def normalise_reviewer(reviewer: str, strip_group: bool = True) -> str:
     """This provide a canonical form of the reviewer for comparison."""
@@ -103,9 +106,9 @@ CONDUIT_SEARCH_PAGE_SIZE = 100
 # one pool is enough in practice; a small num_pools cap leaves headroom for
 # uncommon hosts (e.g. file.querychunks redirects) without unbounded growth.
 # maxsize is the per-host connection cap: the parallel fan-outs in submit
-# (AI review, max_workers=5) and patch (raw diff downloads, max_workers=4)
-# never exceed 10 concurrent in-flight requests, so 10 keeps every worker
-# served from the pool without idle slots.
+# (raw diff downloads, then AI review, max_workers=5) and patch (raw diff
+# downloads, max_workers=4) never exceed 10 concurrent in-flight requests, so
+# 10 keeps every worker served from the pool without idle slots.
 CONDUIT_POOL_NUM_POOLS = 4
 CONDUIT_POOL_MAXSIZE = 10
 
@@ -919,6 +922,29 @@ class ConduitAPI:
     # diminishing returns in benchmarking, and reviewhelper.request is
     # cheap enough that a handful of in-flight requests is sufficient.
     AI_REVIEW_MAX_WORKERS = 5
+
+    def get_raw_diffs(self, diff_ids: Iterable[int]) -> dict[int, str]:
+        """Download the raw diff of each diff in parallel, keyed by diff ID.
+
+        The threading is hidden here so callers stay in command-layer code.
+        """
+        raw_diffs = {}
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=RAW_DIFF_MAX_WORKERS
+        ) as executor:
+            futures = {
+                diff_id: executor.submit(
+                    self.call, "differential.getrawdiff", {"diffID": diff_id}
+                )
+                for diff_id in diff_ids
+            }
+            try:
+                for diff_id, future in futures.items():
+                    raw_diffs[diff_id] = future.result()
+            except Exception:
+                executor.shutdown(wait=False, cancel_futures=True)
+                raise
+        return raw_diffs
 
     def request_ai_reviews(
         self, rev_ids: list[int]

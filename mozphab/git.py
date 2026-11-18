@@ -36,6 +36,7 @@ from .repository import (
     Repository,
     RepositoryOptions,
     StackSelection,
+    parse_patches,
 )
 from .spinner import wait_message
 from .telemetry import telemetry
@@ -141,6 +142,36 @@ class Git(Repository):
                 *self.get_base_remote_args(),
             ]
         )
+
+    def get_patches(self, nodes: list[str]) -> dict[str, bytes]:
+        """Return the patch of each commit, with the whole files as context.
+
+        See `Repository.get_patches`.
+        """
+        log = self.git_out_binary(
+            [
+                # Don't let the user's config change the patches.
+                *("-c", "diff.suppressBlankEmpty=false"),
+                *("-c", "core.quotePath=false"),
+                "log",
+                "--no-walk",
+                "--patch",
+                "--src-prefix=a/",
+                "--dst-prefix=b/",
+                f"--unified={environment.MAX_CONTEXT_SIZE}",
+                "--binary",
+                "--no-color",
+                "--no-show-signature",
+                "--no-ext-diff",
+                "--no-textconv",
+                # Detect copies and renames like `get_diff`.
+                "-M",
+                "-C",
+                "--format=%x00%H",
+                *nodes,
+            ]
+        )
+        return parse_patches(log)
 
     def get_public_node(self, node: str) -> str:
         """Return a Mercurial node if Cinnabar is required.
