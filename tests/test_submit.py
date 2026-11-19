@@ -1444,67 +1444,6 @@ class Commits(unittest.TestCase):
 
 
 class TestUpdateCommitSummary(unittest.TestCase):
-    def test_update_revision_description(self):
-        c = commit(
-            rev_id="D123",
-            title="hi!",
-            body="hello!  µ-benchmarks are a thing.\n\n"
-            "Differential Revision: http://phabricator.test/D123",
-        )
-        r = {"fields": {"title": "", "summary": ""}}
-        t = []
-
-        expected = [
-            {"type": "title", "value": "hi!"},
-            {"type": "summary", "value": "hello!  µ-benchmarks are a thing."},
-        ]
-        submit.update_revision_description(t, c, r)
-
-        self.assertListEqual(t, expected)
-
-    def test_update_revision_description_no_op(self):
-        c = commit(
-            rev_id="D123",
-            title="hi!",
-            body="hello!\n\nDifferential Revision: http://phabricator.test/D123",
-        )
-        r = {"fields": {"title": "hi!", "summary": "hello!\n\n"}}
-        t = []
-
-        expected = []
-        submit.update_revision_description(t, c, r)
-
-        self.assertListEqual(t, expected)
-
-    def test_update_revision_description_with_test_plan(self):
-        c = commit(rev_id="D123", title="hi!", body="")
-        c.test_plan = "Run unit tests"
-        r = {"fields": {"title": "hi!", "summary": "", "testPlan": ""}}
-        t = []
-
-        submit.update_revision_description(t, c, r)
-
-        self.assertIn({"type": "testPlan", "value": "Run unit tests"}, t)
-
-    def test_update_revision_description_test_plan_no_op(self):
-        c = commit(rev_id="D123", title="hi!", body="")
-        c.test_plan = "Run unit tests"
-        r = {"fields": {"title": "hi!", "summary": "", "testPlan": "Run unit tests"}}
-        t = []
-
-        submit.update_revision_description(t, c, r)
-
-        self.assertNotIn({"type": "testPlan", "value": "Run unit tests"}, t)
-
-    def test_update_revision_description_empty_test_plan_not_sent(self):
-        c = commit(rev_id="D123", title="hi!", body="")
-        r = {"fields": {"title": "hi!", "summary": "", "testPlan": "existing plan"}}
-        t = []
-
-        submit.update_revision_description(t, c, r)
-
-        self.assertFalse(any(tx["type"] == "testPlan" for tx in t))
-
     @mock.patch("mozphab.conduit.ConduitAPI.get_users")
     def test_set_initial_revision_reviewers(self, m_get_users):
         # From https://phabricator.services.mozilla.com/api/differential.revision.edit
@@ -1576,15 +1515,6 @@ class TestUpdateCommitSummary(unittest.TestCase):
             'ERR-CONDUIT-CORE: Parameter "transactions" is not a list of transactions.',
             helpers.parse_api_error(api_response),
         )
-
-    def test_update_revision_no_bug_id(self):
-        # Phabricator stores patches with no bug as having an empty string as the
-        # bug ID. We should not explicitly update the bug-id if our bug id is "None".
-        transactions = []
-        submit.update_revision_bug_id(
-            transactions, Commit(bug_id=None), {"fields": {"bugzilla.bug-id": ""}}
-        )
-        self.assertEqual([], transactions)
 
 
 @pytest.fixture

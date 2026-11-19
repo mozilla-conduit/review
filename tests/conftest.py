@@ -32,7 +32,6 @@ from mozphab import (  # noqa: E402
 from mozphab import (  # noqa: E402
     config as config_module,
 )
-from mozphab.commands import submit  # noqa: E402
 from mozphab.git import Git  # noqa: E402
 from mozphab.logger import logger  # noqa: E402
 from mozphab.mercurial import Mercurial  # noqa: E402
@@ -435,10 +434,6 @@ def in_process(monkeypatch, safe_environ, request, config, user_data):
         raise
 
     monkeypatch.setattr(sys, "exit", reraise)
-
-    # Disable uploading a new commit title and summary to Phabricator.  This operation
-    # is safe to skip and doing so makes it easier to test other conduit call sites.
-    monkeypatch.setattr(submit, "update_revision_description", mock.MagicMock())
 
     # Pretend the review queue is empty, so the post-submit reminder doesn't add
     # a conduit call to the sequences the tests below expect.
