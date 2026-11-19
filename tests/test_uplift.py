@@ -27,7 +27,7 @@ from mozphab.commits import Commit
 from mozphab.config import Config
 from mozphab.exceptions import Error
 from mozphab.helpers import ORIGINAL_DIFF_REV_RE
-from mozphab.models import Revision
+from mozphab.models import PhabricatorRepository, Revision
 from mozphab.repository import Repository
 
 
@@ -42,7 +42,7 @@ class Repo(Repository):
         # Read back by the `Repository.phid` property.
         self._phid = phid
 
-    def get_repo_head_branch(self) -> str | None:
+    def get_repo_head_branch(self, repository: PhabricatorRepository) -> str | None:
         return self.unified_head
 
     def is_descendant(self, node: str) -> bool:
@@ -51,6 +51,12 @@ class Repo(Repository):
     def uplift_commits(self, dest: str, commits: list[Commit]) -> list[Commit]:
         self.uplift_called = True
         return commits
+
+
+# The release train repository `uplift` submits to in the tests.
+BETA = PhabricatorRepository(
+    phid="PHID-REPO-BETA", short_name="firefox-beta", default_branch="beta"
+)
 
 
 def test_local_uplift_if_possible():
@@ -66,7 +72,7 @@ def test_local_uplift_if_possible():
 
     repo = Repo()
 
-    uplift = UpliftSettings(train="train", no_rebase=True)
+    uplift = UpliftSettings(repository=BETA, train="train", no_rebase=True)
     assert local_uplift_if_possible(uplift, repo, commits) == (
         True,
         "beta",
@@ -78,7 +84,7 @@ def test_local_uplift_if_possible():
         None,
     ), "`--no-rebase` commits off the unified head shouldn't report it as the base."
 
-    uplift = UpliftSettings(train="train")
+    uplift = UpliftSettings(repository=BETA, train="train")
     repo = Repo(unified_head=None)
 
     assert local_uplift_if_possible(uplift, repo, commits) == (
@@ -97,7 +103,7 @@ def test_local_uplift_if_possible():
         is_descendant=False,
         unified_head="beta",
     )
-    uplift = UpliftSettings(train="beta", no_rebase=False)
+    uplift = UpliftSettings(repository=BETA, train="beta", no_rebase=False)
     assert local_uplift_if_possible(uplift, repo, commits) == (
         False,
         "beta",
@@ -481,6 +487,7 @@ def test_uplift_options_from_args():
         mozphab.parse_args(["uplift", "--train", "beta"]), test_config
     )
     assert options.train == "beta", "`--train` should be kept."
+    assert not options.no_rebase, "Uplifts should be rebased by default."
     assert (
         not options.open_browser
     ), "`ui.open_browser` should be used when `--open-browser` isn't passed."

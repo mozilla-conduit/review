@@ -27,7 +27,7 @@ from mozphab.exceptions import (
 from mozphab.logger import (
     logger,
 )
-from mozphab.models import revision_monogram
+from mozphab.models import PhabricatorRepository, revision_monogram
 from mozphab.profiler import profiler
 from mozphab.repository import (
     Repository,
@@ -40,8 +40,11 @@ from mozphab.user import (
 )
 
 from .submit import (
+    MergeConflict,
+    SubmitOptions,
+    UpliftSettings,
     add_submit_arguments,
-    submit,
+    run_submit,
 )
 
 UPLIFT_REPOSITORY_TAG_SLUG = "uplift"
@@ -49,10 +52,11 @@ UPLIFT_REPOSITORY_TAG_SLUG = "uplift"
 
 @dataclass(frozen=True)
 class UpliftOptions:
-    """The `uplift` flags and config knobs that `submit` doesn't read."""
+    """The `uplift` flags and config knobs, besides those it shares with `submit`."""
 
     list_trains: bool = False
     train: str | None = None
+    no_rebase: bool = False
     assessment_id: int | None = None
     open_browser: bool = True
     output_file: Path | None = None
@@ -63,6 +67,7 @@ class UpliftOptions:
         return cls(
             list_trains=args.list_trains,
             train=args.train,
+            no_rebase=args.no_rebase,
             assessment_id=args.assessment_id,
             open_browser=(
                 args.open_browser
@@ -209,6 +214,8 @@ def uplift(repo: Repository, args: argparse.Namespace, user_data: UserData):
     if not options.train:
         raise Error("Missing `--train` argument!")
 
+    # Parsed before finding the train, so a bad pair of flags fails straight away.
+    merge_conflict = MergeConflict.from_args(args)
     phab_repo = map_train_arg_to_repo(train_repo_shortname=options.train)
 
     # When using `moz-phab uplift`, we perform a standard `submit` but with all
@@ -217,8 +224,17 @@ def uplift(repo: Repository, args: argparse.Namespace, user_data: UserData):
     repo.call_sign = phab_repo["fields"]["callsign"]
     repo._phab_repo = phab_repo
 
-    # Run the usual submit command with our patched arg values.
-    commits = submit(repo, args, user_data)
+    submit_options = SubmitOptions.from_args(
+        args,
+        config,
+        uplift=UpliftSettings(
+            repository=PhabricatorRepository.from_conduit(phab_repo),
+            train=options.train,
+            no_rebase=options.no_rebase,
+            merge_conflict=merge_conflict,
+        ),
+    )
+    commits = run_submit(repo, submit_options, user_data)
 
     # The tip commit has a revision id once `submit` has sent the stack.
     tip_commit_id = commits[-1].rev_id if commits else None

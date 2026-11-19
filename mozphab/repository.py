@@ -21,6 +21,7 @@ from .helpers import (
     read_json_field,
 )
 from .logger import logger
+from .models import PhabricatorRepository
 from .spinner import wait_message
 from .vcs import Vcs
 
@@ -511,8 +512,8 @@ class Repository(object):
         """Return the node `ref` (a branch, bookmark, or other revision) resolves to."""
         raise NotImplementedError()
 
-    def get_repo_head_branch(self) -> str | None:
-        """Return the expected branch/head for the current Phabricator repo.
+    def get_repo_head_branch(self, repository: PhabricatorRepository) -> str | None:
+        """Return the local branch/head of `repository`'s default branch.
 
         Confirms the identified head exists in the repository.
         """
@@ -619,6 +620,11 @@ class Repository(object):
                 self._phab_repo = conduit.get_repository_by_callsign(self.call_sign)
 
         return self._phab_repo
+
+    @property
+    def phabricator_repository(self) -> PhabricatorRepository:
+        """This repository on Phabricator."""
+        return PhabricatorRepository.from_conduit(self.phab_repo)
 
     @property
     def phid(self):

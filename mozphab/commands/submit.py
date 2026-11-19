@@ -36,6 +36,7 @@ from mozphab.logger import logger
 from mozphab.models import (
     Bug,
     DiffCommit,
+    PhabricatorRepository,
     RemoteDiff,
     Revision,
     RevisionStatus,
@@ -77,7 +78,10 @@ class MergeConflict:
 
 @dataclass(frozen=True)
 class UpliftSettings:
-    """The `uplift` flags that change how `submit` runs."""
+    """What `submit` needs to know when it runs on behalf of `uplift`."""
+
+    # The release train's repository, which the revisions are submitted to.
+    repository: PhabricatorRepository
 
     train: str | None = None
 
@@ -140,17 +144,16 @@ class SubmitOptions:
         return not self.yes and (self.interactive or not self.auto_submit)
 
     @classmethod
-    def from_args(cls, args: argparse.Namespace, config: Config) -> SubmitOptions:
-        """Build the options from the parsed command line and the user's config."""
-        uplift = (
-            UpliftSettings(
-                train=args.train,
-                no_rebase=args.no_rebase,
-                merge_conflict=MergeConflict.from_args(args),
-            )
-            if args.command == "uplift"
-            else None
-        )
+    def from_args(
+        cls,
+        args: argparse.Namespace,
+        config: Config,
+        uplift: UpliftSettings | None = None,
+    ) -> SubmitOptions:
+        """Build the options from the parsed command line and the user's config.
+
+        `uplift` passes its `UpliftSettings` once it has found the release train.
+        """
         return cls(
             yes=args.yes,
             interactive=args.interactive,
@@ -1023,7 +1026,7 @@ def local_uplift_if_possible(
     """
     # Try and find a local repo identifier (hg bookmark, git remote branch) to rebase
     # our revset onto.
-    unified_head = repo.get_repo_head_branch()
+    unified_head = repo.get_repo_head_branch(uplift.repository)
 
     if uplift.no_rebase:
         # If args tell us not to do a rebase, do not make any local changes and
@@ -1528,7 +1531,13 @@ def _submit(
 def submit(
     repo: Repository, args: argparse.Namespace, user_data: UserData
 ) -> list[Commit]:
-    options = SubmitOptions.from_args(args, config)
+    return run_submit(repo, SubmitOptions.from_args(args, config), user_data)
+
+
+def run_submit(
+    repo: Repository, options: SubmitOptions, user_data: UserData
+) -> list[Commit]:
+    """Submit the commits, as `submit` and `uplift` do."""
     # Selecting the stack fails like a bad argument would, rather than like a
     # failed `submit`.
     repo.select_stack(options.stack)

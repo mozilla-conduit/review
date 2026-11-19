@@ -12,6 +12,7 @@ from callee import Contains
 
 from mozphab import environment, exceptions, mozphab
 from mozphab.commits import Commit
+from mozphab.models import PhabricatorRepository
 from mozphab.repository import (
     PatchAttempt,
     PatchRefs,
@@ -853,15 +854,16 @@ def test_git_get_repo_head_branch(
     m_is_cinnabar_required.return_value = cinnabar_required
 
     # If head is not a node in the repo, raise `ValueError`.
+    repository = PhabricatorRepository(phid="PHID-REPO-1", default_branch="beta")
     m_is_node.return_value = False
     assert (
-        git.get_repo_head_branch() is None
+        git.get_repo_head_branch(repository) is None
     ), "No found heads should have returned `None`."
 
     # If head is a node in the repo, should map to a remote branch.
     m_is_node.return_value = True
     assert (
-        git.get_repo_head_branch() == unified_head
+        git.get_repo_head_branch(repository) == unified_head
     ), "beta did not correctly map to a branch"
 
 

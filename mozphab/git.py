@@ -29,6 +29,7 @@ from .helpers import (
     temporary_file,
 )
 from .logger import logger
+from .models import PhabricatorRepository
 from .repository import (
     DEFAULT_REPOSITORY_OPTIONS,
     PatchAttempt,
@@ -924,8 +925,8 @@ class Git(Repository):
         # If the command ran without an error, the commit is a descendant.
         return True
 
-    def get_repo_head_branch(self) -> str | None:
-        default_branch = self.phab_repo["fields"]["defaultBranch"]
+    def get_repo_head_branch(self, repository: PhabricatorRepository) -> str | None:
+        default_branch = repository.default_branch
 
         remotes = self.get_base_remotes()
 

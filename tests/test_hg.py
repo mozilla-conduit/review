@@ -12,6 +12,7 @@ from mozphab import diff, environment, exceptions
 from mozphab.commits import Commit
 from mozphab.diff import Diff
 from mozphab.mercurial import Mercurial
+from mozphab.models import PhabricatorRepository
 from mozphab.repository import PatchRefs, RepositoryOptions, StackSelection
 
 from .conftest import assert_attributes, create_temp_fn
@@ -682,13 +683,16 @@ def test_repository_cached(m_which, m_is_dir, m_os_chdir, m_phab_url, m_open, *p
 
 @mock.patch("mozphab.mercurial.Mercurial.is_node")
 def test_hg_get_repo_head_branch(m_is_node, hg):
+    repository = PhabricatorRepository(phid="PHID-REPO-1", short_name="beta")
     m_is_node.return_value = False
     assert (
-        hg.get_repo_head_branch() is None
+        hg.get_repo_head_branch(repository) is None
     ), "Unknown head should have returned `None`."
 
     m_is_node.return_value = True
-    assert hg.get_repo_head_branch() == "beta", "beta did not correctly map to a branch"
+    assert (
+        hg.get_repo_head_branch(repository) == "beta"
+    ), "beta did not correctly map to a branch"
 
 
 def test_hg_validate_email(hg):

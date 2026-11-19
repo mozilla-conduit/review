@@ -41,6 +41,7 @@ from .helpers import (
     which_path,
 )
 from .logger import logger
+from .models import PhabricatorRepository
 from .repository import (
     DEFAULT_REPOSITORY_OPTIONS,
     PatchAttempt,
@@ -630,7 +631,7 @@ class Mercurial(Repository):
 
     def get_latest_landing_node(self, before: int | None = None) -> str | None:
         """Return the most recent autoland-to-mozilla-central merge in the repo."""
-        branch = self.get_repo_head_branch()
+        branch = self.get_repo_head_branch(self.phabricator_repository)
         scope = f"ancestors({branch})" if branch else "public()"
         if before:
             before_str = datetime.fromtimestamp(before, tz=timezone.utc).strftime(
@@ -886,8 +887,8 @@ class Mercurial(Repository):
 
         return True
 
-    def get_repo_head_branch(self) -> str | None:
-        shortname = self.phab_repo["fields"]["shortName"]
+    def get_repo_head_branch(self, repository: PhabricatorRepository) -> str | None:
+        shortname = repository.short_name
         if not self.is_node(shortname):
             return None
 

@@ -25,6 +25,7 @@ from mozphab.models import (
     Bug,
     CreateRawDiffResult,
     DiffCommit,
+    PhabricatorRepository,
     RemoteDiff,
     Revision,
     Transaction,
@@ -68,6 +69,12 @@ def commit(
         submit=submit,
         wip=wip,
     )
+
+
+# The release train repository `uplift` submits to in the tests.
+BETA = PhabricatorRepository(
+    phid="PHID-REPO-BETA", short_name="firefox-beta", default_branch="beta"
+)
 
 
 def validate(
@@ -1111,7 +1118,7 @@ class Commits(unittest.TestCase):
         # Submitting a new uplift clears reviewers and shouldn't warn.
         validation = validate(
             [_commit(rev=None, granted=[], request=[])],
-            submit.SubmitOptions(uplift=submit.UpliftSettings()),
+            submit.SubmitOptions(uplift=submit.UpliftSettings(repository=BETA)),
         )
         self.assertEqual((validation.warnings, validation.errors), ({}, {}))
 
@@ -1374,7 +1381,7 @@ class Commits(unittest.TestCase):
         commits = copy.deepcopy(_commits)
         update(
             commits,
-            submit.SubmitOptions(uplift=submit.UpliftSettings()),
+            submit.SubmitOptions(uplift=submit.UpliftSettings(repository=BETA)),
             submit.RemoteState(),
         )
         assert not commits[0].wip, "Uplift commit without reviewers should not be WIP."
@@ -1732,7 +1739,7 @@ def test_uplift_first_public_parent_uses_train_head(
     m_repo.is_descendant.return_value = True
 
     options = submit_options(
-        uplift=submit.UpliftSettings(train="beta", no_rebase=False)
+        uplift=submit.UpliftSettings(repository=BETA, train="beta", no_rebase=False)
     )
 
     submit._submit(m_repo, options, UserData())
@@ -1760,7 +1767,9 @@ def test_uplift_no_rebase_off_train_uses_public_base(
     m_repo.get_public_base_node.return_value = "central-public-base"
     m_repo.is_descendant.return_value = False
 
-    options = submit_options(uplift=submit.UpliftSettings(train="beta", no_rebase=True))
+    options = submit_options(
+        uplift=submit.UpliftSettings(repository=BETA, train="beta", no_rebase=True)
+    )
 
     submit._submit(m_repo, options, UserData())
 
@@ -1780,7 +1789,9 @@ def test_uplift_no_rebase_on_train_uses_train_head(
     m_repo.get_public_node.side_effect = lambda node: node
     m_repo.is_descendant.return_value = True
 
-    options = submit_options(uplift=submit.UpliftSettings(train="beta", no_rebase=True))
+    options = submit_options(
+        uplift=submit.UpliftSettings(repository=BETA, train="beta", no_rebase=True)
+    )
 
     submit._submit(m_repo, options, UserData())
 
@@ -2051,13 +2062,13 @@ def test_submit_options_from_args():
     assert options.wip, "`--wip` should be kept."
     assert not options.is_uplift, "`submit` shouldn't have uplift settings."
 
+    uplift = submit.UpliftSettings(repository=BETA, train="beta", no_rebase=True)
     options = submit.SubmitOptions.from_args(
-        mozphab.parse_args(["uplift", "--train", "beta", "--no-rebase"]), test_config
+        mozphab.parse_args(["uplift", "--train", "beta", "--no-rebase"]),
+        test_config,
+        uplift=uplift,
     )
-    assert options.uplift == submit.UpliftSettings(
-        train="beta", no_rebase=True
-    ), "`uplift` should pass its train and `--no-rebase` to `submit`."
-    assert options.is_uplift, "`uplift` runs should be marked as uplifts."
+    assert options.uplift is uplift, "`uplift` should pass its settings to `submit`."
 
     test_config.auto_submit = True
     test_config.ai_review = True
@@ -2107,47 +2118,30 @@ def test_force_vcs_skips_the_vcs_check(
     ), "The VCS should be checked unless `--force-vcs` is given."
 
 
-def test_submit_options_from_args_merge_conflict(tmp_path):
-    """`--merge-conflict` and `--merge-conflict-commit` set the uplift's conflict."""
-    test_config = Config(should_access_file=False)
+def test_merge_conflict_from_args(tmp_path):
+    """`--merge-conflict` and `--merge-conflict-commit` give the uplift's conflict."""
     conflict_path = tmp_path / "conflict.diff"
-
-    options = submit.SubmitOptions.from_args(
-        mozphab.parse_args(
-            [
-                "uplift",
-                "--train",
-                "beta",
-                "--merge-conflict",
-                str(conflict_path),
-                "--merge-conflict-commit",
-                "abc123",
-            ]
-        ),
-        test_config,
+    args = mozphab.parse_args(
+        [
+            "uplift",
+            "--train",
+            "beta",
+            "--merge-conflict",
+            str(conflict_path),
+            "--merge-conflict-commit",
+            "abc123",
+        ]
     )
-    assert options.uplift is not None, "`uplift` should have uplift settings."
-    assert options.uplift.merge_conflict == submit.MergeConflict(
+
+    assert submit.MergeConflict.from_args(args) == submit.MergeConflict(
         path=conflict_path, commit="abc123"
-    ), "`--merge-conflict` and its commit should be passed to `submit`."
+    ), "`--merge-conflict` and its commit should give the merge conflict."
     assert (
-        options.merge_conflict is options.uplift.merge_conflict
-    ), "`SubmitOptions.merge_conflict` should be the uplift's merge conflict."
-
-    options = submit.SubmitOptions.from_args(
-        mozphab.parse_args(["uplift", "--train", "beta"]), test_config
-    )
-    assert options.uplift is not None, "`uplift` should have uplift settings."
-    assert (
-        options.uplift.merge_conflict is None
+        submit.MergeConflict.from_args(
+            mozphab.parse_args(["uplift", "--train", "beta"])
+        )
+        is None
     ), "Uplifts without `--merge-conflict` shouldn't have a merge conflict."
-
-    options = submit.SubmitOptions.from_args(
-        mozphab.parse_args(["submit"]), test_config
-    )
-    assert (
-        options.merge_conflict is None
-    ), "`submit` without `uplift` shouldn't have a merge conflict."
 
 
 @pytest.mark.parametrize(
@@ -2157,13 +2151,27 @@ def test_submit_options_from_args_merge_conflict(tmp_path):
         ["--merge-conflict-commit", "abc123"],
     ],
 )
-def test_submit_options_from_args_merge_conflict_needs_both_flags(flags):
+def test_merge_conflict_from_args_needs_both_flags(flags):
     """`--merge-conflict` and `--merge-conflict-commit` can't be used alone."""
-    test_config = Config(should_access_file=False)
     args = mozphab.parse_args(["uplift", "--train", "beta", *flags])
 
     with pytest.raises(exceptions.Error, match="must be used together"):
-        submit.SubmitOptions.from_args(args, test_config)
+        submit.MergeConflict.from_args(args)
+
+
+def test_submit_options_merge_conflict(tmp_path):
+    """`SubmitOptions.merge_conflict` is the uplift's merge conflict, if any."""
+    merge_conflict = submit.MergeConflict(path=tmp_path / "conflict.diff", commit="abc")
+    options = submit_options(
+        uplift=submit.UpliftSettings(repository=BETA, merge_conflict=merge_conflict)
+    )
+
+    assert (
+        options.merge_conflict is merge_conflict
+    ), "`SubmitOptions.merge_conflict` should be the uplift's merge conflict."
+    assert (
+        submit_options().merge_conflict is None
+    ), "`submit` without `uplift` shouldn't have a merge conflict."
 
 
 @pytest.fixture
@@ -2187,7 +2195,7 @@ def merge_conflict_options(merge_conflict, **overrides):
     """Return the options of a `moz-phab uplift --merge-conflict` run."""
     return submit_options(
         uplift=submit.UpliftSettings(
-            train="beta", no_rebase=True, merge_conflict=merge_conflict
+            repository=BETA, train="beta", no_rebase=True, merge_conflict=merge_conflict
         ),
         **overrides,
     )
