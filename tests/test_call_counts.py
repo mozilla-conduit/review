@@ -15,8 +15,8 @@ Concretely it catches things like:
 
 - A new helper added to the submit loop that calls `get_revisions`
   outside the validation preload.
-- A regression where the per-commit `has_revision_reviewers()` check
-  stops hitting the cache.
+- A regression where looking at the commits' revisions stops using the
+  one batched fetch of the revisions.
 - A patch refactor that splits the batched ancestor fetch back into
   per-revision calls.
 
@@ -409,7 +409,7 @@ SUBMIT_EXPECTED: dict[int, dict[str, int]] = {
         "reviewhelper.request": 1,
     },
     3: {
-        "differential.revision.search": 3,
+        "differential.revision.search": 1,
         "differential.diff.search": 1,
         "user.whoami": 1,
         "differential.creatediff": 3,
@@ -418,7 +418,7 @@ SUBMIT_EXPECTED: dict[int, dict[str, int]] = {
         "reviewhelper.request": 3,
     },
     5: {
-        "differential.revision.search": 5,
+        "differential.revision.search": 1,
         "differential.diff.search": 1,
         "user.whoami": 1,
         "differential.creatediff": 5,
@@ -427,7 +427,7 @@ SUBMIT_EXPECTED: dict[int, dict[str, int]] = {
         "reviewhelper.request": 5,
     },
     10: {
-        "differential.revision.search": 10,
+        "differential.revision.search": 1,
         "differential.diff.search": 1,
         "user.whoami": 1,
         "differential.creatediff": 10,

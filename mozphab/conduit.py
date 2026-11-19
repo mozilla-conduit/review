@@ -687,8 +687,7 @@ class ConduitAPI:
         user_names: Iterable[str],
         group_slugs: Iterable[str],
     ) -> tuple[dict[int, Revision], dict[str, RemoteDiff]]:
-        """Fetch everything `validate_commit_stack` needs in as few round-trips
-        as possible.
+        """Fetch everything `submit` needs from Phabricator in few round-trips.
 
         Loads the existing revisions for the commits that have a `rev_id`,
         the diffs those revisions currently point at, and the given reviewer
@@ -1301,17 +1300,6 @@ class ConduitAPI:
 
         has_more = bool((response.get("cursor") or {}).get("after"))
         return count, has_more
-
-    def has_revision_reviewers(self, commit: Commit) -> bool:
-        """Return True if the commit has a remote revision with reviewers.
-
-        If the commit doesn't have a revision ID or the revision cannot be found, then
-        return False.
-        """
-        if not commit.rev_id:
-            return False
-        revs = self.get_revisions(ids=[commit.rev_id])
-        return bool(revs and revs[0].reviewer_phids)
 
     def revision_reviewer_phids(self, revision: Revision) -> set[str]:
         """Return reviewer PHIDs for a Phabricator revision."""

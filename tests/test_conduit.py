@@ -836,19 +836,6 @@ def test_get_pending_reviews(m_whoami, m_call):
     assert [call.args[0] for call in m_call.call_args_list].count("project.search") == 1
 
 
-def test_has_revision_reviewers(m_call):
-    commit = Commit(rev_id=None)
-    assert not conduit.has_revision_reviewers(commit)
-
-    m_call.return_value = {"data": [search_rev(rev=123, reviewers=[])]}
-    commit = Commit(rev_id=123)
-    assert not conduit.has_revision_reviewers(commit)
-
-    m_call.return_value = {"data": [search_rev(rev=456, reviewers=["alice"])]}
-    commit = Commit(rev_id=456)
-    assert conduit.has_revision_reviewers(commit)
-
-
 @mock.patch("builtins.open")
 @mock.patch("mozphab.conduit.json")
 @mock.patch("mozphab.conduit.get_arcrc_path")

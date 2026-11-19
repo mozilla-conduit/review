@@ -435,6 +435,52 @@ def confirm_unassigned_bugs(
     return prompt("Submit anyway", ["No", "Yes"]) == "Yes"
 
 
+@dataclass(frozen=True)
+class RemoteState:
+    """The revisions and diffs on Phabricator of the commits being submitted."""
+
+    # Keyed by revision ID.
+    revisions: Mapping[int, Revision] = field(default_factory=dict)
+
+    # Keyed by diff PHID.
+    diffs: Mapping[str, RemoteDiff] = field(default_factory=dict)
+
+    def has_reviewers(self, commit: Commit) -> bool:
+        """Return `True` if the commit's revision has reviewers on Phabricator."""
+        revision = self.revisions.get(commit.rev_id) if commit.rev_id else None
+        return bool(revision and revision.reviewer_phids)
+
+
+def load_remote_state(commits: list[Commit], options: SubmitOptions) -> RemoteState:
+    """Fetch the commits' revisions and diffs, and their reviewers into the cache.
+
+    The reviewers are looked up before the options replace them, so the names from
+    both the commits and the options are fetched. `uplift` clears the reviewers.
+    """
+    reviewer_names = set()
+    if not options.is_uplift:
+        for commit in commits:
+            for bucket in commit.reviewers.values():
+                reviewer_names.update(bucket)
+        reviewer_names.update(options.reviewers)
+        reviewer_names.update(options.blockers)
+
+    user_names = set()
+    group_slugs = set()
+    for reviewer in reviewer_names:
+        normalised = normalise_reviewer(reviewer, strip_group=False)
+        if normalised.startswith("#"):
+            group_slugs.add(normalised)
+        else:
+            user_names.add(normalised)
+
+    with wait_message("Loading revision data..."):
+        revisions, diffs = conduit.preload_for_validation(
+            commits, user_names, group_slugs
+        )
+    return RemoteState(revisions=revisions, diffs=diffs)
+
+
 def same_message_and_author(commit: Commit, phab_commit: DiffCommit) -> bool:
     """Whether `commit` has the message and author recorded on Phabricator.
 
@@ -455,8 +501,7 @@ def sha1_changed(commit: Commit, diff: RemoteDiff) -> bool:
 def find_unchanged_patches(
     repo: Repository,
     commits: list[Commit],
-    revisions: Mapping[int, Revision],
-    diffs: Mapping[str, RemoteDiff],
+    remote: RemoteState,
 ) -> frozenset[str]:
     """Return the nodes of the rewritten commits whose patch and message are unchanged.
 
@@ -468,9 +513,9 @@ def find_unchanged_patches(
     # The diff to compare each rewritten commit with, keyed by node.
     rewritten = {}
     for commit in commits:
-        if not commit.rev_id or not (revision := revisions.get(commit.rev_id)):
+        if not commit.rev_id or not (revision := remote.revisions.get(commit.rev_id)):
             continue
-        diff = diffs[revision.diff_phid]
+        diff = remote.diffs[revision.diff_phid]
         if (
             sha1_changed(commit, diff)
             and diff.commits
@@ -493,29 +538,6 @@ def find_unchanged_patches(
         return frozenset()
 
 
-def preload_revision_data(
-    commits: list[Commit],
-) -> tuple[dict[int, Revision], dict[str, RemoteDiff]]:
-    """Load the commits' revisions and their current diffs, keyed by ID and PHID.
-
-    The reviewers and groups are loaded in the same batch, so the per-commit
-    `check_for_invalid_reviewers` calls of `validate_commit_stack` hit the cache.
-    """
-    all_user_names = set()
-    all_group_slugs = set()
-    for commit in commits:
-        for bucket in commit.reviewers.values():
-            for reviewer in bucket:
-                normalised = normalise_reviewer(reviewer, strip_group=False)
-                if normalised.startswith("#"):
-                    all_group_slugs.add(normalised)
-                else:
-                    all_user_names.add(normalised)
-
-    with wait_message("Loading revision data..."):
-        return conduit.preload_for_validation(commits, all_user_names, all_group_slugs)
-
-
 @dataclass(frozen=True)
 class StackValidation:
     """What `validate_commit_stack` found, without changing the commits."""
@@ -534,6 +556,7 @@ class StackValidation:
 def validate_commit_stack(
     commits: list[Commit],
     options: SubmitOptions,
+    remote: RemoteState,
     unchanged_patches: frozenset[str] = frozenset(),
 ) -> StackValidation:
     """Validate commit stack is suitable for review.
@@ -543,8 +566,8 @@ def validate_commit_stack(
 
     Return the warnings and errors, and which commits don't need submitting.
     """
-    revisions, diffs = preload_revision_data(commits)
-
+    revisions = remote.revisions
+    diffs = remote.diffs
     warnings = {}
     errors = {}
     nodes = {}
@@ -704,7 +727,7 @@ def validate_commit_stack(
 
         if (
             not commit.has_reviewers
-            and not conduit.has_revision_reviewers(commit)
+            and not remote.has_reviewers(commit)
             # Submitting a new uplift clears reviewers and shouldn't warn.
             and not options.is_uplift
         ):
@@ -766,7 +789,9 @@ def remove_duplicates(reviewers: list[str]) -> list[str]:
     return unique
 
 
-def update_commits_from_options(commits: list[Commit], options: SubmitOptions):
+def update_commits_from_options(
+    commits: list[Commit], options: SubmitOptions, remote: RemoteState
+):
     """Modify commit description based on the options and configuration.
 
     Args:
@@ -861,7 +886,7 @@ def update_commits_from_options(commits: list[Commit], options: SubmitOptions):
             # by automation once the assessment form is submitted.
             not options.is_uplift
             and not commit.has_reviewers
-            and not conduit.has_revision_reviewers(commit)
+            and not remote.has_reviewers(commit)
         ):
             commit.wip = True
         elif commit.wip is None:
@@ -876,15 +901,10 @@ def update_commits_from_options(commits: list[Commit], options: SubmitOptions):
             }
 
 
-def update_commits_for_uplift(commits: list[Commit], repo: Repository):
+def update_commits_for_uplift(
+    commits: list[Commit], repo: Repository, remote: RemoteState
+):
     """Prepares a set of commits for uplifting."""
-    with wait_message("Loading revision data..."):
-        rev_ids = [commit.rev_id for commit in commits if commit.rev_id]
-        revisions = {
-            revision.id: revision
-            for revision in (conduit.get_revisions(ids=rev_ids) if rev_ids else [])
-        }
-
     for commit in commits:
         # Clear all reviewers from the revision.
         commit.reviewers = {
@@ -896,7 +916,7 @@ def update_commits_for_uplift(commits: list[Commit], repo: Repository):
         commit.title = strip_dontbuild(commit.title)
 
         # Skip when updating an existing revision on the uplift repo.
-        revision = revisions.get(commit.rev_id)
+        revision = remote.revisions.get(commit.rev_id) if commit.rev_id else None
         if not revision or revision.repository_phid == repo.phid:
             continue
 
@@ -1224,9 +1244,13 @@ def _submit(
         # Pre-process to load metadata.
         morph_blocking_reviewers(commits)
         augment_commits_from_body(commits)
-        update_commits_from_options(commits, options)
+
+    remote = load_remote_state(commits, options)
+
+    with wait_message("Loading commits.."):
+        update_commits_from_options(commits, options, remote)
         if options.is_uplift:
-            update_commits_for_uplift(commits, repo)
+            update_commits_for_uplift(commits, repo, remote)
         update_commit_title_previews(commits)
 
     # Display a one-line summary of commit and WIP count.
@@ -1245,15 +1269,13 @@ def _submit(
     )
 
     with wait_message("Checking commits..."):
-        # `validate_commit_stack` loads the same data again, from the cache.
-        revisions, diffs = preload_revision_data(commits)
         unchanged_patches = (
             frozenset()
             if options.force
-            else find_unchanged_patches(repo, commits, revisions, diffs)
+            else find_unchanged_patches(repo, commits, remote)
         )
         validation = validate_commit_stack(
-            commits, options, unchanged_patches=unchanged_patches
+            commits, options, remote, unchanged_patches=unchanged_patches
         )
     if validation.errors:
         log_commit_stack_with_messages(

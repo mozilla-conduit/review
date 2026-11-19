@@ -12,6 +12,7 @@ import pytest
 
 from mozphab import mozphab
 from mozphab.commands.submit import (
+    RemoteState,
     UpliftSettings,
     local_uplift_if_possible,
     update_commits_for_uplift,
@@ -124,7 +125,7 @@ def test_update_commits_for_uplift_sets_relman_review():
         ),
     ]
 
-    update_commits_for_uplift(commits, Repo())
+    update_commits_for_uplift(commits, Repo(), RemoteState())
 
     reviewers = commits[0].reviewers
 
@@ -187,13 +188,16 @@ def test_update_commits_for_uplift_sets_original_revision():
         ),
     ]
 
-    with mock.patch("mozphab.commands.submit.conduit.get_revisions") as m_get_revs:
-        m_get_revs.return_value = [
-            Revision(id=1, phid="PHID-DREV-1", repository_phid="PHID-mc"),
-            Revision(id=2, phid="PHID-DREV-2", repository_phid="PHID-beta"),
-            Revision(id=3, phid="PHID-DREV-3", repository_phid="PHID-mc"),
-        ]
-        update_commits_for_uplift(commits, Repo())
+    revisions = [
+        Revision(id=1, phid="PHID-DREV-1", repository_phid="PHID-mc"),
+        Revision(id=2, phid="PHID-DREV-2", repository_phid="PHID-beta"),
+        Revision(id=3, phid="PHID-DREV-3", repository_phid="PHID-mc"),
+    ]
+    update_commits_for_uplift(
+        commits,
+        Repo(),
+        RemoteState(revisions={revision.id: revision for revision in revisions}),
+    )
 
     # Initial submission.
     body = commits[0].body
@@ -237,11 +241,14 @@ def test_uplift_beta_commit_to_esr():
         rev_id=2,
     )
 
-    with mock.patch("mozphab.commands.submit.conduit.get_revisions") as m_get_revs:
-        m_get_revs.return_value = [
-            Revision(id=2, phid="PHID-DREV-2", repository_phid="PHID-beta")
-        ]
-        update_commits_for_uplift([commit], Repo(phid="PHID-esr"))
+    revisions = [
+        Revision(id=2, phid="PHID-DREV-2", repository_phid="PHID-beta"),
+    ]
+    update_commits_for_uplift(
+        [commit],
+        Repo(phid="PHID-esr"),
+        RemoteState(revisions={revision.id: revision for revision in revisions}),
+    )
 
     reviewers = commit.reviewers
     body = commit.body
@@ -282,12 +289,15 @@ def test_update_commits_for_uplift_strips_dontbuild():
         ),
     ]
 
-    with mock.patch("mozphab.commands.submit.conduit.get_revisions") as m_get_revs:
-        m_get_revs.return_value = [
-            Revision(id=1, phid="PHID-DREV-1", repository_phid="PHID-mc"),
-            Revision(id=2, phid="PHID-DREV-2", repository_phid="PHID-mc"),
-        ]
-        update_commits_for_uplift(commits, Repo())
+    revisions = [
+        Revision(id=1, phid="PHID-DREV-1", repository_phid="PHID-mc"),
+        Revision(id=2, phid="PHID-DREV-2", repository_phid="PHID-mc"),
+    ]
+    update_commits_for_uplift(
+        commits,
+        Repo(),
+        RemoteState(revisions={revision.id: revision for revision in revisions}),
+    )
 
     assert (
         "DONTBUILD" not in commits[0].title

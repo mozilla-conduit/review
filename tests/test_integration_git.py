@@ -1269,6 +1269,8 @@ def test_uplift_create(
         {},
         # differential.revision.search
         {"data": [search_rev()]},
+        # differential.diff.search, for the revision the uplift is copied from.
+        {"data": [search_diff()]},
         # differential.creatediff
         {"phid": "PHID-DIFF-2", "diffid": "2"},
         # differential.revision.edit
@@ -1391,6 +1393,8 @@ def test_uplift_create_with_merge_conflict(
         {},
         # differential.revision.search
         {"data": [search_rev()]},
+        # differential.diff.search, for the revision the uplift is copied from.
+        {"data": [search_diff()]},
         # differential.createrawdiff
         {
             "id": 1,
