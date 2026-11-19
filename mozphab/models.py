@@ -239,6 +239,8 @@ class RemoteDiff:
     id: int
     phid: str
     revision_phid: str | None = None
+    # The user who uploaded the diff.
+    author_phid: str | None = None
     # The node the diff was based on, if the diff recorded one.
     base_ref: str | None = None
     # Unlike `dateModified`, this doesn't change for comments or reviewer edits.
@@ -266,6 +268,7 @@ class RemoteDiff:
             id=int(data["id"]),
             phid=data["phid"],
             revision_phid=fields.get("revisionPHID"),
+            author_phid=fields.get("authorPHID"),
             base_ref=base_refs[0] if base_refs else None,
             date_created=fields.get("dateCreated"),
             commits=tuple(DiffCommit.from_conduit(commit) for commit in commits),

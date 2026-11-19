@@ -4,6 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import copy
+import dataclasses
 import unittest
 import uuid
 from typing import Any
@@ -1965,6 +1966,59 @@ def test_check_override_hints_not_needed(m_prompt, m_logger, title, path):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.parametrize(
+    "diff_author,local,node,recorded,warns",
+    [
+        pytest.param(
+            "PHID-USER-2", False, "bbb000bbb000", True, True, id="others-diff-not-local"
+        ),
+        pytest.param(
+            "PHID-USER-2", True, "bbb000bbb000", True, False, id="others-diff-local"
+        ),
+        pytest.param("PHID-USER-1", False, "bbb000bbb000", True, False, id="own-diff"),
+        pytest.param(None, False, "bbb000bbb000", True, False, id="no-uploader"),
+        pytest.param(
+            "PHID-USER-2", False, "aaa000aaa000", True, False, id="unchanged-commit"
+        ),
+        pytest.param(
+            "PHID-USER-2", True, "bbb000bbb000", False, True, id="no-recorded-commit"
+        ),
+    ],
+)
+@mock.patch("mozphab.conduit.ConduitAPI.get_revisions")
+@mock.patch("mozphab.conduit.ConduitAPI.get_diffs")
+@mock.patch("mozphab.conduit.ConduitAPI.whoami")
+def test_validate_commit_stack_warns_on_others_diff(
+    m_whoami, m_get_diffs, m_get_revisions, diff_author, local, node, recorded, warns
+):
+    m_whoami.return_value = {"phid": "PHID-USER-1"}
+    m_get_revisions.return_value = [search_revision()]
+    diff = search_remote_diff(node="aaa000aaa000", message="A")
+    m_get_diffs.return_value = {
+        "PHID-DIFF-1": dataclasses.replace(
+            diff,
+            author_phid=diff_author,
+            commits=diff.commits if recorded else (),
+        )
+    }
+    m_repo = mock.Mock()
+    if not local:
+        m_repo.check_node.side_effect = exceptions.NotFoundError()
+    local_commit = commit(bug_id="1", node=node, title="A", rev_id=1)
+
+    with mock.patch.object(submit.conduit, "_repo", m_repo):
+        warnings, _ = submit.validate_commit_stack(
+            [local_commit], submit.SubmitOptions()
+        )
+
+    assert (
+        Contains("Someone else uploaded the latest diff")
+        in warnings.get(local_commit.name, [])
+    ) is warns
+    if diff_author != "PHID-USER-2" or not recorded:
+        m_repo.check_node.assert_not_called()
 
 
 def test_submit_options_from_args():

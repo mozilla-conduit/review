@@ -21,7 +21,7 @@ from mozphab.commits import AiReviewState, Commit, MergeConflictDiffs
 from mozphab.conduit import ConduitAPIError, conduit, normalise_reviewer
 from mozphab.config import Config, config
 from mozphab.diff import Diff
-from mozphab.exceptions import CommandError, Error
+from mozphab.exceptions import CommandError, Error, NotFoundError
 from mozphab.helpers import (
     BLOCKING_REVIEWERS_RE,
     augment_commits_from_body,
@@ -616,6 +616,19 @@ def validate_commit_stack(
                     'revisions you own. You can "Commandeer" this revision from the '
                     "web interface if you want to become the owner."
                 )
+            latest_diff = diffs[revision.diff_phid]
+            if (
+                latest_diff.author_phid
+                and latest_diff.author_phid != whoami["phid"]
+                and not (
+                    latest_diff.commits
+                    and is_local_node(latest_diff.commits[0].identifier)
+                )
+            ):
+                warnings.setdefault(commit.name, []).append(
+                    "Someone else uploaded the latest diff. If you don't have their "
+                    "changes, submitting will replace them."
+                )
             if revision.is_closed:
                 warnings.setdefault(commit.name, []).append(
                     "This revision is closed! It will be reopened if submission "
@@ -685,6 +698,18 @@ def validate_commit_stack(
             )
 
     return warnings, errors
+
+
+def is_local_node(node: str) -> bool:
+    """Return `True` if `node` is in the local repository.
+
+    `node` may be a Mercurial SHA1, which is mapped to Git with cinnabar.
+    """
+    try:
+        conduit.repo.check_node(node)
+    except NotFoundError:
+        return False
+    return True
 
 
 def make_blocking(reviewers: list[str]) -> list[str]:
