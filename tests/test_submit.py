@@ -93,12 +93,12 @@ class Commits(unittest.TestCase):
         m_get_users.return_value = []
         m_get_groups.return_value = []
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit("1", (["r"], []))], submit.SubmitOptions()
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [
                 commit("1", (["r1"], [])),
                 commit("2", (["r1"], [])),
@@ -106,55 +106,63 @@ class Commits(unittest.TestCase):
             ],
             submit.SubmitOptions(),
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit("1", None)], submit.SubmitOptions()
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit("1", (["r"], [])), commit("1", None)], submit.SubmitOptions()
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit(None, (["r"], []))], submit.SubmitOptions()
         )
-        self.assertEqual(list(errors.values()), [[Contains("Missing bug ID")]])
+        self.assertEqual(
+            list(validation.errors.values()), [[Contains("Missing bug ID")]]
+        )
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit(None, (["r"], []))], submit.SubmitOptions(no_bug=True)
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit("", (["r"], []))], submit.SubmitOptions()
         )
-        self.assertEqual(list(errors.values()), [[Contains("Missing bug ID")]])
+        self.assertEqual(
+            list(validation.errors.values()), [[Contains("Missing bug ID")]]
+        )
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit("1", (["r"], [])), commit("", (["r"], []))], submit.SubmitOptions()
         )
-        self.assertEqual(list(errors.values()), [[Contains("Missing bug ID")]])
+        self.assertEqual(
+            list(validation.errors.values()), [[Contains("Missing bug ID")]]
+        )
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit("1", (["r"], [])), commit("", (["r"], []))],
             submit.SubmitOptions(no_bug=True),
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit("1", (["r"], []), body="Summary: blah\nReviewers: r")],
             submit.SubmitOptions(),
         )
-        self.assertEqual(list(errors.values()), [[Contains("Contains arc fields")]])
+        self.assertEqual(
+            list(validation.errors.values()), [[Contains("Contains arc fields")]]
+        )
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit(bug_id="1", rev_id=1)], submit.SubmitOptions()
         )
         self.assertEqual(
-            list(errors.values()),
+            list(validation.errors.values()),
             [[Contains("didn't return a query result for revision D1")]],
         )
 
@@ -187,7 +195,7 @@ class Commits(unittest.TestCase):
         m_diffs.return_value = {"PHID-DIFF-1": search_remote_diff()}
         m_whoami.return_value = {"phid": "PHID-USER-1"}
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             # Build a stack with an invalid reviewer in the middle.
             [
                 commit("1", (["alice"], [])),
@@ -197,10 +205,11 @@ class Commits(unittest.TestCase):
             submit.SubmitOptions(),
         )
         self.assertEqual(
-            list(errors.values()), [[Contains("gonzo isn't a valid reviewer")]]
+            list(validation.errors.values()),
+            [[Contains("gonzo isn't a valid reviewer")]],
         )
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             # Build a stack with an unavailable reviewer in the middle.
             [
                 commit("1", (["alice"], [])),
@@ -210,10 +219,11 @@ class Commits(unittest.TestCase):
             submit.SubmitOptions(),
         )
         self.assertEqual(
-            list(errors.values()), [[Contains("goober isn't available until string")]]
+            list(validation.errors.values()),
+            [[Contains("goober isn't available until string")]],
         )
 
-        warnings, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [
                 commit("1", (["alice"], [])),
                 commit("2", (["bob", "goober"], [])),
@@ -222,49 +232,55 @@ class Commits(unittest.TestCase):
             submit.SubmitOptions(force=True),
         )
         self.assertEqual(
-            list(warnings.values()), [[Contains("goober isn't available until string")]]
+            list(validation.warnings.values()),
+            [[Contains("goober isn't available until string")]],
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit("1", (["goofus"], []))], submit.SubmitOptions()
         )
-        self.assertEqual(list(errors.values()), [[Contains("goofus is disabled")]])
+        self.assertEqual(
+            list(validation.errors.values()), [[Contains("goofus is disabled")]]
+        )
 
         # An unchanged disabled reviewer should not block unrelated updates.
         m_revs.return_value = [search_revision(reviewers=["PHID-USER-2"])]
         m_diffs.return_value = {"PHID-DIFF-1": search_remote_diff(message="1 r?goofus")}
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit("1", (["goofus"], []), rev_id=1)], submit.SubmitOptions()
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
 
         # Only genuinely new reviewers are validated in a mixed reviewer list.
         check_reviewers.reset_mock()
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit("1", (["goofus", "alice"], []), rev_id=1)], submit.SubmitOptions()
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
         check_reviewers.assert_called_once_with({"request": ["alice"], "granted": []})
 
         # A newly introduced disabled reviewer should still fail validation.
         m_diffs.return_value = {"PHID-DIFF-1": search_remote_diff(message="1 r?alice")}
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit("1", (["goofus"], []), rev_id=1)], submit.SubmitOptions()
         )
-        self.assertEqual(list(errors.values()), [[Contains("goofus is disabled")]])
+        self.assertEqual(
+            list(validation.errors.values()), [[Contains("goofus is disabled")]]
+        )
 
         # An unresolved new reviewer on an otherwise unchanged revision must
         # still reach validation instead of being treated as no change.
         m_diffs.return_value = {
             "PHID-DIFF-1": search_remote_diff(node="same-node", message="1 r?alice")
         }
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [commit("1", (["gonzo"], []), rev_id=1, node="same-node")],
             submit.SubmitOptions(),
         )
         self.assertEqual(
-            list(errors.values()), [[Contains("gonzo isn't a valid reviewer")]]
+            list(validation.errors.values()),
+            [[Contains("gonzo isn't a valid reviewer")]],
         )
 
     @mock.patch("mozphab.conduit.ConduitAPI.get_groups")
@@ -287,7 +303,7 @@ class Commits(unittest.TestCase):
         m_diffs.return_value = {"PHID-DIFF-1": search_remote_diff()}
         m_whoami.return_value = {"phid": "PHID-USER-1"}
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [
                 commit("1", (["r"], []), node="a"),
                 commit("2", (["r"], []), node="b"),
@@ -295,9 +311,9 @@ class Commits(unittest.TestCase):
             ],
             submit.SubmitOptions(),
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [
                 commit("1", (["r"], []), rev_id=1, node="a"),
                 commit("2", (["r"], []), rev_id=2, node="b"),
@@ -305,9 +321,9 @@ class Commits(unittest.TestCase):
             ],
             submit.SubmitOptions(),
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [
                 commit("1", (["r"], []), rev_id=1, node="a"),
                 commit("2", (["r"], []), rev_id=2, node="b"),
@@ -316,10 +332,10 @@ class Commits(unittest.TestCase):
             submit.SubmitOptions(),
         )
         self.assertEqual(
-            errors, {"c": [Contains("commit a refers to the same one D1")]}
+            validation.errors, {"c": [Contains("commit a refers to the same one D1")]}
         )
 
-        _, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [
                 commit("1", (["r"], []), rev_id=1, node="a"),
                 commit("2", (["r"], []), rev_id=2, node="b"),
@@ -329,7 +345,7 @@ class Commits(unittest.TestCase):
             submit.SubmitOptions(),
         )
         self.assertEqual(
-            errors,
+            validation.errors,
             {
                 "c": [Contains("commit a refers to the same one D1")],
                 "d": [Contains("commit b refers to the same one D2")],
@@ -887,30 +903,32 @@ class Commits(unittest.TestCase):
         m_get_diffs.return_value = {"PHID-DIFF-1": search_remote_diff()}
         m_check_reviewers.return_value = []
 
-        warnings, errors = submit.validate_commit_stack([], submit.SubmitOptions())
-        self.assertEqual((warnings, errors), ({}, {}))
+        validation = submit.validate_commit_stack([], submit.SubmitOptions())
+        self.assertEqual((validation.warnings, validation.errors), ({}, {}))
 
-        warnings, _ = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [_commit(bug_orig="2", bug="1", granted=["alice"])], submit.SubmitOptions()
         )
-        self.assertEqual(list(warnings.values()), [["Bug ID changed from 2 to 1"]])
+        self.assertEqual(
+            list(validation.warnings.values()), [["Bug ID changed from 2 to 1"]]
+        )
 
         # Submit with missing bug ID.
-        warnings, _ = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [_commit(bug="", request=["bob"])], submit.SubmitOptions(force=True)
         )
-        self.assertEqual(list(warnings.values()), [["Missing bug ID"]])
+        self.assertEqual(list(validation.warnings.values()), [["Missing bug ID"]])
 
         # Submit with missing reviewers.
-        warnings, _ = submit.validate_commit_stack([_commit()], submit.SubmitOptions())
-        self.assertEqual(list(warnings.values()), [["Missing reviewers"]])
+        validation = submit.validate_commit_stack([_commit()], submit.SubmitOptions())
+        self.assertEqual(list(validation.warnings.values()), [["Missing reviewers"]])
 
         # Submit with existing revision reviewers.
         m_get_revisions.return_value = [search_revision(reviewers=["PHID-USER-2"])]
-        warnings, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [_commit(rev=1)], submit.SubmitOptions()
         )
-        self.assertEqual((warnings, errors), ({}, {}))
+        self.assertEqual((validation.warnings, validation.errors), ({}, {}))
 
         # Do not update not changed commits
         m_get_revisions.return_value = [
@@ -922,7 +940,7 @@ class Commits(unittest.TestCase):
             "PHID-DIFF-2": search_remote_diff(),
         }
         # we're changing bug id in the first revision to 2
-        warnings, _ = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [
                 _commit(node="aaa000aaa000", rev=1, bug="2", granted=["alice"]),
                 _commit(node="bbb000bbb000", title="B", rev=2, granted=["alice"]),
@@ -930,7 +948,8 @@ class Commits(unittest.TestCase):
             submit.SubmitOptions(),
         )
         self.assertEqual(
-            warnings, {"aaa000aaa000": [Contains("revision will change from 1 to 2")]}
+            validation.warnings,
+            {"aaa000aaa000": [Contains("revision will change from 1 to 2")]},
         )
 
         # Adding only commit-title reviewers is enough to submit the revision.
@@ -942,24 +961,25 @@ class Commits(unittest.TestCase):
             )
         }
         changed_reviewers_commit = _commit(node="aaa000aaa000", rev=1, granted=["bob"])
-        warnings, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [changed_reviewers_commit], submit.SubmitOptions()
         )
-        self.assertEqual((warnings, errors), ({}, {}))
-        self.assertTrue(changed_reviewers_commit.submit)
+        self.assertEqual((validation.warnings, validation.errors), ({}, {}))
+        self.assertNotIn(changed_reviewers_commit.name, validation.unchanged)
 
         # Reviewers that were previously requested locally but removed in
         # Phabricator should not be re-added on a reviewer-only resubmit.
         m_get_revisions.return_value = [search_revision(reviewers=[])]
         removed_reviewer_commit = _commit(node="aaa000aaa000", rev=1, granted=["alice"])
-        warnings, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [removed_reviewer_commit], submit.SubmitOptions()
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
         self.assertEqual(
-            warnings, {"aaa000aaa000": [Contains("revision has not changed")]}
+            validation.warnings,
+            {"aaa000aaa000": [Contains("revision has not changed")]},
         )
-        self.assertFalse(removed_reviewer_commit.submit)
+        self.assertIn(removed_reviewer_commit.name, validation.unchanged)
 
         # Resigned reviewers remain in the revision attachment and should not
         # be re-added even when they are newly introduced in the local title.
@@ -983,14 +1003,15 @@ class Commits(unittest.TestCase):
         resigned_reviewer_commit = _commit(
             node="aaa000aaa000", rev=1, granted=["alice"]
         )
-        warnings, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [resigned_reviewer_commit], submit.SubmitOptions()
         )
-        self.assertEqual(errors, {})
+        self.assertEqual(validation.errors, {})
         self.assertEqual(
-            warnings, {"aaa000aaa000": [Contains("revision has not changed")]}
+            validation.warnings,
+            {"aaa000aaa000": [Contains("revision has not changed")]},
         )
-        self.assertFalse(resigned_reviewer_commit.submit)
+        self.assertIn(resigned_reviewer_commit.name, validation.unchanged)
 
         # Reviewers first requested on a WIP diff still need to be added once
         # the revision is ready, even if the commit SHA1 is unchanged.
@@ -1005,17 +1026,17 @@ class Commits(unittest.TestCase):
         with mock.patch.object(
             mozphab.conduit, "latest_non_wip_diff", return_value=None
         ):
-            warnings, errors = submit.validate_commit_stack(
+            validation = submit.validate_commit_stack(
                 [wip_reviewer_commit], submit.SubmitOptions()
             )
-        self.assertEqual((warnings, errors), ({}, {}))
-        self.assertTrue(wip_reviewer_commit.submit)
+        self.assertEqual((validation.warnings, validation.errors), ({}, {}))
+        self.assertNotIn(wip_reviewer_commit.name, validation.unchanged)
 
         m_whoami.return_value = {"phid": "PHID-USER-2"}
-        warnings, _ = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [_commit(rev=1, granted=["alice"])], submit.SubmitOptions()
         )
-        self.assertEqual(list(warnings.values()), [[Contains("Commandeer")]])
+        self.assertEqual(list(validation.warnings.values()), [[Contains("Commandeer")]])
 
         # Information about not updating the commit if not changed
         m_whoami.return_value = {"phid": "PHID-USER-1"}
@@ -1024,48 +1045,49 @@ class Commits(unittest.TestCase):
             "PHID-DIFF-1": search_remote_diff(node="aaa000aaa000")
         }
 
-        warnings, _ = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [_commit(node="aaa000aaa000", rev=1, granted=["alice"])],
             submit.SubmitOptions(),
         )
         self.assertEqual(
-            warnings, {"aaa000aaa000": [Contains("revision has not changed")]}
+            validation.warnings,
+            {"aaa000aaa000": [Contains("revision has not changed")]},
         )
 
         # Removing the WIP state from the revision without changing the commit's SHA1
         m_get_revisions.return_value = [search_revision(status="changes-planned")]
-        warnings, _ = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [_commit(node="aaa000aaa000", rev=1, granted=["alice"])],
             submit.SubmitOptions(),
         )
         self.assertEqual(
-            warnings,
+            validation.warnings,
             {"aaa000aaa000": [Contains('"Changes Planned" status will change')]},
         )
 
         # Adding the WIP state to the revision without changing the commit's SHA1
         m_get_revisions.return_value = [search_revision()]
-        warnings, _ = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [_commit(node="aaa000aaa000", rev=1, granted=["alice"], wip=True)],
             submit.SubmitOptions(wip=True),
         )
         self.assertEqual(
-            warnings,
+            validation.warnings,
             {"aaa000aaa000": [Contains('status will change to "Changes Planned"')]},
         )
 
         # Submit a new patch with reviewers.
-        warnings, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [_commit(request=["alice"])], submit.SubmitOptions()
         )
-        self.assertEqual((warnings, errors), ({}, {}))
+        self.assertEqual((validation.warnings, validation.errors), ({}, {}))
 
         # Submit a new patch without reviewers.
-        warnings, _ = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [_commit(rev=None, request=[], wip=True)], submit.SubmitOptions()
         )
         self.assertEqual(
-            list(warnings.values()),
+            list(validation.warnings.values()),
             [
                 [
                     Contains("Missing reviewers"),
@@ -1075,40 +1097,38 @@ class Commits(unittest.TestCase):
         )
 
         # Submit a new WIP patch with reviewers.
-        warnings, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [_commit(rev=None, request=["alice"], wip=True)],
             submit.SubmitOptions(wip=True),
         )
-        self.assertEqual((warnings, errors), ({}, {}))
+        self.assertEqual((validation.warnings, validation.errors), ({}, {}))
 
         # Submit a new patch with the WIP prefix.
-        warnings, _ = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [_commit(title="WIP: A", request=["alice"], wip=True)],
             submit.SubmitOptions(),
         )
         self.assertEqual(
-            list(warnings.values()), [[Contains('submitted as "Changes Planned"')]]
+            list(validation.warnings.values()),
+            [[Contains('submitted as "Changes Planned"')]],
         )
 
         # Submitting a stack of two commits with one revision already on Phabricator
-        # should properly set `commit.rev_phid`.
+        # should find the existing revision's PHID.
         commits = [_commit(title="submitted", rev=1), _commit(title="new", rev=None)]
-        submit.validate_commit_stack(commits, submit.SubmitOptions())
+        validation = submit.validate_commit_stack(commits, submit.SubmitOptions())
         self.assertEqual(
-            commits[0].rev_phid,
-            "PHID-DREV-1",
-            "`rev_id` should be set for already submitted commit.",
-        )
-        self.assertIsNone(
-            commits[1].rev_phid, "`rev_id` should not be set for newly created commit."
+            validation.revision_phids,
+            {commits[0].name: "PHID-DREV-1"},
+            "Only the already submitted commit should have a revision PHID.",
         )
 
         # Submitting a new uplift clears reviewers and shouldn't warn.
-        warnings, errors = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [_commit(rev=None, granted=[], request=[])],
             submit.SubmitOptions(uplift=submit.UpliftSettings()),
         )
-        self.assertEqual((warnings, errors), ({}, {}))
+        self.assertEqual((validation.warnings, validation.errors), ({}, {}))
 
     @mock.patch("mozphab.conduit.ConduitAPI.get_groups")
     @mock.patch("mozphab.conduit.ConduitAPI.get_users")
@@ -1200,20 +1220,21 @@ class Commits(unittest.TestCase):
         self.assertEqual(m_call.call_count, 2)
 
         # The revisions with an unchanged patch and message aren't submitted.
-        warnings, _ = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             commits, submit.SubmitOptions(), unchanged_patches=unchanged
         )
-        self.assertEqual([c.submit for c in commits], [True, True, False])
+        self.assertEqual(validation.unchanged, frozenset([commits[2].name]))
         self.assertEqual(
-            warnings, {commits[2].name: [Contains("revision has not changed")]}
+            validation.warnings,
+            {commits[2].name: [Contains("revision has not changed")]},
         )
 
         # With --force, everything is submitted.
         commits = [_commit(3)]
-        submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             commits, submit.SubmitOptions(force=True), unchanged_patches=unchanged
         )
-        self.assertTrue(commits[0].submit)
+        self.assertEqual(validation.unchanged, frozenset())
 
         # Changing the author is submitted, without comparing patches.
         repo.get_patches.reset_mock()
@@ -1614,7 +1635,7 @@ def m_validate():
             "mozphab.commands.submit.preload_revision_data", return_value=({}, {})
         ),
     ):
-        m.return_value = ([], {})
+        m.return_value = submit.StackValidation()
         yield m
 
 
@@ -2009,13 +2030,13 @@ def test_validate_commit_stack_warns_on_others_diff(
     local_commit = commit(bug_id="1", node=node, title="A", rev_id=1)
 
     with mock.patch.object(submit.conduit, "_repo", m_repo):
-        warnings, _ = submit.validate_commit_stack(
+        validation = submit.validate_commit_stack(
             [local_commit], submit.SubmitOptions()
         )
 
     assert (
         Contains("Someone else uploaded the latest diff")
-        in warnings.get(local_commit.name, [])
+        in validation.warnings.get(local_commit.name, [])
     ) is warns
     if diff_author != "PHID-USER-2" or not recorded:
         m_repo.check_node.assert_not_called()
@@ -2508,3 +2529,23 @@ def test_unassigned_bugs_warning(unassigned, present, absent):
         assert phrase in text
     for phrase in absent:
         assert phrase not in text
+
+
+def test_submit_applies_the_validation(
+    m_conduit, m_repo, m_validate, m_logger, m_config
+):
+    """`_submit` skips the unchanged commits and links the existing revisions."""
+    unchanged = commit(bug_id="1", body="Differential Revision: http://example.test/D1")
+    changed = commit(bug_id="1", body="Differential Revision: http://example.test/D2")
+    unchanged.name, changed.name = "unchanged", "changed"
+    m_repo.commit_stack.return_value = [unchanged, changed]
+    m_validate.return_value = submit.StackValidation(
+        unchanged=frozenset({"unchanged"}),
+        revision_phids={"unchanged": "PHID-DREV-1", "changed": "PHID-DREV-2"},
+    )
+
+    submit._submit(m_repo, submit_options(), UserData())
+
+    assert not unchanged.submit, "An unchanged commit should not be submitted."
+    assert unchanged.rev_phid == "PHID-DREV-1", "Its revision should be linked."
+    assert m_conduit.update_revision.call_count == 1, "Only one revision changed."

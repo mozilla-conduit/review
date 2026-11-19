@@ -9,7 +9,7 @@ import logging
 import textwrap
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import urllib3
@@ -80,7 +80,9 @@ class UpliftSettings:
     """The `uplift` flags that change how `submit` runs."""
 
     train: str | None = None
+
     no_rebase: bool = False
+
     merge_conflict: MergeConflict | None = None
 
 
@@ -514,23 +516,40 @@ def preload_revision_data(
         return conduit.preload_for_validation(commits, all_user_names, all_group_slugs)
 
 
+@dataclass(frozen=True)
+class StackValidation:
+    """What `validate_commit_stack` found, without changing the commits."""
+
+    warnings: dict[str, list[str]] = field(default_factory=dict)
+
+    errors: dict[str, list[str]] = field(default_factory=dict)
+
+    # The names of the commits whose revisions haven't changed, so aren't submitted.
+    unchanged: frozenset[str] = frozenset()
+
+    # The PHID of each commit's existing revision, keyed by the commit's name.
+    revision_phids: Mapping[str, str] = field(default_factory=dict)
+
+
 def validate_commit_stack(
     commits: list[Commit],
     options: SubmitOptions,
     unchanged_patches: frozenset[str] = frozenset(),
-) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+) -> StackValidation:
     """Validate commit stack is suitable for review.
 
     `unchanged_patches` holds the nodes of the commits that were rewritten,
     but whose patch and message are unchanged: see `find_unchanged_patches`.
 
-    Return collections of warnings and errors.
+    Return the warnings and errors, and which commits don't need submitting.
     """
     revisions, diffs = preload_revision_data(commits)
 
     warnings = {}
     errors = {}
     nodes = {}
+    unchanged = set()
+    revision_phids = {}
 
     for commit in commits:
         reviewer_names_to_validate = commit.reviewers
@@ -543,7 +562,7 @@ def validate_commit_stack(
                 # Don't show more for this commit because it's probably wrong.
                 continue
 
-            commit.rev_phid = revision.phid
+            revision_phids[commit.name] = revision.phid
 
             # WIP if either in changes-planned state, or if the revision has the
             # `draft` flag set.
@@ -584,7 +603,7 @@ def validate_commit_stack(
                 and not options.force
                 and not commit.test_plan
             ):
-                commit.submit = False
+                unchanged.add(commit.name)
                 if new_sha1:
                     logger.debug(
                         "%s: the SHA1 changed, but the patch and the message are "
@@ -697,7 +716,12 @@ def validate_commit_stack(
                 "`--no-wip` to prevent this."
             )
 
-    return warnings, errors
+    return StackValidation(
+        warnings=warnings,
+        errors=errors,
+        unchanged=frozenset(unchanged),
+        revision_phids=revision_phids,
+    )
 
 
 def is_local_node(node: str) -> bool:
@@ -1228,13 +1252,20 @@ def _submit(
             if options.force
             else find_unchanged_patches(repo, commits, revisions, diffs)
         )
-        warnings, errors = validate_commit_stack(
+        validation = validate_commit_stack(
             commits, options, unchanged_patches=unchanged_patches
         )
-    if errors:
-        log_commit_stack_with_messages(commits, errors, "- ", "  ", logging.ERROR)
+    if validation.errors:
+        log_commit_stack_with_messages(
+            commits, validation.errors, "- ", "  ", logging.ERROR
+        )
         raise Error("Unable to submit commits")
-    log_commit_stack_with_messages(commits, warnings, "!! ", "   ")
+    log_commit_stack_with_messages(commits, validation.warnings, "!! ", "   ")
+
+    for commit in commits:
+        commit.rev_phid = validation.revision_phids.get(commit.name, commit.rev_phid)
+        if commit.name in validation.unchanged:
+            commit.submit = False
 
     try:
         repo.check_commits_for_submit(commits)
