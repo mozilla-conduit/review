@@ -5,6 +5,8 @@
 """Typed, immutable views of the data returned by the Phabricator Conduit API
 and the Bugzilla API."""
 
+from __future__ import annotations
+
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
@@ -120,7 +122,7 @@ class Revision:
         return revision_monogram(self.id)
 
     @classmethod
-    def from_conduit(cls, data: dict) -> "Revision":
+    def from_conduit(cls, data: dict) -> Revision:
         """Parse a revision from its `differential.revision.search` result.
 
         Only the ID and PHID are required, as Phabricator instances differ in the
@@ -190,7 +192,7 @@ class Bug:
         return self.assigned_to.lower() == login.lower()
 
     @classmethod
-    def from_bmo(cls, data: dict) -> "Bug":
+    def from_bmo(cls, data: dict) -> Bug:
         """Parse a bug from a Bugzilla `/bug` result."""
         return cls(
             id=str(data["id"]),
@@ -218,7 +220,7 @@ class DiffCommit:
     author_email: str | None = None
 
     @classmethod
-    def from_conduit(cls, data: dict) -> "DiffCommit":
+    def from_conduit(cls, data: dict) -> DiffCommit:
         """Parse a commit from a diff's `commits` attachment."""
         author = data.get("author", {})
         return cls(
@@ -255,7 +257,7 @@ class RemoteDiff:
         return self.commits[0].message.splitlines()[0]
 
     @classmethod
-    def from_conduit(cls, data: dict) -> "RemoteDiff":
+    def from_conduit(cls, data: dict) -> RemoteDiff:
         """Parse a diff from its `differential.diff.search` result."""
         fields = data.get("fields", {})
         commits = data.get("attachments", {}).get("commits", {}).get("commits", [])
@@ -286,6 +288,6 @@ class CreateRawDiffResult:
     phid: str
 
     @classmethod
-    def from_conduit(cls, data: dict) -> "CreateRawDiffResult":
+    def from_conduit(cls, data: dict) -> CreateRawDiffResult:
         """Parse a diff from its `differential.createrawdiff` result."""
         return cls(id=int(data["id"]), phid=data["phid"])
