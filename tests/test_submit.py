@@ -1748,8 +1748,8 @@ def test_uplift_first_public_parent_uses_train_head(
     _, _, _, first_public_parent = m_conduit.set_diff_property.call_args[0]
     assert first_public_parent == "beta-head-sha"
     assert m_conduit.create_diff.call_args.kwargs == {
-        "is_uplift": True
-    }, "Uplift diffs should be created with the uplift creation method."
+        "uplift_repository": BETA
+    }, "Uplift diffs should be created for the release train's repository."
 
 
 def test_uplift_no_rebase_off_train_uses_public_base(
@@ -2182,9 +2182,8 @@ def merge_conflict(tmp_path) -> submit.MergeConflict:
 
 
 @pytest.fixture
-def m_conflict_conduit(m_conduit, m_repo):
+def m_conflict_conduit(m_conduit):
     """Return the `m_conduit` of an uplift whose conflict diff is `PHID-DIFF-7`."""
-    m_repo.phid = "PHID-BETA"
     m_conduit.create_raw_diff.return_value = CreateRawDiffResult(
         id=7, phid="PHID-DIFF-7"
     )
@@ -2233,7 +2232,7 @@ def test_merge_conflict_new_revision(
         "set_diff_property",
     ], "The conflict diff should be created before the resolution's diff."
     m_conflict_conduit.create_raw_diff.assert_called_once_with(
-        "<<<<<<< HEAD\n=======\n>>>>>>> theirs\n", "PHID-BETA"
+        "<<<<<<< HEAD\n=======\n>>>>>>> theirs\n", BETA.phid
     )
     assert (
         m_conflict_conduit.create_revision.call_args.args[1] == "PHID-DIFF-7"

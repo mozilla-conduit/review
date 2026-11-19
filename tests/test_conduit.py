@@ -21,7 +21,12 @@ from mozphab.conduit import (
     normalise_reviewer,
 )
 from mozphab.diff import Diff
-from mozphab.models import CreateRawDiffResult, RemoteDiff, Revision
+from mozphab.models import (
+    CreateRawDiffResult,
+    PhabricatorRepository,
+    RemoteDiff,
+    Revision,
+)
 from tests.conftest import search_diff, search_rev, search_revision
 
 
@@ -37,6 +42,10 @@ class Repo(repository.Repository):
     def __init__(self):
         # `Repository.__init__` reads `.arcconfig` files and the Phabricator URL.
         pass
+
+
+# The release train repository `uplift` submits to in the tests.
+BETA = PhabricatorRepository(phid="PHID-BETA", short_name="firefox-beta")
 
 
 def test_set_args_from_repo():
@@ -1097,9 +1106,9 @@ def test_create_diff(m_upload, m_submit_diff, git):
     commit = Commit(name="abc-name")
     m_submit_diff.return_value = {"phid": "PHID-DIFF-1", "diffid": "1"}
 
-    assert mozphab.conduit.create_diff(diff, commit, is_uplift=True) is diff
+    assert mozphab.conduit.create_diff(diff, commit, uplift_repository=BETA) is diff
     m_upload.assert_called_once_with(diff)
-    m_submit_diff.assert_called_once_with(diff, commit, is_uplift=True)
+    m_submit_diff.assert_called_once_with(diff, commit, uplift_repository=BETA)
     assert diff.phid == "PHID-DIFF-1"
     assert diff.id == "1"
 
@@ -1123,7 +1132,7 @@ def test_create_diffs_names_failing_commit(m_create_diff, git):
     mozphab.conduit.set_repo(git)
     commit_diffs = [(Commit(name=f"commit-{i}"), Diff()) for i in range(3)]
 
-    def create_diff(diff, commit, is_uplift=False):
+    def create_diff(diff, commit, uplift_repository=None):
         if commit.name == "commit-1":
             raise ConduitAPIError("no soup for you")
         return diff
@@ -1220,7 +1229,7 @@ def test_submit_diff_uplift(m_call, git):
         # differential.creatediff
         {},
     ]
-    mozphab.conduit.submit_diff(diff, commit, is_uplift=True)
+    mozphab.conduit.submit_diff(diff, commit, uplift_repository=BETA)
     m_call.assert_any_call(
         "differential.creatediff",
         {
@@ -1306,7 +1315,7 @@ def test_submit_diff_uplift_and_lando(m_call, git, monkeypatch):
         # differential.creatediff
         {},
     ]
-    mozphab.conduit.submit_diff(diff, commit, is_uplift=True)
+    mozphab.conduit.submit_diff(diff, commit, uplift_repository=BETA)
     m_call.assert_any_call(
         "differential.creatediff",
         {
@@ -1355,7 +1364,7 @@ def test_submit_diff_cinnabar_uplift_lando(m_call, m_get_public_node, git, monke
         # differential.creatediff
         {},
     ]
-    mozphab.conduit.submit_diff(diff, commit, is_uplift=True)
+    mozphab.conduit.submit_diff(diff, commit, uplift_repository=BETA)
     m_call.assert_any_call(
         "differential.creatediff",
         {

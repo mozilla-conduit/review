@@ -946,9 +946,9 @@ def update_commits_from_options(
 
 
 def update_commits_for_uplift(
-    commits: list[Commit], repo: Repository, remote: RemoteState
+    commits: list[Commit], train_repository: PhabricatorRepository, remote: RemoteState
 ):
-    """Prepares a set of commits for uplifting."""
+    """Prepares a set of commits for uplifting to the release train `train_repository`."""
     for commit in commits:
         # Clear all reviewers from the revision.
         commit.reviewers = {
@@ -961,7 +961,7 @@ def update_commits_for_uplift(
 
         # Skip when updating an existing revision on the uplift repo.
         revision = remote.revisions.get(commit.rev_id) if commit.rev_id else None
-        if not revision or revision.repository_phid == repo.phid:
+        if not revision or revision.repository_phid == train_repository.phid:
             continue
 
         # When uplifting, ensure the `Differential Revision` line is properly
@@ -1058,20 +1058,19 @@ def local_uplift_if_possible(
     return False, unified_head
 
 
-def upload_merge_conflict(
-    repo: Repository, commits: list[Commit], options: SubmitOptions
-):
+def upload_merge_conflict(commits: list[Commit], options: SubmitOptions):
     """Upload the merge conflict `uplift` was given, if any, to its commit's revision.
 
     Phabricator orders a revision's diffs by ID, so this must run before
     `_prepare_diffs` creates the commits' own diffs.
     """
-    if not options.merge_conflict:
+    if options.uplift is None or options.uplift.merge_conflict is None:
         return
 
-    commit = find_merge_conflict_commit(commits, options.merge_conflict.commit)
+    merge_conflict = options.uplift.merge_conflict
+    commit = find_merge_conflict_commit(commits, merge_conflict.commit)
     commit.merge_conflict = create_merge_conflict_diff(
-        commit, options.merge_conflict, repo
+        commit, merge_conflict, options.uplift.repository
     )
 
 
@@ -1094,9 +1093,11 @@ def find_merge_conflict_commit(commits: list[Commit], sha: str) -> Commit:
 
 
 def create_merge_conflict_diff(
-    commit: Commit, merge_conflict: MergeConflict, repo: Repository
+    commit: Commit, merge_conflict: MergeConflict, repository: PhabricatorRepository
 ) -> MergeConflictDiffs | None:
-    """Create the diff showing `commit`'s merge conflict, if its revision is new.
+    """Create the diff showing `commit`'s merge conflict in the train's `repository`.
+
+    Only new revisions get one.
 
     Phabricator orders a revision's diffs by ID, so this must run before the
     diff of `commit` itself is created.
@@ -1115,7 +1116,7 @@ def create_merge_conflict_diff(
         raise Error(f"Unable to read the merge conflict: {exc}") from exc
 
     with wait_message("Submitting the merge conflict diff..."):
-        return MergeConflictDiffs(conduit.create_raw_diff(diff_text, repo.phid))
+        return MergeConflictDiffs(conduit.create_raw_diff(diff_text, repository.phid))
 
 
 def create_new_revision(
@@ -1227,16 +1228,19 @@ def _prepare_diffs(
             commit, diffs[index], options.can_prompt and not options.force
         )
 
+    uplift_repository = options.uplift.repository if options.uplift else None
     count = len(submittable)
     if count == 1:
         index, commit = submittable[0]
         with wait_message("Submitting the diff..."):
-            conduit.create_diff(diffs[index], commit, is_uplift=options.is_uplift)
+            conduit.create_diff(
+                diffs[index], commit, uplift_repository=uplift_repository
+            )
     else:
         with wait_message(f"Submitting {count} diffs in parallel..."):
             conduit.create_diffs(
                 [(commit, diffs[index]) for index, commit in submittable],
-                is_uplift=options.is_uplift,
+                uplift_repository=uplift_repository,
             )
 
     return diffs
@@ -1293,8 +1297,8 @@ def _submit(
 
     with wait_message("Loading commits.."):
         update_commits_from_options(commits, options, remote)
-        if options.is_uplift:
-            update_commits_for_uplift(commits, repo, remote)
+        if options.uplift is not None:
+            update_commits_for_uplift(commits, options.uplift.repository, remote)
         update_commit_title_previews(commits)
 
     # Display a one-line summary of commit and WIP count.
@@ -1392,7 +1396,7 @@ def _submit(
     plans = plan_revisions(commits, options)
     has_new_revisions = any(not plan.is_update for plan in plans)
 
-    upload_merge_conflict(repo, commits, options)
+    upload_merge_conflict(commits, options)
 
     # Prepare every diff (get_diff + upload + creatediff) up front, creating
     # them on Phabricator in parallel. The revision phase below still runs

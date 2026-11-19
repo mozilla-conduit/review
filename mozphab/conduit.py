@@ -39,6 +39,7 @@ from .helpers import (
 from .logger import logger
 from .models import (
     CreateRawDiffResult,
+    PhabricatorRepository,
     RemoteDiff,
     ReviewerStatus,
     Revision,
@@ -1031,20 +1032,27 @@ class ConduitAPI:
 
         return "-".join(creation_method)
 
-    def create_diff(self, diff: Diff, commit: Commit, is_uplift: bool = False) -> Diff:
+    def create_diff(
+        self,
+        diff: Diff,
+        commit: Commit,
+        uplift_repository: PhabricatorRepository | None = None,
+    ) -> Diff:
         """Upload a diff's attachments and create it on Phabricator.
 
         `diff` is updated in place with the `phid` and `id` returned by
         `differential.creatediff`, and returned for convenience.
         """
         self.upload_files_from_diff(diff)
-        result = self.submit_diff(diff, commit, is_uplift=is_uplift)
+        result = self.submit_diff(diff, commit, uplift_repository=uplift_repository)
         diff.phid = result["phid"]
         diff.id = result["diffid"]
         return diff
 
     def create_diffs(
-        self, commit_diffs: list[tuple[Commit, Diff]], is_uplift: bool = False
+        self,
+        commit_diffs: list[tuple[Commit, Diff]],
+        uplift_repository: PhabricatorRepository | None = None,
     ):
         """Create several diffs on Phabricator, overlapping the round-trips.
 
@@ -1069,7 +1077,7 @@ class ConduitAPI:
         try:
             futures = {
                 executor.submit(
-                    self.create_diff, diff, commit, is_uplift=is_uplift
+                    self.create_diff, diff, commit, uplift_repository=uplift_repository
                 ): commit
                 for commit, diff in commit_diffs
             }
@@ -1087,7 +1095,13 @@ class ConduitAPI:
             # `creatediff` to completion after the user hit Ctrl-C.
             executor.shutdown(cancel_futures=True)
 
-    def submit_diff(self, diff: Diff, commit: Commit, is_uplift: bool = False) -> dict:
+    def submit_diff(
+        self,
+        diff: Diff,
+        commit: Commit,
+        uplift_repository: PhabricatorRepository | None = None,
+    ) -> dict:
+        """Create the diff on Phabricator, for `uplift_repository` if uplifting."""
         files_changed = sorted(
             diff.changes.values(), key=operator.attrgetter("cur_path")
         )
@@ -1098,11 +1112,16 @@ class ConduitAPI:
 
         base_revision = conduit.repo.get_public_node(commit.parent)
 
-        creation_method_str = self.build_creation_method(is_uplift)
+        creation_method_str = self.build_creation_method(uplift_repository is not None)
 
         # Use the repo of the existing revision if this is an update.
         revs = conduit.get_revisions(ids=[commit.rev_id]) if commit.rev_id else []
-        diff_repo_phid = revs[0].repository_phid if revs else self.repo_phid
+        if revs:
+            diff_repo_phid = revs[0].repository_phid
+        elif uplift_repository:
+            diff_repo_phid = uplift_repository.phid
+        else:
+            diff_repo_phid = self.repo_phid
 
         api_call_args = {
             "changes": changes,

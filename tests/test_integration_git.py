@@ -1267,6 +1267,12 @@ def test_uplift_create(
         {"data": [{"fields": {"shortName": "firefox-beta"}}]},
         # conduit.ping
         {},
+        # diffusion.repository.search, for the local repository's VCS.
+        {
+            "data": [
+                {"phid": "PHID-REPO-1", "fields": {"callsign": "TEST", "vcs": "git"}}
+            ]
+        },
         # differential.revision.search
         {"data": [search_rev()]},
         # differential.diff.search, for the revision the uplift is copied from.
@@ -1391,6 +1397,12 @@ def test_uplift_create_with_merge_conflict(
         {"data": [{"fields": {"shortName": "firefox-beta"}}]},
         # conduit.ping
         {},
+        # diffusion.repository.search, for the local repository's VCS.
+        {
+            "data": [
+                {"phid": "PHID-REPO-1", "fields": {"callsign": "TEST", "vcs": "git"}}
+            ]
+        },
         # differential.revision.search
         {"data": [search_rev()]},
         # differential.diff.search, for the revision the uplift is copied from.

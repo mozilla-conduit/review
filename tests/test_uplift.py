@@ -131,7 +131,9 @@ def test_update_commits_for_uplift_sets_relman_review():
         ),
     ]
 
-    update_commits_for_uplift(commits, Repo(), RemoteState())
+    update_commits_for_uplift(
+        commits, PhabricatorRepository(phid="PHID-beta"), RemoteState()
+    )
 
     reviewers = commits[0].reviewers
 
@@ -201,7 +203,7 @@ def test_update_commits_for_uplift_sets_original_revision():
     ]
     update_commits_for_uplift(
         commits,
-        Repo(),
+        PhabricatorRepository(phid="PHID-beta"),
         RemoteState(revisions={revision.id: revision for revision in revisions}),
     )
 
@@ -252,7 +254,7 @@ def test_uplift_beta_commit_to_esr():
     ]
     update_commits_for_uplift(
         [commit],
-        Repo(phid="PHID-esr"),
+        PhabricatorRepository(phid="PHID-esr"),
         RemoteState(revisions={revision.id: revision for revision in revisions}),
     )
 
@@ -301,7 +303,7 @@ def test_update_commits_for_uplift_strips_dontbuild():
     ]
     update_commits_for_uplift(
         commits,
-        Repo(),
+        PhabricatorRepository(phid="PHID-beta"),
         RemoteState(revisions={revision.id: revision for revision in revisions}),
     )
 

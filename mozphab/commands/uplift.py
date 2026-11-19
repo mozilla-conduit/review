@@ -218,12 +218,8 @@ def uplift(repo: Repository, args: argparse.Namespace, user_data: UserData):
     merge_conflict = MergeConflict.from_args(args)
     phab_repo = map_train_arg_to_repo(train_repo_shortname=options.train)
 
-    # When using `moz-phab uplift`, we perform a standard `submit` but with all
-    # the in-repo configurations for submit destination overwritten to submit
-    # to the uplift target repository instead.
-    repo.call_sign = phab_repo["fields"]["callsign"]
-    repo._phab_repo = phab_repo
-
+    # When using `moz-phab uplift`, we perform a standard `submit` but with the
+    # revisions sent to the release train's repository instead.
     submit_options = SubmitOptions.from_args(
         args,
         config,
