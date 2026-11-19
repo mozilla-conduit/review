@@ -759,6 +759,47 @@ def is_local_node(node: str) -> bool:
     return True
 
 
+@dataclass(frozen=True)
+class CommitPlan:
+    """What `submit` does with one commit, decided before anything is written."""
+
+    # The commit's position in the stack.
+    index: int
+
+    # Update the commit's existing revision, rather than creating one.
+    is_update: bool
+
+    # The position of the commit whose revision a new revision depends on.
+    parent_index: int | None
+
+    request_ai_review: bool
+
+
+def plan_revisions(commits: list[Commit], options: SubmitOptions) -> list[CommitPlan]:
+    """Plan the revision each commit being submitted creates or updates."""
+    plans = []
+    for index, commit in enumerate(commits):
+        if not commit.submit:
+            continue
+
+        # Only revisions being updated have an ID. Newly created ones don't.
+        is_update = bool(commit.rev_id)
+        plans.append(
+            CommitPlan(
+                index=index,
+                is_update=is_update,
+                # Stack new revisions on the previous commit's, unless `--no-stack`.
+                parent_index=(
+                    index - 1
+                    if index and not is_update and not options.no_stack
+                    else None
+                ),
+                request_ai_review=options.ai or (options.ai_review and not is_update),
+            )
+        )
+    return plans
+
+
 def make_blocking(reviewers: list[str]) -> list[str]:
     """Convert a list of reviewer strings into a list of blocking reviewer strings."""
     return ["%s!" % r.rstrip("!") for r in reviewers]
@@ -1345,7 +1386,8 @@ def _submit(
     # Process.
     telemetry().submission.process_time.start()
 
-    has_new_revisions = any(not commit.rev_id for commit in commits if commit.submit)
+    plans = plan_revisions(commits, options)
+    has_new_revisions = any(not plan.is_update for plan in plans)
 
     upload_merge_conflict(repo, commits, options)
 
@@ -1368,16 +1410,11 @@ def _submit(
     # after all revisions have been created/updated.
     ai_review_commits: list[Commit] = []
 
-    for index, commit in enumerate(commits):
-        previous_commit = commits[index - 1] if index else None
-        if not commit.submit:
-            continue
-
-        # Only revisions being updated have an ID. Newly created ones don't.
-        is_update = bool(commit.rev_id)
+    for plan in plans:
+        commit = commits[plan.index]
 
         # Let the user know something's happening.
-        if is_update:
+        if plan.is_update:
             logger.info("\nUpdating revision D%s:", commit.rev_id)
         else:
             logger.info("\nCreating new revision:")
@@ -1385,10 +1422,10 @@ def _submit(
         logger.info("%s %s", commit.name, commit.revision_title())
 
         # Diff was prepared up front in parallel; just consume it here.
-        diff = prepared_diffs[index]
+        diff = prepared_diffs[plan.index]
         telemetry().submission.files_count.add(len(diff.changes))
 
-        if is_update:
+        if plan.is_update:
             with wait_message("Updating revision..."):
                 try:
                     rev = conduit.update_revision(
@@ -1404,11 +1441,9 @@ def _submit(
             rev = create_new_revision(
                 commit,
                 diff,
-                # Set the parent revision if one is available, unless
-                # --no-stack was passed.
                 parent_rev_phid=(
-                    previous_commit.rev_phid
-                    if previous_commit and not options.no_stack
+                    commits[plan.parent_index].rev_phid
+                    if plan.parent_index is not None
                     else None
                 ),
             )
@@ -1417,7 +1452,7 @@ def _submit(
         commit.rev_id = rev["object"]["id"]
         commit.rev_phid = rev["object"]["phid"]
 
-        if options.ai or (options.ai_review and not is_update):
+        if plan.request_ai_review:
             ai_review_commits.append(commit)
 
         revision_url = "%s/D%s" % (repo.phab_url, commit.rev_id)

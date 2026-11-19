@@ -2565,3 +2565,29 @@ def test_remote_state_has_reviewers():
     assert remote.has_reviewers(
         Commit(rev_id=456)
     ), "A revision with reviewers has remote reviewers."
+
+
+def test_plan_revisions():
+    unchanged = commit(rev_id=1, submit=False)
+    updated = commit(rev_id=2)
+    created = commit()
+    commits = [unchanged, updated, created]
+
+    plans = submit.plan_revisions(commits, submit.SubmitOptions(ai_review=True))
+    assert plans == [
+        submit.CommitPlan(
+            index=1, is_update=True, parent_index=None, request_ai_review=False
+        ),
+        submit.CommitPlan(
+            index=2, is_update=False, parent_index=1, request_ai_review=True
+        ),
+    ], "Unchanged commits are skipped, and new revisions stack on the previous one."
+
+    plans = submit.plan_revisions(commits, submit.SubmitOptions(no_stack=True, ai=True))
+    assert [plan.parent_index for plan in plans] == [
+        None,
+        None,
+    ], "`--no-stack` shouldn't stack new revisions."
+    assert all(
+        plan.request_ai_review for plan in plans
+    ), "`--ai` should request AI review of every revision."
