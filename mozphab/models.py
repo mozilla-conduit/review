@@ -291,3 +291,26 @@ class CreateRawDiffResult:
     def from_conduit(cls, data: dict) -> CreateRawDiffResult:
         """Parse a diff from its `differential.createrawdiff` result."""
         return cls(id=int(data["id"]), phid=data["phid"])
+
+
+@dataclass(frozen=True)
+class PhabricatorRepository:
+    """A repository, parsed from a `diffusion.repository.search` result."""
+
+    phid: str
+    call_sign: str = ""
+    short_name: str = ""
+    default_branch: str = ""
+    vcs: str = ""
+
+    @classmethod
+    def from_conduit(cls, data: dict) -> PhabricatorRepository:
+        """Parse a repository from its `diffusion.repository.search` result."""
+        fields = data.get("fields", {})
+        return cls(
+            phid=data["phid"],
+            call_sign=fields.get("callsign") or "",
+            short_name=fields.get("shortName") or "",
+            default_branch=fields.get("defaultBranch") or "",
+            vcs=fields.get("vcs") or "",
+        )

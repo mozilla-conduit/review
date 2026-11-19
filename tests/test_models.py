@@ -9,6 +9,7 @@ import pytest
 from mozphab.models import (
     Bug,
     DiffCommit,
+    PhabricatorRepository,
     RemoteDiff,
     Revision,
     RevisionStatus,
@@ -138,6 +139,28 @@ def test_revision_status_label():
     assert (
         RevisionStatus.ACCEPTED.label == "Accepted"
     ), "A one-word status should be capitalised."
+
+
+def test_phabricator_repository_from_conduit():
+    repository = PhabricatorRepository.from_conduit(
+        {
+            "phid": "PHID-REPO-1",
+            "fields": {
+                "callsign": "BETA",
+                "shortName": "firefox-beta",
+                "defaultBranch": "beta",
+                "vcs": "git",
+            },
+        }
+    )
+
+    assert repository == PhabricatorRepository(
+        phid="PHID-REPO-1",
+        call_sign="BETA",
+        short_name="firefox-beta",
+        default_branch="beta",
+        vcs="git",
+    ), "Every field should be parsed from the search result."
 
 
 def test_transaction_to_conduit():
