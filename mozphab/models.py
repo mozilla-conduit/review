@@ -158,7 +158,8 @@ class Revision:
 
 # The Bugzilla login of the assignee of bugs that nobody is assigned to.
 BUGZILLA_NOBODY = "nobody@mozilla.org"
-CONTRIBUTOR_KEYWORDS = frozenset({"good-first-bug", "good-next-bug"})
+GOOD_FIRST_BUG = "good-first-bug"
+CONTRIBUTOR_KEYWORDS = frozenset({GOOD_FIRST_BUG, "good-next-bug"})
 
 
 @dataclass(frozen=True)
@@ -186,6 +187,11 @@ class Bug:
         `good-next-bug` keyword.
         """
         return bool(self.mentors or self.keywords & CONTRIBUTOR_KEYWORDS)
+
+    @property
+    def is_good_first_bug(self) -> bool:
+        """Return `True` if the bug has the `good-first-bug` keyword."""
+        return GOOD_FIRST_BUG in self.keywords
 
     def is_assigned_to(self, login: str) -> bool:
         """Return `True` if the Bugzilla user `login` is assigned to the bug."""

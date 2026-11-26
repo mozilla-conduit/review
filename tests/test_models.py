@@ -229,3 +229,23 @@ def test_bug_is_for_contributors(keywords, mentors, is_for_contributors):
     )
     assert not bug.is_assigned
     assert bug.is_for_contributors is is_for_contributors
+
+
+@pytest.mark.parametrize(
+    "keywords,mentors,is_good_first_bug",
+    [
+        ((), (), False),
+        (("good-next-bug",), (), False),
+        ((), ("mentor@example.com",), False),
+        (("good-first-bug",), (), True),
+        (("good-first-bug", "perf"), ("mentor@example.com",), True),
+    ],
+)
+def test_bug_is_good_first_bug(keywords, mentors, is_good_first_bug):
+    bug = Bug(
+        id="1",
+        assigned_to="nobody@mozilla.org",
+        keywords=frozenset(keywords),
+        mentors=mentors,
+    )
+    assert bug.is_good_first_bug is is_good_first_bug

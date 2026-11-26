@@ -2312,16 +2312,22 @@ def test_find_unassigned_bugs(m_bmo):
     mine = bug("1", assigned_to="me@example.com")
     unassigned = bug("2")
     taken = bug("3", assigned_to="x@y.com")
+    unassigned_gfb = bug("5", keywords=["good-first-bug"])
+    taken_gfb = bug("6", assigned_to="x@y.com", keywords=["good-first-bug"])
     # Bugzilla doesn't return the bugs in the order they were asked for.
-    m_bmo.bugs.return_value = [taken, unassigned, mine]
+    m_bmo.bugs.return_value = [taken_gfb, taken, unassigned_gfb, unassigned, mine]
 
-    commits = [commit(bug_id=bug_id) for bug_id in ("1", "2", "3", "4", "2")]
+    commits = [commit(bug_id=bug_id) for bug_id in ("1", "2", "5", "3", "6", "4", "2")]
     assert submit.find_unassigned_bugs(commits, contributor()) == [
         unassigned,
         taken,
-    ], "Bugs not assigned to the user should be found, in the order of the stack."
+        taken_gfb,
+    ], (
+        "Bugs not assigned to the user should be found, in the order of the "
+        "stack, except good first bugs that nobody is assigned to."
+    )
     m_bmo.bugs.assert_called_once_with(
-        ["1", "2", "3", "4"]
+        ["1", "2", "5", "3", "6", "4"]
     ), "Each bug should be asked for once, in a single request."
 
     m_bmo.reset_mock()
@@ -2353,11 +2359,11 @@ def test_find_unassigned_bugs(m_bmo):
     assert not submit.find_unassigned_bugs(commits, contributor())
 
 
-UNASSIGNED_GFB = bug("2", keywords=["good-first-bug"])
+UNASSIGNED_GNB = bug("2", keywords=["good-next-bug"])
 UNASSIGNED_MENTORED = bug("2", mentors=["mentor@example.com"])
 UNASSIGNED = bug("2", keywords=["perf"])
 TAKEN = bug("3", assigned_to="x@y.com")
-TAKEN_GFB = bug("3", assigned_to="x@y.com", keywords=["good-next-bug"])
+TAKEN_GNB = bug("3", assigned_to="x@y.com", keywords=["good-next-bug"])
 
 
 @pytest.mark.parametrize(
@@ -2410,7 +2416,7 @@ NOT_SUITABLE = ["someone else", "mentored", "something to work on", "really thin
 @pytest.mark.parametrize(
     "unassigned,present,absent",
     [
-        ([UNASSIGNED_GFB], SUITABLE, NOT_SUITABLE),
+        ([UNASSIGNED_GNB], SUITABLE, NOT_SUITABLE),
         ([UNASSIGNED_MENTORED], SUITABLE, NOT_SUITABLE),
         (
             [UNASSIGNED],
@@ -2434,10 +2440,10 @@ NOT_SUITABLE = ["someone else", "mentored", "something to work on", "really thin
                 ],
                 ["reviewer time", "mentored", "something to work on", "Before"],
             )
-            for taken in (TAKEN, TAKEN_GFB)
+            for taken in (TAKEN, TAKEN_GNB)
         ),
         (
-            [UNASSIGNED_GFB, TAKEN],
+            [UNASSIGNED_GNB, TAKEN],
             [
                 "Bug 2 is not assigned to you. Bug 3 is assigned to someone else",
                 "as reviewer time is limited.",

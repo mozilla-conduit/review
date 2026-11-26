@@ -345,7 +345,8 @@ def find_unassigned_bugs(commits: list[Commit], user_data: UserData) -> list[Bug
     """Return the bugs of new revisions that a contributor isn't assigned to.
 
     Staff, and users whose status is unknown, are never checked.  Bugs that
-    can't be looked up are skipped rather than warned about.
+    can't be looked up, and good first bugs that nobody is assigned to, are
+    skipped rather than warned about.
     """
     if user_data.is_employee is not False or not conduit.repo.bmo_url:
         return []
@@ -367,7 +368,12 @@ def find_unassigned_bugs(commits: list[Commit], user_data: UserData) -> list[Bug
         logger.debug("Failed to check the assignees of the bugs: %s", e)
         return []
 
-    unassigned = [bug for bug in bugs if not bug.is_assigned_to(login)]
+    unassigned = [
+        bug
+        for bug in bugs
+        if not bug.is_assigned_to(login)
+        and (bug.is_assigned or not bug.is_good_first_bug)
+    ]
     return sorted(unassigned, key=lambda bug: bug_ids.index(bug.id))
 
 
